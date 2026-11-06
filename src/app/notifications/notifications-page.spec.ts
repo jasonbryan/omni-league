@@ -3,11 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { SwPush } from '@angular/service-worker';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
@@ -17,7 +19,10 @@ const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
 
 class FakeSwPush {
   isEnabled = true;
-  readonly subscription = new BehaviorSubject<PushSubscription | null>(null);
+  /** A plain Subject on an uncontrolled page, where the real one emits nothing. */
+  subscription: Subject<PushSubscription | null> = new BehaviorSubject<PushSubscription | null>(
+    null,
+  );
   readonly requests: { serverPublicKey: string }[] = [];
   nextSubscription: PushSubscription | Error = fakeSubscription(ENDPOINT);
   unsubscribes = 0;
@@ -39,10 +44,14 @@ class FakeSwPush {
   }
 }
 
-function fakeSubscription(endpoint: string): PushSubscription {
+function fakeSubscription(
+  endpoint: string,
+  unsubscribe: () => Promise<boolean> = () => Promise.resolve(true),
+): PushSubscription {
   return {
     endpoint,
     expirationTime: null,
+    unsubscribe,
     toJSON: () => ({
       endpoint,
       expirationTime: null,
@@ -57,6 +66,12 @@ class FakePushDevice implements PushDevice {
   readonly permission = signal<DevicePermission>('default');
   readonly controlled = signal(true);
   readonly permissionRequests: number[] = [];
+  registrationSubscription: PushSubscription | null = null;
+  activated = false;
+  subscriptionReads = 0;
+  /** A pending read keeps `whenStable` from settling, so `settle` skips it while one is held. */
+  holdingRead = false;
+  private gates = { subscription: Promise.resolve(), activated: Promise.resolve() };
   private answer: ((permission: NotificationPermission) => void) | null = null;
   /** The order of calls across the fakes, so a test can check what came first. */
   constructor(private readonly log: string[]) {}
@@ -73,7 +88,23 @@ class FakePushDevice implements PushDevice {
   }
 
   subscription(): Promise<PushSubscription | null> {
-    return Promise.resolve(null);
+    this.subscriptionReads++;
+    return this.gates.subscription.then(() => this.registrationSubscription);
+  }
+
+  workerActivated(): Promise<boolean> {
+    return this.gates.activated.then(() => this.activated);
+  }
+
+  /** Keeps one read unanswered until the returned function is called. */
+  holdRead(read: 'subscription' | 'activated'): () => void {
+    this.holdingRead = true;
+    let release!: () => void;
+    this.gates[read] = new Promise<void>((resolve) => (release = resolve));
+    return () => {
+      this.holdingRead = false;
+      release();
+    };
   }
 
   respond(permission: NotificationPermission): void {
@@ -87,6 +118,7 @@ describe('NotificationsPage', () => {
   let swPush: FakeSwPush;
   let device: FakePushDevice;
   let log: string[];
+  let reloadPage: ReturnType<typeof vi.fn>;
   let harness: RouterTestingHarness;
   let page: HTMLElement;
 
@@ -96,6 +128,7 @@ describe('NotificationsPage', () => {
     convex = new FakeConvexClient();
     swPush = new FakeSwPush();
     device = new FakePushDevice(log);
+    reloadPage = vi.fn();
     const originalRequest = swPush.requestSubscription.bind(swPush);
     swPush.requestSubscription = (options) => {
       log.push('requestSubscription');
@@ -117,6 +150,7 @@ describe('NotificationsPage', () => {
             signOut: (endSession: () => Promise<void>) => endSession(),
           },
         },
+        { provide: RELOAD_PAGE, useValue: reloadPage },
         ...(realDevice ? [] : [{ provide: PUSH_DEVICE, useValue: device }]),
         provideRouter([{ path: 'app/notifications', component: NotificationsPage }]),
       ],
@@ -130,10 +164,10 @@ describe('NotificationsPage', () => {
 
   async function settle() {
     TestBed.tick();
-    await harness.fixture.whenStable();
+    if (!device.holdingRead) await harness.fixture.whenStable();
     await new Promise((resolve) => setTimeout(resolve, 0));
     TestBed.tick();
-    await harness.fixture.whenStable();
+    if (!device.holdingRead) await harness.fixture.whenStable();
   }
 
   const subscriptionsTo = (name: string) =>
@@ -158,6 +192,12 @@ describe('NotificationsPage', () => {
   async function goOffline() {
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     window.dispatchEvent(new Event('offline'));
+    await settle();
+  }
+
+  async function goOnline() {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+    window.dispatchEvent(new Event('online'));
     await settle();
   }
 
@@ -818,6 +858,394 @@ describe('NotificationsPage', () => {
       await press();
       await answer({ status: 'sent', devices: 1 });
       expect(changeStatus()).toBe('');
+    });
+  });
+
+  describe('a page no service worker controls', () => {
+    const RELOAD_TEXT = 'Reload this page to turn notifications on.';
+    const OFFLINE_TEXT = 'Connect to the internet to change this.';
+
+    let registrationSubscription: PushSubscription;
+    let unsubscribeHeld: Mock<() => Promise<boolean>>;
+    beforeEach(() => {
+      unsubscribeHeld = vi.fn(() => Promise.resolve(true));
+      registrationSubscription = fakeSubscription(ENDPOINT, unsubscribeHeld);
+      device.controlled.set(false);
+      device.activated = true;
+      device.registrationSubscription = registrationSubscription;
+      swPush.subscription = new Subject<PushSubscription | null>();
+    });
+
+    const reloadButton = () =>
+      [...panel().querySelectorAll('button')].find((b) => text(b) === 'Reload page') ?? null;
+    const describedBy = (el: Element | null) =>
+      text(panel().querySelector(`#${el?.getAttribute('aria-describedby') ?? ''}`));
+    const spinners = () => panel().querySelectorAll('ng-icon[name="lucideLoaderCircle"]');
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const subscriptionUnsubscribes = () => unsubscribeHeld.mock.calls.length;
+
+    async function openOn() {
+      device.permission.set('granted');
+      await open();
+      await emitConfig(VAPID_KEY);
+      await emitStatus(true);
+    }
+
+    function expectReloadState() {
+      expect(badge()).toBe('Off');
+      expect(text(button())).toBe('Turn on notifications');
+      expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expect(button()!.hasAttribute('disabled')).toBe(false);
+      expect(describedBy(button())).toBe(RELOAD_TEXT);
+      expect(text(panel())).not.toContain('Getting this device ready');
+      expect(spinners()).toHaveLength(0);
+      expect(reloadButton()).not.toBeNull();
+      expect(reloadButton()!.hasAttribute('aria-disabled')).toBe(false);
+    }
+
+    describe('showing what the device holds', () => {
+      it('shows On with Turn off and the test-notification section when the status says it is the caller’s', async () => {
+        await openOn();
+
+        expect(badge()).toBe('On');
+        expect(text(panel())).toContain('On');
+        expect(text(panel())).toContain(
+          'This device gets game reminders, schedule changes, and score updates.',
+        );
+        expect(text(button())).toBe('Turn off');
+        expect(panel().querySelector('app-test-notification')).not.toBeNull();
+        expect(text(panel())).toContain('Send a test notification');
+        expect(text(panel())).not.toContain('Getting this device ready');
+        expect(subscriptionsTo('push:getMyDeviceStatus').map((s) => s.args)).toEqual([
+          { endpoint: ENDPOINT },
+        ]);
+      });
+
+      it('shows the checking skeleton and its status until the subscription read answers', async () => {
+        const answer = device.holdRead('subscription');
+        await open();
+        await emitConfig(VAPID_KEY);
+
+        expect(badge()).toBe('');
+        expect(text(panel().querySelector('[role="status"]'))).toBe(
+          'Checking notifications on this device.',
+        );
+        expect(panel().querySelectorAll('.motion-safe\\:animate-pulse').length).toBeGreaterThan(0);
+        expect(button()).toBeNull();
+        expect(text(panel())).not.toContain('Getting this device ready');
+
+        answer();
+        await settle();
+        expect(badge()).toBe('');
+        await emitStatus(true);
+        expect(badge()).toBe('On');
+      });
+
+      it('shows the checking skeleton until the read of whether the worker is activated answers', async () => {
+        const answer = device.holdRead('activated');
+        device.registrationSubscription = null;
+        await open();
+        await emitConfig(VAPID_KEY);
+
+        expect(badge()).toBe('');
+        expect(text(panel().querySelector('[role="status"]'))).toBe(
+          'Checking notifications on this device.',
+        );
+        expect(button()).toBeNull();
+        expect(text(panel())).not.toContain('Getting this device ready');
+
+        answer();
+        await settle();
+        expectReloadState();
+      });
+
+      it('shows the checking skeleton until the status query answers', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+
+        expect(badge()).toBe('');
+        expect(text(panel().querySelector('[role="status"]'))).toBe(
+          'Checking notifications on this device.',
+        );
+        expect(text(panel())).not.toContain('Getting this device ready');
+      });
+
+      it('shows the reload state when the status is false', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        await emitStatus(false);
+
+        expectReloadState();
+      });
+
+      it('shows the reload state when the status query errors', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        for (const sub of subscriptionsTo('push:getMyDeviceStatus')) sub.fail(new Error('boom'));
+        await settle();
+
+        expectReloadState();
+      });
+
+      it('shows the reload state when the registration holds no subscription', async () => {
+        device.registrationSubscription = null;
+        await open();
+        await emitConfig(VAPID_KEY);
+
+        expectReloadState();
+        expect(subscriptionsTo('push:getMyDeviceStatus')).toEqual([]);
+      });
+    });
+
+    describe('turning off', () => {
+      it('removes the row, then the subscription read from the registration, never through SwPush', async () => {
+        await openOn();
+        button()!.click();
+        await settle();
+
+        expect(text(button())).toBe('Turning off…');
+        expect(convex.calls.map((c) => [c.name, c.args])).toEqual([
+          ['push:unsubscribe', { endpoint: ENDPOINT }],
+        ]);
+        expect(subscriptionUnsubscribes()).toBe(0);
+
+        convex.calls[0].resolve(null);
+        await settle();
+
+        expect(subscriptionUnsubscribes()).toBe(1);
+        expect(swPush.unsubscribes).toBe(0);
+        expect(badge()).toBe('Off');
+        expect(text(button())).toBe('Turn on notifications');
+        expect(changeStatus()).toBe('Notifications are off for this device.');
+        expect(document.activeElement).toBe(button());
+        expectReloadState();
+      });
+
+      it.each([
+        ['rejects', () => unsubscribeHeld.mockRejectedValue(new Error('gone'))],
+        ['resolves false', () => unsubscribeHeld.mockResolvedValue(false)],
+      ])(
+        'shows the reload state when the browser unsubscribe %s, because the row is gone',
+        async (_case, arrange) => {
+          await openOn();
+          arrange();
+          button()!.click();
+          await settle();
+          convex.calls[0].resolve(null);
+          await settle();
+
+          expect(subscriptionUnsubscribes()).toBe(1);
+          expect(swPush.unsubscribes).toBe(0);
+          expect(alertBox()).toBeNull();
+          expect(changeStatus()).toBe('Notifications are off for this device.');
+          expectReloadState();
+          expect(document.activeElement).toBe(button());
+        },
+      );
+
+      it('offline: stays On with the offline alert and leaves the browser subscription alone', async () => {
+        await openOn();
+        await goOffline();
+        button()!.click();
+        await settle();
+
+        expect(convex.calls).toEqual([]);
+        expect(subscriptionUnsubscribes()).toBe(0);
+        expect(badge()).toBe('On');
+        expect(text(alertBox()?.querySelector('[data-slot="alert-title"]'))).toBe(
+          "You're offline. Nothing was sent.",
+        );
+      });
+
+      it('refused offline or failing: stays On with the alert and leaves the browser subscription alone', async () => {
+        await openOn();
+        button()!.click();
+        await settle();
+        convex.calls[0].reject(new ConvexOfflineError('offline'));
+        await settle();
+        expect(badge()).toBe('On');
+        expect(text(alertBox()?.querySelector('[data-slot="alert-description"]'))).toBe(
+          "Notifications are still on. Try again when you're connected.",
+        );
+
+        button()!.click();
+        await settle();
+        convex.calls[1].reject(new Error('Server Error'));
+        await settle();
+        expect(badge()).toBe('On');
+        expect(text(alertBox()?.querySelector('[data-slot="alert-title"]'))).toBe(
+          'Notifications could not be turned off.',
+        );
+        expect(subscriptionUnsubscribes()).toBe(0);
+        expect(swPush.unsubscribes).toBe(0);
+      });
+    });
+
+    describe('Turn on and Reload page', () => {
+      beforeEach(() => {
+        device.registrationSubscription = null;
+      });
+
+      it('Turn on asks for no permission and requests no subscription, and a press does nothing', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        button()!.focus();
+        button()!.click();
+        await settle();
+
+        expect(log).toEqual([]);
+        expect(swPush.requests).toEqual([]);
+        expect(reloadPage).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(button());
+        expectReloadState();
+      });
+
+      it('Reload page sits next to the reload text and calls the reload once per press', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        const help = panel().querySelector(`#${button()!.getAttribute('aria-describedby')}`)!;
+        expect(reloadButton()!.parentElement).toBe(help.parentElement);
+        expect(reloadButton()!.getAttribute('data-slot')).toBe('button');
+
+        reloadButton()!.click();
+        await settle();
+        expect(reloadPage).toHaveBeenCalledTimes(1);
+      });
+
+      it('offline: Reload page is aria-disabled, says why, and a press does not reload; back online both return', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        await goOffline();
+
+        expect(reloadButton()!.getAttribute('aria-disabled')).toBe('true');
+        expect(reloadButton()!.hasAttribute('disabled')).toBe(false);
+        expect(describedBy(reloadButton())).toBe(OFFLINE_TEXT);
+        expect(button()!.getAttribute('aria-disabled')).toBe('true');
+        expect(text(panel())).not.toContain(RELOAD_TEXT);
+
+        reloadButton()!.click();
+        await settle();
+        expect(reloadPage).not.toHaveBeenCalled();
+        expect(log).toEqual([]);
+
+        await goOnline();
+        expectReloadState();
+        reloadButton()!.click();
+        await settle();
+        expect(reloadPage).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('before the worker is activated (first visit)', () => {
+      beforeEach(() => {
+        device.activated = false;
+        device.registrationSubscription = null;
+      });
+
+      it('keeps "Getting this device ready" and a disabled button, with no Reload page', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+
+        expect(badge()).toBe('Off');
+        expect(button()!.disabled).toBe(true);
+        expect(describedBy(button())).toBe(
+          'Getting this device ready. This takes a few seconds the first time.',
+        );
+        expect(reloadButton()).toBeNull();
+        expect(text(panel())).not.toContain(RELOAD_TEXT);
+      });
+
+      it('enables the button when the worker takes control', async () => {
+        await open();
+        await emitConfig(VAPID_KEY);
+        device.controlled.set(true);
+        swPush.subscription.next(null);
+        await settle();
+
+        expect(button()!.disabled).toBe(false);
+        expect(button()!.hasAttribute('aria-describedby')).toBe(false);
+        expect(reloadButton()).toBeNull();
+      });
+    });
+
+    it('a worker taking control keeps the badge On at every tick, and Turn off then goes through SwPush', async () => {
+      await openOn();
+      expect(badge()).toBe('On');
+
+      // As NgswCommChannel.registration: SwPush.subscription emits after controllerchange and a promise.
+      device.controlled.set(true);
+      TestBed.tick();
+      await harness.fixture.whenStable();
+      expect(badge()).toBe('On');
+      expect(panel().querySelector('[role="status"]')?.textContent).not.toContain('Checking');
+      await tick();
+      expect(badge()).toBe('On');
+      TestBed.tick();
+      expect(badge()).toBe('On');
+
+      swPush.subscription.next(registrationSubscription);
+      await settle();
+      expect(badge()).toBe('On');
+      expect(text(button())).toBe('Turn off');
+
+      button()!.click();
+      await settle();
+      convex.calls[0].resolve(null);
+      await settle();
+      expect(swPush.unsubscribes).toBe(1);
+      expect(subscriptionUnsubscribes()).toBe(0);
+      expect(badge()).toBe('Off');
+      expect(button()!.disabled).toBe(false);
+      expect(reloadButton()).toBeNull();
+    });
+
+    it('makes no direct read on a controlled page', async () => {
+      device.controlled.set(true);
+      swPush.subscription = new BehaviorSubject<PushSubscription | null>(null);
+      await open();
+      await emitConfig(VAPID_KEY);
+
+      expect(device.subscriptionReads).toBe(0);
+      expect(badge()).toBe('Off');
+      expect(reloadButton()).toBeNull();
+    });
+
+    it.each([
+      ['there is no service worker', () => (swPush.isEnabled = false)],
+      ['the browser has no Push API', () => (device.hasPushApis = false)],
+    ])('makes no registration read and shows Not available when %s', async (_case, arrange) => {
+      arrange();
+      await open();
+      await emitConfig(VAPID_KEY);
+
+      expect(device.subscriptionReads).toBe(0);
+      expect(badge()).toBe('Not available');
+      expect(button()).toBeNull();
+      expect(reloadButton()).toBeNull();
+    });
+
+    it('shows Blocked with no Turn on or Reload page when permission is denied', async () => {
+      device.permission.set('denied');
+      await open();
+      await emitConfig(VAPID_KEY);
+
+      expect(badge()).toBe('Blocked');
+      expect(button()).toBeNull();
+      expect(reloadButton()).toBeNull();
+    });
+
+    it('two quick presses of Turn off remove the row and the subscription once each', async () => {
+      await openOn();
+      button()!.click();
+      button()!.click();
+      await settle();
+      convex.calls[0].resolve(null);
+      await settle();
+
+      expect(convex.calls).toHaveLength(1);
+      expect(subscriptionUnsubscribes()).toBe(1);
+      expect(swPush.unsubscribes).toBe(0);
+      expectReloadState();
     });
   });
 

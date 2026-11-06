@@ -10,6 +10,7 @@ import {
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { normaliseInviteEmail } from './lib/inviteInput';
+import { insertPendingInvite } from './lib/inviteWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
@@ -694,14 +695,13 @@ export const addInvite = internalMutation({
       if (!league) throw new Error(`No league named ${JSON.stringify(name)}`);
       leagueIds.push(league._id);
     }
-    await ctx.db.insert('invites', {
+    await insertPendingInvite(ctx, {
       organizationId: organization._id,
       email: normaliseInviteEmail(email),
       role,
       leagueIds,
       tokenHash: await hashInviteToken(token ?? generateInviteToken()),
       expiresAt,
-      status: 'pending',
     });
     return null;
   },

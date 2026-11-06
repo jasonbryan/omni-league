@@ -395,6 +395,134 @@ test.describe('Staff: undoing a revoke', () => {
     await expect(page.locator('#email')).toBeFocused();
   });
 
+  test.describe('a reply to Revoke or Undo follows the last press, not where focus sits', () => {
+    const email = 'dana@example.com';
+    const description = (page: Page) => main(page).getByText('Org admins manage everything here.');
+    const revokedStatus = (page: Page) =>
+      page.getByRole('status').filter({ hasText: `Invite to ${email} revoked.` });
+
+    async function openWithHeldRevoke(page: Page) {
+      let revoke: { release: () => void } | undefined;
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          revoke = await interceptMutation(page, 'invites:revoke', 'hold');
+        },
+      });
+      await revokeButton(page, email).click();
+      await expect(page.getByRole('button', { name: 'Revoking…' })).toBeVisible();
+      return { release: () => revoke?.release() };
+    }
+
+    // A late focus move runs after the next render, so the checks that focus did not move wait two frames.
+    const framesPass = (page: Page) =>
+      page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+    const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
+    test('a click on the page text while Revoke is in flight keeps focus on the page', async ({
+      page,
+    }) => {
+      const revoke = await openWithHeldRevoke(page);
+      await description(page).click();
+      await expect(main(page)).toBeFocused();
+
+      revoke.release();
+      await expect(revokedStatus(page)).toBeVisible();
+      await framesPass(page);
+      await expect(revokedStatus(page)).not.toBeFocused();
+      await expect(main(page)).toBeFocused();
+    });
+
+    test('a click on a Role radio while Revoke is in flight keeps focus and scroll there', async ({
+      page,
+    }) => {
+      const revoke = await openWithHeldRevoke(page);
+      const organizer = page.getByRole('radio', { name: 'League organizer' });
+      await organizer.click();
+      const before = await scrollY(page);
+
+      revoke.release();
+      await expect(revokedStatus(page)).toBeVisible();
+      await framesPass(page);
+      await expect(revokedStatus(page)).not.toBeFocused();
+      await expect(organizer).toBeChecked();
+      expect(await scrollY(page)).toBeGreaterThanOrEqual(before);
+    });
+
+    test('a click on a league check box while Revoke is in flight keeps focus and scroll there', async ({
+      page,
+    }) => {
+      const organizer = page.getByRole('radio', { name: 'League organizer' });
+      let revoke: { release: () => void } | undefined;
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          revoke = await interceptMutation(page, 'invites:revoke', 'hold');
+        },
+      });
+      await organizer.click();
+      const leagueBox = page.getByRole('checkbox', { name: 'Coed 7v7 Rec' });
+      await expect(leagueBox).toBeVisible();
+      await revokeButton(page, email).click();
+      await expect(page.getByRole('button', { name: 'Revoking…' })).toBeVisible();
+      await leagueBox.click();
+      const before = await scrollY(page);
+
+      revoke?.release();
+      await expect(revokedStatus(page)).toBeVisible();
+      await framesPass(page);
+      await expect(revokedStatus(page)).not.toBeFocused();
+      await expect(leagueBox).toBeChecked();
+      expect(await scrollY(page)).toBeGreaterThanOrEqual(before);
+    });
+
+    test('a click on the page text while Undo is in flight keeps focus on the page', async ({
+      page,
+    }) => {
+      let undo: { release: () => void } | undefined;
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          undo = await interceptMutation(page, 'invites:restore', 'hold');
+        },
+      });
+      await revokeButton(page, email).click();
+      await undoButton(page, email).click();
+      await expect(page.getByRole('button', { name: 'Undoing…' })).toBeVisible();
+      await description(page).click();
+      await expect(main(page)).toBeFocused();
+
+      undo?.release();
+      const restored = page.getByRole('status').filter({ hasText: `Invite to ${email} restored.` });
+      await expect(restored).toBeVisible();
+      await framesPass(page);
+      await expect(restored).not.toBeFocused();
+    });
+
+    test('a click on the header title while Revoke is in flight leaves focus on the body', async ({
+      page,
+      isMobile,
+    }) => {
+      test.skip(!isMobile, 'the header title shows at phone widths only');
+      const revoke = await openWithHeldRevoke(page);
+      await page.locator('header > p').click();
+      await expect(page.locator('body')).toBeFocused();
+
+      revoke.release();
+      await expect(revokedStatus(page)).toBeVisible();
+      await framesPass(page);
+      await expect(revokedStatus(page)).not.toBeFocused();
+      await expect(page.locator('body')).toBeFocused();
+    });
+
+    test('a click on Revoke and nothing else gives the status focus when the reply arrives', async ({
+      page,
+    }) => {
+      const revoke = await openWithHeldRevoke(page);
+      revoke.release();
+      await expect(revokedStatus(page)).toBeFocused();
+    });
+  });
+
   test('a revoke in flight reads "Revoking…" on its own button and waits on the others', async ({
     page,
   }, testInfo) => {

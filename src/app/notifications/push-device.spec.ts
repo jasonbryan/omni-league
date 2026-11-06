@@ -193,4 +193,41 @@ describe('BrowserPushDevice', () => {
       expect(await TestBed.inject(BrowserPushDevice).subscription()).toBeNull();
     });
   });
+
+  describe('workerActivated', () => {
+    const registrationWith = (worker: { state: string } | null) =>
+      Promise.resolve({ active: worker, installing: null });
+
+    it('is true when the registration holds an activated worker, though none controls the page', async () => {
+      const { device } = create({
+        controlled: false,
+        getRegistration: () => registrationWith({ state: 'activated' }),
+      });
+
+      expect(await device.workerActivated()).toBe(true);
+    });
+
+    it.each([
+      ['an activating worker', () => registrationWith({ state: 'activating' })],
+      ['only an installing worker', () => registrationWith(null)],
+      ['no registration', () => Promise.resolve(undefined)],
+      ['getRegistration rejecting', () => Promise.reject(new Error('SecurityError'))],
+    ])('is false with %s', async (_case, getRegistration) => {
+      expect(await create({ controlled: false, getRegistration }).device.workerActivated()).toBe(
+        false,
+      );
+    });
+
+    it('is false when the window has no serviceWorker', async () => {
+      expect(await create({ serviceWorker: false }).device.workerActivated()).toBe(false);
+    });
+
+    it('is false with no window', async () => {
+      TestBed.configureTestingModule({
+        providers: [{ provide: DOCUMENT, useValue: { defaultView: null } }],
+      });
+
+      expect(await TestBed.inject(BrowserPushDevice).workerActivated()).toBe(false);
+    });
+  });
 });

@@ -6,6 +6,7 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  resource,
   inject,
   signal,
   untracked,
@@ -35,6 +36,7 @@ import {
   injectQuery,
   skipToken,
 } from '../core/data/convex';
+import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import {
@@ -53,6 +55,10 @@ export { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 export type DeviceState = 'checking' | 'not-available' | 'install-first' | 'blocked' | 'off' | 'on';
 type Busy = 'idle' | 'turning-on' | 'turning-off';
 type Change = 'on' | 'off';
+interface RegistrationRead {
+  subscription: PushSubscription | null;
+  activated: boolean;
+}
 type Alert = { kind: 'offline' | 'failed'; change: Change } | null;
 
 const CRUMB_LINK =
@@ -293,11 +299,9 @@ const STEP_NUMBER =
                   #deviceButton
                   type="button"
                   data-slot="button"
-                  [class]="
-                    offlineAware(primaryButton) + (controlled() ? '' : ' disabled:opacity-50')
-                  "
-                  [disabled]="!controlled()"
-                  [attr.aria-disabled]="busy() !== 'idle' || !online() ? 'true' : null"
+                  [class]="turnOnClasses()"
+                  [disabled]="!controlled() && !needsReload()"
+                  [attr.aria-disabled]="turnOnAriaDisabled()"
                   [attr.aria-describedby]="controlled() && online() ? null : 'device-help'"
                   (click)="turnOn()"
                 >
@@ -313,7 +317,27 @@ const STEP_NUMBER =
                     notifications
                   }
                 </button>
-                @if (!controlled()) {
+                @if (needsReload()) {
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <p id="device-help" class="text-sm text-muted-foreground">
+                      {{
+                        online()
+                          ? 'Reload this page to turn notifications on.'
+                          : 'Connect to the internet to change this.'
+                      }}
+                    </p>
+                    <button
+                      type="button"
+                      data-slot="button"
+                      [class]="offlineAware(outlineButton)"
+                      [attr.aria-disabled]="online() ? null : 'true'"
+                      [attr.aria-describedby]="online() ? null : 'device-help'"
+                      (click)="reload()"
+                    >
+                      Reload page
+                    </button>
+                  </div>
+                } @else if (!controlled()) {
                   <p
                     id="device-help"
                     role="status"
@@ -354,12 +378,32 @@ export class NotificationsPage {
   private readonly swPush = inject(SwPush);
   private readonly device = inject(PUSH_DEVICE);
   private readonly injector = inject(Injector);
+  private readonly reloadPage = inject(RELOAD_PAGE);
 
   private readonly config = injectQuery(api.push.getConfig, () => ({}));
-  // SwPush emits nothing until a worker controls the page, so an uncontrolled page has no subscription to show.
-  private readonly subscription = toSignal(
+  // SwPush emits nothing until a worker controls the page, so an uncontrolled page reads its subscription from the registration.
+  private readonly swSubscription = toSignal(
     this.swPush.isEnabled ? this.swPush.subscription : EMPTY,
   );
+  // Decided once: a controllerchange must not idle the resource and bring the skeleton back.
+  private readonly readsRegistration =
+    this.swPush.isEnabled && this.device.hasPushApis && !this.device.controlled();
+  private readonly registrationRead = resource({
+    params: () => (this.readsRegistration ? {} : undefined),
+    loader: async (): Promise<RegistrationRead> => {
+      const [subscription, activated] = await Promise.all([
+        this.device.subscription(),
+        this.device.workerActivated(),
+      ]);
+      return { subscription, activated };
+    },
+  });
+  // SwPush is the only source that sees requestSubscription and SwPush.unsubscribe(), so it wins once it has emitted.
+  private readonly subscription = computed(() => {
+    const swSubscription = this.swSubscription();
+    if (swSubscription !== undefined) return swSubscription;
+    return this.registrationRead.value()?.subscription;
+  });
   private readonly endpoint = computed(() => this.subscription()?.endpoint ?? null);
   private readonly status = injectQuery(api.push.getMyDeviceStatus, () => {
     const endpoint = this.endpoint();
@@ -380,6 +424,10 @@ export class NotificationsPage {
 
   protected readonly online = injectOnline();
   protected readonly controlled = this.device.controlled;
+  // Turning on needs SwPush, which waits for a controller, and a worker claims a page only when it first activates.
+  protected readonly needsReload = computed(
+    () => !this.controlled() && this.registrationRead.value()?.activated === true,
+  );
   protected readonly busy = signal<Busy>('idle');
   protected readonly alert = signal<Alert>(null);
   protected readonly changed = signal<Change | null>(null);
@@ -403,7 +451,11 @@ export class NotificationsPage {
       return 'not-available';
     }
     if (this.device.permission() === 'denied') return 'blocked';
-    if (!this.controlled()) return 'off';
+    if (!this.controlled()) {
+      const read = this.registrationRead.value();
+      if (read === undefined) return 'checking';
+      if (!read.activated) return 'off';
+    }
     const subscription = this.subscription();
     if (subscription === undefined) return 'checking';
     if (subscription === null) return 'off';
@@ -411,6 +463,16 @@ export class NotificationsPage {
     if (this.status.value() === undefined && this.status.error() === undefined) return 'checking';
     return 'off';
   });
+
+  protected readonly turnOnClasses = computed(() => {
+    if (this.needsReload()) return `${this.primaryButton} opacity-50`;
+    return (
+      this.offlineAware(this.primaryButton) + (this.controlled() ? '' : ' disabled:opacity-50')
+    );
+  });
+  protected readonly turnOnAriaDisabled = computed(() =>
+    this.busy() !== 'idle' || !this.online() || this.needsReload() ? 'true' : null,
+  );
 
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
@@ -432,6 +494,10 @@ export class NotificationsPage {
 
   protected offlineAware(classes: string): string {
     return this.online() ? classes : `${classes} opacity-50`;
+  }
+
+  protected reload(): void {
+    if (this.online()) this.reloadPage();
   }
 
   protected turnOn(): void {
@@ -523,10 +589,19 @@ export class NotificationsPage {
 
   private async forgetBrowserSubscription(): Promise<void> {
     try {
-      await this.swPush.unsubscribe();
+      if (this.controlled()) {
+        await this.swPush.unsubscribe();
+      } else {
+        await this.registrationRead.value()?.subscription?.unsubscribe();
+      }
     } catch {
       // Nothing to undo: the page shows what the server holds.
     }
+    if (!this.controlled()) this.forgetRegistrationSubscription();
+  }
+
+  private forgetRegistrationSubscription(): void {
+    this.registrationRead.update((read) => read && { ...read, subscription: null });
   }
 
   private announceChange(change: Change): void {
