@@ -1,7 +1,7 @@
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
 import { type GenericId, type Infer, v } from 'convex/values';
 import { components, internal } from './_generated/api';
-import type { Doc } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import {
   internalAction,
   internalMutation,
@@ -9,7 +9,7 @@ import {
   type MutationCtx,
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
-import { normaliseInviteEmail } from './lib/inviteInput';
+import { INVITE_LIFETIME_MS, normaliseInviteEmail } from './lib/inviteInput';
 import { insertPendingInvite } from './lib/inviteWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
@@ -492,33 +492,80 @@ export const seedWaitingFreeAgents = internalMutation({
   handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, count, emailPrefix }) => {
     assertTestDeployment();
     const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
-    const now = Date.now();
+    await createAccounts(ctx, { count, emailPrefix, namePrefix: 'Free Agent' }, (userId) =>
+      insertFreeAgent(ctx, season, userId),
+    );
+    return null;
+  },
+});
+
+/** Many league organizers at once, so a test can pass the Staff list's 200 rows. */
+export const seedStaff = internalMutation({
+  args: { organizationSlug: v.string(), count: v.number(), emailPrefix: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, count, emailPrefix }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    await createAccounts(ctx, { count, emailPrefix, namePrefix: 'Staff' }, async (userId) => {
+      await insertMembership(ctx, userId, organization._id, 'leagueOrganizer');
+    });
+    return null;
+  },
+});
+
+/** Many pending invites at once. They are org admin invites because Undo refuses a league organizer invite with no league. */
+export const seedPendingInvites = internalMutation({
+  args: { organizationSlug: v.string(), count: v.number(), emailPrefix: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, count, emailPrefix }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const expiresAt = Date.now() + INVITE_LIFETIME_MS;
     for (let i = 1; i <= count; i++) {
-      const number = String(i).padStart(3, '0');
-      const name = `Free Agent ${number}`;
-      // The component's generated return types are `any`.
-      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
-        input: {
-          model: 'user',
-          data: {
-            name,
-            email: `${emailPrefix}-${number}@example.test`,
-            emailVerified: false,
-            createdAt: now,
-            updatedAt: now,
-          },
-        },
-      })) as { _id: string };
-      const userId = await ctx.db.insert('users', {
-        authUserId: account._id,
-        name,
-        adultConfirmedAt: now,
+      await insertPendingInvite(ctx, {
+        organizationId: organization._id,
+        email: `${emailPrefix}-${numbered(i)}@example.test`,
+        role: 'orgAdmin',
+        leagueIds: [],
+        tokenHash: await hashInviteToken(generateInviteToken()),
+        expiresAt,
       });
-      await insertFreeAgent(ctx, season, userId);
     }
     return null;
   },
 });
+
+const numbered = (i: number) => String(i).padStart(3, '0');
+
+async function createAccounts(
+  ctx: MutationCtx,
+  { count, emailPrefix, namePrefix }: { count: number; emailPrefix: string; namePrefix: string },
+  each: (userId: Id<'users'>) => Promise<unknown>,
+): Promise<void> {
+  const now = Date.now();
+  for (let i = 1; i <= count; i++) {
+    const name = `${namePrefix} ${numbered(i)}`;
+    // The component's generated return types are `any`.
+    const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+      input: {
+        model: 'user',
+        data: {
+          name,
+          email: `${emailPrefix}-${numbered(i)}@example.test`,
+          emailVerified: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    })) as { _id: string };
+    const userId = await ctx.db.insert('users', {
+      authUserId: account._id,
+      name,
+      adultConfirmedAt: now,
+    });
+    await each(userId);
+  }
+}
 
 export const addToTeam = internalMutation({
   args: { teamId: v.id('teams'), email: v.string() },

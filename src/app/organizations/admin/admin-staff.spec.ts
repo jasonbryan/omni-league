@@ -20,6 +20,8 @@ const URL = `/app/organizations/${COASTAL.slug}/staff`;
 const LIST_MEMBERS = 'memberships:listForOrganization';
 const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
+const STAFF_COUNT = 'memberships:staffCount';
+const PENDING_COUNT = 'invites:pendingCount';
 const CREATE = 'invites:create';
 const REVOKE = 'invites:revoke';
 const RESTORE = 'invites:restore';
@@ -218,6 +220,8 @@ describe('AdminStaff', () => {
         [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
+        [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
+        [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
       ]);
     });
 
@@ -419,6 +423,145 @@ describe('AdminStaff', () => {
       ]);
       await o.flush();
       expect(pending()).toHaveLength(3);
+    });
+  });
+
+  describe('past 200 rows', () => {
+    const MEMBERS_NOTE = (shown: number, total: number) =>
+      `Showing the ${shown} added first, of ${total} members.`;
+    const INVITES_NOTE = (shown: number, total: number) =>
+      `Showing the first ${shown} of ${total} pending invites.`;
+    const membersSection = () => page.querySelector('section[aria-labelledby="members-heading"]')!;
+    const manyMembers = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...MEMBERS[0],
+        membershipId: `mem_${i}`,
+        name: `Staff ${i}`,
+        email: `staff-${i}@example.com`,
+      }));
+    const manyPending = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...PENDING[0],
+        inviteId: `inv_${i}`,
+        email: `invitee-${i}@example.com`,
+      }));
+    // The admin shell asks for the same staff count, so the name matches two subscriptions.
+    const emitCount = (name: string, value: number) => {
+      for (const sub of o.convex.activeSubscriptions) if (sub.name === name) sub.emit(value);
+    };
+    const failCount = (name: string) => {
+      for (const sub of o.convex.activeSubscriptions)
+        if (sub.name === name) sub.fail(new Error('Server Error: secret'));
+    };
+    const noteOf = (section: Element) => {
+      const last = section.lastElementChild;
+      return last?.tagName === 'P' && last.previousElementSibling?.tagName === 'UL'
+        ? text(last)
+        : undefined;
+    };
+    async function openWith(counts: { staff?: number; pending?: number }, lists = {}) {
+      await open({ leagues: LEAGUES, ...lists });
+      if (counts.staff !== undefined) emitCount(STAFF_COUNT, counts.staff);
+      if (counts.pending !== undefined) emitCount(PENDING_COUNT, counts.pending);
+      await o.flush();
+    }
+
+    it('ends the Members section with the cut and the total after the list', async () => {
+      await openWith({ staff: 214 }, { members: manyMembers(200) });
+      expect(members()).toHaveLength(200);
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(200, 214));
+    });
+
+    it('ends the Pending invites section with the cut and the total after the list', async () => {
+      await openWith({ pending: 201 }, { pending: manyPending(200) });
+      expect(pending()).toHaveLength(200);
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+    });
+
+    it('uses the rows shown, never a fixed 200', async () => {
+      await openWith({ staff: 5, pending: 4 }, { members: MEMBERS, pending: PENDING });
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(3, 5));
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(2, 4));
+    });
+
+    it('shows no note when a count equals its rows', async () => {
+      await openWith({ staff: 3, pending: 2 }, { members: MEMBERS, pending: PENDING });
+      expect(noteOf(membersSection())).toBeUndefined();
+      expect(noteOf(pendingSection())).toBeUndefined();
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows no note when a count is below its 200 rows', async () => {
+      await openWith(
+        { staff: 199, pending: 199 },
+        { members: manyMembers(200), pending: manyPending(200) },
+      );
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows the empty state and no note for no invites with a count of 0', async () => {
+      await openWith({ pending: 0 }, { pending: [] });
+      expect(text(pendingSection())).toContain('No pending invites');
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows the empty state and no note, never "first 0", for no invites with a count of 1', async () => {
+      await openWith({ pending: 1 }, { pending: [] });
+      expect(text(pendingSection())).toContain('No pending invites');
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.textContent).not.toContain('first 0');
+    });
+
+    it('shows each list with no note and no error text while its count is loading', async () => {
+      await openWith({}, { members: manyMembers(200), pending: manyPending(200) });
+      expect(members()).toHaveLength(200);
+      expect(pending()).toHaveLength(200);
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    });
+
+    it('shows each list with no note and no error text when its count failed', async () => {
+      await openWith({}, { members: manyMembers(200), pending: manyPending(200) });
+      failCount(STAFF_COUNT);
+      failCount(PENDING_COUNT);
+      await o.flush();
+      expect(members()).toHaveLength(200);
+      expect(pending()).toHaveLength(200);
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.querySelectorAll('[role="alert"]')).toHaveLength(0);
+      expect(page.textContent).not.toContain('secret');
+    });
+
+    it('leaves the lists loading and the failed-list alert as they were', async () => {
+      await openWith({ staff: 214, pending: 201 });
+      expect(text(membersSection())).toContain('Loading the staff.');
+      expect(text(pendingSection())).toContain('Loading the pending invites.');
+      expect(page.textContent).not.toContain('Showing');
+      o.subscription(LIST_MEMBERS)!.fail(new Error('Server Error: secret'));
+      o.subscription(LIST_PENDING)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('follows the count as it changes', async () => {
+      await openWith({ pending: 201 }, { pending: manyPending(200) });
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+      emitCount(PENDING_COUNT, 200);
+      await o.flush();
+      expect(noteOf(pendingSection())).toBeUndefined();
+      emitCount(PENDING_COUNT, 201);
+      await o.flush();
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+    });
+
+    it('follows the member count as it changes', async () => {
+      await openWith({ staff: 214 }, { members: manyMembers(200) });
+      emitCount(STAFF_COUNT, 200);
+      await o.flush();
+      expect(noteOf(membersSection())).toBeUndefined();
+      emitCount(STAFF_COUNT, 201);
+      await o.flush();
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(200, 201));
     });
   });
 

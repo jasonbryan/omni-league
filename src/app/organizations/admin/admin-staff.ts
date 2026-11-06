@@ -45,6 +45,7 @@ import { adminPath } from './admin-path';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
 import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
+import { CAP_NOTE } from './note-classes';
 import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
 
@@ -184,6 +185,9 @@ const ROLE_LABEL: Record<Role, string> = {
                   </li>
                 }
               </ul>
+              @if (membersCapNote(); as note) {
+                <p [class]="capNote">{{ note }}</p>
+              }
             } @else {
               <p role="status" class="sr-only">Loading the staff.</p>
               <div aria-hidden="true" class="divide-y divide-border">
@@ -363,6 +367,9 @@ const ROLE_LABEL: Record<Role, string> = {
                     </li>
                   }
                 </ul>
+                @if (pendingCapNote(); as note) {
+                  <p [class]="capNote">{{ note }}</p>
+                }
               } @else {
                 <div class="flex flex-col items-center px-6 py-10 text-center">
                   <span
@@ -457,6 +464,7 @@ export class AdminStaff {
     () => !this.online() || this.revokingId() !== null || this.restoring(),
   );
   protected readonly secondaryBadge = BADGE_SECONDARY;
+  protected readonly capNote = CAP_NOTE;
   protected readonly placeholders = [1, 2, 3];
   protected readonly day = formatDay;
   protected readonly initialsOf = initials;
@@ -467,6 +475,16 @@ export class AdminStaff {
   });
 
   private readonly pendingList = injectQuery(api.invites.listPending, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  private readonly staffCount = injectQuery(api.memberships.staffCount, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  private readonly pendingCount = injectQuery(api.invites.pendingCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
@@ -490,6 +508,23 @@ export class AdminStaff {
     if (rows === undefined) return undefined;
     const now = this.now();
     return rows.map((row) => ({ ...row, expired: row.expiresAt <= now }));
+  });
+
+  protected readonly membersCapNote = computed(() => {
+    const shown = this.memberList.value()?.length ?? 0;
+    const total = this.staffCount.value();
+    // The list is the first 200 memberships by creation, sorted by name, so it cannot say "first" alone.
+    return total !== undefined && shown > 0 && total > shown
+      ? `Showing the ${shown} added first, of ${total} members.`
+      : null;
+  });
+
+  protected readonly pendingCapNote = computed(() => {
+    const shown = this.pendingList.value()?.length ?? 0;
+    const total = this.pendingCount.value();
+    return total !== undefined && shown > 0 && total > shown
+      ? `Showing the first ${shown} of ${total} pending invites.`
+      : null;
   });
 
   protected readonly leagueChoices = computed(() =>
