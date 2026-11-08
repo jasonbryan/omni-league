@@ -14,12 +14,13 @@ const CONTROL = 'a[href], button, input, select, textarea, label, summary';
 export interface LaterChoiceOptions {
   /** Focus moving to an element this accepts is the page's own doing, not the user's. */
   readonly isOwnFocus: (element: Element) => boolean;
+  readonly isOwnArea: (element: Element) => boolean;
   readonly signal: AbortSignal;
 }
 
 export function onLaterChoiceOrScroll(
   document: Document,
-  { isOwnFocus, signal }: LaterChoiceOptions,
+  { isOwnFocus, isOwnArea, signal }: LaterChoiceOptions,
   onChoice: () => void,
 ): void {
   const options = { capture: true, passive: true, signal };
@@ -35,6 +36,15 @@ export function onLaterChoiceOrScroll(
     'click',
     (event) => {
       if (event.target instanceof Element && event.target.closest(CONTROL)) onChoice();
+    },
+    options,
+  );
+  // A press on plain text outside the own area counts too: Playwright's engines move focus to
+  // <body> without a focusin, and iOS Safari sends no click from text to a delegated listener.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.target instanceof Element && !isOwnArea(event.target)) onChoice();
     },
     options,
   );

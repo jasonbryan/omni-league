@@ -22,6 +22,7 @@ import {
   lucideTrophy,
 } from '@ng-icons/lucide';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
+import { keepFocusWhenAlertGoes } from '../../core/replaced-focus';
 import { isPlainClick } from '../../shell/follow-link';
 import { leaguePath } from '../league/league-path';
 import { publicLeaguePath } from '../public-league/public-league-path';
@@ -255,6 +256,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
           } @else if (locationsFailed()) {
             <div class="px-4 py-4 md:px-5">
               <app-admin-alert
+                #locationsAlert
                 kind="error"
                 title="The locations could not be loaded."
                 description="Check your connection and try again."
@@ -367,6 +369,10 @@ export class AdminLeagues {
   }
 
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly locationsAlertHost = viewChild<unknown, ElementRef<HTMLElement>>(
+    'locationsAlert',
+    { read: ElementRef },
+  );
   private readonly sectionJump = injectSectionJump((section) => {
     for (const selector of NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT) {
       const target = section.querySelector<HTMLElement>(selector);
@@ -388,6 +394,10 @@ export class AdminLeagues {
 
   constructor() {
     bindAdminTitle('Leagues');
+    keepFocusWhenAlertGoes(
+      () => this.locationsAlertHost()?.nativeElement,
+      () => this.createSection()?.nativeElement,
+    );
     // WebKit moves the scroll when the content's arrival and the skeleton's removal reach the same
     // layout, so the skeleton goes one render later, after a layout with both in the page.
     afterRenderEffect({

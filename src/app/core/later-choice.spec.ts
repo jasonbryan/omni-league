@@ -19,7 +19,11 @@ describe('onLaterChoiceOrScroll', () => {
     onChoice = vi.fn<() => void>();
     onLaterChoiceOrScroll(
       document,
-      { isOwnFocus: (element) => element === excluded, signal: listening.signal },
+      {
+        isOwnFocus: (element) => element === excluded,
+        isOwnArea: (element) => excluded.contains(element),
+        signal: listening.signal,
+      },
       onChoice,
     );
   });
@@ -49,6 +53,18 @@ describe('onLaterChoiceOrScroll', () => {
     expect(onChoice).toHaveBeenCalledTimes(1);
   });
 
+  it('counts a press that lands outside the own area, even on text', () => {
+    root.querySelector('a')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(onChoice).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a press on text inside the own area', () => {
+    root.querySelector('p')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    excluded.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(onChoice).not.toHaveBeenCalled();
+  });
+
   it('counts Tab, Shift+Tab, and every scroll key, and ignores other keys', () => {
     for (const k of ['Shift', 'Enter', 'a']) key(k);
     expect(onChoice).not.toHaveBeenCalled();
@@ -75,6 +91,7 @@ describe('onLaterChoiceOrScroll', () => {
   it('stops once the signal aborts', () => {
     listening.abort();
     root.querySelector('button')!.click();
+    root.querySelector('a')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     key('Tab');
     expect(onChoice).not.toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import { checkReflow, REFLOW_WIDTH, expectAccessible, tabKey } from './support/a
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
@@ -328,6 +329,75 @@ test.describe('Leagues: creating a draft', () => {
     await expect(form(page)).toBeVisible();
     await expect(page.locator('[data-slot="create-league-skeleton"]')).toHaveCount(0);
     expect(await page.evaluate(() => window.scrollY)).toBe(nearTheBottom);
+  });
+
+  test.describe('"Create a league" pressed before the locations load (360)', () => {
+    test.beforeEach(({ page }) => {
+      test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'the link is hidden from 1024px');
+    });
+
+    const jump = (page: Page) => main(page).getByRole('link', { name: 'Create a league' });
+    const section = (page: Page) => page.locator('#create-league');
+    const headerTitle = (page: Page) => page.locator('header p.truncate');
+    const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
+    async function pressWithLocationsHeld(page: Page) {
+      const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+      const held = await holdQueries(page, ['locations:listForAdmin']);
+      await page.goto(`${base}/leagues`);
+      await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await jump(page).click();
+      await expect(section(page)).toBeFocused();
+      return held;
+    }
+
+    test('focuses Name once the locations arrive', async ({ page }) => {
+      const held = await pressWithLocationsHeld(page);
+      held.release();
+      await expect(page.locator('#name')).toBeFocused();
+    });
+
+    test('a tap on the header title leaves Name unfocused and the page where it is', async ({
+      page,
+    }) => {
+      const held = await pressWithLocationsHeld(page);
+      await headerTitle(page).tap();
+      const before = await scrollY(page);
+      held.release();
+      await expect(form(page)).toBeVisible();
+      await expect(page.locator('#name')).not.toBeFocused();
+      await expect(page.locator('body')).toBeFocused();
+      expect(await scrollY(page)).toBe(before);
+    });
+
+    test('a click on the form heading keeps the jump', async ({ page }) => {
+      const held = await pressWithLocationsHeld(page);
+      await page.locator('#create-league-heading').click();
+      held.release();
+      await expect(page.locator('#name')).toBeFocused();
+    });
+
+    test.describe('with the first answer failing', () => {
+      test('the alert takes focus, and the form that replaces it gives focus to the section', async ({
+        page,
+      }) => {
+        const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+        const failure = await failFirstAnswer(page, 'locations:listForAdmin');
+        await page.goto(`${base}/leagues`);
+        const alert = page
+          .getByRole('alert')
+          .filter({ hasText: 'The locations could not be loaded.' });
+        await expect(alert).toBeVisible();
+        await jump(page).click();
+        await expect(alert).toBeFocused();
+
+        failure.reconnect();
+        await expect(form(page)).toBeVisible();
+        await expect(section(page)).toBeFocused();
+        await expect(page.locator('#name')).not.toBeFocused();
+      });
+    });
   });
 });
 
