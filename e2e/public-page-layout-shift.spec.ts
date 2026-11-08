@@ -146,8 +146,10 @@ test.describe('a hard load of a public page', () => {
     await page.waitForTimeout(SETTLE_AFTER_IDLE_MS);
 
     held.release();
-    await expect.poll(() => held.isAnswered()).toBe(true);
-    await page.waitForTimeout(SETTLE_AFTER_IDLE_MS);
+    await expect.poll(() => held.heldQueriesAnswered()).toBe(true);
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
     const shift = await page.evaluate(() => (window as Window & Watch).e2eShift ?? 0);
     expect(shift).toBeLessThan(GOOD_CLS);
   });

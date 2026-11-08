@@ -83,22 +83,14 @@ export async function holdQueries(
 
 export interface HeldSubscriptions {
   isHolding: () => boolean;
-  /** True once every held query has been answered after the release. */
-  isAnswered: () => boolean;
-  /** Sends the kept frames in order, or throws the error that the socket handler recorded. */
+  heldQueriesAnswered: () => boolean;
   release: () => void;
 }
 
-const addedPaths = (message: string | Buffer): string[] =>
-  changes(message).flatMap((change) =>
-    change.type === 'Add' && change.udfPath ? [change.udfPath] : [],
-  );
+const addedChanges = (message: string | Buffer): Change[] =>
+  changes(message).filter((change) => change.type === 'Add' && change.udfPath);
 
-/**
- * Holds the client's subscriptions to `udfPaths`, so the server answers the other queries alone.
- * The first frame that adds one of them and every client frame after it are kept, which keeps the
- * query-set versions in order.
- */
+// Client frames after the first held one are kept too, because the query-set versions must stay in order.
 export async function holdSubscriptions(
   page: Page,
   udfPaths: readonly string[],
@@ -114,24 +106,20 @@ export async function holdSubscriptions(
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       if (released) return server.send(message);
-      if (!holding) {
-        const held = changes(message).filter(
-          (change) => change.type === 'Add' && change.udfPath && udfPaths.includes(change.udfPath),
+      const added = addedChanges(message);
+      const held = added.filter((change) => udfPaths.includes(change.udfPath ?? ''));
+      const others = added.filter((change) => !udfPaths.includes(change.udfPath ?? ''));
+      if (!holding && held.length === 0) return server.send(message);
+      if (others.length > 0) {
+        failure ??= new Error(
+          `holdSubscriptions: a frame adds ${others.map((change) => change.udfPath).join(', ')} while the held queries are ${udfPaths.join(', ')}, so the held queries cannot be split from them`,
         );
-        if (held.length > 0) {
-          const others = addedPaths(message).filter((path) => !udfPaths.includes(path));
-          if (others.length > 0) {
-            failure ??= new Error(
-              `holdSubscriptions: one frame adds ${others.join(', ')} with ${held.map((change) => change.udfPath).join(', ')}, so the held queries cannot be split from them`,
-            );
-            return server.send(message);
-          }
-          holding = true;
-          for (const change of held) pendingQueryIds.add(change.queryId);
-        }
+        // Forwarded, so the page still shows and release() names the queries instead of a timeout.
+        if (!holding) return server.send(message);
       }
-      if (holding) kept.push(message);
-      else server.send(message);
+      for (const change of held) pendingQueryIds.add(change.queryId);
+      holding = true;
+      kept.push(message);
     });
     server.onMessage((message) => {
       if (released) {
@@ -149,7 +137,7 @@ export async function holdSubscriptions(
   });
   return {
     isHolding: () => holding,
-    isAnswered: () => released && pendingQueryIds.size === 0,
+    heldQueriesAnswered: () => released && pendingQueryIds.size === 0,
     release: () => {
       if (failure) throw failure;
       if (!holding) throw new Error('holdSubscriptions: no frame adding the held queries was kept');
