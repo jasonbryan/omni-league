@@ -480,7 +480,14 @@ export class OrganizationOverview {
   };
 
   protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
-  protected readonly locationsLoading = computed(() => this.locations() === undefined);
+  private readonly locationCount = computed(
+    () => this.sport()?.locationCount ?? this.page().locationCount,
+  );
+
+  // A header with no locations reserves no section, so the footer does not jump when the empty list answers.
+  protected readonly locationsLoading = computed(
+    () => this.locations() === undefined && this.locationCount() > 0,
+  );
 
   protected readonly isEmpty = computed(
     () => this.page().leagueCount === 0 && (this.leagues() ?? []).length === 0,
