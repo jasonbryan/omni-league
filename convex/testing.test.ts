@@ -148,6 +148,8 @@ describe('convex/testing.ts exports', () => {
       'resetFilesBatch',
       'resetScheduledBatch',
       'resetSchemaBatch',
+      'seedBatch',
+      'seedBatchRows',
       'seedFreeAgent',
       'seedLeague',
       'seedPendingInvites',

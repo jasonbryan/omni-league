@@ -5,9 +5,10 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
+import { seedBatch, type SeedBatch } from './support/seed-batch';
 import { otherUser, signUp } from './support/session';
-import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
-import { newUser, seedUser, type TestUser } from './support/users';
+import { dateFromToday, newTenant, type Tenant } from './support/tenant';
+import { newUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -24,8 +25,10 @@ const managementPath = (tenant: Tenant) =>
 const waitlist = (page: Page) => page.locator('#waitlist');
 
 /** A published season at its maximum of 2 teams, open for registration. */
-async function seedFullSeason(): Promise<{ tenant: Tenant; teamIds: string[] }> {
-  const tenant = await seedTenant({
+async function seedFullSeason(
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamIds: string[] }> {
+  const { tenant, args } = newTenant({
     name: 'E2E Waitlist',
     locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
     leagues: [
@@ -37,30 +40,31 @@ async function seedFullSeason(): Promise<{ tenant: Tenant; teamIds: string[] }> 
       },
     ],
   });
-  await convexRun('testing:seedSeason', {
-    organizationSlug: tenant.slug,
-    leagueSlug: LEAGUE_SLUG,
-    name: 'Full Season',
-    slug: FULL,
-    startDate: dateFromToday(40),
-    endDate: dateFromToday(100),
-    registrationDeadline: dateFromToday(20),
-    minimumRosterSize: 4,
-    maxTeams: 2,
-    status: 'published',
-  });
-  const teamIds: string[] = [];
-  for (const name of ['Pair of Aces', 'Two Tall']) {
-    const captain = await seedUser(newUser('Captain'));
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: FULL,
-      name,
-      captainEmail: captain.email,
-    })) as { teamId: string };
-    teamIds.push(teamId);
-  }
+  const captains = [newUser('Captain'), newUser('Captain')];
+  const slugs = { leagueSlug: LEAGUE_SLUG, seasonSlug: FULL };
+  const { teamIds } = await seedBatch(
+    {
+      tenant: args,
+      accounts: captains,
+      seasons: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          name: 'Full Season',
+          slug: FULL,
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(100),
+          registrationDeadline: dateFromToday(20),
+          maxTeams: 2,
+        },
+      ],
+      teams: ['Pair of Aces', 'Two Tall'].map((name, i) => ({
+        ...slugs,
+        name,
+        captainEmail: captains[i].email,
+      })),
+    },
+    ...extra,
+  );
   return { tenant, teamIds };
 }
 
@@ -71,16 +75,6 @@ async function seedWaiting(tenant: Tenant, teamName: string, captain: TestUser):
     seasonSlug: FULL,
     teamName,
     captainEmail: captain.email,
-  });
-}
-
-async function asOrgAdmin(page: Page, tenant: Tenant): Promise<void> {
-  const admin = newUser('Admin');
-  await signUp(page, admin);
-  await convexRun('testing:addMembership', {
-    organizationSlug: tenant.slug,
-    email: admin.email,
-    role: 'orgAdmin',
   });
 }
 
@@ -124,11 +118,20 @@ test.describe('Waitlist: an organizer', () => {
     page,
     browser,
   }, testInfo) => {
-    const { tenant } = await seedFullSeason();
     const captain = newUser('Late');
-    const captainPage = await otherUser(browser, captain);
-    await seedWaiting(tenant, 'Late Lobsters', captain);
-    await asOrgAdmin(page, tenant);
+    const admin = newUser('Admin');
+    const [captainPage] = await Promise.all([otherUser(browser, captain), signUp(page, admin)]);
+    const { tenant } = await seedFullSeason({
+      waitlist: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: FULL,
+          teamName: 'Late Lobsters',
+          captainEmail: captain.email,
+        },
+      ],
+      memberships: [{ email: admin.email, role: 'orgAdmin' }],
+    });
 
     await page.goto(managementPath(tenant));
     const panel = waitlist(page);

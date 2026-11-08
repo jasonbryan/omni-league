@@ -542,29 +542,214 @@ async function createAccounts(
   { count, emailPrefix, namePrefix }: { count: number; emailPrefix: string; namePrefix: string },
   each: (userId: Id<'users'>) => Promise<unknown>,
 ): Promise<void> {
-  const now = Date.now();
   for (let i = 1; i <= count; i++) {
     const name = `${namePrefix} ${numbered(i)}`;
-    // The component's generated return types are `any`.
-    const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
-      input: {
-        model: 'user',
-        data: {
-          name,
-          email: `${emailPrefix}-${numbered(i)}@example.test`,
-          emailVerified: false,
-          createdAt: now,
-          updatedAt: now,
-        },
-      },
-    })) as { _id: string };
-    const userId = await ctx.db.insert('users', {
-      authUserId: account._id,
-      name,
-      adultConfirmedAt: now,
-    });
-    await each(userId);
+    await each(
+      await createAccount(ctx, { name, email: `${emailPrefix}-${numbered(i)}@example.test` }),
+    );
   }
+}
+
+/**
+ * An account with no credential, for a person a test never signs in as: it stores no password, so
+ * no password goes around `hashPassword`. The adapter runs no trigger, so the `users` row is written here.
+ */
+async function createAccount(
+  ctx: MutationCtx,
+  { name, email }: { name: string; email: string },
+): Promise<Id<'users'>> {
+  const now = Date.now();
+  // The component's generated return types are `any`.
+  const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+    input: {
+      model: 'user',
+      data: {
+        name,
+        email: email.toLowerCase(),
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+  })) as { _id: string };
+  return await ctx.db.insert('users', { authUserId: account._id, name, adultConfirmedAt: now });
+}
+
+const batchSeasonValidator = v.object({ leagueSlug: v.string(), ...seasonSeedValidator.fields });
+
+const batchTeamValidator = v.object({
+  leagueSlug: v.string(),
+  seasonSlug: v.string(),
+  name: v.string(),
+  captainEmail: v.string(),
+  playerEmails: v.optional(v.array(v.string())),
+  invites: v.optional(
+    v.array(v.object({ email: v.string(), expiresAt: v.number(), token: v.optional(v.string()) })),
+  ),
+  minors: v.optional(v.array(v.object({ guardianEmail: v.string(), minorName: v.string() }))),
+});
+
+const batchRowsFields = {
+  tenant: v.optional(tenantValidator),
+  organizationSlug: v.optional(v.string()),
+  accounts: v.optional(v.array(v.object({ name: v.string(), email: v.string() }))),
+  memberships: v.optional(
+    v.array(
+      v.object({
+        email: v.string(),
+        role: roleValidator,
+        leagueSlugs: v.optional(v.array(v.string())),
+      }),
+    ),
+  ),
+  seasons: v.optional(v.array(batchSeasonValidator)),
+  teams: v.optional(v.array(batchTeamValidator)),
+  waitlist: v.optional(
+    v.array(
+      v.object({
+        leagueSlug: v.string(),
+        seasonSlug: v.string(),
+        teamName: v.string(),
+        captainEmail: v.string(),
+      }),
+    ),
+  ),
+  freeAgents: v.optional(
+    v.array(v.object({ leagueSlug: v.string(), seasonSlug: v.string(), email: v.string() })),
+  ),
+};
+
+function batchOrganizationSlug({
+  tenant,
+  organizationSlug,
+}: {
+  tenant?: { organization: { slug: string } } | undefined;
+  organizationSlug?: string | undefined;
+}): string {
+  const slug = tenant?.organization.slug ?? organizationSlug;
+  if (slug === undefined || (tenant !== undefined && organizationSlug !== undefined)) {
+    throw new Error('A batch names exactly one of tenant and organizationSlug');
+  }
+  return slug;
+}
+
+const batchResultValidator = v.object({ slug: v.string(), teamIds: v.array(v.id('teams')) });
+
+// A test's whole seed in one CLI call, since each call starts a CLI process. `users` sign up
+// through Better Auth's own sign-up, so each password gets a real hash; `accounts` store none.
+export const seedBatch = internalAction({
+  args: { ...batchRowsFields, users: v.optional(v.array(seedUserValidator)) },
+  returns: batchResultValidator,
+  handler: async (ctx, { users = [], ...rows }): Promise<Infer<typeof batchResultValidator>> => {
+    assertTestDeployment();
+    batchOrganizationSlug(rows);
+    const auth = createAuth(ctx);
+    for (const { name, email, password } of users) {
+      // The 18+ field is this app's (convex/auth.ts), so Better Auth's body type does not list it.
+      const body = { name, email, password, [ADULT_CONFIRMATION_FIELD]: true };
+      await auth.api.signUpEmail({ body });
+    }
+    return await ctx.runMutation(internal.testing.seedBatchRows, rows);
+  },
+});
+
+/** Teams come before the waitlist, so a waitlist entry can join the season they fill. */
+export const seedBatchRows = internalMutation({
+  args: batchRowsFields,
+  returns: batchResultValidator,
+  handler: async (ctx, rows) => {
+    assertTestDeployment();
+    const slug = batchOrganizationSlug(rows);
+    if (rows.tenant) {
+      await insertTenant(ctx, { ...rows.tenant, leagues: rows.tenant.leagues.map(withDivision) });
+    }
+    const organization = await organizationBySlug(ctx, slug);
+    for (const account of rows.accounts ?? []) await createAccount(ctx, account);
+    for (const { email, role, leagueSlugs = [] } of rows.memberships ?? []) {
+      const user = await userByEmail(ctx, email);
+      await assertNoMembership(ctx, user, organization);
+      const leagueIds = [];
+      for (const leagueSlug of leagueSlugs) {
+        leagueIds.push((await leagueBySlug(ctx, organization, leagueSlug))._id);
+      }
+      await insertMembership(ctx, user._id, organization._id, role, leagueIds);
+    }
+    for (const { leagueSlug, status, ...season } of rows.seasons ?? []) {
+      const league = await leagueBySlug(ctx, organization, leagueSlug);
+      await insertSeason(ctx, league, withPlayersPerSide(league, season), status);
+    }
+    const teamIds = [];
+    for (const team of rows.teams ?? []) {
+      const season = await seasonBySlugs(ctx, slug, team.leagueSlug, team.seasonSlug);
+      const captain = await userByEmail(ctx, team.captainEmail);
+      const teamId = await insertTeamWithCaptain(ctx, season, {
+        name: team.name,
+        captainUserId: captain._id,
+      });
+      teamIds.push(teamId);
+      for (const email of team.playerEmails ?? []) {
+        const player = await userByEmail(ctx, email);
+        await addRosterEntry(ctx, await teamById(ctx, teamId), {
+          userId: player._id,
+          source: 'invite',
+          addedByUserId: captain._id,
+        });
+      }
+      for (const { email, expiresAt, token } of team.invites ?? []) {
+        await insertTeamInvite(ctx, await teamById(ctx, teamId), {
+          email: normaliseInviteEmail(email),
+          tokenHash: await hashInviteToken(token ?? generateInviteToken()),
+          expiresAt,
+          invitedByUserId: captain._id,
+        });
+      }
+      for (const { guardianEmail, minorName } of team.minors ?? []) {
+        const guardian = await userByEmail(ctx, guardianEmail);
+        await addMinorEntry(ctx, await teamById(ctx, teamId), {
+          guardianUserId: guardian._id,
+          minorName,
+          source: 'invite',
+          addedByUserId: captain._id,
+        });
+      }
+    }
+    for (const entry of rows.waitlist ?? []) {
+      const season = await seasonBySlugs(ctx, slug, entry.leagueSlug, entry.seasonSlug);
+      const captain = await userByEmail(ctx, entry.captainEmail);
+      const result = await registerTeamOrJoinWaitlist(ctx, season, {
+        name: entry.teamName,
+        captainUserId: captain._id,
+      });
+      if (result.status !== 'waitlisted') throw new Error('The season is not full');
+    }
+    for (const { leagueSlug, seasonSlug, email } of rows.freeAgents ?? []) {
+      const season = await seasonBySlugs(ctx, slug, leagueSlug, seasonSlug);
+      await insertFreeAgent(ctx, season, (await userByEmail(ctx, email))._id);
+    }
+    return { slug, teamIds };
+  },
+});
+
+// The roster writers read the team's counters from the document they are given.
+async function teamById(ctx: Pick<MutationCtx, 'db'>, teamId: Id<'teams'>): Promise<Doc<'teams'>> {
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) throw new Error('No team has this id');
+  return team;
+}
+
+async function leagueBySlug(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  slug: string,
+): Promise<Doc<'leagues'>> {
+  const league = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_slug', (q) =>
+      q.eq('organizationId', organization._id).eq('slug', slug),
+    )
+    .unique();
+  if (!league) throw new Error(`No league has the slug ${JSON.stringify(slug)}`);
+  return league;
 }
 
 export const addToTeam = internalMutation({
