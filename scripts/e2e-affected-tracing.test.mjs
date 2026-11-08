@@ -967,6 +967,7 @@ describe('convex/lib', () => {
     'previewOrigin.ts': 'loaded with import() by scripts/e2e-convex.mjs',
     'roles.ts': 'imported by convex/testing.ts',
     'seasonStatus.ts': 'imported by convex/testing.ts',
+    'seedCallLimits.ts': 'imported by convex/testing.ts',
     'signInThrottle.ts': 'imported by convex/auth.ts',
     'slugs.ts': 'reached from convex/testing.ts',
     'sports.ts': 'reached from convex/testing.ts',
