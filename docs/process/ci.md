@@ -231,7 +231,7 @@ Agents never push to `main` directly.
 | Action / tool             | Version | Pin                                                                        | Used for                                                                  |
 | ------------------------- | ------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `actions/checkout`        | v7.0.1  | `3d3c42e5aac5ba805825da76410c181273ba90b1`                                 | Checkout, always `persist-credentials: false`                             |
-| `actions/setup-node`      | v7.0.0  | `820762786026740c76f36085b0efc47a31fe5020`                                 | Node from `package.json`, automatic npm cache                             |
+| `actions/setup-node`      | v7.1.0  | `949feb2413d6458794dcd2491c4babbbce0c15c1`                                 | Node from `package.json`, automatic npm cache                             |
 | actionlint (binary)       | 1.7.12  | SHA-256 `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8` | Workflow lint, `linux_amd64` tarball from the GitHub release              |
 | `actions/upload-artifact` | v7.0.2  | `cf430e030ddbb5b0abf93d22962f4752f3646cd9`                                 | `e2e-report-<n>` artifact, one per `e2e` shard, `retention-days: 7` (#13) |
 
