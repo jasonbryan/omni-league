@@ -14,6 +14,7 @@ import { insertPendingInvite } from './lib/inviteWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
+import { ACCOUNTS_PER_SEED_CALL } from './lib/seedCallLimits';
 import {
   addMinorEntry,
   addRosterEntry,
@@ -479,34 +480,49 @@ export const seedFreeAgent = internalMutation({
   },
 });
 
-/** Many waiting free agents at once, each with an account of its own, so a test can reach the list's cap. They share one registration time, and the index then keeps them in insertion order. */
+/**
+ * Up to `ACCOUNTS_PER_SEED_CALL` waiting free agents, numbered from `from`, each with an account of its own. A test reaches the
+ * list's cap with sequential calls. The rows of one call share one registration time and a later call's come after, so the index
+ * keeps insertion order.
+ */
 export const seedWaitingFreeAgents = internalMutation({
   args: {
     organizationSlug: v.string(),
     leagueSlug: v.string(),
     seasonSlug: v.string(),
+    from: v.optional(v.number()),
     count: v.number(),
     emailPrefix: v.string(),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, count, emailPrefix }) => {
+  handler: async (
+    ctx,
+    { organizationSlug, leagueSlug, seasonSlug, from = 1, count, emailPrefix },
+  ) => {
     assertTestDeployment();
+    assertSeedRange(from, count);
     const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
-    await createAccounts(ctx, { count, emailPrefix, namePrefix: 'Free Agent' }, (userId) =>
+    await createAccounts(ctx, { from, count, emailPrefix, namePrefix: 'Free Agent' }, (userId) =>
       insertFreeAgent(ctx, season, userId),
     );
     return null;
   },
 });
 
-/** Many league organizers at once, so a test can pass the Staff list's 200 rows. */
+/** Up to `ACCOUNTS_PER_SEED_CALL` league organizers, numbered from `from`, so a test can pass the Staff list's 200 rows with sequential calls. */
 export const seedStaff = internalMutation({
-  args: { organizationSlug: v.string(), count: v.number(), emailPrefix: v.string() },
+  args: {
+    organizationSlug: v.string(),
+    from: v.optional(v.number()),
+    count: v.number(),
+    emailPrefix: v.string(),
+  },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, count, emailPrefix }) => {
+  handler: async (ctx, { organizationSlug, from = 1, count, emailPrefix }) => {
     assertTestDeployment();
+    assertSeedRange(from, count);
     const organization = await organizationBySlug(ctx, organizationSlug);
-    await createAccounts(ctx, { count, emailPrefix, namePrefix: 'Staff' }, async (userId) => {
+    await createAccounts(ctx, { from, count, emailPrefix, namePrefix: 'Staff' }, async (userId) => {
       await insertMembership(ctx, userId, organization._id, 'leagueOrganizer');
     });
     return null;
@@ -537,12 +553,25 @@ export const seedPendingInvites = internalMutation({
 
 const numbered = (i: number) => String(i).padStart(3, '0');
 
+function assertSeedRange(from: number, count: number): void {
+  if (!Number.isInteger(from) || from < 1) throw new Error('from must be a positive integer');
+  if (!Number.isInteger(count) || count < 1) throw new Error('count must be a positive integer');
+  if (count > ACCOUNTS_PER_SEED_CALL) {
+    throw new Error(`A seed makes at most ${ACCOUNTS_PER_SEED_CALL} accounts per call`);
+  }
+}
+
 async function createAccounts(
   ctx: MutationCtx,
-  { count, emailPrefix, namePrefix }: { count: number; emailPrefix: string; namePrefix: string },
+  {
+    from,
+    count,
+    emailPrefix,
+    namePrefix,
+  }: { from: number; count: number; emailPrefix: string; namePrefix: string },
   each: (userId: Id<'users'>) => Promise<unknown>,
 ): Promise<void> {
-  for (let i = 1; i <= count; i++) {
+  for (let i = from; i < from + count; i++) {
     const name = `${namePrefix} ${numbered(i)}`;
     await each(
       await createAccount(ctx, { name, email: `${emailPrefix}-${numbered(i)}@example.test` }),

@@ -61,6 +61,7 @@ import type * as lib_searchQuery from "../lib/searchQuery.js";
 import type * as lib_seasonInput from "../lib/seasonInput.js";
 import type * as lib_seasonLookup from "../lib/seasonLookup.js";
 import type * as lib_seasonStatus from "../lib/seasonStatus.js";
+import type * as lib_seedCallLimits from "../lib/seedCallLimits.js";
 import type * as lib_signInThrottle from "../lib/signInThrottle.js";
 import type * as lib_slugs from "../lib/slugs.js";
 import type * as lib_sports from "../lib/sports.js";
@@ -148,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   "lib/seasonInput": typeof lib_seasonInput;
   "lib/seasonLookup": typeof lib_seasonLookup;
   "lib/seasonStatus": typeof lib_seasonStatus;
+  "lib/seedCallLimits": typeof lib_seedCallLimits;
   "lib/signInThrottle": typeof lib_signInThrottle;
   "lib/slugs": typeof lib_slugs;
   "lib/sports": typeof lib_sports;
