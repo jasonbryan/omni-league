@@ -3,7 +3,7 @@ import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { tabWalk } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { holdQueries } from './support/hold-queries';
+import { holdQueries, holdSubscriptions } from './support/hold-queries';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
@@ -12,6 +12,12 @@ test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex bac
 
 const GOOD_CLS = 0.1;
 const SETTLE_AFTER_IDLE_MS = 1_000;
+const ORGANIZATION_LISTS = [
+  'organizations:listPublicLeagues',
+  'organizations:listPublicLocations',
+  'seasons:listOpenForOrganization',
+  'organizations:listPublicLeagueFacets',
+];
 const SKELETONS = ['organization-skeleton', 'league-skeleton', 'season-skeleton'];
 
 const footer = (page: Page) => page.getByRole('contentinfo');
@@ -124,6 +130,27 @@ test.describe('a hard load of a public page', () => {
       expect(shift).toBeLessThan(GOOD_CLS);
     });
   }
+
+  // Signed in, the client sends all five subscriptions in one frame on a hard load, so the header cannot show alone.
+  test('of an organization with no leagues, answered with the client shell, with its lists subscribed after the header shows, has a layout shift below 0.1 when signed out', async ({
+    page,
+  }) => {
+    const tenant = await seedTenant({ name: 'E2E Empty' });
+    const held = await holdSubscriptions(page, ORGANIZATION_LISTS);
+    await answerWithClientShell(page, tenant.path);
+    await watchLayout(page);
+    await page.goto(tenant.path);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByTestId('organization-skeleton')).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+    await page.waitForTimeout(SETTLE_AFTER_IDLE_MS);
+
+    held.release();
+    await expect.poll(() => held.isAnswered()).toBe(true);
+    await page.waitForTimeout(SETTLE_AFTER_IDLE_MS);
+    const shift = await page.evaluate(() => (window as Window & Watch).e2eShift ?? 0);
+    expect(shift).toBeLessThan(GOOD_CLS);
+  });
 
   test('of the organization, league, and season pages never inserts a skeleton when signed in', async ({
     page,

@@ -80,3 +80,80 @@ export async function holdQueries(
     },
   };
 }
+
+export interface HeldSubscriptions {
+  isHolding: () => boolean;
+  /** True once every held query has been answered after the release. */
+  isAnswered: () => boolean;
+  /** Sends the kept frames in order, or throws the error that the socket handler recorded. */
+  release: () => void;
+}
+
+const addedPaths = (message: string | Buffer): string[] =>
+  changes(message).flatMap((change) =>
+    change.type === 'Add' && change.udfPath ? [change.udfPath] : [],
+  );
+
+/**
+ * Holds the client's subscriptions to `udfPaths`, so the server answers the other queries alone.
+ * The first frame that adds one of them and every client frame after it are kept, which keeps the
+ * query-set versions in order.
+ */
+export async function holdSubscriptions(
+  page: Page,
+  udfPaths: readonly string[],
+): Promise<HeldSubscriptions> {
+  const pendingQueryIds = new Set<number>();
+  const kept: (string | Buffer)[] = [];
+  let holding = false;
+  let released = false;
+  // An exception thrown in a socket handler does not fail the test, so release() rethrows it.
+  let failure: Error | undefined;
+  let release: () => void = () => undefined;
+  await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      if (released) return server.send(message);
+      if (!holding) {
+        const held = changes(message).filter(
+          (change) => change.type === 'Add' && change.udfPath && udfPaths.includes(change.udfPath),
+        );
+        if (held.length > 0) {
+          const others = addedPaths(message).filter((path) => !udfPaths.includes(path));
+          if (others.length > 0) {
+            failure ??= new Error(
+              `holdSubscriptions: one frame adds ${others.join(', ')} with ${held.map((change) => change.udfPath).join(', ')}, so the held queries cannot be split from them`,
+            );
+            return server.send(message);
+          }
+          holding = true;
+          for (const change of held) pendingQueryIds.add(change.queryId);
+        }
+      }
+      if (holding) kept.push(message);
+      else server.send(message);
+    });
+    server.onMessage((message) => {
+      if (released) {
+        for (const change of changes(message)) {
+          if (change.type === 'QueryUpdated') pendingQueryIds.delete(change.queryId);
+        }
+      }
+      ws.send(message);
+    });
+    release = () => {
+      released = true;
+      holding = false;
+      for (const frame of kept.splice(0)) server.send(frame);
+    };
+  });
+  return {
+    isHolding: () => holding,
+    isAnswered: () => released && pendingQueryIds.size === 0,
+    release: () => {
+      if (failure) throw failure;
+      if (!holding) throw new Error('holdSubscriptions: no frame adding the held queries was kept');
+      release();
+    },
+  };
+}

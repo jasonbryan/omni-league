@@ -305,6 +305,31 @@ describe('the sport view not found and failures', () => {
   });
 });
 
+describe('the sport view whose header counts no locations for the sport', () => {
+  it('shows no Locations section until a location list answers, then shows its rows', async () => {
+    const page: PublicOrganizationPage = {
+      ...GULF_COAST,
+      sports: GULF_COAST.sports.map((sport) =>
+        sport.key === 'soccer' ? { ...sport, locationCount: 0 } : sport,
+      ),
+    };
+    const harness = await open();
+    const results = sportQueryResults(page, 'soccer');
+    subscription(HEADER).emit(results[HEADER]);
+    subscription(LEAGUES).emit(results[LEAGUES]);
+    await settle(harness);
+    expect(text(leaguesSection(harness)?.querySelector('h2'))).toBe('Soccer leagues');
+    expect(locationsSection(harness)).toBeNull();
+    expect(host(harness).querySelector('app-organization-rows-skeleton')).toBeNull();
+
+    subscription(LOCATIONS).emit(listPage(page.locations.slice(0, 1), 1));
+    await settle(harness);
+    expect([...(locationsSection(harness)?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
+      'Bayside Athletic Complex',
+    ]);
+  });
+});
+
 describe('the sport view with several pages', () => {
   let harness: RouterTestingHarness;
   beforeEach(async () => {
