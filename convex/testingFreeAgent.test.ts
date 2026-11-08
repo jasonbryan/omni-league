@@ -3,6 +3,7 @@ import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { components, internal } from './_generated/api';
+import { ACCOUNTS_PER_SEED_CALL } from './lib/seedCallLimits';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
@@ -119,6 +120,92 @@ describe('testing:seedWaitingFreeAgents', () => {
         ['Free Agent 003', 'many-003@example.test'],
       ]);
     });
+  });
+
+  async function waitingNames(t: Awaited<ReturnType<typeof setup>>['t']) {
+    return t.run(async (ctx) => {
+      const season = (await ctx.db.query('seasons').first())!;
+      const rows = await ctx.db
+        .query('freeAgents')
+        .withIndex('by_seasonId_and_status_and_registeredAt', (q) =>
+          q.eq('seasonId', season._id).eq('status', 'waiting'),
+        )
+        .collect();
+      return Promise.all(rows.map(async (row) => (await ctx.db.get('users', row.userId))!.name));
+    });
+  }
+
+  test('a count above the per-call limit throws and writes nothing, and the limit itself succeeds', async () => {
+    const { t } = await setup();
+    await expect(
+      t.mutation(internal.testing.seedWaitingFreeAgents, {
+        ...SEASON_SLUGS,
+        count: ACCOUNTS_PER_SEED_CALL + 1,
+        emailPrefix: 'many',
+      }),
+    ).rejects.toThrow(/at most 25/);
+    expect(await waitingNames(t)).toEqual([]);
+    await t.mutation(internal.testing.seedWaitingFreeAgents, {
+      ...SEASON_SLUGS,
+      count: ACCOUNTS_PER_SEED_CALL,
+      emailPrefix: 'many',
+    });
+    expect(await waitingNames(t)).toHaveLength(ACCOUNTS_PER_SEED_CALL);
+  }, 30_000);
+
+  test.each([
+    ['from 0', { from: 0, count: 1 }],
+    ['from 1.5', { from: 1.5, count: 1 }],
+    ['from -1', { from: -1, count: 1 }],
+    ['count 0', { count: 0 }],
+    ['count 1.5', { count: 1.5 }],
+  ])('%s throws and writes nothing', async (_, extra) => {
+    const { t } = await setup();
+    await expect(
+      t.mutation(internal.testing.seedWaitingFreeAgents, {
+        ...SEASON_SLUGS,
+        emailPrefix: 'many',
+        ...extra,
+      }),
+    ).rejects.toThrow(/positive integer/);
+    expect(await waitingNames(t)).toEqual([]);
+  });
+
+  test('two calls number the free agents on from one another and list them in insertion order', async () => {
+    const { t } = await setup();
+    for (const from of [1, 3]) {
+      await t.mutation(internal.testing.seedWaitingFreeAgents, {
+        ...SEASON_SLUGS,
+        from,
+        count: 2,
+        emailPrefix: 'many',
+      });
+    }
+    expect(await waitingNames(t)).toEqual([
+      'Free Agent 001',
+      'Free Agent 002',
+      'Free Agent 003',
+      'Free Agent 004',
+    ]);
+  });
+
+  test('every seeded user is an account with no credential', async () => {
+    const { t } = await setup();
+    await t.mutation(internal.testing.seedWaitingFreeAgents, {
+      ...SEASON_SLUGS,
+      count: 2,
+      emailPrefix: 'many',
+    });
+    const accounts = await t.run(
+      async (ctx) =>
+        (
+          (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+            model: 'account',
+            paginationOpts: { numItems: 100, cursor: null },
+          })) as { page: unknown[] }
+        ).page,
+    );
+    expect(accounts).toEqual([]);
   });
 
   test('refuses outside a test deployment', async () => {

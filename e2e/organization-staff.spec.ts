@@ -5,6 +5,7 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
+import { seedAccountsInCalls } from './support/seed-accounts';
 import { signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser, seedUser } from './support/users';
@@ -675,9 +676,8 @@ test.describe('Staff: past 200 rows', () => {
     test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
     const emailPrefix = prefix();
     const { tenant } = await memberOf(page, 'orgAdmin', { name: CAPPED_ORG });
-    await convexRun('testing:seedStaff', {
+    await seedAccountsInCalls('testing:seedStaff', 201, {
       organizationSlug: tenant.slug,
-      count: 201,
       emailPrefix,
     });
     await page.goto(staffPath(tenant.slug));

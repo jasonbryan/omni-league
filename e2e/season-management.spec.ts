@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { Browser, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
-import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdMutations } from './support/hold-mutations';
 import { screenshot } from './support/screenshot';
+import { seedAccountsInCalls } from './support/seed-accounts';
 import { seedBatch, type SeedBatch } from './support/seed-batch';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, newTenant, type Tenant } from './support/tenant';
@@ -234,11 +234,10 @@ test.describe('Season management: an org admin', () => {
   }, testInfo) => {
     test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
     const { tenant } = await asOrgAdmin(page);
-    await convexRun('testing:seedWaitingFreeAgents', {
+    await seedAccountsInCalls('testing:seedWaitingFreeAgents', 201, {
       organizationSlug: tenant.slug,
       leagueSlug: LEAGUE_SLUG,
       seasonSlug: SUMMER,
-      count: 201,
       emailPrefix: `capped-${randomBytes(4).toString('hex')}`,
     });
     await page.goto(seasonPath(tenant, SUMMER));
