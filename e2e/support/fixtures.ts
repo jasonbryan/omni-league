@@ -21,7 +21,8 @@ export interface ConsoleFixtureOptions {
 export interface NetlifyDrawerOptions {
   /**
    * `false` leaves the context with no `context.route`, so its HTTP cache stays on, as in a user's
-   * browser. Only for runs on `localhost` or a preview with the Drawer off.
+   * browser. Only for runs on `localhost` or on a deployed site while the Drawer is off (observed
+   * off 2026-11-09), where the stub does nothing anyway.
    */
   netlifyDrawerStub: boolean;
 }

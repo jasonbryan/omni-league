@@ -4,7 +4,8 @@ import type { BrowserContext } from '@playwright/test';
  * The script Netlify injects into the HTML of Deploy Previews and branch deploys to load the
  * Netlify Drawer, a review toolbar in an iframe. It is not app markup, and the iframe fails the axe
  * helper's Tab walk (2.4.7), so remote runs (`E2E_BASE_URL`) stub it (`docs/process/hosting.md`,
- * "Smoke runs").
+ * "Smoke runs"). The Drawer is off (owner decision 2026-10-09, setting observed off 2026-11-09), so
+ * the stub changes nothing today and stays in case it is turned on again.
  */
 export const NETLIFY_DRAWER_SCRIPT_PATH = '/.netlify/scripts/cdp';
 
