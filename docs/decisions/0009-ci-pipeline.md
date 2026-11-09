@@ -918,11 +918,11 @@ Issue #563. Job `e2e` was cancelled at its 45-minute limit on every night since 
 
 Issue #599 adds two tests to `e2e/pwa.spec.ts`, which now lists 13 on `chromium-mobile` (`PRODUCTION_RUNS` in `scripts/e2e-production-check.mjs`), so `production-mobile` takes longer. Following #178's amendment, the limits are set from a measured run. It changes only `timeout-minutes` of an accepted job, so it is not a `gate:technology` change.
 
-**Step timeout rule.** A run step's `timeout-minutes` is the smallest whole number of minutes that is at least 3.5 times its measured time on a dispatched `e2e-production` run (the ratio of #603's 50.9 s against 180 s). The job's `timeout-minutes` is the sum of the four step limits plus `SETUP_MINUTES` (2) and `SPARE_MINUTES` (1), the budget `scripts/e2e-workflow.test.mjs` checks.
+**Step timeout rule.** The `production-mobile` step's `timeout-minutes` is the smallest whole number of minutes that is at least 3.5 times its measured time on a dispatched `e2e-production` run (the ratio of #603's 50.9 s against 180 s). The job's `timeout-minutes` is the sum of the four step limits plus `SETUP_MINUTES` (2) and `SPARE_MINUTES` (1), the budget `scripts/e2e-workflow.test.mjs` checks.
 
 | Setting                                       | Accepted | Now |
 | --------------------------------------------- | -------- | --- |
 | `timeout-minutes` on step `production-mobile` | 3        | 4   |
 | `timeout-minutes` on job `e2e-production`     | 20       | 20  |
 
-Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/runs/42709660266), a `workflow_dispatch` run of the branch: `production-mobile` 67 s for 13 tests (13 passed), so 3.5 × 67 s = 233 s gives 4 minutes. With `production-desktop` 2, `pwa-update` 6, and `kill-switch` 5 unchanged, the job limit is 4 + 2 + 6 + 5 + 2 + 1 = 20, the value the #426 amendment's "Timeout" row already holds. The job took 391 s (6 min 31 s). The #426 table's "Runs" row (`pwa.spec.ts`, 10 tests) is superseded by the 13 above; its other rows are unchanged. Measured figures are in [`docs/process/ci.md`](../process/ci.md#minutes).
+Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/runs/42709660266), a `workflow_dispatch` run of the branch: `production-mobile` 67 s for 13 tests (13 passed), so 3.5 × 67 s = 234.5 s gives 4 minutes. With `production-desktop` 2, `pwa-update` 6, and `kill-switch` 5 unchanged, the job limit is 4 + 2 + 6 + 5 + 2 + 1 = 20, the value the #426 amendment's "Timeout" row already holds. The job took 391 s (6 min 31 s). The #426 table's "Runs" row (`pwa.spec.ts`, 10 tests) is superseded by the 13 above; its other rows are unchanged. Measured figures are in [`docs/process/ci.md`](../process/ci.md#minutes).
