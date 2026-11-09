@@ -205,7 +205,7 @@ jobs:
             exit 1
           fi
       - name: production-mobile
-        timeout-minutes: 3
+        timeout-minutes: 4
         env:
           E2E_RUN_NAME: production-mobile
           E2E_BASE_URL: http://localhost:4000

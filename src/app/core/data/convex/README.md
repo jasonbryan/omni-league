@@ -79,7 +79,12 @@ Its message points here: to configure a URL, copy `.env.example` to `.env.local`
 
 `provideConvexAuth(AuthService)` in `app.config.ts` registers the auth source. It takes a `ConvexAuthSource` instance, or an injectable class whose root instance is used. In the browser, the client factory then calls `setAuth(fetchToken, onChange)` when it creates the client, `clearAuth()` when `signedIn` turns false, and `setAuth` again when it turns true; live queries keep their subscriptions and rerun with the new identity. On the server it is ignored, so server renders stay anonymous.
 
-`AuthService` (`src/app/core/auth/`) is that source. Its `fetchToken` returns `null` without a request while signed out, so anonymous page views ask for no token, and `convexAuthenticated()` turns true once Convex has accepted the token (`onChange`). A page that reads the caller's own data asks only then, with `skipToken` before:
+Two optional members ([ADR 0006](../../../../../docs/decisions/0006-angular-app-baseline.md), #599 amendment):
+
+- `authEpoch`: a change while `signedIn` is true calls `setAuth` again. Convex asks for no token after it was given `null`, so this is how a source that withheld one gets asked again.
+- `onOnline`: `provideConvex()`'s initializer calls it each time the `online` signal turns true, the first time included. The source must not inject `ConvexConnection` or `CONVEX_CLIENT`, which would be an injection cycle.
+
+`AuthService` (`src/app/core/auth/`) is that source. Its `fetchToken` returns `null` without a request while signed out, so anonymous page views ask for no token, and `convexAuthenticated()` turns true once Convex has accepted the token (`onChange`). A kept session ([glossary](../../../../../docs/glossary.md)) is `signedIn` before the server confirms it: `fetchToken` waits up to 5 s for the session check and otherwise returns `null`, and on confirm `authEpoch` advances. A page that reads the caller's own data asks only once `convexAuthenticated()` is true, with `skipToken` before:
 
 ```ts
 readonly me = injectQuery(api.users.me, () => (this.auth.convexAuthenticated() ? {} : skipToken));

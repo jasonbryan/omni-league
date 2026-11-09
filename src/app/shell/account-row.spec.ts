@@ -25,7 +25,7 @@ describe('AccountRow', () => {
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
 
-  async function open(url = '/app') {
+  async function open(url = '/app', { answered = true } = {}) {
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
     TestBed.configureTestingModule({
@@ -35,7 +35,7 @@ describe('AccountRow', () => {
         provideRouter([{ path: '**', component: AccountRowTestPage }]),
       ],
     });
-    auth.emitSession({ id: 's1' });
+    if (answered) auth.emitSession({ id: 's1' });
     harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
     await harness.fixture.whenStable();
@@ -72,6 +72,18 @@ describe('AccountRow', () => {
       ['users:me', {}],
       ['users:me', {}],
     ]);
+  });
+
+  it('shows a skeleton with no name or email for a kept session the server has not answered for', async () => {
+    const page = await open('/app', { answered: false });
+    expect(TestBed.inject(AuthService).signedIn()).toBe(true);
+    for (const host of [row(page), bar(page)]) {
+      expect(host.querySelector('a')).toBeNull();
+      expect(host.querySelector('[role="status"]')?.textContent).toContain('Loading');
+      expect(host.textContent).not.toContain('Maya');
+      expect(host.textContent).not.toContain('@');
+    }
+    expect(convex.subscriptions).toEqual([]);
   });
 
   it('shows a skeleton and no link, name, or email until users.me answers', async () => {

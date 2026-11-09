@@ -7,14 +7,28 @@ export function provideFakeAuthClient(fake: FakeAuthClient): Provider {
 
 interface SessionValue {
   data: { session: { id: string }; user: { id: string; name: string } } | null;
-  error: null;
+  error: { status: number; statusText: string } | Error | null;
   isPending: boolean;
   isRefetching: boolean;
+  refetch: () => Promise<void>;
 }
 
 export class FakeAuthClient {
-  private value: SessionValue = { data: null, error: null, isPending: true, isRefetching: false };
+  private readonly refetch = () => {
+    this.refetches++;
+    this.emitChecking();
+    return Promise.resolve();
+  };
+  private value: SessionValue = {
+    data: null,
+    error: null,
+    isPending: true,
+    isRefetching: false,
+    refetch: this.refetch,
+  };
   private readonly listeners = new Set<(value: SessionValue) => void>();
+
+  refetches = 0;
 
   nextToken: string | null = 'jwt';
   tokenRequests = 0;
@@ -49,6 +63,7 @@ export class FakeAuthClient {
 
   emitSession(session: { id: string } | null): void {
     this.set({
+      ...this.value,
       data: session ? { session, user: { id: 'u1', name: 'Maya Okafor' } } : null,
       error: null,
       isPending: false,
@@ -58,6 +73,23 @@ export class FakeAuthClient {
 
   emitPending(): void {
     this.set({ ...this.value, isPending: true, isRefetching: true });
+  }
+
+  /** As Better Auth's session store does when a check starts: pending only while it has no session yet. */
+  emitChecking(): void {
+    this.set({ ...this.value, isPending: this.value.data === null, isRefetching: true });
+  }
+
+  /** A failed check: Better Auth keeps the last session except on a 401. */
+  emitError(error: { status: number; statusText: string } | Error): void {
+    const unauthorized = !(error instanceof Error) && error.status === 401;
+    this.set({
+      ...this.value,
+      data: unauthorized ? null : this.value.data,
+      error,
+      isPending: false,
+      isRefetching: false,
+    });
   }
 
   readonly useSession = {

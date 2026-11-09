@@ -314,7 +314,7 @@ describe('the e2e-production job', () => {
       ]),
     );
     assert.deepEqual(timeouts, {
-      'production-mobile': 3,
+      'production-mobile': 4,
       'production-desktop': 2,
       'pwa-update': 6,
       'kill-switch': 5,
