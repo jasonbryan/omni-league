@@ -44,7 +44,7 @@ function socketHttpOrigin(socketUrl: string): string {
  * (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture reports. So while `setOffline` has
  * the context offline, or in field-wifi mode, the route closes the Convex sockets at once and never
  * calls `connectToServer()` (Playwright would otherwise open a mocked socket, which the client
- * counts as connected); otherwise they go to the server.
+ * counts as connected).
  */
 async function routeConvexSockets(
   context: BrowserContext,
