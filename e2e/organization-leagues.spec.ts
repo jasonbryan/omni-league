@@ -24,7 +24,8 @@ import {
   underTheFooter,
 } from './support/sticky-footer';
 import { expectLinkHeights } from './support/link-heights';
-import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
+import { seedBatch } from './support/seed-batch';
+import { newTenant, numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -257,35 +258,30 @@ test.describe('Leagues: creating a draft', () => {
     });
   });
 
-  test(
-    'the same slug in another organization is allowed',
-    VIEWPORT_AGNOSTIC,
-    async ({ page, browser }) => {
-      const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
-      await page.goto(`${first.base}/leagues`);
-      await createDraft(page, {
-        name: 'Shared Name',
-        sport: 'Soccer',
-        locations: ['Redfish Flats Fields'],
-      });
-      await expect(leagueRows(page)).toHaveCount(1);
+  test('the same slug in another organization is allowed', VIEWPORT_AGNOSTIC, async ({ page }) => {
+    const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await page.goto(`${first.base}/leagues`);
+    await createDraft(page, {
+      name: 'Shared Name',
+      sport: 'Soccer',
+      locations: ['Redfish Flats Fields'],
+    });
+    await expect(leagueRows(page)).toHaveCount(1);
 
-      const other = await browser.newPage({ baseURL });
-      try {
-        const second = await memberOf(other, 'orgAdmin', { locations: LOCATIONS });
-        await other.goto(`${second.base}/leagues`);
-        await createDraft(other, {
-          name: 'Shared Name',
-          sport: 'Soccer',
-          locations: ['Redfish Flats Fields'],
-        });
-        await expect(leagueRows(other)).toHaveCount(1);
-        await expect(other.locator('#slug-error')).toHaveCount(0);
-      } finally {
-        await other.context().close();
-      }
-    },
-  );
+    const { tenant: second, args } = newTenant({ name: 'E2E Leagues', locations: LOCATIONS });
+    await seedBatch({
+      tenant: args,
+      memberships: [{ email: first.user.email, role: 'orgAdmin' }],
+    });
+    await page.goto(`/app/organizations/${second.slug}/leagues`);
+    await createDraft(page, {
+      name: 'Shared Name',
+      sport: 'Soccer',
+      locations: ['Redfish Flats Fields'],
+    });
+    await expect(leagueRows(page)).toHaveCount(1);
+    await expect(page.locator('#slug-error')).toHaveCount(0);
+  });
 
   test('"Create a league" in the header jumps to the form and focuses it (360)', async ({
     page,
