@@ -6,6 +6,7 @@ import {
   Injectable,
   PLATFORM_ID,
   afterNextRender,
+  afterRenderEffect,
   inject,
 } from '@angular/core';
 
@@ -105,5 +106,25 @@ function focusMainOnDestroyIfHoldingFocus(): void {
       },
       { injector: environment },
     );
+  });
+}
+
+export function keepFocusWhenAlertGoes(
+  alertHost: () => HTMLElement | undefined,
+  fallback: () => HTMLElement | undefined,
+): void {
+  const record = inject(MainFocusRecord);
+  let shownAlert: HTMLElement | undefined;
+  afterRenderEffect(() => {
+    const host = alertHost();
+    if (host) {
+      shownAlert = host;
+      return;
+    }
+    const heldFocus = shownAlert && record.lastIsInside(shownAlert);
+    shownAlert = undefined;
+    if (heldFocus && record.focusFellWithRemovedElement()) {
+      fallback()?.focus({ preventScroll: true });
+    }
   });
 }

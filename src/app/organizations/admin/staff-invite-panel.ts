@@ -5,7 +5,6 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
-  afterRenderEffect,
   inject,
   input,
   signal,
@@ -24,7 +23,7 @@ import {
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, injectAction, injectOnline } from '../../core/data/convex';
-import { MainFocusRecord } from '../../core/replaced-focus';
+import { keepFocusWhenAlertGoes } from '../../core/replaced-focus';
 import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
@@ -508,22 +507,12 @@ export class StaffInvitePanel {
   private readonly leaguesAlertHost = viewChild<unknown, ElementRef<HTMLElement>>('leaguesAlert', {
     read: ElementRef,
   });
-  private readonly focusRecord = inject(MainFocusRecord);
 
   constructor() {
-    let shownAlert: HTMLElement | undefined;
-    afterRenderEffect(() => {
-      const host = this.leaguesAlertHost()?.nativeElement;
-      if (host) {
-        shownAlert = host;
-        return;
-      }
-      const heldFocus = shownAlert && this.focusRecord.lastIsInside(shownAlert);
-      shownAlert = undefined;
-      if (heldFocus && this.focusRecord.focusFellWithRemovedElement()) {
-        this.section()?.nativeElement.focus({ preventScroll: true });
-      }
-    });
+    keepFocusWhenAlertGoes(
+      () => this.leaguesAlertHost()?.nativeElement,
+      () => this.section()?.nativeElement,
+    );
   }
 
   scrollTarget(): HTMLElement | undefined {

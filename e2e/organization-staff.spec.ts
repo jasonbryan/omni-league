@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { seedAccountsInCalls } from './support/seed-accounts';
@@ -631,6 +632,45 @@ test.describe('Staff: members and the Overview tile', () => {
     await expect(form(page)).toBeAttached();
     await expect(page.locator('#email')).not.toBeFocused();
     expect(await scrollY(page)).toBe(before);
+  });
+
+  test('"Invite staff" then a tap on the header title while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    await page.locator('header p.truncate').tap();
+    const focusedAfterTap = await page.evaluateHandle(() => document.activeElement);
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    expect(
+      await page.evaluate((element) => document.activeElement === element, focusedAfterTap),
+    ).toBe(true);
+    expect(await scrollY(page)).toBe(before);
+  });
+
+  test.describe('with the first answer failing', () => {
+    test('"Invite staff" focuses the alert, and the form that replaces it gives focus to the section', async ({
+      page,
+    }) => {
+      test.skip(isDesktop(page), 'the link is hidden from 1024px');
+      const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+      const failure = await failFirstAnswer(page, 'leagues:listForAdmin');
+      await page.goto(`${org.base}/staff`);
+      const alert = page.getByRole('alert').filter({ hasText: 'The leagues could not be loaded.' });
+      await expect(alert).toBeVisible();
+      await jumpLink(page).click();
+      await expect(alert).toBeFocused();
+
+      await failure.reconnect();
+      await expect(form(page)).toBeAttached();
+      await expect(page.locator('#invite')).toBeFocused();
+      await expect(page.locator('#email')).not.toBeFocused();
+    });
   });
 });
 

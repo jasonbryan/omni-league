@@ -63,7 +63,11 @@ export class LeagueLanding {
     if (target === null) return;
     onLaterChoiceOrScroll(
       this.document,
-      { isOwnFocus: (element) => element.id === 'main', signal: this.listening.signal },
+      {
+        isOwnFocus: (element) => element.id === 'main',
+        isOwnArea: (element) => element.closest('#main') !== null,
+        signal: this.listening.signal,
+      },
       () => this.settle(),
     );
   }

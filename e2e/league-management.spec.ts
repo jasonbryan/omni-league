@@ -1030,6 +1030,50 @@ test.describe('League management: the link to a new season', () => {
     await expect(opened.locator('#name')).toBeFocused();
   });
 
+  test.describe('a #season-… address opened before the list arrives', () => {
+    test.beforeEach(({ page }) => {
+      test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'the header title shows below 1024px');
+    });
+
+    async function openWithListHeld(page: Page) {
+      const { tenant, base } = await memberOf(page, 'orgAdmin');
+      await convexRun('testing:seedSeason', {
+        organizationSlug: tenant.slug,
+        leagueSlug: SOFTBALL,
+        name: 'Fall 2026',
+        slug: 'fall-2026',
+        startDate: '2026-09-01',
+        endDate: '2026-11-15',
+        registrationDeadline: '2026-08-25',
+        minimumRosterSize: 10,
+        status: 'draft',
+      });
+      const held = await holdQueries(page, ['seasons:listForOrganizer']);
+      await page.goto(`${base}/leagues/${SOFTBALL}#season-fall-2026`);
+      await expect(
+        main(page).getByRole('heading', { level: 1, name: 'Draft Softball' }),
+      ).toBeVisible();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      return held;
+    }
+
+    test('a tap on the header title cancels the landing', async ({ page }) => {
+      const held = await openWithListHeld(page);
+      await page.locator('header p.truncate').tap();
+      held.release();
+      await expect(rows(page)).toHaveCount(1);
+      await expect(rowTitle(page, 'fall-2026')).not.toBeFocused();
+      await expect(page.locator('body')).toBeFocused();
+    });
+
+    test('a tap on the h1 text keeps the landing', async ({ page }) => {
+      const held = await openWithListHeld(page);
+      await main(page).getByRole('heading', { level: 1, name: 'Draft Softball' }).tap();
+      held.release();
+      await expect(rowTitle(page, 'fall-2026')).toBeFocused();
+    });
+  });
+
   test('a #season-… address with a slug no row has lands on the Seasons heading', async ({
     page,
   }) => {
