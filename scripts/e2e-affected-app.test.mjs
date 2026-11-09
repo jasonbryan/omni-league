@@ -256,23 +256,82 @@ describe('the specs of the importers outside a hand rule', () => {
       assert.deepEqual(Object.keys(IMPORTER_EXCEPTIONS), []);
     });
 
-    it('opts out of the importer specs only for the route tables, the saved query list, and the notifications page, which a full-suite file imports', () => {
-      const optedOut = AREAS.filter((area) => area.widen === false).map((area) => area.name);
-      assert.deepEqual(optedOut.sort(), [
-        'notifications page',
-        'offline saved queries',
-        'route table',
-        'server route table',
-      ]);
-      for (const file of [
-        ...ROUTE_TABLE_FILES,
-        'src/app/core/data/convex/offline-saved-queries.ts',
-        'src/app/notifications/notifications-page.ts',
-      ]) {
-        for (const importer of importers.get(file) ?? []) {
-          assert.ok(!isHandRule(ruleOf(importer)), `${importer} has a rule and imports ${file}`);
+    const OPTED_OUT_AREAS = [
+      'notifications page',
+      'offline saved queries',
+      'route table',
+      'server route table',
+    ];
+    const NOTIFICATION_FILES = [
+      'src/app/notifications/notifications-page.ts',
+      'src/app/notifications/push-device.ts',
+      'src/app/notifications/push-subscription-lifecycle.ts',
+      'src/app/notifications/test-notification.ts',
+    ];
+    const optedOutAreas = AREAS.filter((area) => area.widen === false);
+    const filesOf = (area) => appSources.filter((file) => area.test(file));
+
+    /**
+     * @param {Map<string, Set<string>>} importerMap
+     * @returns {string[]}
+     */
+    function optOutProblems(importerMap) {
+      const problems = [];
+      for (const area of optedOutAreas) {
+        for (const file of filesOf(area)) {
+          for (const importer of importerMap.get(file) ?? []) {
+            if (area.test(importer) || !isHandRule(ruleOf(importer))) continue;
+            problems.push(`${importer} has a rule and imports ${file}`);
+          }
         }
       }
+      return problems;
+    }
+
+    /**
+     * @param {string} importer
+     * @param {string} file
+     * @returns {Map<string, Set<string>>}
+     */
+    function withEdge(importer, file) {
+      const copy = new Map([...importers].map(([key, set]) => [key, new Set(set)]));
+      copy.set(file, new Set([...(copy.get(file) ?? []), importer]));
+      return copy;
+    }
+
+    it('opts out of the importer specs only for the route tables, the saved query list, and the notifications page, which a full-suite file imports', () => {
+      assert.deepEqual(optedOutAreas.map((area) => area.name).sort(), OPTED_OUT_AREAS);
+      assert.deepEqual(optOutProblems(importers), []);
+    });
+
+    it('matches at least one file in each opted-out area, and the four notifications files', () => {
+      for (const area of optedOutAreas) assert.ok(filesOf(area).length > 0, area.name);
+      const notifications = optedOutAreas.find((area) => area.name === 'notifications page');
+      for (const file of NOTIFICATION_FILES) assert.ok(filesOf(notifications).includes(file), file);
+    });
+
+    for (const file of NOTIFICATION_FILES.slice(1)) {
+      it(`reports a file with a rule that imports ${posix.basename(file)}`, () => {
+        assert.deepEqual(optOutProblems(withEdge('src/app/teams/team-page.ts', file)), [
+          `src/app/teams/team-page.ts has a rule and imports ${file}`,
+        ]);
+      });
+    }
+
+    it('reports no problem for an import between two files of the notifications folder', () => {
+      const edge = withEdge(
+        'src/app/notifications/test-notification.ts',
+        'src/app/notifications/push-subscription-lifecycle.ts',
+      );
+      assert.deepEqual(optOutProblems(edge), []);
+    });
+
+    it('reports no problem for a file with no rule that imports a notifications file', () => {
+      const edge = withEdge(
+        'src/app/core/auth/auth.service.ts',
+        'src/app/notifications/push-device.ts',
+      );
+      assert.deepEqual(optOutProblems(edge), []);
     });
 
     it('follows importers inside the same rule to the importers outside it', () => {
