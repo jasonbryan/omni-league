@@ -8,6 +8,7 @@
 - **Amended:** 2026-10-27, by #384: a new version applies itself when nothing on the page can be lost, and the 14-day forced-reload rule is removed. See "Amendment: new versions apply themselves (2026-10-27)" at the end. Where section 4 disagrees with it, the amendment applies.
 - **Amended:** 2026-10-28, by #385: the note and form alerts name the cause, and an old version whose Convex deployment is gone checks for an update early and reloads at once. See "Amendment: an old version whose Convex deployment is gone (2026-10-28)" at the end. Where sections 3 and 4 disagree with it, the amendment applies.
 - **Amended:** 2026-11-05, by #533 and #558: the client reads and removes this browser's push subscription on a page no service worker controls, and the notifications page shows it. See "Amendment: push cleanup on a page no service worker controls (2026-11-05)" at the end. Where section 7's Lifecycle bullets disagree with it, the amendment applies.
+- **Amended:** 2026-11-09, by #194: the Netlify Drawer is observed off on staging and previews, and a guard test fails if it returns. See "Amendment: Netlify Drawer observed off (2026-11-09)" at the end. Where the Context, Options, section 2, Cost, and Owner questions passages that describe the Drawer as injected disagree with it, the amendment applies.
 
 ## Context
 
@@ -479,3 +480,21 @@ It amends section 7, "Lifecycle", and adds a note to section 5, "Client".
 - **A worker taking control** (`controllerchange`) keeps the badge On until `SwPush.subscription` emits the same subscription, which it does after a promise. From then on `SwPush` is the source, and Turn off goes through `SwPush.unsubscribe()`.
 
 **Open.** Subscribing on an uncontrolled page through `PushManager.subscribe()` is not done: `SwPush.subscription` would not see it, and section 5 keeps subscribing on `SwPush`. The page shows what the server holds for the endpoint, so an old key or a past `expirationTime` stays until the next controlled load replaces it.
+
+## Amendment: Netlify Drawer observed off (2026-11-09)
+
+Owner decision 2026-10-09 ([PR #87 comment](https://github.com/jasonbryan/omni-league/pull/87#issuecomment-6086158597)): the Drawer is turned off for Deploy Previews and Branch deploys, and the owner changes the Netlify setting. No comment records when it was applied. On 2026-11-09 the system found no `/.netlify/scripts/cdp` in the HTML of `/`, `/sign-up`, and `/app` on staging, and none in `/index.csr.html` or a missing path, and none on the preview of PR #598.
+
+It amends the rows and bullets that describe the Drawer as injected into preview and staging HTML.
+
+| Where                                                       | Was                                                                                                               | Now                                                                                                                                                |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Context, ADR 0010 row                                       | Netlify injects its Drawer script into preview and staging HTML.                                                  | The Drawer is off, so Netlify injects nothing into that HTML.                                                                                      |
+| Option 1A, Cons and risks (hash-checked files)              | The Drawer script rewrites a cached file on previews and staging, which makes the version invalid there.          | The Drawer rewrites nothing while it is off. The hash check fails on previews and staging only if the Drawer is turned on.                         |
+| Section 2, "Previews and staging" row                       | The injected script changes `index.csr.html`, so the hash check fails and offline does not work on those origins. | While the Drawer is off, nothing changes the file and offline works there. Preview evidence still counts only once the owner confirms the setting. |
+| Cost, `e2e/pwa.spec.ts` note                                | A preview run waits for the owner to confirm the Drawer setting.                                                  | Unchanged: it waits for the owner's confirmation, which this observation is not.                                                                   |
+| Owner questions, 1 (Netlify Drawer on previews and staging) | Until the owner confirms the setting, evidence comes from local production builds.                                | Unchanged, for the same reason.                                                                                                                    |
+
+**Guard.** `e2e/harness/netlify-drawer.spec.ts` ("the Netlify Drawer stays off") runs on a remote run (`E2E_BASE_URL`). It fetches `/` with the `request` fixture and requires a 200 whose HTML has `<app-root` and no `/.netlify/scripts/cdp`. It then loads `/` with `netlifyDrawerStub: false`, records requests before the load, and requires no request to that path and no `iframe`. A control in the same spec, which runs locally too, serves HTML with the script tag and a script that appends an `iframe`, and requires the same detector to report all three signals. The e2e stub (`e2e/support/netlify-drawer.ts`) stays and does nothing while the Drawer is off. It hides a returning Drawer from every other remote test, so the guard is the only detector.
+
+**Why.** The spec's old remote test waited for a request to the Drawer path that never came, so every remote run of the spec failed. The docs still said the Drawer was injected.
