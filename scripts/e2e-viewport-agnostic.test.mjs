@@ -301,6 +301,84 @@ describe('the viewport-agnostic guard', () => {
     assert.deepEqual(unused, []);
   });
 
+  it('counts a fixture that a test or hook inside a tagged describe destructures', () => {
+    const fixtures = `export const fixtures = {
+      shots: async ({ page }, use) => { await page.setViewportSize({ width: 320, height: 800 }); await use(); },
+    };`;
+    const importFixtures = `import { fixtures } from './support/helper-0';\n`;
+    const inTest = check(
+      `${importFixtures}test.describe('d', VIEWPORT_AGNOSTIC, () => {
+         test('t', async ({ shots }) => { await shots.take(); });
+       });`,
+      fixtures,
+    );
+    assert.deepEqual(names(inTest), ['shots']);
+
+    const inHook = check(
+      `${importFixtures}test.describe('d', VIEWPORT_AGNOSTIC, () => {
+         test.beforeEach(async ({ shots }) => { await shots.take(); });
+         test('t', async ({ page }) => { await page.goto('/'); });
+       });`,
+      fixtures,
+    );
+    assert.deepEqual(names(inHook), ['shots']);
+
+    const inStep = check(
+      `${importFixtures}test.describe('d', VIEWPORT_AGNOSTIC, () => {
+         test('t', async ({ shots }) => { await test.step('s', async () => { await shots.take(); }); });
+       });`,
+      fixtures,
+    );
+    assert.deepEqual(names(inStep), ['shots']);
+  });
+
+  it('counts a fixture that another fixture destructures', () => {
+    const violations = check(
+      `import { fixtures } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ outer }) => { await outer.go(); });`,
+      `export const fixtures = {
+         inner: async ({ page }, use) => { await page.setViewportSize({ width: 1, height: 1 }); await use(); },
+         outer: async ({ inner }, use) => { await use(); },
+       };`,
+    );
+    assert.deepEqual(names(violations), ['outer']);
+  });
+
+  it('reaches a method and a fixture through a re-export file', () => {
+    const exported = `export const app = {
+      async scan(page) { await axeScan(page); },
+      shots: async ({ page }, use) => { await page.setViewportSize({ width: 1, height: 1 }); await use(); },
+    };`;
+    const method = check(
+      `import { app } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await app.scan(page); });`,
+      `export { app } from './helper-1';`,
+      exported,
+    );
+    assert.deepEqual(names(method), ['scan']);
+
+    const fixture = check(
+      `import { test } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ shots }) => { await shots.take(); });`,
+      `export * from './helper-1';`,
+      exported,
+    );
+    assert.deepEqual(names(fixture), ['shots']);
+  });
+
+  it('follows a chain of re-exports to a helper and to a method', () => {
+    const spec = `import { reflowOf, app } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await reflowOf(page); await app.scan(page); });`;
+    const violations = check(
+      spec,
+      `export { reflowOf, app } from './helper-1';`,
+      `export * from './helper-2';`,
+      `export async function reflowOf(page) { await checkReflow(page); }
+       export const app = { async scan(page) { await axeScan(page); } };`,
+    );
+    assert.deepEqual(names(violations), ['reflowOf', 'scan']);
+  });
+
   it('keeps an imported helper in view when a same-named function is declared locally', () => {
     const violations = check(
       `import { open } from './support/helper-0';

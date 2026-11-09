@@ -115,25 +115,25 @@ const isExported = (node) =>
 
 function declaredFunctions(sourceFile) {
   const functions = [];
-  const add = (name, body, member) => functions.push({ name, body, member });
+  const add = (name, body, member, fn) => functions.push({ name, body, member, fn });
   const visit = (node) => {
     if (ts.isFunctionDeclaration(node) && node.name && node.body) {
-      add(node.name.text, node.body, false);
+      add(node.name.text, node.body, false, node);
     } else if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
       node.initializer &&
       isFunctionLike(node.initializer)
     ) {
-      add(node.name.text, node.initializer, false);
+      add(node.name.text, node.initializer, false, node.initializer);
     } else if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name) && node.body) {
-      add(node.name.text, node.body, true);
+      add(node.name.text, node.body, true, node);
     } else if (
       ts.isPropertyAssignment(node) &&
       ts.isIdentifier(node.name) &&
       isFunctionLike(node.initializer)
     ) {
-      add(node.name.text, node.initializer, true);
+      add(node.name.text, node.initializer, true, node.initializer);
     }
     ts.forEachChild(node, visit);
   };
@@ -232,13 +232,22 @@ function calledOrPassedNames(node, aliases) {
   return references;
 }
 
-function fixtureNames(callback) {
-  const pattern = callback.parameters?.[0]?.name;
-  if (!pattern || !ts.isObjectBindingPattern(pattern)) return [];
-  return pattern.elements
-    .map((element) => element.propertyName ?? element.name)
-    .filter((name) => ts.isIdentifier(name))
-    .map((name) => ({ name: name.text, member: true }));
+function fixtureNames(root) {
+  const functions = [root];
+  const collect = (node) => {
+    const callback = isTestCall(node) ? callbackOf(node) : undefined;
+    if (callback && callback !== root) functions.push(callback);
+    ts.forEachChild(node, collect);
+  };
+  collect(root);
+  return functions.flatMap((fn) => {
+    const pattern = fn.parameters?.[0]?.name;
+    if (!pattern || !ts.isObjectBindingPattern(pattern)) return [];
+    return pattern.elements
+      .map((element) => element.propertyName ?? element.name)
+      .filter((name) => ts.isIdentifier(name))
+      .map((name) => ({ name: name.text, member: true }));
+  });
 }
 
 function resolveModule(fromPath, specifier, modules) {
@@ -254,7 +263,7 @@ function buildModules(parsed) {
       ...declared,
       file: resolve(path),
       directs: identifiersIn(declared.body, aliases).filter((name) => REASON_BY_NAME.has(name)),
-      references: calledOrPassedNames(declared.body, aliases),
+      references: [...calledOrPassedNames(declared.body, aliases), ...fixtureNames(declared.fn)],
     }));
     modules.set(resolve(path), {
       path: resolve(path),
@@ -269,6 +278,7 @@ function buildModules(parsed) {
       .filter((target) => target !== undefined);
     for (const reexport of module.reexports) {
       reexport.target = resolveModule(module.path, reexport.specifier, modules);
+      if (reexport.target !== undefined) module.targets.push(reexport.target);
     }
   }
   return modules;
