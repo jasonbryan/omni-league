@@ -207,13 +207,14 @@ describe('the e2e-production job', () => {
     assert.doesNotMatch(production, /^ {4}permissions:/m, 'the top-level contents: read only');
   });
 
-  it('starts the backend, seeds it, builds, serves, runs the four runs, checks, then uploads', () => {
+  it('starts the backend, sets it up, seeds it, builds, serves, runs the four runs, checks, then uploads', () => {
     assert.deepEqual(names, [
       names[0],
       names[1],
       'install',
       'e2e browsers',
       'e2e backend',
+      'e2e setup',
       'seed demo',
       'build',
       'app server',
@@ -237,6 +238,14 @@ describe('the e2e-production job', () => {
       backend.run ?? '',
       /curl [^\n]*--retry-max-time 60 [^\n]*http:\/\/127\.0\.0\.1:3210\/version/,
     );
+  });
+
+  it('sets up auth on the local backend with the script alone: no env and no secret', () => {
+    const setup = step('e2e setup');
+    assert.equal(setup.run, 'node scripts/e2e-convex.mjs setup');
+    assert.deepEqual(setup.env, {});
+    assert.doesNotMatch(setup.block, /^ {8}env:/m);
+    assert.doesNotMatch(job('e2e-production'), /secrets\./);
   });
 
   it('seeds the demo data with no demo password', () => {

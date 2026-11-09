@@ -179,7 +179,7 @@ jobs:
             echo "::error::the local Convex backend did not answer /version within 60 s"
             exit 1
           fi
-          # /version answers before `convex dev` has pushed the functions that seed-demo runs.
+          # /version answers before `convex dev` has pushed the functions that setup and seed-demo run.
           for _ in $(seq 60); do
             if grep -q 'Convex functions ready!' "$RUNNER_TEMP/convex.log"; then exit 0; fi
             sleep 1
@@ -187,6 +187,8 @@ jobs:
           cat "$RUNNER_TEMP/convex.log"
           echo "::error::convex dev did not push the functions within 60 s"
           exit 1
+      - name: e2e setup
+        run: node scripts/e2e-convex.mjs setup
       - name: seed demo
         run: node scripts/e2e-convex.mjs seed-demo
       - name: build
