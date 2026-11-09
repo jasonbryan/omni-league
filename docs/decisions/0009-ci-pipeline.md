@@ -12,6 +12,7 @@
 - **Amended:** 2026-10-30 (#426): `e2e.yml` gets a second job, `e2e-production`, that builds for production and runs the service-worker specs every night instead of skipping them. See "Amendment: the nightly run builds for production (2026-10-30)" at the end.
 - **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end. Where the sections above say otherwise, this amendment applies.
 - **Amended:** 2026-11-05 (#563): the nightly job `e2e` is a matrix of Playwright shards under a 30-minute global timeout, and `nightly-issue` runs for a cancelled job and names every shard that did not finish. See "Amendment: sharded nightly e2e and a reported cancel (2026-11-05)" at the end. Where the sections above or the 2026-10-12 amendment say the suite runs in one job, this amendment applies.
+- **Amended:** 2026-11-09 (#599): the `production-mobile` step of `e2e-production` gets 4 minutes by the step timeout rule, and the job keeps 20. See "Amendment: e2e-production step and job timeouts (2026-11-09)" at the end. Where the #426 amendment's table says `pwa.spec.ts` has 10 tests, the amendment applies.
 
 ## Context
 
@@ -912,3 +913,16 @@ Issue #563. Job `e2e` was cancelled at its 45-minute limit on every night since 
 **Measured.** The 10-shard run of the branch ([run 42135507342](https://github.com/jasonbryan/omni-league/actions/runs/42135507342)) listed 1,747 tests at 3.19 s per test (1.58 s on 2026-11-04, 3.55 s on 2026-11-05, [#565](https://github.com/jasonbryan/omni-league/issues/565)). Its legs took 5.4 to 18.8 minutes of Playwright time and 7:00 to 21:03 as jobs, and the union of the 10 JSON reports equals `playwright test --list` (no ID missing or in two reports). The slowest leg held 13 failing tests of [#575](https://github.com/jasonbryan/omni-league/issues/575), about 6.6 minutes of the 18.8; without them it would have taken about 12. The probe run ([run 42130632263](https://github.com/jasonbryan/omni-league/actions/runs/42130632263), at 6 shards) showed that the sleeping leg finished last and the combined outputs still held both failing legs' lists and all six `e2e_done_<n>` markers. `docs/process/ci.md` records every leg of the 4-, 6-, and 10-shard runs, the re-shard trigger, and the runner minutes.
 
 **What stays the same.** `e2e-production` is unchanged (it now also opens the issue when it is cancelled). The Playwright worker count stays 2: it is unmeasured on the 4-vCPU runner of a public repository, and every worker shares one Convex backend. A shard has its own backend, so the sharding gains from the extra runners, not from a shared one. The repository is public, so the extra setup minutes are not billed (2026-10-26 amendment). The change adds no package, action, service, or secret, and `issues: write` stays on `nightly-issue` only.
+
+## Amendment: e2e-production step and job timeouts (2026-11-09)
+
+Issue #599 adds two tests to `e2e/pwa.spec.ts`, which now lists 13 on `chromium-mobile` (`PRODUCTION_RUNS` in `scripts/e2e-production-check.mjs`), so `production-mobile` takes longer. Following #178's amendment, the limits are set from a measured run. It changes only `timeout-minutes` of an accepted job, so it is not a `gate:technology` change.
+
+**Step timeout rule.** A run step's `timeout-minutes` is the smallest whole number of minutes that is at least 3.5 times its measured time on a dispatched `e2e-production` run (the ratio of #603's 50.9 s against 180 s). The job's `timeout-minutes` is the sum of the four step limits plus `SETUP_MINUTES` (2) and `SPARE_MINUTES` (1), the budget `scripts/e2e-workflow.test.mjs` checks.
+
+| Setting                                       | Accepted | Now |
+| --------------------------------------------- | -------- | --- |
+| `timeout-minutes` on step `production-mobile` | 3        | 4   |
+| `timeout-minutes` on job `e2e-production`     | 20       | 20  |
+
+Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/runs/42709660266), a `workflow_dispatch` run of the branch: `production-mobile` 67 s for 13 tests (13 passed), so 3.5 × 67 s = 233 s gives 4 minutes. With `production-desktop` 2, `pwa-update` 6, and `kill-switch` 5 unchanged, the job limit is 4 + 2 + 6 + 5 + 2 + 1 = 20, the value the #426 amendment's "Timeout" row already holds. The job took 391 s (6 min 31 s). The #426 table's "Runs" row (`pwa.spec.ts`, 10 tests) is superseded by the 13 above; its other rows are unchanged. Measured figures are in [`docs/process/ci.md`](../process/ci.md#minutes).
