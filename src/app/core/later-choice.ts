@@ -39,7 +39,7 @@ export function onLaterChoiceOrScroll(
     },
     options,
   );
-  // A press on plain text outside the own area counts too: Playwright's engines move focus to
+  // A press on plain text outside the own area counts too: Chromium and WebKit move focus to
   // <body> without a focusin, and iOS Safari sends no click from text to a delegated listener.
   document.addEventListener(
     'pointerdown',

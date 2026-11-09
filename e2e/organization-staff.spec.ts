@@ -663,7 +663,7 @@ test.describe('Staff: members and the Overview tile', () => {
       await jumpLink(page).click();
       await expect(alert).toBeFocused();
 
-      failure.reconnect();
+      await failure.reconnect();
       await expect(form(page)).toBeAttached();
       await expect(page.locator('#invite')).toBeFocused();
       await expect(page.locator('#email')).not.toBeFocused();

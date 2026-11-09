@@ -392,7 +392,7 @@ test.describe('Leagues: creating a draft', () => {
         await jump(page).click();
         await expect(alert).toBeFocused();
 
-        failure.reconnect();
+        await failure.reconnect();
         await expect(form(page)).toBeVisible();
         await expect(section(page)).toBeFocused();
         await expect(page.locator('#name')).not.toBeFocused();

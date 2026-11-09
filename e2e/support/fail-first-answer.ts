@@ -19,7 +19,7 @@ const parse = (message: string | Buffer): Frame => JSON.parse(String(message)) a
 const changesOf = (frame: Frame): Change[] => frame.modifications ?? [];
 
 export interface FailedFirstAnswer {
-  reconnect: () => void;
+  reconnect: () => Promise<void>;
 }
 
 export async function failFirstAnswer(page: Page, udfPath: string): Promise<FailedFirstAnswer> {
@@ -54,6 +54,8 @@ export async function failFirstAnswer(page: Page, udfPath: string): Promise<Fail
     });
   });
   return {
-    reconnect: () => void current?.close(),
+    reconnect: async () => {
+      await current?.close();
+    },
   };
 }

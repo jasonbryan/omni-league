@@ -501,7 +501,7 @@ describe('LeaguePage', () => {
     it('lands after a press on text inside <main> with focus on <body>, which is not a later choice', async () => {
       await openPending(url('details'));
       expect(document.activeElement).toBe(document.body);
-      const text = document.querySelector('#main *')!;
+      const text = document.querySelector('#main [role="status"]')!;
       text.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       text.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await league();
