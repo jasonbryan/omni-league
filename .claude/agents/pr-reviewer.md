@@ -16,7 +16,7 @@ Check every changed file for:
 - **Conventions:** the matching `docs/conventions/` rules.
 - **Code comments:** any added or changed comment that breaks `AGENTS.md`, Code comments, is a blocking finding, including a what-comment where a clearer name, extracted function, or named constant would do.
 - **Tests:** tests assert behaviour, not implementation details, and would fail if the feature broke.
-- **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`).
+- **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`). A PR that raises or removes the production `initial` `maximumError` in `angular.json` without a link to the owner's record (the owner's own issue or PR comment, or the owner's chat message quoted exactly there by the orchestrator) is blocking.
 - **Migration:** a PR that changes `convex/schema.ts`, or code that rewrites stored data, with a missing or `none` Migration section is a blocking finding.
 - **Demo data:** compare the PR's seed change (`convex/seed.ts`) with the issue's own Demo data criterion. A PR that does not deliver it is a blocking finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 - **E2e evidence:** on every PR an implementer opened, the latest own-specs run on the head SHA under review, in the PR Evidence block or the tester's `Test: PASS` Evidence, lists the specs that `docs/process/dev-cycle.md` (Own e2e specs) gives for the diff and passed. No such run, or a missing spec, is a blocking finding.
