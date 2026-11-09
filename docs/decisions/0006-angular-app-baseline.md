@@ -8,6 +8,7 @@
 - **Amended:** 2026-10-09, `provideConvexAuth` also accepts an injectable class (#62, PR #102). See "Amendment: injectable auth source (2026-10-09)" at the end.
 - **Amended:** 2026-10-13, by #269: `ngSkipHydration` takes a one-line why comment, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say the comment links an issue, the amendment applies.
 - **Amended:** 2026-10-31, by #419: app code takes `api` and `getFunctionName` from the adapter, and imports `convex/server` and `convex/_generated/api` by type only. See "Amendment: Convex server code out of the browser bundle (#419, 2026-10-31)" at the end.
+- **Amended:** 2026-11-09, by #599: `ConvexAuthSource` gains two optional members, `authEpoch` and `onOnline`. See "Amendment: authEpoch and onOnline (#599, 2026-11-09)" at the end. Where "Auth extension point" says `setAuth` runs again only when `signedIn` goes from false to true, the amendment applies.
 
 ## Context
 
@@ -555,3 +556,14 @@ A usage rule for packages already accepted; no technology changes.
 | Function references (`api.module.fn`) | `api` from `convex/_generated/api`                                    | `api` from the adapter, a proxy typed from `convex/_generated/api.d.ts`. Outside specs, `convex/_generated/api` is imported only with `import type`. `convex/_generated/` stays unedited |
 
 **Why.** `convex/_generated/api.js` imports `anyApi` and `componentsGeneric` from `convex/server`, whose index keeps `schema.js` (its top-level `defineSchema(...)` call) in the bundle. Any runtime import of either module put about 4.5 kB of server code in the browser's initial bundle, which had about 0.2 kB of room under its 500 kB budget. `convex/browser` exports only the clients, so no browser-safe entry point exists. `no-restricted-imports` (with `allowTypeImports`) enforces the rule in `src/`. Specs may import both modules at runtime, because specs never ship in the browser bundle.
+
+## Amendment: authEpoch and onOnline (#599, 2026-11-09)
+
+A kept session ([ADR 0013](0013-pwa-stack.md), "Amendment: a kept session on an offline fresh load") is `signedIn` before the server confirms it, and its `fetchToken` returns `null` until then. Convex 1.48 (`authentication_manager.js`) ends in `noAuth` after a `null` token and never asks again, so accepting the token later needs a new `setAuth`. The "Auth extension point" gains two optional members, which a source without them never sees:
+
+| Member                       | Adapter behaviour                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authEpoch?: Signal<number>` | `applyAuth` (`convex-client.ts`) calls `client.setAuth(fetchToken, onChange)` again when it changes while `signedIn` is true. The `signedIn` effect is unchanged: `true` → `false` calls `clearAuth()`, and `false` → `true` calls `setAuth` again. `AuthService` advances it only after a withheld token, so an ordinary load makes no extra `setAuth`.                                                      |
+| `onOnline?: () => void`      | `provideConvex()`'s app initializer, which already creates `ConvexConnection`, calls it each time `ConvexConnection.online` turns true, the first time included. The initializer creates `ConvexConnection`, then `CONVEX_CLIENT`, then the source, so `inject(CONVEX_AUTH)` returns the existing instance. The source must not inject `ConvexConnection` or `CONVEX_CLIENT`, which would be an NG0200 cycle. |
+
+On the server `CONVEX_AUTH` is still ignored. `provide-convex-auth.spec.ts` checks both members and boots the real `provideConvex()` with `provideConvexAuth(AuthService)`.

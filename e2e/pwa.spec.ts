@@ -736,7 +736,6 @@ async function signUpOnLocalBuild(page: Page): Promise<{ manifest: NgswManifest;
 }
 
 const OFFLINE_NOTE = "You're offline. Changes need a connection.";
-const OFFLINE_SETTLE_MS = 2_000;
 const STORE_KEY = 'better-auth_cookie';
 const SESSION_TOKEN = 'better-auth.session_token';
 
@@ -841,12 +840,13 @@ test.describe('offline navigation inside the app (production build against the l
   }) => {
     const { user } = await signUpOnLocalBuild(page);
     await expect(accountRowName(page, user)).toBeVisible();
-    const siteRequests = convexSiteRequests(context);
 
     await setOffline(context, true);
-    // Chromium's offline emulation hands the leaving document an `online` event when the reload follows `setOffline` within about a second, and Better Auth refetches on it.
-    await page.waitForFunction(() => !navigator.onLine);
-    await page.waitForTimeout(OFFLINE_SETTLE_MS);
+    // Chromium's offline emulation can hand a leaving document an `online` event, and Better Auth refetches on it, so the requests are counted from a page that loaded offline and never asked.
+    await page.goto('/app');
+    await expect(page.locator('app-account-page')).toBeAttached();
+    await expect(offlineNote(page)).toHaveText(OFFLINE_NOTE);
+    const siteRequests = convexSiteRequests(context);
     await page.reload();
     await expect(page).toHaveURL(`${baseURL}/app`);
     await expect(page).toHaveTitle('Home | Omni League');
