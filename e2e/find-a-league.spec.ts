@@ -683,8 +683,8 @@ test.describe('find a league: a full season with registration open', () => {
         testInfo.project.name !== 'chromium-desktop',
         'raw HTML does not depend on the viewport',
       );
-      const { id } = await seedFullSeasonTenant();
-      const { html } = await raw(request, url(id));
+      const { searchWord } = await seedFullSeasonTenant();
+      const { html } = await raw(request, url(searchWord));
       expect(resultNames(html).sort()).toEqual([FULL_LEAGUE, PACKED_LEAGUE]);
       const text = plainText(resultsSection(html));
       expect(text).toContain('Alpha Field Full Full Season · waitlist open');
@@ -697,8 +697,8 @@ test.describe('find a league: a full season with registration open', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { id } = await seedFullSeasonTenant();
-    await page.goto(url(id));
+    const { searchWord } = await seedFullSeasonTenant();
+    await page.goto(url(searchWord));
     await hydrated(consoleGuard);
     await expect(rowNames(page)).toHaveCount(2);
     const row = results(page)

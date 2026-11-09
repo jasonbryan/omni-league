@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest, type TestConvex } from 'convex-test';
+import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
@@ -7,7 +7,7 @@ import type { Doc } from './_generated/dataModel';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, setTeamCounts } from './test.setup';
 
 const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
 
@@ -47,18 +47,6 @@ async function setup() {
 }
 
 type T = Awaited<ReturnType<typeof setup>>;
-
-async function setTeamCounts(
-  t: { run: TestConvex<typeof schema>['run'] },
-  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
-): Promise<void> {
-  await t.run(async (ctx) => {
-    for (const season of await ctx.db.query('seasons').collect()) {
-      const count = counts[season.slug];
-      if (count) await ctx.db.patch('seasons', season._id, count);
-    }
-  });
-}
 
 async function leagueOf(t: T, orgSlug: string, leagueSlug: string): Promise<Doc<'leagues'>> {
   return t.run(async (ctx) => {

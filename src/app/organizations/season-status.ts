@@ -16,8 +16,7 @@ export interface LeagueRowSeason extends SeasonDates {
 export interface SeasonStatusLine {
   badge: string | null;
   badgeClass: string | null;
-  /** Registration is open, full or not, so the row keeps its Register link. */
-  open: boolean;
+  registrationOpen: boolean;
   text: string;
   season: { name: string; slug: string } | null;
 }
@@ -85,20 +84,28 @@ export function leagueSeasonStatus(
   if (seasons === undefined) return undefined;
   const next = soonestClosingOpenSeason(seasons, nowMs) ?? nextSeason(seasons, nowMs);
   if (next === undefined) {
-    return { badge: null, badgeClass: null, open: false, text: 'No upcoming season', season: null };
+    return {
+      badge: null,
+      badgeClass: null,
+      registrationOpen: false,
+      text: 'No upcoming season',
+      season: null,
+    };
   }
   const phase = seasonPhase(next, nowMs);
   const season = { name: next.name, slug: next.slug };
   if (isOpenAndFull(phase, next)) {
     const text = `${next.name} · waitlist open`;
-    return { badge: FULL_BADGE_TEXT, badgeClass: FULL_BADGE, open: true, text, season };
+    return { badge: FULL_BADGE_TEXT, badgeClass: FULL_BADGE, registrationOpen: true, text, season };
   }
-  const open = phase === 'registrationOpen';
+  const registrationOpen = phase === 'registrationOpen';
   return {
     badge: BADGE_TEXT[phase],
-    badgeClass: open ? OPEN_BADGE : MUTED_BADGE,
-    open,
-    text: open ? `${next.name} · closes ${closesText(next.registrationDeadline)}` : next.name,
+    badgeClass: registrationOpen ? OPEN_BADGE : MUTED_BADGE,
+    registrationOpen,
+    text: registrationOpen
+      ? `${next.name} · closes ${closesText(next.registrationDeadline)}`
+      : next.name,
     season,
   };
 }

@@ -601,7 +601,7 @@ export class OrganizationOverview {
         where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
         status,
         register:
-          status?.open && status.season
+          status?.registrationOpen && status.season
             ? {
                 href: publicSeasonPath(this.page().slug, league.slug, status.season.slug),
                 seasonName: status.season.name,

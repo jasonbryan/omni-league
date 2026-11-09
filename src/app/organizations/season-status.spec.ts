@@ -43,7 +43,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-03-01'))).toEqual({
       badge: 'Registration open',
       badgeClass: OPEN_BADGE,
-      open: true,
+      registrationOpen: true,
       text: 'NEXT · closes May 19',
       season: { name: 'NEXT', slug: 'next' },
     });
@@ -53,7 +53,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-05-25'))).toEqual({
       badge: 'Registration closed',
       badgeClass: MUTED_BADGE,
-      open: false,
+      registrationOpen: false,
       text: 'NEXT',
       season: { name: 'NEXT', slug: 'next' },
     });
@@ -63,7 +63,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([CURRENT, ENDED], noon('2026-10-27'))).toEqual({
       badge: 'In progress',
       badgeClass: MUTED_BADGE,
-      open: false,
+      registrationOpen: false,
       text: 'CURRENT',
       season: { name: 'CURRENT', slug: 'current' },
     });
@@ -73,7 +73,7 @@ describe('leagueSeasonStatus', () => {
     const none = {
       badge: null,
       badgeClass: null,
-      open: false,
+      registrationOpen: false,
       text: 'No upcoming season',
       season: null,
     };
@@ -85,7 +85,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([CURRENT, LATER], noon('2027-08-01'))).toEqual({
       badge: 'Registration open',
       badgeClass: OPEN_BADGE,
-      open: true,
+      registrationOpen: true,
       text: 'LATER · closes Aug 29',
       season: { name: 'LATER', slug: 'later' },
     });
@@ -123,7 +123,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([{ ...NEXT, isFull: true }], noon('2027-03-01'))).toEqual({
       badge: 'Full',
       badgeClass: FULL_BADGE,
-      open: true,
+      registrationOpen: true,
       text: 'NEXT · waitlist open',
       season: { name: 'NEXT', slug: 'next' },
     });
@@ -141,7 +141,7 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([full], noon('2027-05-25'))).toMatchObject({
       badge: 'Registration closed',
       badgeClass: MUTED_BADGE,
-      open: false,
+      registrationOpen: false,
       text: 'NEXT',
     });
     expect(leagueSeasonStatus([full], noon('2027-06-02'))).toMatchObject({

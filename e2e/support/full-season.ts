@@ -36,8 +36,7 @@ export const PACKED_SEASON: SeasonSeed = {
 
 export interface FullSeasonTenant {
   tenant: Tenant;
-  /** The unique word in the organization's name, which finds only this tenant's leagues. */
-  id: string;
+  searchWord: string;
 }
 
 /** One `testing:seedBatch` call, since each `convexRun` starts a CLI process. Local runs only. */
@@ -76,5 +75,5 @@ export async function seedFullSeasonTenant(): Promise<FullSeasonTenant> {
     ],
     teams,
   });
-  return { tenant, id: tenant.slug.replace(/^e2e-/, '') };
+  return { tenant, searchWord: tenant.slug.replace(/^e2e-/, '') };
 }

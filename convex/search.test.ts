@@ -1,11 +1,11 @@
 /// <reference types="vite/client" />
-import { convexTest, type TestConvex } from 'convex-test';
+import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
-import { modules } from './test.setup';
+import { modules, setTeamCounts } from './test.setup';
 
 const season = (name: string, slug: string, startDate: string): NewSeason => ({
   name,
@@ -80,18 +80,6 @@ async function insertBulk(t: Awaited<ReturnType<typeof setup>>, count: number, w
 
 const search = (t: Awaited<ReturnType<typeof setup>>, q: string) =>
   t.query(api.search.leagues, { q });
-
-async function setTeamCounts(
-  t: { run: TestConvex<typeof schema>['run'] },
-  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
-): Promise<void> {
-  await t.run(async (ctx) => {
-    for (const season of await ctx.db.query('seasons').collect()) {
-      const count = counts[season.slug];
-      if (count) await ctx.db.patch('seasons', season._id, count);
-    }
-  });
-}
 
 describe('search.leagues', () => {
   test('returns a published league with its organization, sport, locations, division, and seasons', async () => {

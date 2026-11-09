@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
-import { convexTest, type TestConvex } from 'convex-test';
+import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, setTeamCounts } from './test.setup';
 
 function season(slug: string, startDate: string, overrides: Partial<NewSeason> = {}): NewSeason {
   return {
@@ -36,18 +36,6 @@ async function setup() {
 }
 
 type T = Awaited<ReturnType<typeof setup>>;
-
-async function setTeamCounts(
-  t: { run: TestConvex<typeof schema>['run'] },
-  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
-): Promise<void> {
-  await t.run(async (ctx) => {
-    for (const season of await ctx.db.query('seasons').collect()) {
-      const count = counts[season.slug];
-      if (count) await ctx.db.patch('seasons', season._id, count);
-    }
-  });
-}
 
 async function add(
   t: T,
