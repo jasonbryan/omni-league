@@ -1,8 +1,12 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { Router, provideRouter, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { AuthService, SESSION_CHECK_LIMIT_MS } from '../core/auth/auth.service';
+import { redirectSignedIn } from '../core/auth/guards';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
+import { CONVEX_CLIENT } from '../core/data/convex';
+import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { MESSAGES, SignInPage } from './sign-in-page';
 
@@ -11,6 +15,15 @@ class Elsewhere {}
 
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
+
+const ROUTES: Routes = [
+  { path: 'sign-in', component: SignInPage, canActivate: [redirectSignedIn] },
+  { path: 'sign-up', component: Elsewhere },
+  { path: 'app', component: Elsewhere },
+  { path: 'app/account', component: Elsewhere },
+  { path: 'leagues/x/register', component: Elsewhere },
+  { path: '', component: Elsewhere },
+];
 
 describe('SignInPage', () => {
   let client: FakeAuthClient;
@@ -21,21 +34,44 @@ describe('SignInPage', () => {
     client = new FakeAuthClient();
     client.storedCookie = '';
     TestBed.configureTestingModule({
-      providers: [
-        provideFakeAuthClient(client),
-        provideRouter([
-          { path: 'sign-in', component: SignInPage },
-          { path: 'sign-up', component: Elsewhere },
-          { path: 'app', component: Elsewhere },
-          { path: 'leagues/x/register', component: Elsewhere },
-          { path: '', component: Elsewhere },
-        ]),
-      ],
+      providers: [provideFakeAuthClient(client), provideRouter(ROUTES)],
     });
     harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
     client.emitSession(null);
     page = harness.routeNativeElement!;
+  }
+
+  /** The stored token stays after a 503, so the page shows its form with the session still confirmable. */
+  async function openRefused(from: string) {
+    client = new FakeAuthClient();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeAuthClient(client),
+        { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+        provideRouter(ROUTES),
+      ],
+    });
+    const auth = TestBed.inject(AuthService);
+    await expect(auth.isSignedIn()).resolves.toBe(true);
+    client.emitError({ status: 503, statusText: 'Service Unavailable' });
+    harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(from);
+    page = harness.routeNativeElement!;
+    expect(url().startsWith('/sign-in')).toBe(true);
+    expect(input('email')).not.toBeNull();
+    return { auth, navigate: vi.spyOn(TestBed.inject(Router), 'navigateByUrl') };
+  }
+
+  async function settle() {
+    await harness.fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await harness.fixture.whenStable();
+  }
+
+  function confirmByCheck() {
+    client.emitChecking();
+    client.emitSession({ id: 's1' });
   }
 
   const input = (id: string) => page.querySelector<HTMLInputElement>(`#${id}`)!;
@@ -534,5 +570,70 @@ describe('SignInPage', () => {
       expect(error('email')).not.toBeNull();
       expect(alert()).toBeNull();
     });
+  });
+
+  describe('a stored session that a later check confirms', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it.each([
+      ['/sign-in?returnTo=%2Fapp%2Faccount', '/app/account'],
+      ['/sign-in?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
+      ['/sign-in?returnTo=%2F%2Fevil.example', '/app'],
+      ['/sign-in?returnTo=https%3A%2F%2Fevil.example', '/app'],
+      ['/sign-in', '/app'],
+    ])('from %s, goes to %s with no press, replacing the entry', async (from, to) => {
+      const { navigate } = await openRefused(from);
+      confirmByCheck();
+      await settle();
+      expect(url()).toBe(to);
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(to, { replaceUrl: true });
+      expect(client.signIns).toEqual([]);
+    });
+
+    it('on field wifi, the online signal with no browser online event re-checks once and goes to returnTo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const { auth, navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+      vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+      auth.onOnline();
+      auth.onOnline();
+      expect(client.refetches).toBe(1);
+      client.emitSession({ id: 's1' });
+      await settle();
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+    });
+
+    it("the form's own sign-in still navigates once", async () => {
+      const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+      await fill();
+      await submit();
+      client.emitSession({ id: 's1' });
+      await settle();
+      expect(client.signIns).toHaveLength(1);
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+    });
+
+    it.each([
+      ['succeeds', null],
+      ['is refused', { status: 401 }],
+    ])(
+      'a check that confirms while the submit is pending navigates once, and the submit that then %s changes nothing',
+      async (_, signInError) => {
+        const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+        await fill();
+        client.holdSignIn = true;
+        client.nextSignInError = signInError;
+        await submit();
+        expect(submitButton().textContent?.trim()).toBe('Signing in…');
+        confirmByCheck();
+        await settle();
+        expect(url()).toBe('/app/account');
+        client.releaseSignIn();
+        await settle();
+        expect(url()).toBe('/app/account');
+        expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+      },
+    );
   });
 });

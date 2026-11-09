@@ -12,7 +12,7 @@ import {
   type Signal,
 } from '@angular/core';
 import { FormField, form, required, validate } from '@angular/forms/signals';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCircleAlert,
@@ -24,6 +24,7 @@ import {
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
+import { injectContinueToReturnTo } from '../core/auth/continue-to-return-to';
 import { returnToOrApp } from '../core/auth/return-to';
 import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
@@ -281,9 +282,9 @@ type FormAlert = { title: string; description: string } | 'offline';
 })
 export class SignInPage {
   private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
+  private readonly continueToReturnTo = injectContinueToReturnTo();
 
   protected readonly signUpReturnTo = returnToOrApp(this.returnTo);
 
@@ -366,8 +367,9 @@ export class SignInPage {
     this.submitting.set(true);
     const result = await this.auth.signIn({ email: email.trim(), password });
     this.submitting.set(false);
+    if (this.continueToReturnTo.underway()) return;
     if (result.ok) {
-      await this.router.navigateByUrl(returnToOrApp(this.returnTo), { replaceUrl: true });
+      await this.continueToReturnTo.go();
       return;
     }
     this.showFailure(result);

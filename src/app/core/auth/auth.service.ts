@@ -9,19 +9,20 @@ import {
 } from '@angular/core';
 import {
   type ActivatedRouteSnapshot,
+  type CanActivateFn,
   NavigationCancel,
   NavigationEnd,
   NavigationError,
   NavigationSkipped,
   Router,
 } from '@angular/router';
-import { filter, take } from 'rxjs';
+import { Subject, filter, take } from 'rxjs';
 import type { PushSubscriptionLifecycle } from '../../notifications/push-subscription-lifecycle';
 import { ChangesInFlight } from '../changes-in-flight';
 import type { ConvexAuthSource } from '../data/convex';
 import { OFFLINE_SIGNAL_DELAY_MS } from '../data/convex/connection';
 import { AUTH_CLIENT, type AuthClientLike } from './auth-client';
-import { SIGN_IN_PATH, requireSignedIn } from './guards';
+import { SIGN_IN_PATH, redirectSignedIn, requireSignedIn } from './guards';
 
 export type SignUpFailure =
   | 'exists'
@@ -108,6 +109,10 @@ export class AuthService implements ConvexAuthSource {
   private readonly epoch = signal(0);
   readonly authEpoch = this.epoch.asReadonly();
 
+  private readonly checkSignedIn = new Subject<void>();
+  /** Only from `signed-out`: a kept session sent no page to sign-in, and this tab's own sign-in navigates by itself. */
+  readonly signedInByCheck = this.checkSignedIn.asObservable();
+
   private readonly destroyRef = inject(DestroyRef);
   private readonly changes = inject(ChangesInFlight);
   private readonly injector = inject(Injector);
@@ -159,6 +164,7 @@ export class AuthService implements ConvexAuthSource {
   private watchSession(client: AuthClientLike): void {
     if (this.watching || this.destroyRef.destroyed) return;
     this.watching = true;
+    this.loadedClient = client;
     // The store's own first fetch starts on a later task, so the check counts from here.
     if (this.session() === 'kept') this.startCheck();
     const unsubscribe = client.useSession.subscribe((value) => this.onSessionValue(client, value));
@@ -183,8 +189,10 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private confirmSession(): void {
-    const askAgain = this.session() === 'kept' && this.tokenWithheld;
+    const previous = this.session();
+    const askAgain = previous === 'kept' && this.tokenWithheld;
     this.setSession('signed-in');
+    if (previous === 'signed-out') this.checkSignedIn.next();
     if (!askAgain) return;
     this.forgetToken();
     this.epoch.update((epoch) => epoch + 1);
@@ -227,7 +235,8 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private redirectFromGuardedRoute(router: Router): void {
-    if (this.signedIn() || !requiresSignIn(router.routerState.snapshot.root)) return;
+    const guarded = routeChainHasGuard(router.routerState.snapshot.root, requireSignedIn);
+    if (this.signedIn() || !guarded) return;
     void router.navigate([SIGN_IN_PATH], {
       queryParams: { returnTo: router.url },
       replaceUrl: true,
@@ -235,22 +244,39 @@ export class AuthService implements ConvexAuthSource {
   }
 
   readonly onOnline = (): void => {
-    if (this.session() !== 'kept' || !this.browserOnline()) return;
-    this.rechecks = 0;
-    this.checkKeptSession();
+    if (!this.browserOnline()) return;
+    if (this.session() === 'kept') {
+      this.rechecks = 0;
+      this.checkKeptSession();
+    } else if (this.refusedWithTokenStored() && this.onSignedOutOnlyRoute()) {
+      this.refetchUnlessCheckedRecently();
+    }
   };
 
   private checkKeptSession(): void {
     const client = this.loadedClient;
     if (!client) return;
-    if (!this.watching) {
-      this.watchSession(client);
-    } else if (!this.checkedRecently()) {
-      this.startCheck();
-      // Replaces a check still in flight: Better Auth aborts it.
-      void this.refetchSession?.();
-    }
+    if (this.watching) this.refetchUnlessCheckedRecently();
+    else this.watchSession(client);
     this.scheduleRecheck();
+  }
+
+  /** A refusal other than a 401 leaves the token stored, so the same token may still be confirmed once the server answers. */
+  private refusedWithTokenStored(): boolean {
+    const client = this.loadedClient;
+    return this.session() === 'signed-out' && this.watching && !!client && hasStoredSession(client);
+  }
+
+  private onSignedOutOnlyRoute(): boolean {
+    const router = this.injector.get(Router);
+    return routeChainHasGuard(router.routerState.snapshot.root, redirectSignedIn);
+  }
+
+  private refetchUnlessCheckedRecently(): void {
+    if (this.checkedRecently()) return;
+    this.startCheck();
+    // Replaces a check still in flight: Better Auth aborts it.
+    void this.refetchSession?.();
   }
 
   private checkedRecently(): boolean {
@@ -478,9 +504,9 @@ function neverReachedServer(error: unknown): boolean {
   return error !== null && error !== undefined && httpStatusOf(error) === undefined;
 }
 
-function requiresSignIn(route: ActivatedRouteSnapshot | null): boolean {
+function routeChainHasGuard(route: ActivatedRouteSnapshot | null, guard: CanActivateFn): boolean {
   for (let current = route; current; current = current.firstChild) {
-    if (current.routeConfig?.canActivate?.includes(requireSignedIn)) return true;
+    if (current.routeConfig?.canActivate?.includes(guard)) return true;
   }
   return false;
 }
