@@ -62,6 +62,7 @@ import {
   type RegisterTeamState,
 } from './register-team-state';
 import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
+import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
 
 export const REGISTER_MESSAGES = {
   failedTitle: 'The team could not be registered.',
@@ -93,11 +94,6 @@ export const REGISTER_MESSAGES = {
 /** What the page shows after a refused submit, before the query catches up. */
 type Refusal = 'closed' | 'onTeam' | 'waiting' | 'waitlisted';
 
-interface WaitlistPlace {
-  teamName: string;
-  position: number;
-}
-
 type FormAlert = 'offline' | 'failed';
 
 interface NameRefusal {
@@ -114,13 +110,6 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
-}
-
-function waitlistPlaceOf(data: Record<string, unknown>): WaitlistPlace | null {
-  const { teamName, position } = data;
-  return typeof teamName === 'string' && typeof position === 'number'
-    ? { teamName, position }
-    : null;
 }
 
 function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
@@ -608,8 +597,8 @@ export class RegisterTeamPage {
       this.refuse('closed');
       return;
     }
-    if (code === 'onWaitlist' && data) {
-      this.joinedWaitlist.set(waitlistPlaceOf(data));
+    if (code === 'onWaitlist') {
+      this.joinedWaitlist.set(waitlistPlaceOf(failure));
       this.refuse('waitlisted');
       return;
     }
