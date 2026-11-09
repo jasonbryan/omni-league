@@ -276,6 +276,35 @@ describe('OrganizationPage offline', () => {
       expect(host(harness).querySelector('main a[href$="#registration-open"]')).not.toBeNull();
     });
 
+    it('shows the status each copy was saved with: Full for a full season, and today’s status for a copy saved before seasons held isFull', async () => {
+      const [summer, fall] = SAVED_OPEN;
+      const rowSeason = {
+        name: summer.name,
+        slug: summer.slug,
+        startDate: summer.startDate,
+        endDate: summer.endDate,
+        registrationDeadline: summer.registrationDeadline,
+      };
+      const page = structuredClone(GULF_COAST);
+      page.leagues[0].seasons = [{ ...rowSeason, isFull: true }];
+      page.leagues[2].seasons = [{ ...rowSeason, slug: 'before-is-full' }];
+      plant({ ...page, openSeasons: [{ ...summer, isFull: true }, fall] });
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      const status = (n: number) =>
+        [...(host(harness).querySelector(`#league-${n} p:last-of-type`)?.children ?? [])]
+          .map(text)
+          .slice(0, 2);
+      expect(status(1)).toEqual(['Full', 'Summer 2027 · waitlist open']);
+      expect(status(3)).toEqual(['Registration open', 'Summer 2027 · closes Oct 12']);
+      expect(
+        text(
+          host(harness).querySelector('#registration-open > ul > li [data-slot="badge"] + span'),
+        ),
+      ).toBe('Full');
+      expect(note(harness)).not.toBeNull();
+    });
+
     it('drops a season whose deadline passed after the copy was saved', async () => {
       plant({ ...GULF_COAST, openSeasons: SAVED_OPEN });
       vi.setSystemTime(Date.UTC(2026, 9, 13, 18));

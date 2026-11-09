@@ -18,7 +18,7 @@ import { isPlainClick } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from '../organizations/organization-mark';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
-import { leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from '../organizations/season-status';
+import { leagueSeasonStatus } from '../organizations/season-status';
 import { SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, type FindResults } from './find-path';
 import { FindSkeleton } from './find-skeleton';
@@ -135,11 +135,9 @@ const TEXT_LINK_CLASSES =
                           @if (row.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                               @if (status.badge) {
-                                <span
-                                  data-slot="badge"
-                                  [class]="status.open ? openBadge : mutedBadge"
-                                  >{{ status.badge }}</span
-                                >
+                                <span data-slot="badge" [class]="status.badgeClass">{{
+                                  status.badge
+                                }}</span>
                               }
                               <span class="text-xs text-muted-foreground">{{ status.text }}</span>
                             </p>
@@ -211,8 +209,6 @@ export class FindContent {
   protected readonly linkClasses = LINK_CLASSES;
   protected readonly suggestionClasses = TEXT_LINK_CLASSES;
   protected readonly clearClasses = `mt-4 ${TEXT_LINK_CLASSES}`;
-  protected readonly openBadge = OPEN_BADGE;
-  protected readonly mutedBadge = MUTED_BADGE;
 
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
   private readonly resultStatus = viewChild<ElementRef<HTMLElement>>('resultStatus');

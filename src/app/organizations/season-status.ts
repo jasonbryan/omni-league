@@ -10,11 +10,13 @@ import type { PublicOpenSeasonRows } from './organization-path';
 export interface LeagueRowSeason extends SeasonDates {
   name: string;
   slug: string;
+  isFull?: boolean | undefined;
 }
 
 export interface SeasonStatusLine {
   badge: string | null;
-  open: boolean;
+  badgeClass: string | null;
+  registrationOpen: boolean;
   text: string;
   season: { name: string; slug: string } | null;
 }
@@ -23,6 +25,9 @@ const BADGE =
   'inline-flex w-fit shrink-0 items-center gap-1 rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap';
 export const OPEN_BADGE = `${BADGE} border-transparent bg-secondary text-secondary-foreground`;
 export const MUTED_BADGE = `${BADGE} border-transparent bg-muted text-muted-foreground`;
+export const FULL_BADGE = `${BADGE} border-border text-foreground`;
+
+export const FULL_BADGE_TEXT = 'Full';
 
 export const BADGE_TEXT: Record<SeasonPhase, string> = {
   registrationOpen: 'Registration open',
@@ -32,6 +37,14 @@ export const BADGE_TEXT: Record<SeasonPhase, string> = {
 };
 
 export const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Full only while registration is open: once it closes, the waitlist takes no entries and the phase says more. */
+export function isOpenAndFull(
+  phase: SeasonPhase,
+  season: { isFull?: boolean | undefined },
+): boolean {
+  return phase === 'registrationOpen' && season.isFull === true;
+}
 
 /** "May 19" from a stored calendar date, read as text so the server and a browser in any time zone agree. */
 export function closesText(registrationDeadline: string): string {
@@ -71,15 +84,29 @@ export function leagueSeasonStatus(
   if (seasons === undefined) return undefined;
   const next = soonestClosingOpenSeason(seasons, nowMs) ?? nextSeason(seasons, nowMs);
   if (next === undefined) {
-    return { badge: null, open: false, text: 'No upcoming season', season: null };
+    return {
+      badge: null,
+      badgeClass: null,
+      registrationOpen: false,
+      text: 'No upcoming season',
+      season: null,
+    };
   }
   const phase = seasonPhase(next, nowMs);
-  const open = phase === 'registrationOpen';
+  const season = { name: next.name, slug: next.slug };
+  if (isOpenAndFull(phase, next)) {
+    const text = `${next.name} · waitlist open`;
+    return { badge: FULL_BADGE_TEXT, badgeClass: FULL_BADGE, registrationOpen: true, text, season };
+  }
+  const registrationOpen = phase === 'registrationOpen';
   return {
     badge: BADGE_TEXT[phase],
-    open,
-    text: open ? `${next.name} · closes ${closesText(next.registrationDeadline)}` : next.name,
-    season: { name: next.name, slug: next.slug },
+    badgeClass: registrationOpen ? OPEN_BADGE : MUTED_BADGE,
+    registrationOpen,
+    text: registrationOpen
+      ? `${next.name} · closes ${closesText(next.registrationDeadline)}`
+      : next.name,
+    season,
   };
 }
 

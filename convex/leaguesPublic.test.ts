@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, setTeamCounts } from './test.setup';
 
 async function setup() {
   const t = convexTest(schema, modules);
@@ -234,11 +234,30 @@ describe('leagues.getPublicPage seasons', () => {
         endDate: '2027-05-28',
         registrationDeadline: '2027-05-01',
         minimumRosterSize: 5,
+        isFull: false,
       },
       expect.objectContaining({ slug: 'season-04' }),
       expect.objectContaining({ slug: 'season-03' }),
     ]);
     expect(JSON.stringify(page)).not.toContain('Draft Season');
+  });
+
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await addSeason(t, 'sand-2s', season(1, { slug: 'full', maxTeams: 2 }));
+    await addSeason(t, 'sand-2s', season(2, { slug: 'waiting', maxTeams: 4 }));
+    await addSeason(t, 'sand-2s', season(3, { slug: 'room', maxTeams: 4 }));
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    const page = await get(t, 'org-a', 'sand-2s');
+    expect(Object.fromEntries(page?.seasons?.map((s) => [s.slug, s.isFull]) ?? [])).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
   });
 
   test('is empty for a league whose only seasons are drafts', async () => {

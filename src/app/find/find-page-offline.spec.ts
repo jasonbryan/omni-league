@@ -82,6 +82,25 @@ describe('FindPage offline', () => {
     expect(main.querySelector('app-not-saved-view')).toBeNull();
   });
 
+  it('shows the status each saved row was saved with: Full for a full season, and today’s status for a row saved before seasons held isFull', async () => {
+    const [sunday, thursday] = COED_RESULTS.rows;
+    const results = {
+      ...COED_RESULTS,
+      rows: [
+        sunday,
+        { ...thursday, seasons: sunday.seasons.map((season) => ({ ...season, isFull: true })) },
+      ],
+    };
+    plantSavedCopy(api.search.leagues, { q: 'coed' }, results, SAVED_AT);
+    stubOnLine(false);
+    const harness = await open('/leagues?q=coed');
+    const [before, full] = [...host(harness).querySelectorAll('main section ul > li')];
+    expect(text(before.querySelector('[data-slot="badge"]'))).toBe('Registration open');
+    expect(text(before)).toContain('Summer 2027 · closes May 23');
+    expect(text(full.querySelector('[data-slot="badge"]'))).toBe('Full');
+    expect(text(full)).toContain('Summer 2027 · waitlist open');
+  });
+
   it('shows the not-saved view for a search that was not viewed', async () => {
     plantSavedCopy(api.search.leagues, { q: 'coed' }, COED_RESULTS, SAVED_AT);
     stubOnLine(false);

@@ -10,6 +10,7 @@ import {
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { FULL_BADGE, OPEN_BADGE } from '../season-status';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -412,6 +413,93 @@ describe('PublicLeaguePage populated', () => {
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
     expect(text(crumbs)).toContain('Curling');
     expect([...(crumbs?.querySelectorAll('a') ?? [])].map(text)).not.toContain('Curling');
+  });
+});
+
+describe('PublicLeaguePage with a full season whose registration is open', () => {
+  const FALL_2027 = {
+    name: 'Fall 2027',
+    slug: 'fall-2027',
+    startDate: '2027-09-12',
+    endDate: '2027-11-14',
+    registrationDeadline: '2027-08-29',
+  };
+  const leagueSeasons = SUNDAY_4S.seasons ?? [];
+  const fullLeague = {
+    ...SUNDAY_4S,
+    seasons: [
+      { ...FALL_2027, minimumRosterSize: 4, isFull: false },
+      { ...leagueSeasons[0], isFull: true },
+      ...leagueSeasons.slice(1),
+    ],
+  };
+  const fullRows = {
+    rows: [
+      { ...FALL_2027, formatName: '4v4', isFull: false },
+      { ...SEASONS[0], isFull: true },
+      ...SEASONS.slice(1, 4),
+    ],
+    page: 1,
+    pageCount: 2,
+    total: 8,
+  };
+  const card = (harness: RouterTestingHarness) =>
+    host(harness).querySelector('section#registration-open');
+  const clockLine = (harness: RouterTestingHarness) => card(harness)?.querySelectorAll('ul li')[2];
+  const rows = (harness: RouterTestingHarness) => [
+    ...host(harness).querySelectorAll('section#seasons > ul > li'),
+  ];
+  const statusOf = (row: Element) =>
+    [...(row.querySelector('p:last-of-type')?.children ?? [])].map(text);
+
+  it('shows the full season that closes first in the card, with Full on the clock line before the waitlist and the deadline', async () => {
+    const harness = await open();
+    emit(leagueQueryResults({ league: fullLeague, seasons: fullRows }));
+    await settle(harness);
+    expect(text(card(harness)?.querySelector('h3'))).toBe('Summer 2027');
+    const badge = clockLine(harness)?.querySelector('[data-slot="badge"]');
+    expect(text(badge)).toBe('Full');
+    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expect(text(clockLine(harness))).toBe('Full Waitlist open · closes May 23, 2027');
+    expect(card(harness)?.querySelectorAll('[data-slot="badge"]')).toHaveLength(1);
+    const register = card(harness)?.querySelector<HTMLAnchorElement>('a[data-slot="button"]');
+    expect(text(register)).toBe('Register for Summer 2027');
+    expect(register?.getAttribute('href')).toBe(`${PATH}/seasons/summer-2027#registration`);
+  });
+
+  it('reads Full and waitlist open in the full row, and Registration open with its deadline in the row with room', async () => {
+    const harness = await open();
+    emit(leagueQueryResults({ league: fullLeague, seasons: fullRows }));
+    await settle(harness);
+    const [room, full] = rows(harness);
+    expect(statusOf(room)).toEqual(['Registration open', 'closes Aug 29, 2027']);
+    expect(statusOf(full)).toEqual(['Full', 'waitlist open']);
+    const badgeOf = (row: Element) =>
+      row.querySelector('[data-slot="badge"]')?.className.split(' ').sort();
+    expect(badgeOf(room)).toEqual(OPEN_BADGE.split(' ').sort());
+    expect(badgeOf(full)).toEqual(FULL_BADGE.split(' ').sort());
+  });
+
+  it('keeps Closes and no badge on the card of an open season with room', async () => {
+    const harness = await open();
+    emit(leagueQueryResults());
+    await settle(harness);
+    expect(text(clockLine(harness))).toBe('Closes May 23, 2027');
+    expect(card(harness)?.querySelector('[data-slot="badge"]')).toBeNull();
+  });
+
+  it('shows no card for a full season whose registration has closed, and its row reads the phase', async () => {
+    vi.setSystemTime(at('2027-05-30'));
+    const harness = await open();
+    emit(
+      leagueQueryResults({
+        league: { ...SUNDAY_4S, seasons: [{ ...leagueSeasons[0], isFull: true }] },
+        seasons: { ...seasonsPage(1), rows: [{ ...SEASONS[0], isFull: true }] },
+      }),
+    );
+    await settle(harness);
+    expect(card(harness)).toBeNull();
+    expect(statusOf(rows(harness)[0])).toEqual(['Registration closed']);
   });
 });
 

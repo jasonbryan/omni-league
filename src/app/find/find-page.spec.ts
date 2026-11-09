@@ -20,6 +20,7 @@ import {
   SATURDAY_6S_ROW,
   SUNDAY_4S_ROW,
 } from './testing/find-data';
+import { FULL_BADGE } from '../organizations/season-status';
 
 const QUERY = 'search:leagues';
 
@@ -180,6 +181,21 @@ describe('FindPage results', () => {
     );
     expect(text(saturday)).toContain('No upcoming season');
     expect(saturday.querySelector('[data-slot="badge"]')).toBeNull();
+  });
+
+  it('reads Full with its waitlist open, in the outline badge, for a league whose soonest-closing open season is full', async () => {
+    const [summer] = SUNDAY_4S_ROW.seasons;
+    subscription().emit({
+      more: false,
+      rows: [{ ...SUNDAY_4S_ROW, seasons: [{ ...summer, isFull: true }] }],
+    });
+    await settle(harness);
+    const row = results(harness)!.querySelector('ul > li')!;
+    const badge = row.querySelector('[data-slot="badge"]');
+    expect(text(badge)).toBe('Full');
+    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expect(text(row)).toContain('Summer 2027 · waitlist open');
+    expect(text(row)).not.toContain('closes');
   });
 
   it('shows the organization logo in the mark of a row whose organization has one, and the initials for the others', async () => {

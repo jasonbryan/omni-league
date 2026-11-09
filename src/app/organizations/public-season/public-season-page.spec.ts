@@ -20,6 +20,7 @@ import {
   teamsPage,
   without,
 } from './testing/season-data';
+import { FULL_BADGE } from '../season-status';
 
 const SEASON = 'seasons:getPublicPage';
 const TEAMS = 'teams:listPublic';
@@ -472,7 +473,9 @@ describe('PublicSeasonPage registration card', () => {
         '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/free-agent',
       ],
     ]);
-    expect(text(host(harness).querySelector('[data-testid="season-phase"]'))).toBe('Full');
+    const phase = host(harness).querySelector('[data-testid="season-phase"]');
+    expect(text(phase)).toBe('Full');
+    expect(phase?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
   });
 
   it('shows the closed card, not the full one, once a full season’s registration closes', async () => {

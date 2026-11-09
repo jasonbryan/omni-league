@@ -1,5 +1,6 @@
 import type { Doc } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
+import { seasonIsFull } from './seasonInput';
 
 // Leaves out a location of another organization, so a stray id never shows it.
 export async function leagueLocations(
@@ -46,6 +47,7 @@ export async function leagueRowSeasons(ctx: Pick<QueryCtx, 'db'>, league: Doc<'l
     startDate: season.startDate,
     endDate: season.endDate,
     registrationDeadline: season.registrationDeadline,
+    isFull: seasonIsFull(season),
   }));
 }
 
@@ -58,5 +60,6 @@ export async function leaguePageSeasons(ctx: Pick<QueryCtx, 'db'>, league: Doc<'
     endDate: season.endDate,
     registrationDeadline: season.registrationDeadline,
     minimumRosterSize: season.minimumRosterSize,
+    isFull: seasonIsFull(season),
   }));
 }

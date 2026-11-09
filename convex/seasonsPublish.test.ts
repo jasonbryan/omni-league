@@ -358,6 +358,7 @@ describe('seasons.publish edge cases', () => {
     for (const season of publishedSeasons(leaguesAfter)) {
       expect(Object.keys(season).sort()).toEqual([
         'endDate',
+        'isFull',
         'name',
         'registrationDeadline',
         'slug',
