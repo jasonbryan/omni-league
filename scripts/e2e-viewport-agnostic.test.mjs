@@ -246,6 +246,81 @@ describe('the viewport-agnostic guard', () => {
     assert.deepEqual(mentioned, []);
   });
 
+  it('finds a method that the test destructures from an imported object', () => {
+    const violations = check(
+      `import { press } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => {
+         const { expectDone } = press;
+         await expectDone(page);
+       });`,
+      `export const press = { async expectDone(page) { await expect(page).toBeFocused(); } };`,
+    );
+    assert.deepEqual(names(violations), ['expectDone']);
+  });
+
+  it('resolves a call on a namespace import to the exports of that file', () => {
+    const violations = check(
+      `import * as h from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await h.scan(page); });`,
+      `export async function scan(page) { await axeScan(page); }`,
+    );
+    assert.deepEqual(names(violations), ['scan']);
+
+    const other = check(
+      `import * as h from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await h.scan(page); });`,
+      `export async function scan(page) { await page.goto('/'); }`,
+      `export async function scan(page) { await axeScan(page); }`,
+    );
+    assert.deepEqual(other, []);
+  });
+
+  it('counts a fixture the test destructures from its first parameter', () => {
+    const fixtures = `export const fixtures = {
+      shots: async ({ page }, use) => { await page.setViewportSize({ width: 320, height: 800 }); await use(); },
+    };`;
+    const tagged = check(
+      `import { fixtures } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ shots }) => { await shots.take(); });`,
+      fixtures,
+    );
+    assert.deepEqual(names(tagged), ['shots']);
+
+    const renamed = check(
+      `import { fixtures } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ shots: taken }) => { await taken.take(); });`,
+      fixtures,
+    );
+    assert.deepEqual(names(renamed), ['shots']);
+
+    const unused = check(
+      `import { fixtures } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await page.goto('/'); });`,
+      fixtures,
+    );
+    assert.deepEqual(unused, []);
+  });
+
+  it('keeps an imported helper in view when a same-named function is declared locally', () => {
+    const violations = check(
+      `import { open } from './support/helper-0';
+       test('other', async () => { async function open() {} await open(); });
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await open(page); });`,
+      `export async function open(page) { await page.setViewportSize({ width: 1, height: 1 }); }`,
+    );
+    assert.deepEqual(names(violations), ['open']);
+  });
+
+  it('follows a default export given as `export default name`', () => {
+    const violations = check(
+      `import scan from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await scan(page); });`,
+      `async function scan(page) { await axeScan(page); }
+       export default scan;`,
+    );
+    assert.deepEqual(names(violations), ['scan']);
+  });
+
   it('keeps an import alias to its own file', () => {
     const violations = check(
       `async function open() {}

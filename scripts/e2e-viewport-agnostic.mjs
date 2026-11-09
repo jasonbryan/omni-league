@@ -152,6 +152,8 @@ function moduleExports(sourceFile) {
       for (const { name } of statement.declarationList.declarations) {
         if (ts.isIdentifier(name)) names.set(name.text, name.text);
       }
+    } else if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
+      names.set('default', statement.expression.text);
     } else if (ts.isExportDeclaration(statement)) {
       const specifier = statement.moduleSpecifier?.text;
       const elements =
@@ -180,6 +182,7 @@ function moduleExports(sourceFile) {
 
 function moduleImports(sourceFile) {
   const imports = new Map();
+  const namespaces = new Map();
   const specifiers = [];
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -192,6 +195,9 @@ function moduleImports(sourceFile) {
     const record = (name, exportName) =>
       imports.set(name, [...(imports.get(name) ?? []), { specifier, exportName }]);
     if (clause.name) record(clause.name.text, 'default');
+    if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+      namespaces.set(clause.namedBindings.name.text, specifier);
+    }
     if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
       for (const element of clause.namedBindings.elements) {
         const original = (element.propertyName ?? element.name).text;
@@ -199,12 +205,10 @@ function moduleImports(sourceFile) {
       }
     }
   }
-  return { imports, specifiers };
+  return { imports, namespaces, specifiers };
 }
 
-// A name that is only mentioned, not called or handed to a call (`expect.poll(helper)`), does not
-// reach the helper.
-function referencedHelpers(node, aliases) {
+function calledOrPassedNames(node, aliases) {
   const references = [];
   const nameOf = (identifier) => aliases.get(identifier.text) ?? identifier.text;
   const visit = (child) => {
@@ -212,7 +216,11 @@ function referencedHelpers(node, aliases) {
       const callee = child.expression;
       if (ts.isIdentifier(callee)) references.push({ name: nameOf(callee), member: false });
       else if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name)) {
-        references.push({ name: callee.name.text, member: true });
+        references.push({
+          name: callee.name.text,
+          member: true,
+          object: ts.isIdentifier(callee.expression) ? callee.expression.text : undefined,
+        });
       }
       for (const argument of child.arguments) {
         if (ts.isIdentifier(argument)) references.push({ name: nameOf(argument), member: false });
@@ -222,6 +230,15 @@ function referencedHelpers(node, aliases) {
   };
   visit(node);
   return references;
+}
+
+function fixtureNames(callback) {
+  const pattern = callback.parameters?.[0]?.name;
+  if (!pattern || !ts.isObjectBindingPattern(pattern)) return [];
+  return pattern.elements
+    .map((element) => element.propertyName ?? element.name)
+    .filter((name) => ts.isIdentifier(name))
+    .map((name) => ({ name: name.text, member: true }));
 }
 
 function resolveModule(fromPath, specifier, modules) {
@@ -237,7 +254,7 @@ function buildModules(parsed) {
       ...declared,
       file: resolve(path),
       directs: identifiersIn(declared.body, aliases).filter((name) => REASON_BY_NAME.has(name)),
-      references: referencedHelpers(declared.body, aliases),
+      references: calledOrPassedNames(declared.body, aliases),
     }));
     modules.set(resolve(path), {
       path: resolve(path),
@@ -294,19 +311,27 @@ function createHelperResolver(modules) {
     if (!reachable.has(path)) reachable.set(path, reachableModules(modules, path));
     return reachable.get(path);
   };
-  return (path, { name, member }) => {
+  return (path, { name, member, object }) => {
     const module = modules.get(resolve(path));
-    if (member) {
-      return [...reachableFrom(module.path)].flatMap((reached) =>
+    const members = () =>
+      [...reachableFrom(module.path)].flatMap((reached) =>
         modules.get(reached).functions.filter((fn) => fn.name === name && fn.member),
       );
-    }
-    const local = module.functions.filter((fn) => !fn.member && fn.name === name);
-    if (local.length) return local;
-    return (module.imports.get(name) ?? []).flatMap(({ specifier, exportName }) => {
+    const exportsOf = (specifier, exportName) => {
       const target = resolveModule(module.path, specifier, modules);
       return (target && exportedHelper(modules, target, exportName)) ?? [];
-    });
+    };
+    if (member) {
+      const namespace = object === undefined ? undefined : module.namespaces.get(object);
+      return [...members(), ...(namespace === undefined ? [] : exportsOf(namespace, name))];
+    }
+    const plain = [
+      ...module.functions.filter((fn) => !fn.member && fn.name === name),
+      ...(module.imports.get(name) ?? []).flatMap(({ specifier, exportName }) =>
+        exportsOf(specifier, exportName),
+      ),
+    ];
+    return plain.length ? plain : members();
   };
 }
 
@@ -439,7 +464,8 @@ export function findViolations(files) {
         for (const name of identifiersIn(callback, aliases)) {
           report(name, REASON_BY_NAME.get(name), undefined, hook);
         }
-        for (const reference of referencedHelpers(callback, aliases)) {
+        const references = [...calledOrPassedNames(callback, aliases), ...fixtureNames(callback)];
+        for (const reference of references) {
           if (REASON_BY_NAME.has(reference.name)) continue;
           report(reference.name, helperReason(path, reference), reference.name, hook);
         }
