@@ -2,7 +2,7 @@
 // two, so it must not check anything that depends on the screen: layout, accessibility,
 // screenshots, focus, or responsive behaviour.
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
 export const TAG_IDENTIFIER = 'VIEWPORT_AGNOSTIC';
@@ -61,7 +61,7 @@ function identifiersIn(node, aliases = new Map()) {
   return names;
 }
 
-function importAliases(parsed) {
+function importAliases(sourceFile) {
   const aliases = new Map();
   const visit = (node) => {
     if (ts.isImportSpecifier(node) && node.propertyName) {
@@ -69,23 +69,25 @@ function importAliases(parsed) {
     }
     ts.forEachChild(node, visit);
   };
-  for (const { sourceFile } of parsed) visit(sourceFile);
+  visit(sourceFile);
   return aliases;
 }
 
-function tagNames(parsed, aliases) {
+function tagNames(parsed) {
   const tags = new Set([TAG_IDENTIFIER]);
   const declarations = [];
-  const visit = (node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      declarations.push(node);
-    }
-    ts.forEachChild(node, visit);
-  };
-  for (const { sourceFile } of parsed) visit(sourceFile);
+  for (const { sourceFile, aliases } of parsed) {
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        declarations.push({ node, aliases });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
   for (let changed = true; changed;) {
     changed = false;
-    for (const declaration of declarations) {
+    for (const { node: declaration, aliases } of declarations) {
       if (tags.has(declaration.name.text)) continue;
       if (identifiersIn(declaration.initializer, aliases).some((name) => tags.has(name))) {
         tags.add(declaration.name.text);
@@ -107,26 +109,31 @@ function carriesTag(node, tags, aliases) {
   return found;
 }
 
-function namedFunctions(sourceFile, aliases) {
-  const functions = new Map();
+const isExported = (node) =>
+  ts.canHaveModifiers(node) &&
+  (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+
+function declaredFunctions(sourceFile) {
+  const functions = [];
+  const add = (name, body, member) => functions.push({ name, body, member });
   const visit = (node) => {
     if (ts.isFunctionDeclaration(node) && node.name && node.body) {
-      functions.set(node.name.text, identifiersIn(node.body, aliases));
+      add(node.name.text, node.body, false);
     } else if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
       node.initializer &&
       isFunctionLike(node.initializer)
     ) {
-      functions.set(node.name.text, identifiersIn(node.initializer, aliases));
+      add(node.name.text, node.initializer, false);
     } else if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name) && node.body) {
-      functions.set(node.name.text, identifiersIn(node.body, aliases));
+      add(node.name.text, node.body, true);
     } else if (
       ts.isPropertyAssignment(node) &&
       ts.isIdentifier(node.name) &&
       isFunctionLike(node.initializer)
     ) {
-      functions.set(node.name.text, identifiersIn(node.initializer, aliases));
+      add(node.name.text, node.initializer, true);
     }
     ts.forEachChild(node, visit);
   };
@@ -134,27 +141,200 @@ function namedFunctions(sourceFile, aliases) {
   return functions;
 }
 
-// Matching is by name across all files, so a same-named helper in another file is treated alike (a
-// false positive fails safe).
-function sensitiveHelpers(parsed, aliases) {
-  const functions = new Map();
-  for (const { sourceFile } of parsed) {
-    for (const [name, names] of namedFunctions(sourceFile, aliases)) {
-      functions.set(name, [...(functions.get(name) ?? []), ...names]);
+function moduleExports(sourceFile) {
+  const names = new Map();
+  const reexports = [];
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name && isExported(statement)) {
+      const isDefault = statement.modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
+      names.set(isDefault ? 'default' : statement.name.text, statement.name.text);
+    } else if (ts.isVariableStatement(statement) && isExported(statement)) {
+      for (const { name } of statement.declarationList.declarations) {
+        if (ts.isIdentifier(name)) names.set(name.text, name.text);
+      }
+    } else if (ts.isExportDeclaration(statement)) {
+      const specifier = statement.moduleSpecifier?.text;
+      const elements =
+        statement.exportClause && ts.isNamedExports(statement.exportClause)
+          ? statement.exportClause.elements
+          : undefined;
+      if (specifier === undefined) {
+        for (const element of elements ?? []) {
+          names.set(element.name.text, (element.propertyName ?? element.name).text);
+        }
+      } else if (elements) {
+        for (const element of elements) {
+          reexports.push({
+            specifier,
+            exported: element.name.text,
+            original: (element.propertyName ?? element.name).text,
+          });
+        }
+      } else {
+        reexports.push({ specifier, exported: undefined, original: undefined });
+      }
     }
   }
+  return { names, reexports };
+}
+
+function moduleImports(sourceFile) {
+  const imports = new Map();
+  const specifiers = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    const specifier = statement.moduleSpecifier.text;
+    specifiers.push(specifier);
+    const clause = statement.importClause;
+    if (!clause) continue;
+    const record = (name, exportName) =>
+      imports.set(name, [...(imports.get(name) ?? []), { specifier, exportName }]);
+    if (clause.name) record(clause.name.text, 'default');
+    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      for (const element of clause.namedBindings.elements) {
+        const original = (element.propertyName ?? element.name).text;
+        record(original, original);
+      }
+    }
+  }
+  return { imports, specifiers };
+}
+
+// A name that is only mentioned, not called or handed to a call (`expect.poll(helper)`), does not
+// reach the helper.
+function referencedHelpers(node, aliases) {
+  const references = [];
+  const nameOf = (identifier) => aliases.get(identifier.text) ?? identifier.text;
+  const visit = (child) => {
+    if (ts.isCallExpression(child)) {
+      const callee = child.expression;
+      if (ts.isIdentifier(callee)) references.push({ name: nameOf(callee), member: false });
+      else if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name)) {
+        references.push({ name: callee.name.text, member: true });
+      }
+      for (const argument of child.arguments) {
+        if (ts.isIdentifier(argument)) references.push({ name: nameOf(argument), member: false });
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return references;
+}
+
+function resolveModule(fromPath, specifier, modules) {
+  if (!specifier.startsWith('.')) return undefined;
+  const base = resolve(dirname(fromPath), specifier);
+  return [base, `${base}.ts`, join(base, 'index.ts')].find((path) => modules.has(path));
+}
+
+function buildModules(parsed) {
+  const modules = new Map();
+  for (const { path, sourceFile, aliases } of parsed) {
+    const functions = declaredFunctions(sourceFile).map((declared) => ({
+      ...declared,
+      file: resolve(path),
+      directs: identifiersIn(declared.body, aliases).filter((name) => REASON_BY_NAME.has(name)),
+      references: referencedHelpers(declared.body, aliases),
+    }));
+    modules.set(resolve(path), {
+      path: resolve(path),
+      functions,
+      ...moduleExports(sourceFile),
+      ...moduleImports(sourceFile),
+    });
+  }
+  for (const module of modules.values()) {
+    module.targets = module.specifiers
+      .map((specifier) => resolveModule(module.path, specifier, modules))
+      .filter((target) => target !== undefined);
+    for (const reexport of module.reexports) {
+      reexport.target = resolveModule(module.path, reexport.specifier, modules);
+    }
+  }
+  return modules;
+}
+
+function exportedHelper(modules, path, exportName, seen = new Set()) {
+  const key = `${path}#${exportName}`;
+  if (seen.has(key)) return undefined;
+  seen.add(key);
+  const module = modules.get(path);
+  const local = module.names.get(exportName);
+  if (local !== undefined) {
+    return module.functions.filter((fn) => !fn.member && fn.name === local);
+  }
+  for (const { target, exported, original } of module.reexports) {
+    if (target === undefined || (exported !== undefined && exported !== exportName)) continue;
+    const found = exportedHelper(modules, target, original ?? exportName, seen);
+    if (found?.length) return found;
+  }
+  return undefined;
+}
+
+function reachableModules(modules, path) {
+  const reached = new Set([path]);
+  const queue = [path];
+  while (queue.length) {
+    for (const target of modules.get(queue.pop()).targets) {
+      if (!reached.has(target)) {
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return reached;
+}
+
+function createHelperResolver(modules) {
+  const reachable = new Map();
+  const reachableFrom = (path) => {
+    if (!reachable.has(path)) reachable.set(path, reachableModules(modules, path));
+    return reachable.get(path);
+  };
+  return (path, { name, member }) => {
+    const module = modules.get(resolve(path));
+    if (member) {
+      return [...reachableFrom(module.path)].flatMap((reached) =>
+        modules.get(reached).functions.filter((fn) => fn.name === name && fn.member),
+      );
+    }
+    const local = module.functions.filter((fn) => !fn.member && fn.name === name);
+    if (local.length) return local;
+    return (module.imports.get(name) ?? []).flatMap(({ specifier, exportName }) => {
+      const target = resolveModule(module.path, specifier, modules);
+      return (target && exportedHelper(modules, target, exportName)) ?? [];
+    });
+  };
+}
+
+function sensitiveHelpers(parsed) {
+  const modules = buildModules(parsed);
+  const resolveHelper = createHelperResolver(modules);
   const sensitive = new Map();
+  const all = [...modules.values()].flatMap((module) => module.functions);
+  for (const fn of all) {
+    if (fn.directs.length) sensitive.set(fn, REASON_BY_NAME.get(fn.directs[0]));
+  }
   for (let changed = true; changed;) {
     changed = false;
-    for (const [name, names] of functions) {
-      if (sensitive.has(name)) continue;
-      const hit = names.find((used) => REASON_BY_NAME.has(used) || sensitive.has(used));
-      if (hit === undefined) continue;
-      sensitive.set(name, REASON_BY_NAME.get(hit) ?? sensitive.get(hit));
-      changed = true;
+    for (const fn of all) {
+      if (sensitive.has(fn)) continue;
+      for (const reference of fn.references) {
+        const hit = resolveHelper(fn.file, reference).find((helper) => sensitive.has(helper));
+        if (hit === undefined) continue;
+        sensitive.set(fn, sensitive.get(hit));
+        changed = true;
+        break;
+      }
     }
   }
-  return sensitive;
+  return (path, reference) => {
+    const hit = resolveHelper(path, reference).find((helper) => sensitive.has(helper));
+    return hit && sensitive.get(hit);
+  };
 }
 
 // `base` is the plain test in auth-session.spec.ts.
@@ -225,33 +405,43 @@ function titleOf(call) {
 }
 
 export function findViolations(files) {
-  const parsed = files.map(({ path, text }) => ({
-    path,
-    sourceFile: ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS),
-  }));
-  const aliases = importAliases(parsed);
-  const tags = tagNames(parsed, aliases);
-  const sensitive = sensitiveHelpers(parsed, aliases);
+  const parsed = files.map(({ path, text }) => {
+    const sourceFile = ts.createSourceFile(
+      path,
+      text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    return { path, sourceFile, aliases: importAliases(sourceFile) };
+  });
+  const tags = tagNames(parsed);
+  const helperReason = sensitiveHelpers(parsed);
   const violations = [];
-  for (const { path, sourceFile } of parsed) {
+  for (const { path, sourceFile, aliases } of parsed) {
     for (const { call, callbacks } of taggedScopes(sourceFile, tags, aliases)) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(call.getStart());
       const seen = new Set();
+      const report = (name, reason, via, hook) => {
+        if (reason === undefined || seen.has(name)) return;
+        seen.add(name);
+        violations.push({
+          file: path,
+          line: line + 1,
+          title: titleOf(call),
+          name,
+          reason,
+          via,
+          hook,
+        });
+      };
       for (const { callback, hook } of callbacks) {
         for (const name of identifiersIn(callback, aliases)) {
-          const direct = REASON_BY_NAME.get(name);
-          const reason = direct ?? sensitive.get(name);
-          if (reason === undefined || seen.has(name)) continue;
-          seen.add(name);
-          violations.push({
-            file: path,
-            line: line + 1,
-            title: titleOf(call),
-            name,
-            reason,
-            via: direct === undefined ? name : undefined,
-            hook,
-          });
+          report(name, REASON_BY_NAME.get(name), undefined, hook);
+        }
+        for (const reference of referencedHelpers(callback, aliases)) {
+          if (REASON_BY_NAME.has(reference.name)) continue;
+          report(reference.name, helperReason(path, reference), reference.name, hook);
         }
       }
     }

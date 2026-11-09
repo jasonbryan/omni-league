@@ -165,6 +165,96 @@ describe('the viewport-agnostic guard', () => {
     );
   });
 
+  it('resolves a helper only within its own file or through an import', () => {
+    const unexportedElsewhere = check(
+      `test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await scan(page); });`,
+      `async function scan(page) { await axeScan(page); }`,
+    );
+    assert.deepEqual(unexportedElsewhere, []);
+
+    const localShadowsElsewhere = check(
+      `import { settle } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await settle(page); });`,
+      `export async function settle(page) { await open(page); }`,
+      `async function open(page) { await page.screenshot(); }`,
+    );
+    assert.deepEqual(localShadowsElsewhere, []);
+
+    const sameNameExportedElsewhere = check(
+      `import { settle } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await settle(page); });`,
+      `export async function settle(page) { await page.goto('/'); }`,
+      `export async function settle(page) { await checkReflow(page); }`,
+    );
+    assert.deepEqual(sameNameExportedElsewhere, []);
+
+    const ownFileWins = check(
+      `async function open(page) { await page.goto('/'); }
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await open(page); });`,
+      `export async function open(page) { await checkReflow(page); }`,
+    );
+    assert.deepEqual(ownFileWins, []);
+  });
+
+  it('follows a re-export, an export list, and an aliased import to the helper', () => {
+    const reexported = check(
+      `import { reflowOf } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await reflowOf(page); });`,
+      `export { reflowOf } from './helper-1';`,
+      `export async function reflowOf(page) { await checkReflow(page); }`,
+    );
+    assert.deepEqual(names(reexported), ['reflowOf']);
+
+    const listed = check(
+      `import { settle as wait } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await wait(page); });`,
+      `async function inner(page) { await axeScan(page); }
+       export { inner as settle };`,
+    );
+    assert.deepEqual(names(listed), ['settle']);
+  });
+
+  it('finds a method only on an object the file can reach through its imports', () => {
+    const reachable = check(
+      `import { app } from './support/helper-0';
+       test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await app.scan(page); });`,
+      `export const app = { async scan(page) { await axeScan(page); } };`,
+    );
+    assert.deepEqual(names(reachable), ['scan']);
+
+    const unreachable = check(
+      `test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await app.scan(page); });`,
+      `export const app = { async scan(page) { await axeScan(page); } };`,
+    );
+    assert.deepEqual(unreachable, []);
+  });
+
+  it('counts a helper that is called or passed to a call, and not a name that is only mentioned', () => {
+    const called = check(`
+      async function scan(page) { await axeScan(page); }
+      test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await expect.poll(scan).toBe(1); });`);
+    assert.deepEqual(names(called), ['scan']);
+
+    const mentioned = check(`
+      async function scan(page) { await axeScan(page); }
+      async function settle() { const scan = 1; return scan + 1; }
+      test('t', VIEWPORT_AGNOSTIC, async ({ page }) => {
+        const label = { scan: 1 };
+        await settle();
+        log(label.scan);
+      });`);
+    assert.deepEqual(mentioned, []);
+  });
+
+  it('keeps an import alias to its own file', () => {
+    const violations = check(
+      `async function open() {}
+       test('t', VIEWPORT_AGNOSTIC, async () => { await open(); });`,
+      `import { screenshot as open } from './shots';`,
+    );
+    assert.deepEqual(violations, []);
+  });
+
   it('names the file, line, and test in its message', () => {
     const violations = check(
       `\n\ntest('the title', VIEWPORT_AGNOSTIC, async () => { checkReflow(); });`,
