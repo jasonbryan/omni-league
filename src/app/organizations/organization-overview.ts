@@ -56,7 +56,13 @@ import {
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
-import { closesText, leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from './season-status';
+import {
+  closesText,
+  FULL_BADGE,
+  FULL_BADGE_TEXT,
+  leagueSeasonStatus,
+  OPEN_BADGE,
+} from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
@@ -213,8 +219,11 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                     <li
                       class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
                     >
-                      <p>
+                      <p class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                         <span data-slot="badge" [class]="openBadge">{{ card.sportName }}</span>
+                        @if (card.full) {
+                          <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                        }
                       </p>
                       <h3 class="mt-3 text-lg font-semibold tracking-tight">
                         <a
@@ -254,7 +263,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           class="flex items-center justify-between gap-3 border-t border-border pt-4"
                         >
                           <p class="text-sm text-muted-foreground">
-                            Closes
+                            {{ card.closesLabel }}
                             <span class="font-medium text-foreground">{{ card.closes }}</span>
                           </p>
                           <a
@@ -338,11 +347,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           @if (league.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                               @if (status.badge) {
-                                <span
-                                  data-slot="badge"
-                                  [class]="status.open ? openBadge : mutedBadge"
-                                  >{{ status.badge }}</span
-                                >
+                                <span data-slot="badge" [class]="status.badgeClass">{{
+                                  status.badge
+                                }}</span>
                               }
                               <span class="text-xs text-muted-foreground">{{ status.text }}</span>
                               @if (league.register; as register) {
@@ -468,7 +475,8 @@ export class OrganizationOverview {
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
   protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly openBadge = OPEN_BADGE;
-  protected readonly mutedBadge = MUTED_BADGE;
+  protected readonly fullBadge = FULL_BADGE;
+  protected readonly fullBadgeText = FULL_BADGE_TEXT;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');
@@ -577,6 +585,8 @@ export class OrganizationOverview {
         : `Teams of at least ${season.minimumRosterSize}`,
       where: season.league.locationNames.join(', '),
       closes: closesText(season.registrationDeadline),
+      full: season.isFull === true,
+      closesLabel: season.isFull === true ? 'Waitlist open · closes' : 'Closes',
     })),
   );
 

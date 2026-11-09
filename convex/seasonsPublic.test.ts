@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test';
+import { convexTest, type TestConvex } from 'convex-test';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
@@ -47,6 +47,18 @@ async function setup() {
 }
 
 type T = Awaited<ReturnType<typeof setup>>;
+
+async function setTeamCounts(
+  t: { run: TestConvex<typeof schema>['run'] },
+  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
+): Promise<void> {
+  await t.run(async (ctx) => {
+    for (const season of await ctx.db.query('seasons').collect()) {
+      const count = counts[season.slug];
+      if (count) await ctx.db.patch('seasons', season._id, count);
+    }
+  });
+}
 
 async function leagueOf(t: T, orgSlug: string, leagueSlug: string): Promise<Doc<'leagues'>> {
   return t.run(async (ctx) => {
@@ -131,9 +143,28 @@ describe('seasons.listPublic', () => {
         endDate: '2027-08-25',
         registrationDeadline: '2027-05-19',
         formatName: '7v7',
+        isFull: false,
       },
     ]);
     expect(JSON.stringify(result)).not.toMatch(/_id|_creationTime|organizationId|leagueId|status/);
+  });
+
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await addSeasons(t, 'org-a', 'coed-7v7', 1, 1, 'published', { slug: 'full', maxTeams: 2 });
+    await addSeasons(t, 'org-a', 'coed-7v7', 2, 2, 'published', { slug: 'waiting', maxTeams: 4 });
+    await addSeasons(t, 'org-a', 'coed-7v7', 3, 3, 'published', { slug: 'room', maxTeams: 4 });
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    const { rows } = await list(t, 1);
+    expect(Object.fromEntries(rows.map((row) => [row.slug, row.isFull]))).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
   });
 
   test('page 1 serves a page that is 0, negative, fractional, NaN, infinite, or past the last page', async () => {

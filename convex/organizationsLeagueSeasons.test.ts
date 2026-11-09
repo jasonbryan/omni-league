@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test';
+import { convexTest, type TestConvex } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
@@ -36,6 +36,18 @@ async function setup() {
 }
 
 type T = Awaited<ReturnType<typeof setup>>;
+
+async function setTeamCounts(
+  t: { run: TestConvex<typeof schema>['run'] },
+  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
+): Promise<void> {
+  await t.run(async (ctx) => {
+    for (const season of await ctx.db.query('seasons').collect()) {
+      const count = counts[season.slug];
+      if (count) await ctx.db.patch('seasons', season._id, count);
+    }
+  });
+}
 
 async function add(
   t: T,
@@ -84,7 +96,7 @@ describe('organizations.listPublicLeagues seasons', () => {
     expect(beta?.seasons).toEqual([]);
   });
 
-  test('holds the dates the page needs for the status and none of the roster fields', async () => {
+  test('holds the dates and the full flag the page needs for the status, and none of the roster fields', async () => {
     const t = await setup();
     await add(t, 'alpha', [
       season('s1', '2030-01-01', { endDate: '2030-03-01', registrationDeadline: '2029-12-15' }),
@@ -97,8 +109,29 @@ describe('organizations.listPublicLeagues seasons', () => {
         startDate: '2030-01-01',
         endDate: '2030-03-01',
         registrationDeadline: '2029-12-15',
+        isFull: false,
       },
     ]);
+  });
+
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await add(t, 'alpha', [
+      season('full', '2030-01-01', { maxTeams: 2 }),
+      season('waiting', '2030-02-01', { maxTeams: 4 }),
+      season('room', '2030-03-01', { maxTeams: 4 }),
+    ]);
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    const [alpha] = await rows(t);
+    expect(Object.fromEntries(alpha?.seasons?.map((s) => [s.slug, s.isFull]) ?? [])).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
   });
 
   test('leaves out draft seasons', async () => {

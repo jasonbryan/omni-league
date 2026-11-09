@@ -36,12 +36,14 @@ const publicLocationValidator = v.object({
   sportNames: v.optional(v.array(v.string())),
 });
 
+// `isFull` is optional so a copy saved before it existed stays valid.
 const publicLeagueSeasonValidator = v.object({
   name: v.string(),
   slug: v.string(),
   startDate: v.string(),
   endDate: v.string(),
   registrationDeadline: v.string(),
+  isFull: v.optional(v.boolean()),
 });
 
 const publicLeagueValidator = v.object({
@@ -108,6 +110,7 @@ export const publicLeaguesValidator = publicListValidator(publicLeagueValidator)
 export type PublicLocations = Infer<typeof publicLocationsValidator>;
 export type PublicLeagues = Infer<typeof publicLeaguesValidator>;
 
+// `isFull` is optional so a copy saved before it existed stays valid.
 const publicLeaguePageSeasonValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -115,6 +118,7 @@ const publicLeaguePageSeasonValidator = v.object({
   endDate: v.string(),
   registrationDeadline: v.string(),
   minimumRosterSize: v.number(),
+  isFull: v.optional(v.boolean()),
 });
 
 // `divisionLabel`, `locations`, and `seasons` are optional so a copy saved before they existed stays valid.
@@ -133,7 +137,7 @@ export type PublicLeaguePage = Infer<typeof publicLeaguePageValidator>;
 
 export const getLeaguePublicPageReturns = v.union(v.null(), publicLeaguePageValidator);
 
-// `registrationDeadline` is optional so a copy saved before it existed stays valid.
+// `registrationDeadline` and `isFull` are optional so a copy saved before they existed stays valid.
 const publicSeasonValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -141,6 +145,7 @@ const publicSeasonValidator = v.object({
   endDate: v.string(),
   registrationDeadline: v.optional(v.string()),
   formatName: v.string(),
+  isFull: v.optional(v.boolean()),
 });
 
 export const publicSeasonsValidator = publicListValidator(publicSeasonValidator);
@@ -188,6 +193,7 @@ export type PublicTeams = Infer<typeof publicTeamsValidator>;
 
 export const getSeasonPublicPageReturns = v.union(v.null(), publicSeasonPageValidator);
 
+// `isFull` is optional so a copy saved before it existed stays valid.
 const publicOpenSeasonValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -195,6 +201,7 @@ const publicOpenSeasonValidator = v.object({
   endDate: v.string(),
   registrationDeadline: v.string(),
   minimumRosterSize: v.number(),
+  isFull: v.optional(v.boolean()),
   league: v.object({
     name: v.string(),
     slug: v.string(),

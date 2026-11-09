@@ -286,6 +286,7 @@ export const listPublic = query({
         endDate: season.endDate,
         registrationDeadline: season.registrationDeadline,
         formatName: formatLabel(seasonPlayersPerSide(season)),
+        isFull: seasonIsFull(season),
       })),
       page,
       pageCount,
@@ -380,6 +381,7 @@ export const listOpenForOrganization = query({
         endDate: season.endDate,
         registrationDeadline: season.registrationDeadline,
         minimumRosterSize: season.minimumRosterSize,
+        isFull: seasonIsFull(season),
         league,
       });
     }

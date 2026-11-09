@@ -1,4 +1,5 @@
 import {
+  FULL_BADGE,
   OPEN_BADGE,
   MUTED_BADGE,
   closesText,
@@ -41,6 +42,7 @@ describe('leagueSeasonStatus', () => {
   it('names an open season with its closing date', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-03-01'))).toEqual({
       badge: 'Registration open',
+      badgeClass: OPEN_BADGE,
       open: true,
       text: 'NEXT · closes May 19',
       season: { name: 'NEXT', slug: 'next' },
@@ -50,6 +52,7 @@ describe('leagueSeasonStatus', () => {
   it('names a season whose registration closed', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-05-25'))).toEqual({
       badge: 'Registration closed',
+      badgeClass: MUTED_BADGE,
       open: false,
       text: 'NEXT',
       season: { name: 'NEXT', slug: 'next' },
@@ -59,6 +62,7 @@ describe('leagueSeasonStatus', () => {
   it('names a season in progress', () => {
     expect(leagueSeasonStatus([CURRENT, ENDED], noon('2026-10-27'))).toEqual({
       badge: 'In progress',
+      badgeClass: MUTED_BADGE,
       open: false,
       text: 'CURRENT',
       season: { name: 'CURRENT', slug: 'current' },
@@ -66,7 +70,13 @@ describe('leagueSeasonStatus', () => {
   });
 
   it('says there is no upcoming season when only ended seasons remain, and when there are none', () => {
-    const none = { badge: null, open: false, text: 'No upcoming season', season: null };
+    const none = {
+      badge: null,
+      badgeClass: null,
+      open: false,
+      text: 'No upcoming season',
+      season: null,
+    };
     expect(leagueSeasonStatus([ENDED], noon('2026-10-27'))).toEqual(none);
     expect(leagueSeasonStatus([], noon('2026-10-27'))).toEqual(none);
   });
@@ -74,6 +84,7 @@ describe('leagueSeasonStatus', () => {
   it('leads with the season open for registration over one in progress', () => {
     expect(leagueSeasonStatus([CURRENT, LATER], noon('2027-08-01'))).toEqual({
       badge: 'Registration open',
+      badgeClass: OPEN_BADGE,
       open: true,
       text: 'LATER · closes Aug 29',
       season: { name: 'LATER', slug: 'later' },
@@ -106,6 +117,48 @@ describe('leagueSeasonStatus', () => {
 
   it('says nothing for a saved copy made before rows held their seasons', () => {
     expect(leagueSeasonStatus(undefined, noon('2026-10-27'))).toBeUndefined();
+  });
+
+  it('marks a full open season Full, with its waitlist open, and keeps it open for the Register link', () => {
+    expect(leagueSeasonStatus([{ ...NEXT, isFull: true }], noon('2027-03-01'))).toEqual({
+      badge: 'Full',
+      badgeClass: FULL_BADGE,
+      open: true,
+      text: 'NEXT · waitlist open',
+      season: { name: 'NEXT', slug: 'next' },
+    });
+  });
+
+  it('shows the soonest-closing open season when it is full and a later open season has room', () => {
+    const later = season('later-room', '2027-06-20', '2027-08-30', '2027-05-30');
+    expect(
+      leagueSeasonStatus([later, { ...NEXT, isFull: true }], noon('2027-03-01')),
+    ).toMatchObject({ badge: 'Full', text: 'NEXT · waitlist open', season: { slug: 'next' } });
+  });
+
+  it('shows the phase of a full season whose registration has closed or that is in progress', () => {
+    const full = { ...NEXT, isFull: true };
+    expect(leagueSeasonStatus([full], noon('2027-05-25'))).toMatchObject({
+      badge: 'Registration closed',
+      badgeClass: MUTED_BADGE,
+      open: false,
+      text: 'NEXT',
+    });
+    expect(leagueSeasonStatus([full], noon('2027-06-02'))).toMatchObject({
+      badge: 'In progress',
+      badgeClass: MUTED_BADGE,
+      text: 'NEXT',
+    });
+  });
+
+  it('reads an open season with no isFull (a copy saved earlier) as open', () => {
+    expect(leagueSeasonStatus([NEXT], noon('2027-03-01'))).toMatchObject({
+      badge: 'Registration open',
+      text: 'NEXT · closes May 19',
+    });
+    expect(leagueSeasonStatus([{ ...NEXT, isFull: false }], noon('2027-03-01'))?.badge).toBe(
+      'Registration open',
+    );
   });
 
   it('moves a season from open to closed as the clock passes its deadline', () => {
@@ -204,5 +257,10 @@ describe('badge classes', () => {
   it('are the secondary badge for Registration open and the muted badge for the other phases', () => {
     expect(OPEN_BADGE).toContain('bg-secondary text-secondary-foreground');
     expect(MUTED_BADGE).toContain('bg-muted text-muted-foreground');
+  });
+
+  it('are the outline badge for Full, with no fill and no link hover', () => {
+    expect(FULL_BADGE).toContain('border-border text-foreground');
+    expect(FULL_BADGE).not.toMatch(/\bbg-|hover:/);
   });
 });

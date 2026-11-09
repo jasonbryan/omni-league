@@ -43,7 +43,7 @@ import {
   type RegistrationCard,
   type ViewerTeam,
 } from './public-season-registration';
-import { BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
+import { BADGE_TEXT, FULL_BADGE, FULL_BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
 import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
@@ -63,7 +63,11 @@ const RESERVED_HEIGHT = {
   full: 'min-h-66 sm:min-h-58',
   closed: 'min-h-47 md:min-h-49',
 } as const;
-const FULL_BADGE_TEXT = 'Full';
+const PHASE_BADGES: Record<RegistrationCard['kind'], string> = {
+  open: OPEN_BADGE,
+  full: FULL_BADGE,
+  closed: MUTED_BADGE,
+};
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
 
@@ -449,9 +453,7 @@ export class PublicSeasonContent {
     const team = this.viewerTeam();
     return team && teamCard(team, this.season(), this.now());
   });
-  protected readonly phaseBadge = computed(() =>
-    this.card()?.kind === 'open' ? OPEN_BADGE : MUTED_BADGE,
-  );
+  protected readonly phaseBadge = computed(() => PHASE_BADGES[this.card()?.kind ?? 'closed']);
   protected readonly dates = computed(() =>
     seasonDateParts(this.season().startDate, this.season().endDate),
   );

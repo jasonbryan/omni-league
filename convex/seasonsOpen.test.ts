@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test';
+import { convexTest, type TestConvex } from 'convex-test';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
@@ -53,6 +53,18 @@ async function setup() {
 
 type T = Awaited<ReturnType<typeof setup>>;
 
+async function setTeamCounts(
+  t: { run: TestConvex<typeof schema>['run'] },
+  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
+): Promise<void> {
+  await t.run(async (ctx) => {
+    for (const season of await ctx.db.query('seasons').collect()) {
+      const count = counts[season.slug];
+      if (count) await ctx.db.patch('seasons', season._id, count);
+    }
+  });
+}
+
 async function add(
   t: T,
   orgSlug: string,
@@ -93,6 +105,7 @@ describe('seasons.listOpenForOrganization', () => {
         endDate: '2030-08-30',
         registrationDeadline: '2030-05-19',
         minimumRosterSize: 7,
+        isFull: false,
         league: {
           name: 'Coed 7v7',
           slug: 'coed-7v7',
@@ -102,6 +115,25 @@ describe('seasons.listOpenForOrganization', () => {
         },
       },
     ]);
+  });
+
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await add(t, 'org-a', 'coed-7v7', [
+      season('full', '2030-05-19', { maxTeams: 2 }),
+      season('waiting', '2030-05-20', { maxTeams: 4 }),
+      season('room', '2030-05-21', { maxTeams: 4 }),
+    ]);
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    expect(Object.fromEntries((await open(t)).map((card) => [card.slug, card.isFull]))).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
   });
 
   test('leaves out the division label of a league that has none', async () => {

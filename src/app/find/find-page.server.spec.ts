@@ -242,6 +242,23 @@ describe('FindPage server render', () => {
     expect(html).not.toContain('ott=');
   });
 
+  it('puts Full and the open waitlist in the raw HTML of a league row whose open season is full', async () => {
+    const [sunday, ...rest] = COED_RESULTS.rows;
+    const full = {
+      ...COED_RESULTS,
+      rows: [
+        { ...sunday, seasons: sunday.seasons.map((season) => ({ ...season, isFull: true })) },
+        ...rest,
+      ],
+    };
+    const { body } = await render('/leagues?q=coed', (name) =>
+      Promise.resolve(name === ORGANIZATIONS_QUERY ? ORGANIZATIONS : full),
+    );
+    const row = body.querySelector('main section ul > li');
+    expect(text(row?.querySelector('[data-slot="badge"]'))).toBe('Full');
+    expect(text(row)).toContain('Summer 2027 · waitlist open');
+  });
+
   it('renders the no-results state with 200', async () => {
     const { body, responseInit } = await render('/leagues?q=pickleball', () =>
       Promise.resolve(NO_RESULTS),

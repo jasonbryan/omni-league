@@ -8,6 +8,7 @@ import { freezeOrganizations } from './support/freeze-organizations';
 import { holdQueries } from './support/hold-queries';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { FULL_LEAGUE, PACKED_LEAGUE, seedFullSeasonTenant } from './support/full-season';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
@@ -670,6 +671,47 @@ test.describe('find a league: in the browser', () => {
     expect(measured.coarse).toBe(false);
     expect(measured.retry).toBeLessThan(44);
     expect(measured.clear).toBeLessThan(44);
+  });
+});
+
+test.describe('find a league: a full season with registration open', () => {
+  test(
+    'raw: the row of a league whose soonest-closing open season is full reads Full and the waitlist',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'raw HTML does not depend on the viewport',
+      );
+      const { id } = await seedFullSeasonTenant();
+      const { html } = await raw(request, url(id));
+      expect(resultNames(html)).toEqual([FULL_LEAGUE, PACKED_LEAGUE]);
+      const text = plainText(resultsSection(html));
+      expect(text).toContain(`${FULL_LEAGUE} `);
+      expect(text).toMatch(/Full League .* Full Full Season · waitlist open .*Packed League/);
+      expect(text).toMatch(/Packed League .* Full Packed Season · waitlist open/);
+      expect(text).not.toContain('Registration open');
+    },
+  );
+
+  test('browser: the rows show the outline Full badge, nothing scrolls sideways at 320px, and the page passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { id } = await seedFullSeasonTenant();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveText([FULL_LEAGUE, PACKED_LEAGUE]);
+    const first = results(page).locator('ul > li').first();
+    await expect(first.locator('[data-slot="badge"]')).toHaveText('Full');
+    await expect(first.locator('[data-slot="badge"]')).toHaveClass(/\bborder-border\b/);
+    await expect(first).toContainText('Full Season · waitlist open');
+    await screenshot(page, testInfo, '530-find-full-season');
+    await expectAccessible(page);
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
   });
 });
 

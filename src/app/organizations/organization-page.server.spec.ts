@@ -461,6 +461,36 @@ describe('Registration open on the server', () => {
     );
     expect(html).not.toContain('SECRET');
   });
+
+  it('puts Full and the open waitlist in the raw HTML of a full season’s league row and card', async () => {
+    const full = { ...season('Soon 2027', '2027-04-20', 7), isFull: true };
+    const { leagues, ...page } = GULF_COAST;
+    const { name, slug, startDate, endDate, registrationDeadline } = full;
+    const rowSeason = { name, slug, startDate, endDate, registrationDeadline, isFull: true };
+    const results = queryResults({
+      ...page,
+      leagues: [{ ...leagues[0], seasons: [rowSeason] }, ...leagues.slice(1)],
+      openSeasons: [full],
+    });
+    const { body } = await render('/organizations/gulf-coast-sport-social', (query) =>
+      Promise.resolve(results[query]),
+    );
+    const row = body.querySelector('#league-1 p:last-of-type');
+    expect([...(row?.children ?? [])].map(text)).toEqual([
+      'Full',
+      'Soon 2027 · waitlist open',
+      'Register for Coed 7v7 Rec, Soon 2027',
+    ]);
+    const card = body.querySelector('#registration-open > ul > li');
+    expect([...(card?.querySelectorAll('[data-slot="badge"]') ?? [])].map(text)).toEqual([
+      'Soccer',
+      'Full',
+    ]);
+    expect(text(card)).toContain('Waitlist open · closes Apr 20');
+    expect(text(body.querySelector('main a[href$="#registration-open"]'))).toBe(
+      'Register for a season',
+    );
+  });
 });
 
 describe('sport view server render', () => {

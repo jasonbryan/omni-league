@@ -13,6 +13,7 @@ import {
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { FULL_LEAGUE_SLUG, FULL_SEASON, seedFullSeasonTenant } from './support/full-season';
 import { screenshot } from './support/screenshot';
 import {
   dateFromToday,
@@ -744,6 +745,68 @@ test.describe('public league page in the browser', () => {
       await expect(page.locator('section#seasons > ul > li h3').first()).toHaveText('Season 99');
     },
   );
+});
+
+test.describe('public league page: a full season with registration open', () => {
+  const fullCloses = formatCalendarDate(FULL_SEASON.registrationDeadline ?? '');
+
+  test(
+    'raw: the card shows the full season with Full before the waitlist and its deadline, and the rows read Full or Registration open',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'raw HTML does not depend on the viewport',
+      );
+      const { tenant } = await seedFullSeasonTenant();
+      const path = `${tenant.path}/leagues/${FULL_LEAGUE_SLUG}`;
+      const { html } = await fetchRawHtml(request, path);
+      const card = plainText(sectionById(html, 'registration-open'));
+      expect(card).toContain(`Full Season`);
+      expect(card).toContain(`Full Waitlist open · closes ${fullCloses}`);
+      expect(card).toMatch(/Register for Full Season$/);
+      expect(sectionById(html, 'registration-open')).toMatch(
+        new RegExp(`<a\\b[^>]*href="${path}/seasons/full-season#registration"`),
+      );
+      const seasons = plainText(sectionById(html, 'seasons'));
+      expect(seasons).toMatch(
+        /Room Season Dates: .* Registration open closes [A-Z][a-z]{2} \d{1,2}, \d{4}/,
+      );
+      expect(seasons).toMatch(/Full Season Dates: .* Full waitlist open/);
+    },
+  );
+
+  test('browser: the card’s Full badge sits on the clock line, Register opens the season page at its registration card, nothing scrolls sideways at 320px, and the page passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant } = await seedFullSeasonTenant();
+    const path = `${tenant.path}/leagues/${FULL_LEAGUE_SLUG}`;
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    const card = page.locator('#registration-open');
+    await expect(card.locator('h3')).toHaveText('Full Season');
+    const clockLine = card.locator('ul li').nth(2);
+    await expect(clockLine.locator('[data-slot="badge"]')).toHaveText('Full');
+    await expect(clockLine).toContainText(`Waitlist open · closes ${fullCloses}`);
+    const rows = page.locator('#seasons > ul > li');
+    await expect(rows.nth(0).locator('[data-slot="badge"]')).toHaveText('Registration open');
+    await expect(rows.nth(1).locator('[data-slot="badge"]')).toHaveText('Full');
+    await expect(rows.nth(1)).toContainText('waitlist open');
+    await screenshot(page, testInfo, '530-league-full-season');
+    await expectAccessible(page);
+
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    if (viewport) await page.setViewportSize(viewport);
+
+    await card.getByRole('link', { name: 'Register for Full Season' }).click();
+    await expect(page).toHaveURL(`${path}/seasons/full-season#registration`);
+    await expect(page.locator('#registration')).toContainText('This season is full');
+  });
 });
 
 test.describe('public league page: Men and Women divisions', () => {

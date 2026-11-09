@@ -20,7 +20,14 @@ import {
 } from '../../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
-import { at, leagueQueryResults, NO_SEASONS, OPEN_DAY, seasonsPage } from './testing/league-data';
+import {
+  at,
+  leagueQueryResults,
+  NO_SEASONS,
+  OPEN_DAY,
+  SUNDAY_4S,
+  seasonsPage,
+} from './testing/league-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -198,6 +205,27 @@ describe('PublicLeaguePage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
+  });
+
+  it('puts Full and the open waitlist in the raw HTML of a full season’s card and row', async () => {
+    const [summer, ...rest] = SUNDAY_4S.seasons ?? [];
+    const rows = seasonsPage(1);
+    const { body } = await render(
+      LEAGUE_PATH,
+      answer({
+        league: { ...SUNDAY_4S, seasons: [{ ...summer, isFull: true }, ...rest] },
+        seasons: {
+          ...rows,
+          rows: rows.rows.map((row, i) => (i === 0 ? { ...row, isFull: true } : row)),
+        },
+      }),
+    );
+    const card = body.querySelector('main section#registration-open');
+    expect(text(card?.querySelectorAll('ul li')[2])).toBe(
+      'Full Waitlist open · closes May 23, 2027',
+    );
+    const row = body.querySelector('main section#seasons > ul > li p:last-of-type');
+    expect([...(row?.children ?? [])].map(text)).toEqual(['Full', 'waitlist open']);
   });
 
   it('writes one description tag that matches og:description', async () => {

@@ -27,7 +27,7 @@ import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
-import { MUTED_BADGE, OPEN_BADGE, soonestClosingOpenSeason } from '../season-status';
+import { FULL_BADGE, FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
@@ -130,7 +130,11 @@ function plural(count: number, noun: string): string {
                         name="lucideClock"
                         class="shrink-0 text-base text-muted-foreground"
                         aria-hidden="true"
-                      />Closes {{ card.closes }}
+                      />
+                      @if (card.full) {
+                        <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                      }
+                      {{ card.closesText }}
                     </li>
                   </ul>
                 </div>
@@ -189,11 +193,9 @@ function plural(count: number, noun: string): string {
                         </p>
                         @if (season.status; as status) {
                           <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span
-                              data-slot="badge"
-                              [class]="status.open ? openBadge : mutedBadge"
-                              >{{ status.badge }}</span
-                            >
+                            <span data-slot="badge" [class]="status.badgeClass">{{
+                              status.badge
+                            }}</span>
                             @if (status.note) {
                               <span class="text-xs text-muted-foreground">{{ status.note }}</span>
                             }
@@ -292,8 +294,8 @@ export class PublicLeagueContent {
   readonly savedAt = input<number | undefined>(undefined);
 
   protected readonly registerButton = PRIMARY_BUTTON_LARGE;
-  protected readonly openBadge = OPEN_BADGE;
-  protected readonly mutedBadge = MUTED_BADGE;
+  protected readonly fullBadge = FULL_BADGE;
+  protected readonly fullBadgeText = FULL_BADGE_TEXT;
 
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly injector = inject(Injector);
@@ -330,6 +332,8 @@ export class PublicLeagueContent {
     const season = soonestClosingOpenSeason(league.seasons, this.now());
     if (!season) return undefined;
     const minimum = `teams of at least ${season.minimumRosterSize}`;
+    const closes = formatCalendarDate(season.registrationDeadline);
+    const full = season.isFull === true;
     return {
       name: season.name,
       href: publicSeasonPath(league.organization.slug, league.slug, season.slug),
@@ -337,7 +341,8 @@ export class PublicLeagueContent {
       teams: league.divisionLabel
         ? `${league.divisionLabel}, ${minimum}`
         : `${minimum.charAt(0).toUpperCase()}${minimum.slice(1)}`,
-      closes: formatCalendarDate(season.registrationDeadline),
+      full,
+      closesText: full ? `Waitlist open · closes ${closes}` : `Closes ${closes}`,
     };
   });
 

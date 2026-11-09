@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test';
+import { convexTest, type TestConvex } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
@@ -81,6 +81,18 @@ async function insertBulk(t: Awaited<ReturnType<typeof setup>>, count: number, w
 const search = (t: Awaited<ReturnType<typeof setup>>, q: string) =>
   t.query(api.search.leagues, { q });
 
+async function setTeamCounts(
+  t: { run: TestConvex<typeof schema>['run'] },
+  counts: Record<string, { teamCount: number; waitlistCount?: number }>,
+): Promise<void> {
+  await t.run(async (ctx) => {
+    for (const season of await ctx.db.query('seasons').collect()) {
+      const count = counts[season.slug];
+      if (count) await ctx.db.patch('seasons', season._id, count);
+    }
+  });
+}
+
 describe('search.leagues', () => {
   test('returns a published league with its organization, sport, locations, division, and seasons', async () => {
     const t = await setup();
@@ -129,6 +141,39 @@ describe('search.leagues', () => {
     expect(await search(t, 'pickleball')).toEqual({ rows: [], more: false });
   });
 
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (entry) => entry.slug === 'sunday-reverse-coed-4s',
+      )!;
+      for (const [slug, startDate, maxTeams] of [
+        ['full', '2027-03-01', 2],
+        ['waiting', '2027-06-01', 4],
+        ['room', '2027-09-01', 4],
+      ] as const) {
+        const current = (await ctx.db.get('leagues', league._id))!;
+        await insertSeason(
+          ctx,
+          current,
+          { ...season(slug, slug, startDate), maxTeams },
+          'published',
+        );
+      }
+    });
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    const [row] = (await search(t, 'sunday')).rows;
+    expect(Object.fromEntries(row.seasons.map((entry) => [entry.slug, entry.isFull]))).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
+  });
+
   test('each row’s seasons hold at most the three newest published seasons of that league, never a draft', async () => {
     const t = await setup();
     await t.run(async (ctx) => {
@@ -164,6 +209,7 @@ describe('search.leagues', () => {
     ]);
     expect(Object.keys(row.seasons[0]).sort()).toEqual([
       'endDate',
+      'isFull',
       'name',
       'registrationDeadline',
       'slug',
