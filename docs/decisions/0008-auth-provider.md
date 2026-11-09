@@ -9,6 +9,7 @@
 - **Amended:** 2026-11-01, by #163: on Convex cloud, `cf-connecting-ip` is the caller's address and a client cannot set it. See "Amendment: client-IP probe (2026-11-01)" at the end.
 - **Amended:** 2026-11-01, by #481: the per-IP limit is on outside `IS_TEST`, for sign-in and sign-up only, counted in the project's `ipRateLimits` store. It supersedes the client-IP probe amendment's "Still off" item. See "Amendment: per-IP limit on (2026-11-01)" at the end.
 - **Amended:** 2026-11-01, by #164: a `signInFailures` row below the threshold expires a day after its last attempt (so an address kept below 5 failures a day never reaches the hard limit, accepted by the owner), a success still deletes the whole row, and an unsafe `returnTo` after sign-in goes to `/app`. See "Amendment: throttle cleanup and return-to default (2026-11-01)" at the end.
+- **Amended:** 2026-11-09, by #599: `signedIn` is also true for a kept session, a stored unexpired token the server has not answered for yet, so "Angular wiring" no longer derives it from the session store alone. See [ADR 0013, "Amendment: a kept session on an offline fresh load (2026-11-09)"](0013-pwa-stack.md#amendment-a-kept-session-on-an-offline-fresh-load-2026-11-09). The token, its storage, and the Better Auth configuration are unchanged.
 
 ## Context
 

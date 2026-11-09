@@ -57,7 +57,7 @@ describe('the expected production runs', () => {
     assert.deepEqual(
       PRODUCTION_RUNS.map(({ name, spec, project, tests }) => [name, spec, project, tests]),
       [
-        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 10],
+        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 13],
         ['production-desktop', 'e2e/harness/no-service-worker.spec.ts', 'chromium-desktop', 2],
         ['pwa-update', 'e2e/pwa-update.spec.ts', 'chromium-mobile', 1],
         ['kill-switch', 'e2e/pwa-kill-switch.spec.ts', 'chromium-mobile', 1],
@@ -80,7 +80,7 @@ describe('checkRun', () => {
     assert.deepEqual(checkRun(mobile, reportFor(mobile, { statuses })).problems, []);
     assert.match(
       checkRun(mobile, reportFor(mobile, { statuses })).summary,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 10 of 10 run \(8 passed, 1 failed, 1 flaky\)$/,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 13 of 13 run \(11 passed, 1 failed, 1 flaky\)$/,
     );
   });
 
@@ -130,11 +130,11 @@ describe('checkRun', () => {
 
   it('fails when the spec lists fewer or more tests than expected', () => {
     const mobile = run('production-mobile');
-    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 9 })).problems, [
-      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 9 tests, expected 10',
+    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 12 })).problems, [
+      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 12 tests, expected 13',
     ]);
-    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 11 })).problems, [
-      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 11 tests, expected 10',
+    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 14 })).problems, [
+      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 14 tests, expected 13',
     ]);
   });
 
@@ -177,7 +177,7 @@ describe('checkReports and the command line', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(
       result.stdout,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 10 of 10/m,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 13 of 13/m,
     );
     assert.match(result.stdout, /^kill-switch: e2e\/pwa-kill-switch\.spec\.ts on chromium-mobile/m);
   });

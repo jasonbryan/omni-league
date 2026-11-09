@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { AuthService } from '../core/auth/auth.service';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import {
   FakeConvexClient,
@@ -449,6 +450,64 @@ describe('OrganizationPage', () => {
         `${buttonVariants({ variant: 'outline', size: 'lg' })} mt-6`.split(' ').sort(),
       );
       expect(find[0].querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    describe('while only the header has answered', () => {
+      const header = (page: PublicOrganizationPage) => queryResults(page)[HEADER];
+      const lists = (page: PublicOrganizationPage) =>
+        Object.entries(queryResults(page)).filter(([name]) => name !== HEADER);
+
+      for (const [label, signedIn] of [
+        ['signed out', false],
+        ['signed in', true],
+      ] as const) {
+        it(`reserves no Locations section for a header with no locations, so the lists' answer changes nothing when ${label}`, async () => {
+          const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
+          if (signedIn) {
+            TestBed.inject(AuthService).onChange(true);
+            await settle(harness);
+          }
+          subscription(HEADER).emit(header(PORT_ARANSAS));
+          await settle(harness);
+          const main = host(harness).querySelector('main');
+          const beforeLists = main?.innerHTML;
+          expect(main?.querySelector('h1')).not.toBeNull();
+          expect(main?.querySelector('section')).toBeNull();
+          expect(main?.querySelector('app-organization-rows-skeleton')).toBeNull();
+          expect(main?.textContent).not.toContain('Locations');
+
+          for (const [name, value] of lists(PORT_ARANSAS)) subscription(name).emit(value);
+          await settle(harness);
+          expect(main?.innerHTML).toBe(beforeLists);
+        });
+      }
+
+      it('shows the Locations section with the rows that arrive after a header with no locations', async () => {
+        const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
+        subscription(HEADER).emit(header(PORT_ARANSAS));
+        await settle(harness);
+        const row = { name: 'Mustang Courts', address: '1 Mustang Way', sportNames: [] };
+        const withRow = { ...PORT_ARANSAS, locationCount: 1, locations: [row] };
+        for (const [name, value] of lists(withRow)) subscription(name).emit(value);
+        await settle(harness);
+        const main = host(harness).querySelector('main');
+        expect(text(main?.querySelector('section#locations h2'))).toBe('Locations');
+        expect(
+          [...(main?.querySelectorAll('#location-1 h3, #location-1 p') ?? [])].map(text),
+        ).toEqual(['Mustang Courts', '1 Mustang Way']);
+        expect(main?.querySelector('app-organization-rows-skeleton')).toBeNull();
+      });
+
+      it('shows the Locations rows skeleton for a header with locations', async () => {
+        const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
+        subscription(HEADER).emit(header({ ...PORT_ARANSAS, locationCount: 2 }));
+        await settle(harness);
+        const main = host(harness).querySelector('main');
+        expect(text(main?.querySelector('section#locations h2'))).toBe('Locations');
+        expect(
+          main?.querySelector('section#locations app-organization-rows-skeleton'),
+        ).not.toBeNull();
+      });
     });
 
     it('has no "Find another league" link once the organization has a league', async () => {

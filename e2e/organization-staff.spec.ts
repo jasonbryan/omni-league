@@ -3,8 +3,10 @@ import { randomBytes } from 'node:crypto';
 import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
+import { seedAccountsInCalls } from './support/seed-accounts';
 import { signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser, seedUser } from './support/users';
@@ -61,6 +63,51 @@ const memberRows = (page: Page) => page.locator('#members-list > li');
 const staffTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Staff' });
 const linkField = (page: Page) => page.locator('#invite-link');
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
+
+async function holdLeaguesAnswer(page: Page) {
+  const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+  // Convex applies transitions in order, so holding the answer to the leagues query holds every
+  // frame after it; the form is not rendered while the leagues load.
+  let leaguesQuery: number | undefined;
+  let holding = false;
+  const held: string[] = [];
+  let release: () => void = () => undefined;
+  interface Change {
+    type: string;
+    queryId: number;
+    udfPath?: string;
+  }
+  const changes = (message: string | Buffer): Change[] =>
+    (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
+  await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      for (const change of changes(message)) {
+        if (change.type === 'Add' && change.udfPath === 'leagues:listForAdmin') {
+          leaguesQuery = change.queryId;
+        }
+      }
+      server.send(message);
+    });
+    release = () => {
+      holding = false;
+      for (const frame of held.splice(0)) ws.send(frame);
+    };
+    server.onMessage((message) => {
+      const answersLeagues = changes(message).some(
+        (change) => change.type === 'QueryUpdated' && change.queryId === leaguesQuery,
+      );
+      if (answersLeagues) holding = true;
+      if (holding) held.push(String(message));
+      else ws.send(message);
+    });
+  });
+  await page.goto(`${org.base}/staff`);
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
+  await expect(page.getByText('Loading the leagues.')).toBeAttached();
+  await expect.poll(() => holding).toBe(true);
+  return { release: () => release() };
+}
 
 async function invite(page: Page, email: string, leagues: string[] = []) {
   await page.locator('#email').fill(email);
@@ -509,57 +556,180 @@ test.describe('Staff: members and the Overview tile', () => {
     await expect(page.locator('#email')).toBeInViewport();
   });
 
+  const jumpLink = (page: Page) => main(page).getByRole('link', { name: 'Invite staff' });
+  const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
   test('"Invite staff" pressed while the leagues load focuses Email once the form appears (360)', async ({
     page,
   }) => {
     test.skip(isDesktop(page), 'the link is hidden from 1024px');
-    const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
-    // Convex applies transitions in order, so holding the answer to the leagues query holds every
-    // frame after it; the form is not rendered while the leagues load.
-    let leaguesQuery: number | undefined;
-    let holding = false;
-    const held: string[] = [];
-    let release: () => void = () => undefined;
-    interface Change {
-      type: string;
-      queryId: number;
-      udfPath?: string;
-    }
-    const changes = (message: string | Buffer): Change[] =>
-      (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
-    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
-      const server = ws.connectToServer();
-      ws.onMessage((message) => {
-        for (const change of changes(message)) {
-          if (change.type === 'Add' && change.udfPath === 'leagues:listForAdmin') {
-            leaguesQuery = change.queryId;
-          }
-        }
-        server.send(message);
-      });
-      release = () => {
-        holding = false;
-        for (const frame of held.splice(0)) ws.send(frame);
-      };
-      server.onMessage((message) => {
-        const answersLeagues = changes(message).some(
-          (change) => change.type === 'QueryUpdated' && change.queryId === leaguesQuery,
-        );
-        if (answersLeagues) holding = true;
-        if (holding) held.push(String(message));
-        else ws.send(message);
-      });
-    });
-    await page.goto(`${org.base}/staff`);
-    await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
-    await expect(page.getByText('Loading the leagues.')).toBeAttached();
-    await expect.poll(() => holding).toBe(true);
-
-    await main(page).getByRole('link', { name: 'Invite staff' }).click();
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
     await expect(form(page)).toHaveCount(0);
-    release();
+    leagues.release();
     await expect(page.locator('#email')).toBeFocused();
     await expect(page.locator('#email')).toBeInViewport();
+  });
+
+  test('"Invite staff" pressed while the leagues load focuses the section at once (360)', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    await expect(form(page)).toHaveCount(0);
+  });
+
+  test('"Invite staff" then a click on the page text while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await main(page).getByText('Org admins manage everything here').click();
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    await expect(main(page)).toBeFocused();
+    expect(await scrollY(page)).toBe(before);
+  });
+
+  test('"Invite staff" then a click on the panel heading while the leagues load keeps the jump (360)', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await page.locator('#invite-heading').click();
+    leagues.release();
+    await expect(page.locator('#email')).toBeFocused();
+  });
+
+  test('"Invite staff" then a scroll while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    test.skip(browserName === 'webkit', 'Playwright mobile WebKit has no mouse wheel');
+    const leagues = await holdLeaguesAnswer(page);
+    // The page is short while the form is missing, so a spacer gives the wheel room to scroll.
+    // Scroll anchoring would otherwise follow the spacer down when the form arrives above it.
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '2000px';
+      spacer.style.overflowAnchor = 'none';
+      document.querySelector('main')!.append(spacer);
+    });
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    const jumped = await scrollY(page);
+    await page.mouse.wheel(0, 600);
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(jumped);
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    expect(await scrollY(page)).toBe(before);
+  });
+
+  test('"Invite staff" then a tap on the header title while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    await page.locator('header p.truncate').tap();
+    const focusedAfterTap = await page.evaluateHandle(() => document.activeElement);
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    expect(
+      await page.evaluate((element) => document.activeElement === element, focusedAfterTap),
+    ).toBe(true);
+    expect(await scrollY(page)).toBe(before);
+  });
+
+  test.describe('with the first answer failing', () => {
+    test('"Invite staff" focuses the alert, and the form that replaces it gives focus to the section', async ({
+      page,
+    }) => {
+      test.skip(isDesktop(page), 'the link is hidden from 1024px');
+      const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+      const failure = await failFirstAnswer(page, 'leagues:listForAdmin');
+      await page.goto(`${org.base}/staff`);
+      const alert = page.getByRole('alert').filter({ hasText: 'The leagues could not be loaded.' });
+      await expect(alert).toBeVisible();
+      await jumpLink(page).click();
+      await expect(alert).toBeFocused();
+
+      await failure.reconnect();
+      await expect(form(page)).toBeAttached();
+      await expect(page.locator('#invite')).toBeFocused();
+      await expect(page.locator('#email')).not.toBeFocused();
+    });
+  });
+});
+
+test.describe('Staff: past 200 rows', () => {
+  const CAPPED_ORG = 'E2E Staff capped';
+  const prefix = () => `capped-${randomBytes(4).toString('hex')}`;
+  const staffPath = (slug: string) => `/app/organizations/${slug}/staff`;
+  const sectionNote = (page: Page, text: string) => main(page).getByText(text, { exact: true });
+
+  test('201 pending invites list 200 and say so; revoking the first drops the note and Undo brings it back', async ({
+    page,
+  }, testInfo) => {
+    test.slow(); // a 201-invite seed and an axe Tab walk over about 210 tab stops
+    const emailPrefix = prefix();
+    const { tenant } = await memberOf(page, 'orgAdmin', { name: CAPPED_ORG });
+    await convexRun('testing:seedPendingInvites', {
+      organizationSlug: tenant.slug,
+      count: 201,
+      emailPrefix,
+    });
+    const first = `${emailPrefix}-001@example.test`;
+    const note = sectionNote(page, 'Showing the first 200 of 201 pending invites.');
+    await page.goto(staffPath(tenant.slug));
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(pendingRows(page).first().locator('h3')).toHaveText(first);
+    await expect(note).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '568-staff-invites-capped');
+
+    await page.getByRole('button', { name: `Revoke the invite to ${first}` }).click();
+    await expect(page.getByText(`Invite to ${first} revoked.`)).toBeVisible();
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(note).toHaveCount(0);
+
+    await page.getByRole('button', { name: `Undo revoking the invite to ${first}` }).click();
+    await expect(page.getByText(`Invite to ${first} restored.`)).toBeVisible();
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(pendingRows(page).first().locator('h3')).toHaveText(first);
+    await expect(note).toBeVisible();
+  });
+
+  test('202 members list the 200 added first and say so', async ({ page }, testInfo) => {
+    test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
+    const emailPrefix = prefix();
+    const { tenant } = await memberOf(page, 'orgAdmin', { name: CAPPED_ORG });
+    await seedAccountsInCalls('testing:seedStaff', 201, {
+      organizationSlug: tenant.slug,
+      emailPrefix,
+    });
+    await page.goto(staffPath(tenant.slug));
+    await expect(memberRows(page)).toHaveCount(200);
+    await expect(memberRows(page).filter({ hasText: '(you)' })).toHaveCount(1);
+    await expect(memberRows(page).locator('h3', { hasText: 'Staff 199' })).toHaveCount(1);
+    await expect(memberRows(page).locator('h3', { hasText: /^\s*Staff 20[01]\s*$/ })).toHaveCount(
+      0,
+    );
+    await expect(sectionNote(page, 'Showing the 200 added first, of 202 members.')).toBeVisible();
+    await expectAccessible(page);
+    if (!isDesktop(page)) await screenshot(page, testInfo, '568-staff-members-capped');
   });
 });
 

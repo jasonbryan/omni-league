@@ -13,15 +13,17 @@ import {
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
+import { seedBatch, type SeedBatch } from './support/seed-batch';
 import { signUp } from './support/session';
 import {
   dateFromToday,
+  newTenant,
   seedSeasons,
   seedTenant,
   type SeasonSeed,
   type Tenant,
 } from './support/tenant';
-import { newUser, seedUser, type TestUser } from './support/users';
+import { newUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -76,10 +78,11 @@ const DRAFT_SEASON: SeasonSeed = {
 interface SeededSeason {
   tenant: Tenant;
   path: string;
+  teamIds: string[];
 }
 
-async function seed(): Promise<SeededSeason> {
-  const tenant = await seedTenant({
+async function seed(...extra: SeedBatch[]): Promise<SeededSeason> {
+  const { tenant, args } = newTenant({
     name: 'E2E Season Page',
     locations: [
       { name: 'Beta Courts', address: '2 Beta Street, Corpus Christi, TX 78402' },
@@ -101,26 +104,22 @@ async function seed(): Promise<SeededSeason> {
       { name: 'Other League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
     ],
   });
-  await Promise.all([
-    seedSeasons(tenant, LEAGUE_SLUG, [
-      SUMMER,
-      NEW_YEAR,
-      CROSS_YEAR,
-      ONE_DAY,
-      OPEN_SEASON,
-      DRAFT_SEASON,
-    ]),
-    seedSeasons(tenant, 'draft-league', [SUMMER]),
-    seedSeasons(tenant, 'other-league', [
-      {
-        name: 'Other Season',
-        slug: 'other-season',
-        startDate: '2027-02-01',
-        endDate: '2027-04-01',
-      },
-    ]),
-  ]);
-  return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/summer-2027` };
+  const seasons = [
+    ...[SUMMER, NEW_YEAR, CROSS_YEAR, ONE_DAY, OPEN_SEASON, DRAFT_SEASON].map((season) => ({
+      leagueSlug: LEAGUE_SLUG,
+      ...season,
+    })),
+    { leagueSlug: 'draft-league', ...SUMMER },
+    {
+      leagueSlug: 'other-league',
+      name: 'Other Season',
+      slug: 'other-season',
+      startDate: '2027-02-01',
+      endDate: '2027-04-01',
+    },
+  ];
+  const { teamIds } = await seedBatch({ tenant: args, seasons }, ...extra);
+  return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/summer-2027`, teamIds };
 }
 
 /** Invented names, inserted out of order; the panel lists them by name ignoring case. */
@@ -144,26 +143,26 @@ const TEAMS_BY_NAME = [
 ];
 
 /** One captain per team (a person is on one team a season), plus a player on the first team. */
-async function seedTeams(
-  tenant: Tenant,
+function teams(
   seasonSlug: string,
   names: readonly string[],
-): Promise<{ captains: TestUser[]; player: TestUser }> {
-  const captains = await Promise.all(names.map(() => seedUser(newUser('Captain'))));
-  const player = await seedUser(newUser('Player'));
-  const teamIds: string[] = [];
-  for (const [index, name] of names.entries()) {
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug,
-      name,
-      captainEmail: captains[index].email,
-    })) as { teamId: string };
-    teamIds.push(teamId);
-  }
-  if (teamIds[0]) await convexRun('testing:addToTeam', { teamId: teamIds[0], email: player.email });
-  return { captains, player };
+): { captains: TestUser[]; player: TestUser; batch: SeedBatch } {
+  const captains = names.map(() => newUser('Captain'));
+  const player = newUser('Player');
+  return {
+    captains,
+    player,
+    batch: {
+      accounts: [...captains, player],
+      teams: names.map((name, index) => ({
+        leagueSlug: LEAGUE_SLUG,
+        seasonSlug,
+        name,
+        captainEmail: captains[index].email,
+        playerEmails: index === 0 ? [player.email] : [],
+      })),
+    },
+  };
 }
 
 function teamsPanel(html: string): string | undefined {
@@ -451,8 +450,8 @@ test.describe('public season page: Teams panel in the raw server HTML', () => {
     '?page=2 of a season with 7 teams: names 6 and 7, the range, no captain or player name, 200, the public Cache-Control, and a canonical ending ?page=2',
     RAW_HTTP,
     async ({ request }) => {
-      const { tenant, path } = await seed();
-      const { captains, player } = await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+      const { captains, player, batch } = teams(SUMMER.slug, SEVEN_TEAMS);
+      const { path } = await seed(batch);
       const { status, headers, html } = await fetchRawHtml(request, `${path}?page=2`);
       expect(status).toBe(200);
       expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
@@ -479,8 +478,7 @@ test.describe('public season page: Teams panel in the raw server HTML', () => {
     '?page=0, 9, abc, a canary, and page=2 beside a canary each render page 1 with 200, no Location, and none of the raw value',
     RAW_HTTP,
     async ({ request }) => {
-      const { tenant, path } = await seed();
-      await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+      const { path } = await seed(teams(SUMMER.slug, SEVEN_TEAMS).batch);
       const canary = 'CANARY7f3a91c2';
       for (const [query, raw] of [
         ['?page=0', 'page=0'],
@@ -662,8 +660,7 @@ test.describe('public season page in the browser', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { tenant, path } = await seed();
-    await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+    const { path } = await seed(teams(SUMMER.slug, SEVEN_TEAMS).batch);
     await page.goto(path);
     await hydrated(consoleGuard);
     const panel = page.locator('main section#teams');
@@ -694,8 +691,7 @@ test.describe('public season page in the browser', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { tenant } = await seed();
-    await seedTeams(tenant, OPEN_SEASON.slug, ['Two Tall', 'Pair of Aces']);
+    const { tenant } = await seed(teams(OPEN_SEASON.slug, ['Two Tall', 'Pair of Aces']).batch);
     await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN_SEASON.slug}`);
     await hydrated(consoleGuard);
     const panel = page.locator('main section#teams');
@@ -912,20 +908,22 @@ test.describe('public season page: signed in and on a team', () => {
   const OPEN_PATH = (tenant: Tenant) => `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`;
 
   /** Signed up in the page, so the page holds the captain's session. */
-  async function captainOfSandSharks(page: Page, tenant: Tenant): Promise<string> {
+  async function captainOfSandSharks(page: Page): Promise<SeedBatch> {
     const captain = newUser('Captain');
     await signUp(page, captain);
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: OPEN_SEASON.slug,
-      name: 'Sand Sharks',
-      captainEmail: captain.email,
-    })) as { teamId: string };
-    for (const player of await Promise.all([1, 2].map(() => seedUser(newUser('Player'))))) {
-      await convexRun('testing:addToTeam', { teamId, email: player.email });
-    }
-    return teamId;
+    const players = [newUser('Player'), newUser('Player')];
+    return {
+      accounts: players,
+      teams: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: OPEN_SEASON.slug,
+          name: 'Sand Sharks',
+          captainEmail: captain.email,
+          playerEmails: players.map((player) => player.email),
+        },
+      ],
+    };
   }
 
   const detailsTop = async (page: Page) =>
@@ -935,8 +933,10 @@ test.describe('public season page: signed in and on a team', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { tenant } = await seed();
-    const teamId = await captainOfSandSharks(page, tenant);
+    const {
+      tenant,
+      teamIds: [teamId],
+    } = await seed(await captainOfSandSharks(page));
     const held = await holdQueries(page, [REGISTRATION]);
     await page.goto(OPEN_PATH(tenant));
     await hydrated(consoleGuard);
@@ -1059,8 +1059,7 @@ test.describe('public season page: signed in and on a team', () => {
     page,
     consoleGuard,
   }) => {
-    const { tenant } = await seed();
-    await captainOfSandSharks(page, tenant);
+    const { tenant } = await seed(await captainOfSandSharks(page));
     await page.goto(OPEN_PATH(tenant));
     await hydrated(consoleGuard);
     const card = page.locator('#registration');
@@ -1120,8 +1119,10 @@ test.describe('public season page: signed in and on a team', () => {
         testInfo.project.name !== 'chromium-desktop',
         'the document does not depend on the viewport',
       );
-      const { tenant } = await seed();
-      const teamId = await captainOfSandSharks(page, tenant);
+      const {
+        tenant,
+        teamIds: [teamId],
+      } = await seed(await captainOfSandSharks(page));
       const anonymous = await fetchRawHtml(request, OPEN_PATH(tenant));
       const response = await page.goto(OPEN_PATH(tenant));
       await expect(page.locator('#registration')).toContainText("You're registered");

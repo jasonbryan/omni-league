@@ -1,8 +1,8 @@
 import { v } from 'convex/values';
-import type { Doc, Id } from './_generated/dataModel';
+import type { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { requireOrgAdmin } from './lib/access';
-import { authEmailOf } from './lib/authUsers';
+import { authEmailsOf } from './lib/authUsers';
 import { recountMemberships } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 
@@ -44,9 +44,16 @@ export const listForOrganization = query({
       }
       return names.get(id) ?? null;
     };
+    const users = await Promise.all(
+      memberships.map((membership) => ctx.db.get('users', membership.userId)),
+    );
+    const emails = await authEmailsOf(
+      ctx,
+      users.flatMap((user) => (user ? [user.authUserId] : [])),
+    );
     const rows = [];
-    for (const membership of memberships) {
-      const user: Doc<'users'> | null = await ctx.db.get('users', membership.userId);
+    for (const [index, membership] of memberships.entries()) {
+      const user = users[index];
       if (!user) continue;
       const leagueNames: string[] = [];
       for (const id of membership.leagueIds) {
@@ -56,7 +63,7 @@ export const listForOrganization = query({
       rows.push({
         membershipId: membership._id,
         name: user.name,
-        email: (await authEmailOf(ctx, user.authUserId)) ?? '',
+        email: emails.get(user.authUserId) ?? '',
         role: membership.role,
         leagueNames,
         isYou: user._id === caller._id,

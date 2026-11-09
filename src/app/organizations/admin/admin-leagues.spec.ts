@@ -331,6 +331,28 @@ describe('AdminLeagues', () => {
           expect(scrolled).toEqual([section()]);
         });
 
+        it('a press on <main> text outside the form cancels the jump: the form’s arrival moves neither focus nor scroll', async () => {
+          await open(LEAGUES, null);
+          await pressAsChromium();
+          page
+            .querySelector('main h1')!
+            .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await locationsArrive();
+          expect(input('name')).not.toBeNull();
+          expect(document.activeElement).toBe(section());
+          expect(scrolled).toEqual([section()]);
+        });
+
+        it('a press on the form’s own heading keeps the jump', async () => {
+          await open([], null);
+          await pressAsChromium();
+          page
+            .querySelector('#create-league-heading')!
+            .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+        });
+
         for (const shiftKey of [false, true]) {
           it(`a ${shiftKey ? 'Shift+Tab' : 'Tab'} keydown cancels the jump, as Shift+Tab out of the page fires no focusin in WebKit`, async () => {
             await open([], null);
@@ -424,7 +446,7 @@ describe('AdminLeagues', () => {
           expect(document.activeElement).toBe(goToLocations());
         });
 
-        it('a failed query focuses the alert', async () => {
+        it('a failed query focuses the alert, and the form that replaces it gives focus to the section', async () => {
           await open([], null);
           await pressAsChromium();
           o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
@@ -433,6 +455,35 @@ describe('AdminLeagues', () => {
             'The locations could not be loaded. Check your connection and try again.',
           );
           expect(document.activeElement).toBe(locationsAlert());
+          await locationsArrive();
+          expect(input('name')).not.toBeNull();
+          expect(document.activeElement).toBe(section());
+          expect(document.activeElement).not.toBe(input('name'));
+        });
+
+        it('a failed query with no press: nothing takes focus, and the form that arrives later moves nothing', async () => {
+          await open([], null);
+          const before = document.activeElement;
+          o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
+          await o.flush();
+          expect(locationsAlert()).not.toBeNull();
+          expect(document.activeElement).toBe(before);
+          await locationsArrive();
+          expect(input('name')).not.toBeNull();
+          expect(document.activeElement).toBe(before);
+        });
+
+        it('a button elsewhere in <main> focused after the alert keeps focus when the form replaces the alert', async () => {
+          await open(LEAGUES, null);
+          await pressAsChromium();
+          o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
+          await o.flush();
+          expect(document.activeElement).toBe(locationsAlert());
+          const publish = page.querySelector<HTMLButtonElement>('button[data-league-id]')!;
+          publish.focus();
+          await locationsArrive();
+          expect(input('name')).not.toBeNull();
+          expect(document.activeElement).toBe(publish);
         });
 
         it('offline, the status and skeleton stay and nothing moves focus; on reconnect the form’s arrival focuses Name', async () => {

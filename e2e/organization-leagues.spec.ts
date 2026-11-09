@@ -5,6 +5,7 @@ import { checkReflow, REFLOW_WIDTH, expectAccessible, tabKey } from './support/a
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
@@ -23,7 +24,8 @@ import {
   underTheFooter,
 } from './support/sticky-footer';
 import { expectLinkHeights } from './support/link-heights';
-import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
+import { seedBatch } from './support/seed-batch';
+import { newTenant, numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -256,35 +258,30 @@ test.describe('Leagues: creating a draft', () => {
     });
   });
 
-  test(
-    'the same slug in another organization is allowed',
-    VIEWPORT_AGNOSTIC,
-    async ({ page, browser }) => {
-      const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
-      await page.goto(`${first.base}/leagues`);
-      await createDraft(page, {
-        name: 'Shared Name',
-        sport: 'Soccer',
-        locations: ['Redfish Flats Fields'],
-      });
-      await expect(leagueRows(page)).toHaveCount(1);
+  test('the same slug in another organization is allowed', VIEWPORT_AGNOSTIC, async ({ page }) => {
+    const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await page.goto(`${first.base}/leagues`);
+    await createDraft(page, {
+      name: 'Shared Name',
+      sport: 'Soccer',
+      locations: ['Redfish Flats Fields'],
+    });
+    await expect(leagueRows(page)).toHaveCount(1);
 
-      const other = await browser.newPage({ baseURL });
-      try {
-        const second = await memberOf(other, 'orgAdmin', { locations: LOCATIONS });
-        await other.goto(`${second.base}/leagues`);
-        await createDraft(other, {
-          name: 'Shared Name',
-          sport: 'Soccer',
-          locations: ['Redfish Flats Fields'],
-        });
-        await expect(leagueRows(other)).toHaveCount(1);
-        await expect(other.locator('#slug-error')).toHaveCount(0);
-      } finally {
-        await other.context().close();
-      }
-    },
-  );
+    const { tenant: second, args } = newTenant({ name: 'E2E Leagues', locations: LOCATIONS });
+    await seedBatch({
+      tenant: args,
+      memberships: [{ email: first.user.email, role: 'orgAdmin' }],
+    });
+    await page.goto(`/app/organizations/${second.slug}/leagues`);
+    await createDraft(page, {
+      name: 'Shared Name',
+      sport: 'Soccer',
+      locations: ['Redfish Flats Fields'],
+    });
+    await expect(leagueRows(page)).toHaveCount(1);
+    await expect(page.locator('#slug-error')).toHaveCount(0);
+  });
 
   test('"Create a league" in the header jumps to the form and focuses it (360)', async ({
     page,
@@ -328,6 +325,78 @@ test.describe('Leagues: creating a draft', () => {
     await expect(form(page)).toBeVisible();
     await expect(page.locator('[data-slot="create-league-skeleton"]')).toHaveCount(0);
     expect(await page.evaluate(() => window.scrollY)).toBe(nearTheBottom);
+  });
+
+  test.describe('"Create a league" pressed before the locations load (360)', () => {
+    test.beforeEach(({ page }) => {
+      test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'the link is hidden from 1024px');
+    });
+
+    const jump = (page: Page) => main(page).getByRole('link', { name: 'Create a league' });
+    const section = (page: Page) => page.locator('#create-league');
+    const headerTitle = (page: Page) => page.locator('header p.truncate');
+    const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
+    async function pressWithLocationsHeld(page: Page) {
+      const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+      const held = await holdQueries(page, ['locations:listForAdmin']);
+      await page.goto(`${base}/leagues`);
+      await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await jump(page).click();
+      await expect(section(page)).toBeFocused();
+      return held;
+    }
+
+    test('focuses Name once the locations arrive', async ({ page }) => {
+      const held = await pressWithLocationsHeld(page);
+      held.release();
+      await expect(page.locator('#name')).toBeFocused();
+    });
+
+    test('a tap on the header title leaves Name unfocused and the page where it is', async ({
+      page,
+    }) => {
+      const held = await pressWithLocationsHeld(page);
+      await headerTitle(page).tap();
+      const focusedAfterTap = await page.evaluateHandle(() => document.activeElement);
+      const before = await scrollY(page);
+      held.release();
+      await expect(form(page)).toBeVisible();
+      await expect(page.locator('#name')).not.toBeFocused();
+      expect(
+        await page.evaluate((element) => document.activeElement === element, focusedAfterTap),
+      ).toBe(true);
+      expect(await scrollY(page)).toBe(before);
+    });
+
+    test('a click on the form heading keeps the jump', async ({ page }) => {
+      const held = await pressWithLocationsHeld(page);
+      await page.locator('#create-league-heading').click();
+      held.release();
+      await expect(page.locator('#name')).toBeFocused();
+    });
+
+    test.describe('with the first answer failing', () => {
+      test('the alert takes focus, and the form that replaces it gives focus to the section', async ({
+        page,
+      }) => {
+        const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+        const failure = await failFirstAnswer(page, 'locations:listForAdmin');
+        await page.goto(`${base}/leagues`);
+        const alert = page
+          .getByRole('alert')
+          .filter({ hasText: 'The locations could not be loaded.' });
+        await expect(alert).toBeVisible();
+        await jump(page).click();
+        await expect(alert).toBeFocused();
+
+        await failure.reconnect();
+        await expect(form(page)).toBeVisible();
+        await expect(section(page)).toBeFocused();
+        await expect(page.locator('#name')).not.toBeFocused();
+      });
+    });
   });
 });
 

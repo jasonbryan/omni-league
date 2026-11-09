@@ -20,6 +20,7 @@ describe('SignUpPage', () => {
 
   async function open(url = '/sign-up') {
     client = new FakeAuthClient();
+    client.storedCookie = '';
     TestBed.configureTestingModule({
       providers: [
         provideFakeAuthClient(client),

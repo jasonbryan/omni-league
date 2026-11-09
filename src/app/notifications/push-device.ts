@@ -16,6 +16,11 @@ export interface PushDevice {
    * It does not need a controlling worker, unlike `SwPush.subscription`, which emits nothing on an uncontrolled page.
    */
   subscription(): Promise<PushSubscription | null>;
+  /**
+   * The registration's worker is activated; never rejects.
+   * On an uncontrolled page, true means a hard reload (the worker claimed the page only in its first `activate`), false a first visit still waiting for one.
+   */
+  workerActivated(): Promise<boolean>;
   /** Must be called synchronously in the click handler: Safari grants the prompt only from a direct user action. */
   requestPermission(): Promise<NotificationPermission>;
 }
@@ -87,6 +92,15 @@ export class BrowserPushDevice implements PushDevice {
       return (await registration?.pushManager.getSubscription()) ?? null;
     } catch {
       return null;
+    }
+  }
+
+  async workerActivated(): Promise<boolean> {
+    try {
+      const registration = await this.container?.getRegistration();
+      return registration?.active?.state === 'activated';
+    } catch {
+      return false;
     }
   }
 

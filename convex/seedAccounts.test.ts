@@ -267,6 +267,7 @@ const NO_BACKFILL = {
   pendingInviteCounts: 0,
   waitlistCounts: 0,
   staffCounts: 0,
+  staffInviteCounts: 0,
   draftLeagueCounts: 0,
 };
 
@@ -324,7 +325,14 @@ describe('seed:demo accounts: a new deployment', () => {
         expect(organization.staffCount, organization.slug).toBe(recount);
       }
       expect(invites).toHaveLength(1);
+      for (const organization of organizations) {
+        const recount = invites.filter(
+          (invite) => invite.organizationId === organization._id && invite.status === 'pending',
+        ).length;
+        expect(organization.pendingInviteCount, organization.slug).toBe(recount);
+      }
       const gulfCoast = organizations.find((o) => o.slug === GULF_COAST);
+      expect(gulfCoast?.pendingInviteCount).toBe(1);
       const league = leagues.find(
         (l) => l.slug === 'coed-7v7-rec' && l.organizationId === gulfCoast?._id,
       );

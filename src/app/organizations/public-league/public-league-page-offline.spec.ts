@@ -192,6 +192,41 @@ describe('PublicLeaguePage offline', () => {
     expect(note(harness)).not.toBeNull();
   });
 
+  it('shows the status each copy was saved with: Full for a full season, and today’s status for a row saved before seasons held isFull', async () => {
+    const leagueSeasons = SUNDAY_4S.seasons ?? [];
+    const rows = leagueQueryResults()[SEASONS] as PublicLeagueSeasons;
+    const spring = leagueSeasons.findIndex((season) => season.slug === 'spring-2027');
+    plant({
+      ...leagueQueryResults(),
+      [LEAGUE]: {
+        ...SUNDAY_4S,
+        seasons: leagueSeasons.map((season, i) =>
+          i === spring ? { ...season, isFull: true } : season,
+        ),
+      },
+      [SEASONS]: {
+        ...rows,
+        rows: rows.rows.map((row) => (row.slug === 'spring-2027' ? { ...row, isFull: true } : row)),
+      },
+    });
+    stubOnLine(false);
+    const harness = await open(PATH, { socket: 'down' });
+    const main = host(harness).querySelector('main');
+    const card = main?.querySelector('section#registration-open');
+    expect(text(card?.querySelector('h3'))).toBe('Spring 2027');
+    expect(text(card?.querySelectorAll('ul li')[2])).toBe(
+      'Full Waitlist open · closes Feb 21, 2027',
+    );
+    const statuses = [...(main?.querySelectorAll('section#seasons > ul > li') ?? [])]
+      .slice(0, 2)
+      .map((row) => [...(row.querySelector('p:last-of-type')?.children ?? [])].map(text));
+    expect(statuses).toEqual([
+      ['Registration open', 'closes May 23, 2027'],
+      ['Full', 'waitlist open'],
+    ]);
+    expect(note(harness)).not.toBeNull();
+  });
+
   it('dates the note by the oldest saved copy on screen', async () => {
     const older = SAVED_AT - 3 * 60 * 60 * 1000;
     plant();

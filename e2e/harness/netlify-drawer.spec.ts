@@ -5,6 +5,7 @@ import { ConsoleGuard } from '../support/console-guard';
 import { baseURL, remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 import { NETLIFY_DRAWER_SCRIPT_PATH, stubNetlifyDrawer } from '../support/netlify-drawer';
+import { fetchRawHtml } from '../support/raw-html';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
 async function fetchFromPage(page: Page, path: string): Promise<{ status: number; body: string }> {
@@ -16,6 +17,31 @@ async function fetchFromPage(page: Page, path: string): Promise<{ status: number
 
 // The expected-failure probe below would otherwise write a failure screenshot into the report.
 test.use({ screenshot: 'off' });
+
+const DRAWER_IS_ON =
+  'The Netlify Drawer is on for this site, so previews and staging lose offline support (docs/process/hosting.md, "Netlify Drawer").';
+
+function recordDrawerRequests(page: Page): string[] {
+  const urls: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === NETLIFY_DRAWER_SCRIPT_PATH) urls.push(request.url());
+  });
+  return urls;
+}
+
+interface DrawerEvidence {
+  html: string;
+  drawerRequests: readonly string[];
+  iframeCount: number;
+}
+
+function drawerProblems({ html, drawerRequests, iframeCount }: DrawerEvidence): string[] {
+  const problems: string[] = [];
+  if (html.includes(NETLIFY_DRAWER_SCRIPT_PATH)) problems.push('the HTML loads the Drawer script');
+  if (drawerRequests.length > 0) problems.push('the page requested the Drawer script');
+  if (iframeCount > 0) problems.push('the page has an iframe');
+  return problems;
+}
 
 async function pageAtRoot(browser: Browser, stub: boolean) {
   const context = await browser.newContext({ baseURL });
@@ -89,20 +115,67 @@ test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
     await page.evaluate(() => console.error('probe app error through the fixture'));
   });
 
-  test.describe('remote runs (E2E_BASE_URL)', () => {
-    test.skip(!remoteBaseUrl, 'needs E2E_BASE_URL: Netlify injects the Drawer script only there');
+  test.describe('Drawer guard control', () => {
+    test.use({ netlifyDrawerStub: false });
 
-    test('the page loads the Drawer script and the auto fixture answers it empty', async ({
-      page,
-    }) => {
-      const drawerResponse = page.waitForResponse(
-        (r) => new URL(r.url()).pathname === NETLIFY_DRAWER_SCRIPT_PATH,
+    test('reports a Drawer that loads its script and adds an iframe', async ({ page }) => {
+      await page.route(
+        (url) => url.pathname === '/',
+        (route) =>
+          route.fulfill({
+            contentType: 'text/html',
+            body: `<!doctype html><html><body><app-root></app-root><script src="${NETLIFY_DRAWER_SCRIPT_PATH}"></script></body></html>`,
+          }),
       );
+      await page.route(
+        (url) => url.pathname === NETLIFY_DRAWER_SCRIPT_PATH,
+        (route) =>
+          route.fulfill({
+            contentType: 'text/javascript; charset=utf-8',
+            body: "document.body.append(document.createElement('iframe'));",
+          }),
+      );
+      const drawerRequests = recordDrawerRequests(page);
       await page.goto('/');
-      const response = await drawerResponse;
-      expect(response.status()).toBe(200);
-      expect(await response.text()).toBe('');
-      expect(await page.locator('iframe').count()).toBe(0);
+      const served = await fetchFromPage(page, '/');
+      expect(served.status).toBe(200);
+      expect(
+        drawerProblems({
+          html: served.body,
+          drawerRequests,
+          iframeCount: await page.locator('iframe').count(),
+        }),
+      ).toEqual([
+        'the HTML loads the Drawer script',
+        'the page requested the Drawer script',
+        'the page has an iframe',
+      ]);
+    });
+  });
+
+  test.describe('remote runs (E2E_BASE_URL)', () => {
+    test.skip(
+      !remoteBaseUrl,
+      'needs E2E_BASE_URL: the guard checks a deployed site, and the auto fixture stubs the Drawer only there',
+    );
+
+    test.describe('Drawer guard', () => {
+      // The default stub would answer a returning Drawer script empty, so no iframe could appear.
+      test.use({ netlifyDrawerStub: false });
+
+      test('the Netlify Drawer stays off', async ({ page, request }) => {
+        const raw = await fetchRawHtml(request, '/');
+        expect(raw.status).toBe(200);
+        expect(raw.html).toContain('<app-root');
+        const drawerRequests = recordDrawerRequests(page);
+        await page.goto('/');
+        const problems = drawerProblems({
+          html: raw.html,
+          drawerRequests,
+          iframeCount: await page.locator('iframe').count(),
+        });
+        expect(problems, DRAWER_IS_ON).toEqual([]);
+      });
     });
 
     test('by default, the Drawer path gets the empty stub in the test context', async ({

@@ -9,7 +9,7 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
-import { MUTED_BADGE, OPEN_BADGE } from './season-status';
+import { FULL_BADGE, MUTED_BADGE, OPEN_BADGE } from './season-status';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -313,6 +313,121 @@ describe('the Registration open section', () => {
       await emit(harness, queryResults(page));
       expect(text(host(harness).querySelector('#league-1'))).not.toContain('No upcoming season');
       expect(host(harness).querySelector('#league-1 [data-slot="badge"]')).toBeNull();
+    });
+  });
+
+  describe('with a full season whose registration is open', () => {
+    const FULL_7V7 = { ...SUMMER_7V7, isFull: true };
+    const FULL_7V7_CARD = { ...FULL_7V7, minimumRosterSize: 7, league: COED_7V7 };
+    const FALL_7V7 = {
+      name: 'Fall 2027',
+      slug: 'fall-2027',
+      startDate: '2027-09-08',
+      endDate: '2027-11-17',
+      registrationDeadline: '2027-08-25',
+      isFull: false,
+    };
+    const FALL_7V7_CARD = { ...FALL_7V7, minimumRosterSize: 7, league: COED_7V7 };
+    const SEASON_PATH = '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons';
+    const cards = (harness: RouterTestingHarness) => [
+      ...(section(harness)?.querySelectorAll(':scope > ul > li') ?? []),
+    ];
+    const closingLine = (card: Element) =>
+      text(card.querySelector('p.text-sm.text-muted-foreground:not(h3 + p)'));
+
+    function fullPage(open: PublicOpenSeasonRows, rowSeasons = [FULL_7V7]) {
+      const page = withSeasons(open);
+      page.leagues[0].seasons = rowSeasons;
+      return page;
+    }
+
+    it('reads Full and the waitlist in the league row, with the outline badge, and keeps the Register link to its registration card', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(fullPage([FULL_7V7_CARD])));
+      expect(rowStatus(harness, 1)).toEqual([
+        'Full',
+        'Summer 2027 · waitlist open',
+        'Register for Coed 7v7 Rec, Summer 2027',
+      ]);
+      const badge = host(harness).querySelector('#league-1 [data-slot="badge"]');
+      expect(classes(badge!)).toEqual(classes(FULL_BADGE));
+      expect(
+        host(harness).querySelector('#league-1 a[href$="#registration"]')?.getAttribute('href'),
+      ).toBe(`${SEASON_PATH}/summer-2027#registration`);
+    });
+
+    it('leads the row with the full season that closes first over a later open season with room, and lists both cards, soonest deadline first', async () => {
+      const harness = await open();
+      await emit(
+        harness,
+        queryResults(fullPage([FALL_7V7_CARD, FULL_7V7_CARD], [FALL_7V7, FULL_7V7])),
+      );
+      expect(rowStatus(harness, 1)).toEqual([
+        'Full',
+        'Summer 2027 · waitlist open',
+        'Register for Coed 7v7 Rec, Summer 2027',
+      ]);
+      expect(cards(harness).map((card) => text(card.querySelector('h3 + p')))).toEqual([
+        'Summer 2027',
+        'Fall 2027',
+      ]);
+    });
+
+    it('marks the full card Full after the sport and says the waitlist is open before the deadline; the card with room keeps Closes', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(fullPage([FALL_7V7_CARD, FULL_7V7_CARD])));
+      const [full, room] = cards(harness);
+      const badges = (card: Element) => [...card.querySelectorAll('[data-slot="badge"]')];
+      expect(badges(full).map(text)).toEqual(['Soccer', 'Full']);
+      expect(classes(badges(full)[1])).toEqual(classes(FULL_BADGE));
+      expect(badges(full)[0].parentElement).toBe(badges(full)[1].parentElement);
+      expect(closingLine(full)).toBe('Waitlist open · closes May 19');
+      expect(
+        text(full.querySelector('p.text-sm.text-muted-foreground:not(h3 + p) > .font-medium')),
+      ).toBe('May 19');
+      expect(badges(room).map(text)).toEqual(['Soccer']);
+      expect(closingLine(room)).toBe('Closes Aug 25');
+      for (const [card, slug] of [
+        [full, 'summer-2027'],
+        [room, 'fall-2027'],
+      ] as const) {
+        const register = card.querySelector('a[data-slot="button"]');
+        expect(register?.getAttribute('href')).toBe(`${SEASON_PATH}/${slug}#registration`);
+      }
+    });
+
+    it('still lists the card and the hero Register link when the only open season is full', async () => {
+      const page = fullPage([FULL_7V7_CARD]);
+      page.leagues[2].seasons = [];
+      const harness = await open();
+      await emit(harness, queryResults(page));
+      expect(cards(harness).map((card) => text(card.querySelector('h3')))).toEqual([
+        'Coed 7v7 Rec',
+      ]);
+      expect(text(heroLink(harness))).toBe('Register for a season');
+      expect(heroLink(harness)?.getAttribute('href')).toBe(`${ORG}#registration-open`);
+    });
+
+    it('shows the phase and no card once the full season closes', async () => {
+      vi.setSystemTime(at('2027-05-25'));
+      const harness = await open();
+      await emit(harness, queryResults(fullPage([FULL_7V7_CARD])));
+      expect(rowStatus(harness, 1)).toEqual(['Registration closed', 'Summer 2027']);
+      expect(text(section(harness))).not.toContain('Coed 7v7 Rec');
+      expect(text(host(harness).querySelector('#leagues'))).not.toContain('Full');
+    });
+
+    it('reads Full in the row of a sport view, with its Register link', async () => {
+      const harness = await open(`${ORG}/sports/soccer`);
+      await emit(harness, sportQueryResults(fullPage([FULL_7V7_CARD]), 'soccer'));
+      expect(rowStatus(harness, 1)).toEqual([
+        'Full',
+        'Summer 2027 · waitlist open',
+        'Register for Coed 7v7 Rec, Summer 2027',
+      ]);
+      expect(
+        text(cards(harness)[0]?.querySelector('[data-slot="badge"] + [data-slot="badge"]')),
+      ).toBe('Full');
     });
   });
 

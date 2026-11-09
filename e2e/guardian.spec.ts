@@ -5,8 +5,9 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
+import { seedBatch, type BatchTeam } from './support/seed-batch';
 import { signUp } from './support/session';
-import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, newTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -26,9 +27,20 @@ interface Season {
 
 const named = (label: string, name: string): TestUser => ({ ...newUser(label), name });
 
-/** `captain`, when given, has already signed up in the browser. */
-async function seedSeason(captain?: TestUser): Promise<Season> {
-  const tenant = await seedTenant({
+interface SeasonOptions {
+  /** Has already signed up in the browser. */
+  captain?: TestUser;
+  /** People who never sign in, for `sharks` to name. */
+  accounts?: TestUser[];
+  sharks?: Pick<BatchTeam, 'playerEmails' | 'minors'>;
+}
+
+async function seedSeason({
+  captain,
+  accounts = [],
+  sharks = {},
+}: SeasonOptions = {}): Promise<Season> {
+  const { tenant, args } = newTenant({
     name: 'E2E Minor Rosters',
     locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
     leagues: [
@@ -40,33 +52,36 @@ async function seedSeason(captain?: TestUser): Promise<Season> {
       },
     ],
   });
-  await seedSeasons(tenant, LEAGUE_SLUG, [
-    {
-      name: 'Summer Open',
-      slug: SEASON,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
-    },
-  ]);
-  const [sharksCaptain, rivalCaptain] = await Promise.all([
-    captain ?? seedUser(named('Captain', 'Tasha Greene')),
-    seedUser(named('Rival', 'Jalen Brooks')),
-  ]);
-  const sharks = await addTeam(tenant, 'Sand Sharks', sharksCaptain);
-  const party = await addTeam(tenant, 'Block Party', rivalCaptain);
-  return { tenant, sharks, party, captain: sharksCaptain, rivalCaptain };
-}
-
-async function addTeam(tenant: Tenant, name: string, captain: TestUser): Promise<string> {
-  const { teamId } = (await convexRun('testing:seedTeam', {
-    organizationSlug: tenant.slug,
-    leagueSlug: LEAGUE_SLUG,
-    seasonSlug: SEASON,
-    name,
-    captainEmail: captain.email,
-  })) as { teamId: string };
-  return teamId;
+  const sharksCaptain = captain ?? named('Captain', 'Tasha Greene');
+  const rivalCaptain = named('Rival', 'Jalen Brooks');
+  const slugs = { leagueSlug: LEAGUE_SLUG, seasonSlug: SEASON };
+  const {
+    teamIds: [sharksId, partyId],
+  } = await seedBatch({
+    tenant: args,
+    accounts: [...(captain ? [] : [sharksCaptain]), rivalCaptain, ...accounts],
+    seasons: [
+      {
+        ...slugs,
+        name: 'Summer Open',
+        slug: SEASON,
+        startDate: dateFromToday(40),
+        endDate: dateFromToday(100),
+        registrationDeadline: dateFromToday(20),
+      },
+    ],
+    teams: [
+      { ...slugs, name: 'Sand Sharks', captainEmail: sharksCaptain.email, ...sharks },
+      { ...slugs, name: 'Block Party', captainEmail: rivalCaptain.email },
+    ],
+  });
+  return {
+    tenant,
+    sharks: sharksId,
+    party: partyId,
+    captain: sharksCaptain,
+    rivalCaptain,
+  };
 }
 
 const addPlayer = (teamId: string, user: TestUser) =>
@@ -160,11 +175,15 @@ test.describe('a guardian on the team page', () => {
   test.use({ expectedConvexErrors: ['rosterEntries:addMinor'] });
 
   test('adds a second minor from the team page and renames one', async ({ page }, testInfo) => {
-    const s = await seedSeason();
+    test.slow(); // six axe scans and Tab walks: about 13 s of its 19 s on a GitHub runner
     const guardian = named('Guardian', 'Marcus Bell');
     await signUp(page, guardian);
-    await addPlayer(s.sharks, guardian);
-    await addMinor(s.sharks, guardian, 'Theo Bell');
+    const s = await seedSeason({
+      sharks: {
+        playerEmails: [guardian.email],
+        minors: [{ guardianEmail: guardian.email, minorName: 'Theo Bell' }],
+      },
+    });
 
     await openTeam(page, s.sharks, 'Sand Sharks');
     await expect(page.getByTestId('roster-count')).toHaveText('3 of 4 players');
@@ -222,14 +241,15 @@ test.describe('a captain with a minor on the team', () => {
   }, testInfo) => {
     const captain = named('Captain', 'Tasha Greene');
     await signUp(page, captain);
-    const s = await seedSeason(captain);
-    const [player, guardian] = await Promise.all([
-      seedUser(named('Player', 'Elena Ruiz')),
-      seedUser(named('Guardian', 'Marcus Bell')),
-    ]);
-    await addPlayer(s.sharks, player);
-    await addPlayer(s.sharks, guardian);
-    await addMinor(s.sharks, guardian, 'Theo Bell');
+    const [player, guardian] = [named('Player', 'Elena Ruiz'), named('Guardian', 'Marcus Bell')];
+    const s = await seedSeason({
+      captain,
+      accounts: [player, guardian],
+      sharks: {
+        playerEmails: [player.email, guardian.email],
+        minors: [{ guardianEmail: guardian.email, minorName: 'Theo Bell' }],
+      },
+    });
 
     await openTeam(page, s.sharks, 'Sand Sharks');
     await expect(page.getByTestId('roster-count')).toHaveText('4 of 4 players');

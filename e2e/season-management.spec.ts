@@ -1,13 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import type { Browser, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
-import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdMutations } from './support/hold-mutations';
 import { screenshot } from './support/screenshot';
+import { seedAccountsInCalls } from './support/seed-accounts';
+import { seedBatch, type SeedBatch } from './support/seed-batch';
 import { otherUser, signUp } from './support/session';
-import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, newTenant, type Tenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -30,18 +31,14 @@ const noAccess = (page: Page) =>
 const notFound = (page: Page) =>
   main(page).getByRole('heading', { level: 1, name: 'Page not found' });
 
-async function seedUsers(users: TestUser[]): Promise<void> {
-  const id = randomBytes(4).toString('hex');
-  await convexRun('testing:seedLeague', {
-    organization: { name: `E2E Users ${id}`, slug: `e2e-users-${id}` },
-    locations: [],
-    leagues: [],
-    users,
-  });
-}
+const SEASON_DATES = {
+  startDate: dateFromToday(40),
+  endDate: dateFromToday(100),
+  registrationDeadline: dateFromToday(20),
+};
 
-async function seedLeagues(): Promise<Tenant> {
-  const tenant = await seedTenant({
+function leagues(): { tenant: Tenant; batch: SeedBatch } {
+  const { tenant, args } = newTenant({
     name: 'E2E Season Teams',
     locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
     leagues: [
@@ -59,76 +56,82 @@ async function seedLeagues(): Promise<Tenant> {
       },
     ],
   });
-  const dates = {
-    startDate: dateFromToday(40),
-    endDate: dateFromToday(100),
-    registrationDeadline: dateFromToday(20),
-  };
-  await seedSeasons(tenant, LEAGUE_SLUG, [
-    { name: 'Summer Open', slug: SUMMER, ...dates },
-    { name: 'Spring Open', slug: EMPTY, ...dates },
-    { name: 'Fall Draft', slug: DRAFT, ...dates, status: 'draft' },
-  ]);
-  await seedSeasons(tenant, OTHER_LEAGUE_SLUG, [
-    { name: 'Thursday Only', slug: OTHER_SEASON, ...dates },
-  ]);
-  return tenant;
+  const seasons = [
+    { leagueSlug: LEAGUE_SLUG, name: 'Summer Open', slug: SUMMER, ...SEASON_DATES },
+    { leagueSlug: LEAGUE_SLUG, name: 'Spring Open', slug: EMPTY, ...SEASON_DATES },
+    {
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Fall Draft',
+      slug: DRAFT,
+      ...SEASON_DATES,
+      status: 'draft' as const,
+    },
+    { leagueSlug: OTHER_LEAGUE_SLUG, name: 'Thursday Only', slug: OTHER_SEASON, ...SEASON_DATES },
+  ];
+  return { tenant, batch: { tenant: args, seasons } };
 }
 
 interface Season {
-  tenant: Tenant;
   captains: TestUser[];
-  teamIds: Record<string, string>;
   freeAgents: TestUser[];
+  batch: SeedBatch;
 }
 
-async function seedSummer(tenant: Tenant, captains: TestUser[] = []): Promise<Season> {
+const SUMMER_TEAMS = ['Block Party', 'Dig Deep', 'Sand Sharks'];
+
+/** `captains` have signed up in a browser; the other people never sign in, so they are accounts. */
+function summer(captains: TestUser[] = []): Season {
   const all = [
     ...captains,
     ...Array.from({ length: 3 - captains.length }, () => newUser('Captain')),
   ];
   const players = Array.from({ length: 7 }, () => newUser('Player'));
   const freeAgents = [newUser('First'), newUser('Second')];
-  await seedUsers([...all.slice(captains.length), ...players, ...freeAgents]);
-  const slugs = { organizationSlug: tenant.slug, leagueSlug: LEAGUE_SLUG, seasonSlug: SUMMER };
-  const teamIds: Record<string, string> = {};
-  const roster: Record<string, TestUser[]> = {
-    'Block Party': players.slice(0, 3),
-    'Dig Deep': players.slice(3, 4),
-    'Sand Sharks': players.slice(4, 7),
+  const slugs = { leagueSlug: LEAGUE_SLUG, seasonSlug: SUMMER };
+  const rosters = [players.slice(0, 3), players.slice(3, 4), players.slice(4, 7)];
+  return {
+    captains: all,
+    freeAgents,
+    batch: {
+      accounts: [...all.slice(captains.length), ...players, ...freeAgents],
+      teams: SUMMER_TEAMS.map((name, i) => ({
+        ...slugs,
+        name,
+        captainEmail: all[i].email,
+        playerEmails: rosters[i].map((player) => player.email),
+        ...(name === 'Dig Deep' && {
+          invites: [{ email: 'pending@example.com', expiresAt: Date.now() + 14 * DAY }],
+        }),
+      })),
+      freeAgents: freeAgents.map(({ email }) => ({ ...slugs, email })),
+    },
   };
-  for (const [i, name] of ['Block Party', 'Dig Deep', 'Sand Sharks'].entries()) {
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      ...slugs,
-      name,
-      captainEmail: all[i].email,
-    })) as { teamId: string };
-    teamIds[name] = teamId;
-    for (const player of roster[name]) {
-      await convexRun('testing:addToTeam', { teamId, email: player.email });
-    }
-  }
-  await convexRun('testing:addTeamInvite', {
-    teamId: teamIds['Dig Deep'],
-    email: 'pending@example.com',
-    expiresAt: Date.now() + 14 * DAY,
-  });
-  for (const freeAgent of freeAgents) {
-    await convexRun('testing:seedFreeAgent', { ...slugs, email: freeAgent.email });
-  }
-  return { tenant, captains: all, teamIds, freeAgents };
 }
 
-async function asOrgAdmin(page: Page): Promise<Tenant> {
+const teamIdsByName = (teamIds: string[]): Record<string, string> =>
+  Object.fromEntries(SUMMER_TEAMS.map((name, i) => [name, teamIds[i]]));
+
+async function asOrgAdmin(
+  page: Page,
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamIds: string[] }> {
   const admin = newUser('Admin');
   await signUp(page, admin);
-  const tenant = await seedLeagues();
-  await convexRun('testing:addMembership', {
-    organizationSlug: tenant.slug,
-    email: admin.email,
-    role: 'orgAdmin',
-  });
-  return tenant;
+  return seedForOrgAdmin(admin, ...extra);
+}
+
+/** `admin` has signed up in a browser. */
+async function seedForOrgAdmin(
+  admin: TestUser,
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamIds: string[] }> {
+  const { tenant, batch } = leagues();
+  const { teamIds } = await seedBatch(
+    batch,
+    { memberships: [{ email: admin.email, role: 'orgAdmin' }] },
+    ...extra,
+  );
+  return { tenant, teamIds };
 }
 
 const seasonPath = (tenant: Tenant, season: string, league = LEAGUE_SLUG) =>
@@ -146,8 +149,8 @@ test.describe('Season management: an org admin', () => {
   test('opens a season from the league page and sees its teams and its waiting free agents, oldest first', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
-    const { freeAgents } = await seedSummer(tenant);
+    const { freeAgents, batch } = summer();
+    const { tenant } = await asOrgAdmin(page, batch);
     await page.goto(`/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}`);
     await page.locator('#seasons-list').getByRole('link', { name: 'Summer Open' }).click();
     await expect(page).toHaveURL(seasonPath(tenant, SUMMER));
@@ -188,14 +191,10 @@ test.describe('Season management: an org admin', () => {
   test('a season with free agents and no teams, and one with neither', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
     const waiting = newUser('Waiting');
-    await seedUsers([waiting]);
-    await convexRun('testing:seedFreeAgent', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: SUMMER,
-      email: waiting.email,
+    const { tenant } = await asOrgAdmin(page, {
+      accounts: [waiting],
+      freeAgents: [{ leagueSlug: LEAGUE_SLUG, seasonSlug: SUMMER, email: waiting.email }],
     });
     await page.goto(seasonPath(tenant, SUMMER));
     await expect(
@@ -218,7 +217,7 @@ test.describe('Season management: an org admin', () => {
   test('a draft season shows no teams and links to the league to publish it', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
+    const { tenant } = await asOrgAdmin(page);
     await page.goto(seasonPath(tenant, DRAFT));
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Fall Draft');
     const publish = main(page).getByRole('link', { name: `Publish it from ${LEAGUE}` });
@@ -234,12 +233,11 @@ test.describe('Season management: an org admin', () => {
     page,
   }, testInfo) => {
     test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
-    const tenant = await asOrgAdmin(page);
-    await convexRun('testing:seedWaitingFreeAgents', {
+    const { tenant } = await asOrgAdmin(page);
+    await seedAccountsInCalls('testing:seedWaitingFreeAgents', 201, {
       organizationSlug: tenant.slug,
       leagueSlug: LEAGUE_SLUG,
       seasonSlug: SUMMER,
-      count: 201,
       emailPrefix: `capped-${randomBytes(4).toString('hex')}`,
     });
     await page.goto(seasonPath(tenant, SUMMER));
@@ -256,7 +254,7 @@ test.describe('Season management: an org admin', () => {
   test('an unknown season slug and a season slug of another league show the not-found view and request no free agents', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
+    const { tenant } = await asOrgAdmin(page);
     const sent = framesSent(page);
     await page.goto(seasonPath(tenant, 'no-such-season'));
     await expect(notFound(page)).toBeVisible();
@@ -274,17 +272,13 @@ test.describe('Season management: an org admin', () => {
 const placeDialog = (page: Page) => page.getByRole('dialog');
 
 async function placeAsOrgAdmin(page: Page, browser: Browser) {
-  const tenant = await asOrgAdmin(page);
-  const season = await seedSummer(tenant);
+  const admin = newUser('Admin');
   const waiting = newUser('Waiting');
-  const waitingPage = await otherUser(browser, waiting);
-  await convexRun('testing:seedFreeAgent', {
-    organizationSlug: tenant.slug,
-    leagueSlug: LEAGUE_SLUG,
-    seasonSlug: SUMMER,
-    email: waiting.email,
+  const [waitingPage] = await Promise.all([otherUser(browser, waiting), signUp(page, admin)]);
+  const { tenant, teamIds } = await seedForOrgAdmin(admin, summer().batch, {
+    freeAgents: [{ leagueSlug: LEAGUE_SLUG, seasonSlug: SUMMER, email: waiting.email }],
   });
-  return { tenant, season, waiting, waitingPage };
+  return { tenant, teamIds: teamIdsByName(teamIds), waiting, waitingPage };
 }
 
 test.describe('Season management: placing a free agent', () => {
@@ -292,7 +286,7 @@ test.describe('Season management: placing a free agent', () => {
     page,
     browser,
   }, testInfo) => {
-    const { tenant, season, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
+    const { tenant, teamIds, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
     try {
       await page.goto(seasonPath(tenant, SUMMER));
       await expect(freeAgentRows(page)).toHaveCount(3);
@@ -350,7 +344,7 @@ test.describe('Season management: placing a free agent', () => {
         'You’re on Dig Deep in this season.',
       );
       await waitingPage.getByRole('link', { name: 'Go to Dig Deep' }).click();
-      await expect(waitingPage).toHaveURL(`/app/teams/${season.teamIds['Dig Deep']}`);
+      await expect(waitingPage).toHaveURL(`/app/teams/${teamIds['Dig Deep']}`);
       await expect(
         waitingPage.getByRole('main').getByRole('heading', { level: 1, name: 'Dig Deep' }),
       ).toBeVisible();
@@ -448,13 +442,13 @@ test.describe('Season management: an assigned league organizer', () => {
   test('opens the page in their sidebar, with the league marked', async ({ page }, testInfo) => {
     const organizer = newUser('Organizer');
     await signUp(page, organizer);
-    const tenant = await seedLeagues();
-    await convexRun('testing:addLeagueOrganizer', {
-      organizationSlug: tenant.slug,
+    const { tenant, batch } = leagues();
+    const organizerOfLeague = {
       email: organizer.email,
+      role: 'leagueOrganizer' as const,
       leagueSlugs: [LEAGUE_SLUG],
-    });
-    await seedSummer(tenant);
+    };
+    await seedBatch(batch, { memberships: [organizerOfLeague] }, summer().batch);
     await page.goto(seasonPath(tenant, SUMMER));
     await expect(teamRows(page)).toHaveCount(3);
     await expect(freeAgentRows(page)).toHaveCount(2);
@@ -477,22 +471,25 @@ test.describe('Season management: callers who may not open it', () => {
     page,
     browser,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
+    const admin = newUser('Admin');
     const otherOrganizer = newUser('Other organizer');
     const captain = newUser('Captain');
     const stranger = newUser('Stranger');
-    const pages = [
-      await otherUser(browser, otherOrganizer),
-      await otherUser(browser, captain),
-      await otherUser(browser, stranger),
-    ];
+    const [, ...pages] = await Promise.all([
+      signUp(page, admin),
+      ...[otherOrganizer, captain, stranger].map((user) => otherUser(browser, user)),
+    ]);
     try {
-      await convexRun('testing:addLeagueOrganizer', {
-        organizationSlug: tenant.slug,
+      const organizerOfOtherLeague = {
         email: otherOrganizer.email,
+        role: 'leagueOrganizer' as const,
         leagueSlugs: [OTHER_LEAGUE_SLUG],
-      });
-      await seedSummer(tenant, [captain]);
+      };
+      const { tenant } = await seedForOrgAdmin(
+        admin,
+        { memberships: [organizerOfOtherLeague] },
+        summer([captain]).batch,
+      );
       for (const intruder of pages) {
         const sent = framesSent(intruder);
         await intruder.goto(seasonPath(tenant, SUMMER));
@@ -516,39 +513,37 @@ test.describe('Season management: maximum teams', () => {
   const field = (page: Page) => page.locator('#edit-maximum-teams');
   const saveButton = (page: Page) => limits(page).getByRole('button', { name: 'Save changes' });
 
-  async function seedFullSeason(tenant: Tenant): Promise<void> {
-    await convexRun('testing:seedSeason', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      name: 'Full Open',
-      slug: FULL,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
-      minimumRosterSize: 4,
-      maxTeams: 2,
-      status: 'published',
-    });
-    await addTeam(tenant, 'Pair of Aces');
-    await addTeam(tenant, 'Two Tall');
+  function fullSeason(): SeedBatch {
+    const captains = [newUser('Captain'), newUser('Captain')];
+    return {
+      accounts: captains,
+      seasons: [
+        { leagueSlug: LEAGUE_SLUG, name: 'Full Open', slug: FULL, ...SEASON_DATES, maxTeams: 2 },
+      ],
+      teams: ['Pair of Aces', 'Two Tall'].map((name, i) => team(name, captains[i])),
+    };
   }
+
+  const team = (name: string, captain: TestUser) => ({
+    leagueSlug: LEAGUE_SLUG,
+    seasonSlug: FULL,
+    name,
+    captainEmail: captain.email,
+  });
 
   async function addTeam(tenant: Tenant, name: string): Promise<void> {
     const captain = newUser('Captain');
-    await seedUsers([captain]);
-    await convexRun('testing:seedTeam', {
+    await seedBatch({
       organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: FULL,
-      name,
-      captainEmail: captain.email,
+      accounts: [captain],
+      teams: [team(name, captain)],
     });
   }
 
   test('the create form takes Maximum teams, refuses one out of range, and the new season shows it', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
+    const { tenant } = await asOrgAdmin(page);
     await page.goto(`/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}`);
     const create = page.locator('#create-season form');
     await page.locator('#name').fill('Winter Cap');
@@ -581,8 +576,7 @@ test.describe('Season management: maximum teams', () => {
     test('a full season shows 2 of 2 teams; the limit is raised, refused below the count, and removed', async ({
       page,
     }, testInfo) => {
-      const tenant = await asOrgAdmin(page);
-      await seedFullSeason(tenant);
+      const { tenant } = await asOrgAdmin(page, fullSeason());
       await page.goto(seasonPath(tenant, FULL));
       await expect(page.getByTestId('team-count')).toHaveText('2 of 2');
       await expect(summary(page)).toHaveText('2 teams · 2 registered, so the season is full');
@@ -636,43 +630,42 @@ test.describe('Season management: maximum roster size', () => {
   const field = (page: Page) => page.locator('#edit-maximum-roster-size');
   const saveButton = (page: Page) => limits(page).getByRole('button', { name: 'Save changes' });
 
-  async function seedCapSeason(tenant: Tenant): Promise<TestUser> {
-    await convexRun('testing:seedSeason', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      name: 'Roster Cap',
-      slug: CAP,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
-      minimumRosterSize: 4,
-      maxRosterSize: 4,
-      status: 'published',
-    });
+  function capSeason(): { waiting: TestUser; batch: SeedBatch } {
     const captains = [newUser('Captain'), newUser('Captain')];
     const players = [newUser('Player'), newUser('Player'), newUser('Player')];
     const waiting = newUser('Waiting');
-    await seedUsers([...captains, ...players, waiting]);
-    const slugs = { organizationSlug: tenant.slug, leagueSlug: LEAGUE_SLUG, seasonSlug: CAP };
-    for (const [i, name] of ['Block Party', 'Dig Deep'].entries()) {
-      const { teamId } = (await convexRun('testing:seedTeam', {
-        ...slugs,
-        name,
-        captainEmail: captains[i].email,
-      })) as { teamId: string };
-      if (i > 0) continue;
-      for (const player of players) {
-        await convexRun('testing:addToTeam', { teamId, email: player.email });
-      }
-    }
-    await convexRun('testing:seedFreeAgent', { ...slugs, email: waiting.email });
-    return waiting;
+    const slugs = { leagueSlug: LEAGUE_SLUG, seasonSlug: CAP };
+    return {
+      waiting,
+      batch: {
+        accounts: [...captains, ...players, waiting],
+        seasons: [
+          {
+            leagueSlug: LEAGUE_SLUG,
+            name: 'Roster Cap',
+            slug: CAP,
+            ...SEASON_DATES,
+            maxRosterSize: 4,
+          },
+        ],
+        teams: [
+          {
+            ...slugs,
+            name: 'Block Party',
+            captainEmail: captains[0].email,
+            playerEmails: players.map((player) => player.email),
+          },
+          { ...slugs, name: 'Dig Deep', captainEmail: captains[1].email },
+        ],
+        freeAgents: [{ ...slugs, email: waiting.email }],
+      },
+    };
   }
 
   test('the create form takes Maximum roster size, refuses one below the minimum, and the new season shows it', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
+    const { tenant } = await asOrgAdmin(page);
     await page.goto(`/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}`);
     const create = page.locator('#create-season form');
     await page.locator('#name').fill('Winter Roster');
@@ -702,8 +695,7 @@ test.describe('Season management: maximum roster size', () => {
     test('the limit is refused below the largest roster, naming the team, then raised and removed', async ({
       page,
     }, testInfo) => {
-      const tenant = await asOrgAdmin(page);
-      await seedCapSeason(tenant);
+      const { tenant } = await asOrgAdmin(page, capSeason().batch);
       await page.goto(seasonPath(tenant, CAP));
       await expect(summary(page)).toHaveText('4 players per team');
 
@@ -745,8 +737,8 @@ test.describe('Season management: maximum roster size', () => {
   test('the place dialog keeps a full team in the list as unavailable', async ({
     page,
   }, testInfo) => {
-    const tenant = await asOrgAdmin(page);
-    const waiting = await seedCapSeason(tenant);
+    const { waiting, batch } = capSeason();
+    const { tenant } = await asOrgAdmin(page, batch);
     await page.goto(seasonPath(tenant, CAP));
     await freeAgentRows(page)
       .filter({ hasText: waiting.name })

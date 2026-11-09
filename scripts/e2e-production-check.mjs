@@ -8,7 +8,7 @@ import { join } from 'node:path';
 /** @type {readonly ProductionRun[]} */
 export const PRODUCTION_RUNS = Object.freeze(
   [
-    { name: 'production-mobile', spec: 'e2e/pwa.spec.ts', project: 'chromium-mobile', tests: 10 },
+    { name: 'production-mobile', spec: 'e2e/pwa.spec.ts', project: 'chromium-mobile', tests: 13 },
     {
       name: 'production-desktop',
       spec: 'e2e/harness/no-service-worker.spec.ts',

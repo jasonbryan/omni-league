@@ -20,6 +20,8 @@ const URL = `/app/organizations/${COASTAL.slug}/staff`;
 const LIST_MEMBERS = 'memberships:listForOrganization';
 const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
+const STAFF_COUNT = 'memberships:staffCount';
+const PENDING_COUNT = 'invites:pendingCount';
 const CREATE = 'invites:create';
 const REVOKE = 'invites:revoke';
 const RESTORE = 'invites:restore';
@@ -147,6 +149,7 @@ describe('AdminStaff', () => {
     if (lists.leagues) o.subscription(LIST_LEAGUES)!.emit(lists.leagues);
     await o.flush();
   }
+  const main = () => document.querySelector<HTMLElement>('main#main')!;
   const openFull = () => open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES });
 
   const input = (id: string) => page.querySelector<HTMLInputElement>(`#${id}`)!;
@@ -217,6 +220,8 @@ describe('AdminStaff', () => {
         [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
+        [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
+        [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
       ]);
     });
 
@@ -421,6 +426,145 @@ describe('AdminStaff', () => {
     });
   });
 
+  describe('past 200 rows', () => {
+    const MEMBERS_NOTE = (shown: number, total: number) =>
+      `Showing the ${shown} added first, of ${total} members.`;
+    const INVITES_NOTE = (shown: number, total: number) =>
+      `Showing the first ${shown} of ${total} pending invites.`;
+    const membersSection = () => page.querySelector('section[aria-labelledby="members-heading"]')!;
+    const manyMembers = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...MEMBERS[0],
+        membershipId: `mem_${i}`,
+        name: `Staff ${i}`,
+        email: `staff-${i}@example.com`,
+      }));
+    const manyPending = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...PENDING[0],
+        inviteId: `inv_${i}`,
+        email: `invitee-${i}@example.com`,
+      }));
+    // The admin shell asks for the same staff count, so the name matches two subscriptions.
+    const emitCount = (name: string, value: number) => {
+      for (const sub of o.convex.activeSubscriptions) if (sub.name === name) sub.emit(value);
+    };
+    const failCount = (name: string) => {
+      for (const sub of o.convex.activeSubscriptions)
+        if (sub.name === name) sub.fail(new Error('Server Error: secret'));
+    };
+    const noteOf = (section: Element) => {
+      const last = section.lastElementChild;
+      return last?.tagName === 'P' && last.previousElementSibling?.tagName === 'UL'
+        ? text(last)
+        : undefined;
+    };
+    async function openWith(counts: { staff?: number; pending?: number }, lists = {}) {
+      await open({ leagues: LEAGUES, ...lists });
+      if (counts.staff !== undefined) emitCount(STAFF_COUNT, counts.staff);
+      if (counts.pending !== undefined) emitCount(PENDING_COUNT, counts.pending);
+      await o.flush();
+    }
+
+    it('ends the Members section with the cut and the total after the list', async () => {
+      await openWith({ staff: 214 }, { members: manyMembers(200) });
+      expect(members()).toHaveLength(200);
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(200, 214));
+    });
+
+    it('ends the Pending invites section with the cut and the total after the list', async () => {
+      await openWith({ pending: 201 }, { pending: manyPending(200) });
+      expect(pending()).toHaveLength(200);
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+    });
+
+    it('uses the rows shown, never a fixed 200', async () => {
+      await openWith({ staff: 5, pending: 4 }, { members: MEMBERS, pending: PENDING });
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(3, 5));
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(2, 4));
+    });
+
+    it('shows no note when a count equals its rows', async () => {
+      await openWith({ staff: 3, pending: 2 }, { members: MEMBERS, pending: PENDING });
+      expect(noteOf(membersSection())).toBeUndefined();
+      expect(noteOf(pendingSection())).toBeUndefined();
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows no note when a count is below its 200 rows', async () => {
+      await openWith(
+        { staff: 199, pending: 199 },
+        { members: manyMembers(200), pending: manyPending(200) },
+      );
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows the empty state and no note for no invites with a count of 0', async () => {
+      await openWith({ pending: 0 }, { pending: [] });
+      expect(text(pendingSection())).toContain('No pending invites');
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('shows the empty state and no note, never "first 0", for no invites with a count of 1', async () => {
+      await openWith({ pending: 1 }, { pending: [] });
+      expect(text(pendingSection())).toContain('No pending invites');
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.textContent).not.toContain('first 0');
+    });
+
+    it('shows each list with no note and no error text while its count is loading', async () => {
+      await openWith({}, { members: manyMembers(200), pending: manyPending(200) });
+      expect(members()).toHaveLength(200);
+      expect(pending()).toHaveLength(200);
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    });
+
+    it('shows each list with no note and no error text when its count failed', async () => {
+      await openWith({}, { members: manyMembers(200), pending: manyPending(200) });
+      failCount(STAFF_COUNT);
+      failCount(PENDING_COUNT);
+      await o.flush();
+      expect(members()).toHaveLength(200);
+      expect(pending()).toHaveLength(200);
+      expect(page.textContent).not.toContain('Showing');
+      expect(page.querySelectorAll('[role="alert"]')).toHaveLength(0);
+      expect(page.textContent).not.toContain('secret');
+    });
+
+    it('leaves the lists loading and the failed-list alert as they were', async () => {
+      await openWith({ staff: 214, pending: 201 });
+      expect(text(membersSection())).toContain('Loading the staff.');
+      expect(text(pendingSection())).toContain('Loading the pending invites.');
+      expect(page.textContent).not.toContain('Showing');
+      o.subscription(LIST_MEMBERS)!.fail(new Error('Server Error: secret'));
+      o.subscription(LIST_PENDING)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(page.textContent).not.toContain('Showing');
+    });
+
+    it('follows the count as it changes', async () => {
+      await openWith({ pending: 201 }, { pending: manyPending(200) });
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+      emitCount(PENDING_COUNT, 200);
+      await o.flush();
+      expect(noteOf(pendingSection())).toBeUndefined();
+      emitCount(PENDING_COUNT, 201);
+      await o.flush();
+      expect(noteOf(pendingSection())).toBe(INVITES_NOTE(200, 201));
+    });
+
+    it('follows the member count as it changes', async () => {
+      await openWith({ staff: 214 }, { members: manyMembers(200) });
+      emitCount(STAFF_COUNT, 200);
+      await o.flush();
+      expect(noteOf(membersSection())).toBeUndefined();
+      emitCount(STAFF_COUNT, 201);
+      await o.flush();
+      expect(noteOf(membersSection())).toBe(MEMBERS_NOTE(200, 201));
+    });
+  });
+
   describe('the "Invite staff" jump link (phones)', () => {
     it('is hidden from 1024px, targets the form, and moves focus and scroll to Email', async () => {
       await openFull();
@@ -440,6 +584,16 @@ describe('AdminStaff', () => {
 
     describe('pressed while the leagues are still loading', () => {
       const jump = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
+
+      // jsdom has no scrollIntoView, which the jump calls on the target once it renders.
+      const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+      beforeEach(() => {
+        Element.prototype.scrollIntoView = vi.fn();
+      });
+      afterEach(() => {
+        if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+        else delete (Element.prototype as Partial<Element>).scrollIntoView;
+      });
 
       it('focuses Email as soon as the form appears, and scrolls only once', async () => {
         await open({ members: MEMBERS, pending: PENDING });
@@ -470,23 +624,113 @@ describe('AdminStaff', () => {
         expect(input('email').value).toBe('jordan@example.com');
       });
 
-      it('the leagues fail: the alert shows and nothing takes focus', async () => {
+      it('the leagues fail: the alert takes focus, and the form that replaces it gives focus to the section', async () => {
         await open({ members: MEMBERS, pending: PENDING });
         page.querySelector<HTMLElement>('#invite')!.scrollIntoView = vi.fn();
         jump().click();
         await o.flush();
         o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
         await o.flush();
-        expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+        const alert = page.querySelector<HTMLElement>('#invite [role="alert"]')!;
+        expect(text(alert)).toBe(
           'The leagues could not be loaded. Check your connection and try again.',
         );
         expect(page.querySelector('#email')).toBeNull();
+        expect(document.activeElement).toBe(alert);
 
-        // A later successful answer renders the form: the failed press must not steal focus then.
         o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
         await o.flush();
         expect(input('email')).not.toBeNull();
+        expect(document.activeElement).toBe(page.querySelector('#invite'));
         expect(document.activeElement).not.toBe(input('email'));
+      });
+
+      it('the leagues fail with no press: nothing takes focus, and the form that arrives later moves nothing', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        const before = document.activeElement;
+        o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+        await o.flush();
+        expect(page.querySelector('#invite [role="alert"]')).not.toBeNull();
+        expect(document.activeElement).toBe(before);
+
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(input('email')).not.toBeNull();
+        expect(document.activeElement).toBe(before);
+      });
+
+      it('holds focus on the section, which takes it with tabindex -1, while the leagues load', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        const section = page.querySelector<HTMLElement>('#invite')!;
+        section.scrollIntoView = vi.fn();
+        expect(section.getAttribute('tabindex')).toBe('-1');
+        expect(section.classList.contains('focus:outline-none')).toBe(true);
+        jump().click();
+        await o.flush();
+        expect(document.activeElement).toBe(section);
+      });
+
+      describe('a WebKit tap leaves <main> focused; a later choice or scroll cancels the jump', () => {
+        const section = () => page.querySelector<HTMLElement>('#invite')!;
+        async function tapJumpLeavingMainFocused() {
+          await open({ members: MEMBERS, pending: PENDING });
+          main().focus();
+          jump().click();
+          await o.flush();
+          expect(document.activeElement).toBe(section());
+        }
+
+        async function leaguesArrive() {
+          o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+          await o.flush();
+          expect(input('email')).not.toBeNull();
+          expect(document.activeElement).not.toBe(input('email'));
+        }
+
+        it('a click on a main button that takes no focus', async () => {
+          await tapJumpLeavingMainFocused();
+          const button = page.querySelector<HTMLElement>('main #pending-list button')!;
+          button.click();
+          await leaguesArrive();
+          expect(document.activeElement).not.toBe(button);
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('<main> focused again, as a tap on page text does', async () => {
+          await tapJumpLeavingMainFocused();
+          main().focus();
+          await leaguesArrive();
+          expect(document.activeElement).toBe(main());
+        });
+
+        it('a wheel event', async () => {
+          await tapJumpLeavingMainFocused();
+          page.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a touchmove event', async () => {
+          await tapJumpLeavingMainFocused();
+          page.dispatchEvent(new Event('touchmove', { bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a PageDown keydown', async () => {
+          await tapJumpLeavingMainFocused();
+          section().dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a click on the panel heading keeps the jump', async () => {
+          await tapJumpLeavingMainFocused();
+          page.querySelector<HTMLElement>('#invite-heading')!.click();
+          o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+          await o.flush();
+          expect(document.activeElement).toBe(input('email'));
+        });
       });
 
       it('drops the press when focus moved elsewhere before the form appeared', async () => {
@@ -1215,20 +1459,21 @@ describe('AdminStaff', () => {
       expect(document.activeElement).toBe(statusBox());
     });
 
+    const revokeReplies: [string, () => void][] = [
+      ['success', () => o.convex.calls[0].resolve(null)],
+      ['offline', () => o.convex.calls[0].reject(new ConvexOfflineError())],
+      ['a server error', () => o.convex.calls[0].reject(new Error('Server Error: secret'))],
+      [
+        'a refusal',
+        () =>
+          o.convex.calls[0].reject(
+            new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
+          ),
+      ],
+    ];
+
     describe('a user who moves on to Email while the revoke is in flight keeps focus there', () => {
-      const replies: [string, () => void][] = [
-        ['success', () => o.convex.calls[0].resolve(null)],
-        ['offline', () => o.convex.calls[0].reject(new ConvexOfflineError())],
-        ['a server error', () => o.convex.calls[0].reject(new Error('Server Error: secret'))],
-        [
-          'a refusal',
-          () =>
-            o.convex.calls[0].reject(
-              new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
-            ),
-        ],
-      ];
-      for (const [name, reply] of replies) {
+      for (const [name, reply] of revokeReplies) {
         it(name, async () => {
           await openFull();
           await press(0);
@@ -1238,6 +1483,76 @@ describe('AdminStaff', () => {
           await o.flush();
           expect(statusBox()).not.toBeNull();
           expect(document.activeElement).toBe(email);
+        });
+      }
+    });
+
+    describe('focus after the reply to a Revoke follows what the user pressed or focused last', () => {
+      const description = () => page.querySelector<HTMLElement>('h1 + p')!;
+      const pressWithoutFocus = async () => {
+        main().focus();
+        await press(0);
+        expect(document.activeElement).toBe(main());
+      };
+
+      for (const [name, reply] of revokeReplies) {
+        describe(name, () => {
+          it('takes focus when Revoke was clicked without taking it and nothing else was pressed', async () => {
+            await openFull();
+            await pressWithoutFocus();
+            reply();
+            await o.flush();
+            expect(document.activeElement).toBe(statusBox());
+          });
+
+          const moves: [string, () => void][] = [
+            ['plain text in the page', () => description().click()],
+            ['a Role radio', () => input('role-admin').click()],
+            ['a league check box', () => league(1).click()],
+          ];
+          for (const [move, click] of moves) {
+            it(`leaves focus on <main> after a click on ${move} without focus`, async () => {
+              await openFull();
+              await pressWithoutFocus();
+              click();
+              reply();
+              await o.flush();
+              expect(statusBox()).not.toBeNull();
+              expect(document.activeElement).toBe(main());
+            });
+          }
+
+          it('leaves focus on <body> after the pressed Revoke lost focus to it', async () => {
+            await openFull();
+            revokeButton(0).focus();
+            await press(0);
+            revokeButton(0).blur();
+            await o.flush();
+            expect(document.activeElement).toBe(document.body);
+            reply();
+            await o.flush();
+            expect(statusBox()).not.toBeNull();
+            expect(document.activeElement).toBe(document.body);
+          });
+
+          it('leaves focus on <body> after a click on plain text outside the page, as in WebKit', async () => {
+            await openFull();
+            await pressWithoutFocus();
+            const outside = document.createElement('p');
+            document.body.append(outside);
+            try {
+              outside.click();
+              main().blur();
+              await o.flush();
+              expect(document.activeElement).toBe(document.body);
+              reply();
+              await o.flush();
+              expect(statusBox()).not.toBeNull();
+              expect(document.activeElement).toBe(document.body);
+            } finally {
+              outside.remove();
+            }
+          });
         });
       }
     });
@@ -1288,6 +1603,19 @@ describe('AdminStaff', () => {
       undoButton()!.click();
       await o.flush();
     }
+
+    const undoReplies: [string, () => void][] = [
+      ['success', () => o.convex.calls[1].resolve(null)],
+      ['offline', () => o.convex.calls[1].reject(new ConvexOfflineError())],
+      ['a server error', () => o.convex.calls[1].reject(new Error('Server Error: secret'))],
+      [
+        'a refusal',
+        () =>
+          o.convex.calls[1].reject(
+            new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
+          ),
+      ],
+    ];
 
     async function goOffline() {
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
@@ -1648,19 +1976,7 @@ describe('AdminStaff', () => {
       });
 
       describe('a user who moves on to Email while an Undo is in flight keeps focus there', () => {
-        const replies: [string, () => void][] = [
-          ['success', () => o.convex.calls[1].resolve(null)],
-          ['offline', () => o.convex.calls[1].reject(new ConvexOfflineError())],
-          ['a server error', () => o.convex.calls[1].reject(new Error('Server Error: secret'))],
-          [
-            'a refusal',
-            () =>
-              o.convex.calls[1].reject(
-                new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
-              ),
-          ],
-        ];
-        for (const [name, reply] of replies) {
+        for (const [name, reply] of undoReplies) {
           for (const windowPassed of [false, true]) {
             it(`${name}, with the window ${windowPassed ? 'passed' : 'open'}`, async () => {
               await revokeDana();
@@ -1703,6 +2019,21 @@ describe('AdminStaff', () => {
         await o.harness.navigateByUrl('/app');
         expect(cleared).toHaveBeenCalledWith(started.mock.results[call].value);
       });
+    });
+
+    describe('focus after the reply to an Undo follows what the user pressed or focused last', () => {
+      for (const [name, reply] of undoReplies) {
+        it(`stays on <main> after a click on plain text, with ${name}`, async () => {
+          await revokeDana();
+          main().focus();
+          await pressUndo();
+          page.querySelector<HTMLElement>('h1 + p')!.click();
+          reply();
+          await o.flush();
+          expect(statusBox()).not.toBeNull();
+          expect(document.activeElement).toBe(main());
+        });
+      }
     });
 
     describe('Revoke while an Undo is in flight', () => {

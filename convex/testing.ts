@@ -1,7 +1,7 @@
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
 import { type GenericId, type Infer, v } from 'convex/values';
 import { components, internal } from './_generated/api';
-import type { Doc } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import {
   internalAction,
   internalMutation,
@@ -9,10 +9,12 @@ import {
   type MutationCtx,
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
-import { normaliseInviteEmail } from './lib/inviteInput';
+import { INVITE_LIFETIME_MS, normaliseInviteEmail } from './lib/inviteInput';
+import { insertPendingInvite } from './lib/inviteWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
+import { ACCOUNTS_PER_SEED_CALL } from './lib/seedCallLimits';
 import {
   addMinorEntry,
   addRosterEntry,
@@ -478,46 +480,306 @@ export const seedFreeAgent = internalMutation({
   },
 });
 
-/** Many waiting free agents at once, each with an account of its own, so a test can reach the list's cap. They share one registration time, and the index then keeps them in insertion order. */
+/**
+ * Up to `ACCOUNTS_PER_SEED_CALL` waiting free agents, numbered from `from`, each with an account of its own. A test reaches the
+ * list's cap with sequential calls. The rows of one call share one registration time and a later call's come after, so the index
+ * keeps insertion order.
+ */
 export const seedWaitingFreeAgents = internalMutation({
   args: {
     organizationSlug: v.string(),
     leagueSlug: v.string(),
     seasonSlug: v.string(),
+    from: v.optional(v.number()),
     count: v.number(),
     emailPrefix: v.string(),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, count, emailPrefix }) => {
+  handler: async (
+    ctx,
+    { organizationSlug, leagueSlug, seasonSlug, from = 1, count, emailPrefix },
+  ) => {
     assertTestDeployment();
+    assertSeedRange(from, count);
     const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
-    const now = Date.now();
+    await createAccounts(ctx, { from, count, emailPrefix, namePrefix: 'Free Agent' }, (userId) =>
+      insertFreeAgent(ctx, season, userId),
+    );
+    return null;
+  },
+});
+
+/** Up to `ACCOUNTS_PER_SEED_CALL` league organizers, numbered from `from`, so a test can pass the Staff list's 200 rows with sequential calls. */
+export const seedStaff = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    from: v.optional(v.number()),
+    count: v.number(),
+    emailPrefix: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, from = 1, count, emailPrefix }) => {
+    assertTestDeployment();
+    assertSeedRange(from, count);
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    await createAccounts(ctx, { from, count, emailPrefix, namePrefix: 'Staff' }, async (userId) => {
+      await insertMembership(ctx, userId, organization._id, 'leagueOrganizer');
+    });
+    return null;
+  },
+});
+
+/** Many pending invites at once. They are org admin invites because Undo refuses a league organizer invite with no league. */
+export const seedPendingInvites = internalMutation({
+  args: { organizationSlug: v.string(), count: v.number(), emailPrefix: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, count, emailPrefix }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const expiresAt = Date.now() + INVITE_LIFETIME_MS;
     for (let i = 1; i <= count; i++) {
-      const number = String(i).padStart(3, '0');
-      const name = `Free Agent ${number}`;
-      // The component's generated return types are `any`.
-      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
-        input: {
-          model: 'user',
-          data: {
-            name,
-            email: `${emailPrefix}-${number}@example.test`,
-            emailVerified: false,
-            createdAt: now,
-            updatedAt: now,
-          },
-        },
-      })) as { _id: string };
-      const userId = await ctx.db.insert('users', {
-        authUserId: account._id,
-        name,
-        adultConfirmedAt: now,
+      await insertPendingInvite(ctx, {
+        organizationId: organization._id,
+        email: `${emailPrefix}-${numbered(i)}@example.test`,
+        role: 'orgAdmin',
+        leagueIds: [],
+        tokenHash: await hashInviteToken(generateInviteToken()),
+        expiresAt,
       });
-      await insertFreeAgent(ctx, season, userId);
     }
     return null;
   },
 });
+
+const numbered = (i: number) => String(i).padStart(3, '0');
+
+function assertSeedRange(from: number, count: number): void {
+  if (!Number.isInteger(from) || from < 1) throw new Error('from must be a positive integer');
+  if (!Number.isInteger(count) || count < 1) throw new Error('count must be a positive integer');
+  if (count > ACCOUNTS_PER_SEED_CALL) {
+    throw new Error(`A seed makes at most ${ACCOUNTS_PER_SEED_CALL} accounts per call`);
+  }
+}
+
+async function createAccounts(
+  ctx: MutationCtx,
+  {
+    from,
+    count,
+    emailPrefix,
+    namePrefix,
+  }: { from: number; count: number; emailPrefix: string; namePrefix: string },
+  each: (userId: Id<'users'>) => Promise<unknown>,
+): Promise<void> {
+  for (let i = from; i < from + count; i++) {
+    const name = `${namePrefix} ${numbered(i)}`;
+    await each(
+      await createAccount(ctx, { name, email: `${emailPrefix}-${numbered(i)}@example.test` }),
+    );
+  }
+}
+
+/**
+ * An account with no credential, for a person a test never signs in as: it stores no password, so
+ * no password goes around `hashPassword`. The adapter runs no trigger, so the `users` row is written here.
+ */
+async function createAccount(
+  ctx: MutationCtx,
+  { name, email }: { name: string; email: string },
+): Promise<Id<'users'>> {
+  const now = Date.now();
+  // The component's generated return types are `any`.
+  const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+    input: {
+      model: 'user',
+      data: {
+        name,
+        email: email.toLowerCase(),
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+  })) as { _id: string };
+  return await ctx.db.insert('users', { authUserId: account._id, name, adultConfirmedAt: now });
+}
+
+const batchSeasonValidator = v.object({ leagueSlug: v.string(), ...seasonSeedValidator.fields });
+
+const batchTeamValidator = v.object({
+  leagueSlug: v.string(),
+  seasonSlug: v.string(),
+  name: v.string(),
+  captainEmail: v.string(),
+  playerEmails: v.optional(v.array(v.string())),
+  invites: v.optional(
+    v.array(v.object({ email: v.string(), expiresAt: v.number(), token: v.optional(v.string()) })),
+  ),
+  minors: v.optional(v.array(v.object({ guardianEmail: v.string(), minorName: v.string() }))),
+});
+
+const batchRowsFields = {
+  tenant: v.optional(tenantValidator),
+  organizationSlug: v.optional(v.string()),
+  accounts: v.optional(v.array(v.object({ name: v.string(), email: v.string() }))),
+  memberships: v.optional(
+    v.array(
+      v.object({
+        email: v.string(),
+        role: roleValidator,
+        leagueSlugs: v.optional(v.array(v.string())),
+      }),
+    ),
+  ),
+  seasons: v.optional(v.array(batchSeasonValidator)),
+  teams: v.optional(v.array(batchTeamValidator)),
+  waitlist: v.optional(
+    v.array(
+      v.object({
+        leagueSlug: v.string(),
+        seasonSlug: v.string(),
+        teamName: v.string(),
+        captainEmail: v.string(),
+      }),
+    ),
+  ),
+  freeAgents: v.optional(
+    v.array(v.object({ leagueSlug: v.string(), seasonSlug: v.string(), email: v.string() })),
+  ),
+};
+
+function batchOrganizationSlug({
+  tenant,
+  organizationSlug,
+}: {
+  tenant?: { organization: { slug: string } } | undefined;
+  organizationSlug?: string | undefined;
+}): string {
+  const slug = tenant?.organization.slug ?? organizationSlug;
+  if (slug === undefined || (tenant !== undefined && organizationSlug !== undefined)) {
+    throw new Error('A batch names exactly one of tenant and organizationSlug');
+  }
+  return slug;
+}
+
+const batchResultValidator = v.object({ slug: v.string(), teamIds: v.array(v.id('teams')) });
+
+// A test's whole seed in one CLI call, since each call starts a CLI process. `users` sign up
+// through Better Auth's own sign-up, so each password gets a real hash; `accounts` store none.
+export const seedBatch = internalAction({
+  args: { ...batchRowsFields, users: v.optional(v.array(seedUserValidator)) },
+  returns: batchResultValidator,
+  handler: async (ctx, { users = [], ...rows }): Promise<Infer<typeof batchResultValidator>> => {
+    assertTestDeployment();
+    batchOrganizationSlug(rows);
+    const auth = createAuth(ctx);
+    for (const { name, email, password } of users) {
+      // The 18+ field is this app's (convex/auth.ts), so Better Auth's body type does not list it.
+      const body = { name, email, password, [ADULT_CONFIRMATION_FIELD]: true };
+      await auth.api.signUpEmail({ body });
+    }
+    return await ctx.runMutation(internal.testing.seedBatchRows, rows);
+  },
+});
+
+/** Teams come before the waitlist, so a waitlist entry can join the season they fill. */
+export const seedBatchRows = internalMutation({
+  args: batchRowsFields,
+  returns: batchResultValidator,
+  handler: async (ctx, rows) => {
+    assertTestDeployment();
+    const slug = batchOrganizationSlug(rows);
+    if (rows.tenant) {
+      await insertTenant(ctx, { ...rows.tenant, leagues: rows.tenant.leagues.map(withDivision) });
+    }
+    const organization = await organizationBySlug(ctx, slug);
+    for (const account of rows.accounts ?? []) await createAccount(ctx, account);
+    for (const { email, role, leagueSlugs = [] } of rows.memberships ?? []) {
+      const user = await userByEmail(ctx, email);
+      await assertNoMembership(ctx, user, organization);
+      const leagueIds = [];
+      for (const leagueSlug of leagueSlugs) {
+        leagueIds.push((await leagueBySlug(ctx, organization, leagueSlug))._id);
+      }
+      await insertMembership(ctx, user._id, organization._id, role, leagueIds);
+    }
+    for (const { leagueSlug, status, ...season } of rows.seasons ?? []) {
+      const league = await leagueBySlug(ctx, organization, leagueSlug);
+      await insertSeason(ctx, league, withPlayersPerSide(league, season), status);
+    }
+    const teamIds = [];
+    for (const team of rows.teams ?? []) {
+      const season = await seasonBySlugs(ctx, slug, team.leagueSlug, team.seasonSlug);
+      const captain = await userByEmail(ctx, team.captainEmail);
+      const teamId = await insertTeamWithCaptain(ctx, season, {
+        name: team.name,
+        captainUserId: captain._id,
+      });
+      teamIds.push(teamId);
+      for (const email of team.playerEmails ?? []) {
+        const player = await userByEmail(ctx, email);
+        await addRosterEntry(ctx, await teamById(ctx, teamId), {
+          userId: player._id,
+          source: 'invite',
+          addedByUserId: captain._id,
+        });
+      }
+      for (const { email, expiresAt, token } of team.invites ?? []) {
+        await insertTeamInvite(ctx, await teamById(ctx, teamId), {
+          email: normaliseInviteEmail(email),
+          tokenHash: await hashInviteToken(token ?? generateInviteToken()),
+          expiresAt,
+          invitedByUserId: captain._id,
+        });
+      }
+      for (const { guardianEmail, minorName } of team.minors ?? []) {
+        const guardian = await userByEmail(ctx, guardianEmail);
+        await addMinorEntry(ctx, await teamById(ctx, teamId), {
+          guardianUserId: guardian._id,
+          minorName,
+          source: 'invite',
+          addedByUserId: captain._id,
+        });
+      }
+    }
+    for (const entry of rows.waitlist ?? []) {
+      const season = await seasonBySlugs(ctx, slug, entry.leagueSlug, entry.seasonSlug);
+      const captain = await userByEmail(ctx, entry.captainEmail);
+      const result = await registerTeamOrJoinWaitlist(ctx, season, {
+        name: entry.teamName,
+        captainUserId: captain._id,
+      });
+      if (result.status !== 'waitlisted') throw new Error('The season is not full');
+    }
+    for (const { leagueSlug, seasonSlug, email } of rows.freeAgents ?? []) {
+      const season = await seasonBySlugs(ctx, slug, leagueSlug, seasonSlug);
+      await insertFreeAgent(ctx, season, (await userByEmail(ctx, email))._id);
+    }
+    return { slug, teamIds };
+  },
+});
+
+// The roster writers read the team's counters from the document they are given.
+async function teamById(ctx: Pick<MutationCtx, 'db'>, teamId: Id<'teams'>): Promise<Doc<'teams'>> {
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) throw new Error('No team has this id');
+  return team;
+}
+
+async function leagueBySlug(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  slug: string,
+): Promise<Doc<'leagues'>> {
+  const league = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_slug', (q) =>
+      q.eq('organizationId', organization._id).eq('slug', slug),
+    )
+    .unique();
+  if (!league) throw new Error(`No league has the slug ${JSON.stringify(slug)}`);
+  return league;
+}
 
 export const addToTeam = internalMutation({
   args: { teamId: v.id('teams'), email: v.string() },
@@ -694,14 +956,13 @@ export const addInvite = internalMutation({
       if (!league) throw new Error(`No league named ${JSON.stringify(name)}`);
       leagueIds.push(league._id);
     }
-    await ctx.db.insert('invites', {
+    await insertPendingInvite(ctx, {
       organizationId: organization._id,
       email: normaliseInviteEmail(email),
       role,
       leagueIds,
       tokenHash: await hashInviteToken(token ?? generateInviteToken()),
       expiresAt,
-      status: 'pending',
     });
     return null;
   },

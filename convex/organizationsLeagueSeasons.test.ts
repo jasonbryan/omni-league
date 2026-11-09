@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, setTeamCounts } from './test.setup';
 
 function season(slug: string, startDate: string, overrides: Partial<NewSeason> = {}): NewSeason {
   return {
@@ -84,7 +84,7 @@ describe('organizations.listPublicLeagues seasons', () => {
     expect(beta?.seasons).toEqual([]);
   });
 
-  test('holds the dates the page needs for the status and none of the roster fields', async () => {
+  test('holds the dates and the full flag the page needs for the status, and none of the roster fields', async () => {
     const t = await setup();
     await add(t, 'alpha', [
       season('s1', '2030-01-01', { endDate: '2030-03-01', registrationDeadline: '2029-12-15' }),
@@ -97,8 +97,29 @@ describe('organizations.listPublicLeagues seasons', () => {
         startDate: '2030-01-01',
         endDate: '2030-03-01',
         registrationDeadline: '2029-12-15',
+        isFull: false,
       },
     ]);
+  });
+
+  test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
+    const t = await setup();
+    await add(t, 'alpha', [
+      season('full', '2030-01-01', { maxTeams: 2 }),
+      season('waiting', '2030-02-01', { maxTeams: 4 }),
+      season('room', '2030-03-01', { maxTeams: 4 }),
+    ]);
+    await setTeamCounts(t, {
+      full: { teamCount: 2 },
+      waiting: { teamCount: 2, waitlistCount: 1 },
+      room: { teamCount: 2 },
+    });
+    const [alpha] = await rows(t);
+    expect(Object.fromEntries(alpha?.seasons?.map((s) => [s.slug, s.isFull]) ?? [])).toEqual({
+      full: true,
+      waiting: true,
+      room: false,
+    });
   });
 
   test('leaves out draft seasons', async () => {

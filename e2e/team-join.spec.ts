@@ -6,8 +6,9 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
+import { seedBatch, type SeedBatch } from './support/seed-batch';
 import { signUp } from './support/session';
-import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, newTenant, type Tenant } from './support/tenant';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -24,8 +25,17 @@ const heading = (page: Page) => main(page).getByRole('heading', { level: 1 });
 const acceptButton = (page: Page) => main(page).getByRole('button', { name: 'Accept invite' });
 const newToken = () => randomBytes(32).toString('base64url');
 
-async function seedTeam(captain: TestUser): Promise<{ tenant: Tenant; teamId: string }> {
-  const tenant = await seedTenant({
+const SEASON_DATES = {
+  startDate: dateFromToday(40),
+  endDate: dateFromToday(100),
+  registrationDeadline: dateFromToday(20),
+};
+
+async function seedTeam(
+  captain: TestUser,
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamId: string }> {
+  const { tenant, args } = newTenant({
     name: 'E2E Team Join',
     locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
     leagues: [
@@ -37,17 +47,22 @@ async function seedTeam(captain: TestUser): Promise<{ tenant: Tenant; teamId: st
       },
     ],
   });
-  await seedSeasons(tenant, LEAGUE_SLUG, [
+  const { teamIds } = await seedBatch(
     {
-      name: 'Summer Open',
-      slug: SEASON,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
+      tenant: args,
+      seasons: [{ leagueSlug: LEAGUE_SLUG, name: 'Summer Open', slug: SEASON, ...SEASON_DATES }],
+      teams: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: SEASON,
+          name: 'Sand Sharks',
+          captainEmail: captain.email,
+        },
+      ],
     },
-  ]);
-  const teamId = await addTeam(tenant, 'Sand Sharks', captain);
-  return { tenant, teamId };
+    ...extra,
+  );
+  return { tenant, teamId: teamIds[0] };
 }
 
 async function addTeam(tenant: Tenant, name: string, captain: TestUser): Promise<string> {
@@ -325,38 +340,34 @@ test.describe('Join a team: a full team', () => {
   test('an invite from before the team filled is refused as a whole, says nothing was added, and stays pending', async ({
     page,
   }, testInfo) => {
-    const captain = await seedUser(newUser('Captain'));
-    const { tenant } = await seedTeam(captain);
-    await convexRun('testing:seedSeason', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      name: 'Roster Cap',
-      slug: 'roster-cap',
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
-      minimumRosterSize: 4,
-      maxRosterSize: 4,
-      status: 'published',
-    });
-    const fullCaptain = await seedUser(newUser('Captain'));
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: 'roster-cap',
-      name: 'Sand Sharks',
-      captainEmail: fullCaptain.email,
-    })) as { teamId: string };
-    for (const player of [await seedUser(newUser('Player')), await seedUser(newUser('Player'))]) {
-      await convexRun('testing:addToTeam', { teamId, email: player.email });
-    }
     const joiner = newUser('Joiner');
     await signUp(page, joiner);
-    const token = await seedInvite(teamId, joiner.email);
-    await convexRun('testing:addMinorToTeam', {
-      teamId,
-      guardianEmail: fullCaptain.email,
-      minorName: 'Theo Bell',
+    const captain = newUser('Captain');
+    const fullCaptain = newUser('Captain');
+    const players = [newUser('Player'), newUser('Player')];
+    const token = newToken();
+    await seedTeam(captain, {
+      accounts: [captain, fullCaptain, ...players],
+      seasons: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          name: 'Roster Cap',
+          slug: 'roster-cap',
+          ...SEASON_DATES,
+          maxRosterSize: 4,
+        },
+      ],
+      teams: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: 'roster-cap',
+          name: 'Sand Sharks',
+          captainEmail: fullCaptain.email,
+          playerEmails: players.map((player) => player.email),
+          invites: [{ email: joiner.email, expiresAt: Date.now() + 12 * DAY, token }],
+          minors: [{ guardianEmail: fullCaptain.email, minorName: 'Theo Bell' }],
+        },
+      ],
     });
 
     await openLink(page, token);

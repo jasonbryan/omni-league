@@ -44,7 +44,7 @@ describe('auth guards', () => {
       expect(router.url).toBe('/app');
     });
 
-    it('waits for the session store before deciding', async () => {
+    it('lets a kept session in at once, before the session store answers', async () => {
       client = new FakeAuthClient();
       TestBed.configureTestingModule({
         providers: [
@@ -56,11 +56,9 @@ describe('auth guards', () => {
         ],
       });
       const harness = await RouterTestingHarness.create();
-      const navigation = harness.navigateByUrl('/app');
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      client.emitSession({ id: 's1' });
-      await navigation;
+      await harness.navigateByUrl('/app');
       expect(TestBed.inject(Router).url).toBe('/app');
+      expect(client.sessionListeners).toBe(1);
     });
   });
 
@@ -69,6 +67,23 @@ describe('auth guards', () => {
       const { harness, router } = await setup(null);
       await harness.navigateByUrl(`${page}?returnTo=%2Fleagues%2Fx%2Fregister`);
       expect(router.url).toBe(`${page}?returnTo=%2Fleagues%2Fx%2Fregister`);
+    });
+
+    it('sends a kept session on, before the session store answers', async () => {
+      client = new FakeAuthClient();
+      TestBed.configureTestingModule({
+        providers: [
+          provideFakeAuthClient(client),
+          provideRouter([
+            { path: 'sign-up', component: Page, canActivate: [redirectSignedIn] },
+            { path: 'sign-in', component: Page, canActivate: [redirectSignedIn] },
+            { path: 'app', component: Page },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(page);
+      expect(TestBed.inject(Router).url).toBe('/app');
     });
 
     it.each([

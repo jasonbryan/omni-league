@@ -50,8 +50,33 @@ jobs:
     if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    # A matrix combines its legs' outputs under one name and the last leg to finish wins, so each
+    # leg writes only the outputs named for its own shard.
     outputs:
-      e2e_failures: ${{ steps.failures.outputs.failures }}
+      e2e_failures_1: ${{ matrix.shard == 1 && steps.failures.outputs.failures || '' }}
+      e2e_failures_2: ${{ matrix.shard == 2 && steps.failures.outputs.failures || '' }}
+      e2e_failures_3: ${{ matrix.shard == 3 && steps.failures.outputs.failures || '' }}
+      e2e_failures_4: ${{ matrix.shard == 4 && steps.failures.outputs.failures || '' }}
+      e2e_failures_5: ${{ matrix.shard == 5 && steps.failures.outputs.failures || '' }}
+      e2e_failures_6: ${{ matrix.shard == 6 && steps.failures.outputs.failures || '' }}
+      e2e_failures_7: ${{ matrix.shard == 7 && steps.failures.outputs.failures || '' }}
+      e2e_failures_8: ${{ matrix.shard == 8 && steps.failures.outputs.failures || '' }}
+      e2e_failures_9: ${{ matrix.shard == 9 && steps.failures.outputs.failures || '' }}
+      e2e_failures_10: ${{ matrix.shard == 10 && steps.failures.outputs.failures || '' }}
+      e2e_done_1: ${{ matrix.shard == 1 && steps.done.outputs.done || '' }}
+      e2e_done_2: ${{ matrix.shard == 2 && steps.done.outputs.done || '' }}
+      e2e_done_3: ${{ matrix.shard == 3 && steps.done.outputs.done || '' }}
+      e2e_done_4: ${{ matrix.shard == 4 && steps.done.outputs.done || '' }}
+      e2e_done_5: ${{ matrix.shard == 5 && steps.done.outputs.done || '' }}
+      e2e_done_6: ${{ matrix.shard == 6 && steps.done.outputs.done || '' }}
+      e2e_done_7: ${{ matrix.shard == 7 && steps.done.outputs.done || '' }}
+      e2e_done_8: ${{ matrix.shard == 8 && steps.done.outputs.done || '' }}
+      e2e_done_9: ${{ matrix.shard == 9 && steps.done.outputs.done || '' }}
+      e2e_done_10: ${{ matrix.shard == 10 && steps.done.outputs.done || '' }}
     env:
       E2E_WEBKIT: ${{ inputs.webkit == true && '1' || '0' }}
     steps:
@@ -86,14 +111,18 @@ jobs:
           fi
           exit "$drift"
       # Runs after a drift failure too, so one run reports both.
+      # The global timeout ends a stuck run as a failed step, so the steps below still run before the
+      # job limit cancels the leg.
       - name: e2e
         id: e2e
         if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           if [ "$E2E_WEBKIT" = "1" ]; then
-            npm run e2e -- --project=webkit-mobile
+            npm run e2e -- --project=webkit-mobile --shard="$SHARD/10" --global-timeout=1800000
           else
-            npm run e2e
+            npm run e2e -- --shard="$SHARD/10" --global-timeout=1800000
           fi
       - name: e2e failures
         id: failures
@@ -103,13 +132,19 @@ jobs:
         if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
             e2e/screenshots/
           retention-days: 7
           if-no-files-found: ignore
+      # A leg cancelled at the job limit or by hand never reaches this step, which is how
+      # nightly-issue tells a leg that did not finish from one that failed.
+      - name: done
+        id: done
+        if: ${{ !cancelled() }}
+        run: echo 'done=1' >> "$GITHUB_OUTPUT"
 
   # The specs that need a production build, each in its own Playwright run so every spec gets its
   # own project and report folder (E2E_RUN_NAME). Runs after the first use !cancelled(), so one
@@ -144,7 +179,7 @@ jobs:
             echo "::error::the local Convex backend did not answer /version within 60 s"
             exit 1
           fi
-          # /version answers before `convex dev` has pushed the functions that seed-demo runs.
+          # /version answers before `convex dev` has pushed the functions that setup and seed-demo run.
           for _ in $(seq 60); do
             if grep -q 'Convex functions ready!' "$RUNNER_TEMP/convex.log"; then exit 0; fi
             sleep 1
@@ -152,6 +187,8 @@ jobs:
           cat "$RUNNER_TEMP/convex.log"
           echo "::error::convex dev did not push the functions within 60 s"
           exit 1
+      - name: e2e setup
+        run: node scripts/e2e-convex.mjs setup
       - name: seed demo
         run: node scripts/e2e-convex.mjs seed-demo
       - name: build
@@ -168,7 +205,7 @@ jobs:
             exit 1
           fi
       - name: production-mobile
-        timeout-minutes: 3
+        timeout-minutes: 4
         env:
           E2E_RUN_NAME: production-mobile
           E2E_BASE_URL: http://localhost:4000
@@ -217,10 +254,12 @@ jobs:
           if-no-files-found: ignore
 
   # issues: write for this job only; no checkout, no other secret.
+  # always() with the explicit results, because a job that hit its time limit concludes `cancelled`
+  # and the docs do not say whether !cancelled() holds downstream of one.
   nightly-issue:
     name: nightly-issue
     needs: [e2e, e2e-production]
-    if: ${{ !cancelled() && (needs.e2e.result == 'failure' || needs.e2e-production.result == 'failure') && github.event_name == 'schedule' }}
+    if: ${{ always() && github.event_name == 'schedule' && (needs.e2e.result == 'failure' || needs.e2e.result == 'cancelled' || needs.e2e-production.result == 'failure' || needs.e2e-production.result == 'cancelled') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -228,7 +267,29 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      E2E_FAILURES: ${{ needs.e2e.outputs.e2e_failures }}
+      E2E_RESULT: ${{ needs.e2e.result }}
+      PRODUCTION_RESULT: ${{ needs.e2e-production.result }}
+      E2E_SHARDS: 10
+      E2E_FAILURES_1: ${{ needs.e2e.outputs.e2e_failures_1 }}
+      E2E_FAILURES_2: ${{ needs.e2e.outputs.e2e_failures_2 }}
+      E2E_FAILURES_3: ${{ needs.e2e.outputs.e2e_failures_3 }}
+      E2E_FAILURES_4: ${{ needs.e2e.outputs.e2e_failures_4 }}
+      E2E_FAILURES_5: ${{ needs.e2e.outputs.e2e_failures_5 }}
+      E2E_FAILURES_6: ${{ needs.e2e.outputs.e2e_failures_6 }}
+      E2E_FAILURES_7: ${{ needs.e2e.outputs.e2e_failures_7 }}
+      E2E_FAILURES_8: ${{ needs.e2e.outputs.e2e_failures_8 }}
+      E2E_FAILURES_9: ${{ needs.e2e.outputs.e2e_failures_9 }}
+      E2E_FAILURES_10: ${{ needs.e2e.outputs.e2e_failures_10 }}
+      E2E_DONE_1: ${{ needs.e2e.outputs.e2e_done_1 }}
+      E2E_DONE_2: ${{ needs.e2e.outputs.e2e_done_2 }}
+      E2E_DONE_3: ${{ needs.e2e.outputs.e2e_done_3 }}
+      E2E_DONE_4: ${{ needs.e2e.outputs.e2e_done_4 }}
+      E2E_DONE_5: ${{ needs.e2e.outputs.e2e_done_5 }}
+      E2E_DONE_6: ${{ needs.e2e.outputs.e2e_done_6 }}
+      E2E_DONE_7: ${{ needs.e2e.outputs.e2e_done_7 }}
+      E2E_DONE_8: ${{ needs.e2e.outputs.e2e_done_8 }}
+      E2E_DONE_9: ${{ needs.e2e.outputs.e2e_done_9 }}
+      E2E_DONE_10: ${{ needs.e2e.outputs.e2e_done_10 }}
       PRODUCTION_FAILURES: ${{ needs.e2e-production.outputs.e2e_failures }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       COMMIT: ${{ github.sha }}
@@ -238,15 +299,49 @@ jobs:
         run: |
           list() {
             local parsed
-            parsed="$(printf '%s' "${1:-[]}" | jq -c 'if type == "array" then . else [] end' 2>/dev/null)" || parsed='[]'
+            parsed="$(printf '%s' "${1:-[]}" | jq -c 'if type == "array" then map(select(type == "string")) else [] end' 2>/dev/null)" || parsed='[]'
             printf '%s' "${parsed:-[]}"
           }
-          failures="$(jq -cn --argjson a "$(list "${E2E_FAILURES:-}")" --argjson b "$(list "${PRODUCTION_FAILURES:-}")" '$a + $b')"
-          body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" '
-            "Nightly e2e: FAIL (main \($commit))\n\nRun: \($run)\n\n"
+          failures='[]'
+          unfinished='[]'
+          for shard in $(seq "$E2E_SHARDS"); do
+            failures_name="E2E_FAILURES_$shard"
+            done_name="E2E_DONE_$shard"
+            failures="$(jq -cn --argjson a "$failures" --argjson b "$(list "${!failures_name:-}")" '$a + $b')"
+            if [ "$E2E_RESULT" != skipped ] && [ -z "${!done_name:-}" ]; then
+              unfinished="$(jq -cn --argjson a "$unfinished" --argjson n "$shard" '$a + [$n]')"
+            fi
+          done
+          failures="$(jq -cn --argjson a "$failures" --argjson b "$(list "${PRODUCTION_FAILURES:-}")" '$a + $b')"
+          production_unfinished=false
+          [ "$PRODUCTION_RESULT" = cancelled ] && production_unfinished=true
+          cancelled=false
+          if [ "$E2E_RESULT" = cancelled ] || [ "$PRODUCTION_RESULT" = cancelled ] || [ "$unfinished" != '[]' ]; then
+            cancelled=true
+          fi
+          body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" \
+            --argjson shards "$E2E_SHARDS" --argjson unfinished "$unfinished" \
+            --argjson productionUnfinished "$production_unfinished" --argjson cancelled "$cancelled" '
+            def is_more: test("^and [0-9]+ more$");
+            def is_problem: startswith("expected tests: ") or startswith("run error: ");
+            def cap:
+              (map(select(is_more)) | map(capture("^and (?<n>[0-9]+) more$").n | tonumber) | add // 0) as $legsMore
+              | (map(select((is_more or is_problem) | not)) | sort) as $tests
+              | ((($tests | length) - 30) | if . > 0 then . else 0 end) as $overflow
+              | ($overflow + $legsMore) as $more
+              | map(select(startswith("expected tests: ")))
+                + $tests[:30]
+                + (if $more > 0 then ["and \($more) more"] else [] end)
+                + map(select(startswith("run error: ")));
+            def tick: [96] | implode;
+            def code: tick + . + tick;
+            ($unfinished | map("- " + ("e2e" | code) + " shard \(.) of \($shards) did not finish")
+              + (if $productionUnfinished then ["- " + ("e2e-production" | code) + " did not finish"] else [] end)) as $notes
+            | "Nightly e2e: \(if $cancelled then "CANCELLED" else "FAIL" end) (main \($commit))\n\nRun: \($run)\n\n"
+            + (if ($notes | length) > 0 then ($notes | join("\n")) + "\n\n" else "" end)
             + (if ($failures | length) > 0
-               then "Failing tests:\n" + ($failures | map("- `" + gsub("`"; "\u0027") + "`") | join("\n"))
-               else "No failing test was recorded: a step other than a Playwright run failed. See the run." end)')"
+               then "Failing tests:\n" + ($failures | cap | map("- " + (gsub(tick; ([39] | implode)) | code)) | join("\n"))
+               else "No failing test was recorded: a step other than a Playwright run failed, or a job did not finish. See the run." end)')"
           number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
             | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
           if [ -n "$number" ]; then

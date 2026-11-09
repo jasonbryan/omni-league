@@ -4,6 +4,8 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { components, internal } from './_generated/api';
 import schema from './schema';
+import { recountMemberships } from './lib/memberships';
+import { ACCOUNTS_PER_SEED_CALL } from './lib/seedCallLimits';
 import { AUTH_COMPONENT_TABLES } from './lib/testOnly';
 import { modules } from './test.setup';
 
@@ -329,5 +331,131 @@ describe('testing:addMembership', () => {
         role: 'orgAdmin',
       }),
     ).rejects.toThrow(/No account/);
+  }, 30_000);
+});
+
+describe('testing:seedStaff', () => {
+  const SEED = { organizationSlug: TENANT.organization.slug, count: 3, emailPrefix: 'staff' };
+  const organization = (t: T) =>
+    t.run(async (ctx) => (await ctx.db.query('organizations').first())!);
+
+  async function seededTenant() {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+    ['empty', ''],
+    ['"TRUE"', 'TRUE'],
+  ])(
+    'refuses with IS_TEST %s even for a real organization, and writes nothing',
+    async (_, value) => {
+      const t = await seededTenant();
+      const before = await appCounts(t);
+      vi.stubEnv('IS_TEST', value);
+      await expect(t.mutation(internal.testing.seedStaff, SEED)).rejects.toThrow(/IS_TEST/);
+      expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
+      expect(await appCounts(t)).toEqual(before);
+    },
+    30_000,
+  );
+
+  test('writes league organizer memberships for distinct accounts, and the counter equals a recount', async () => {
+    const t = await seededTenant();
+    const before = await appCounts(t);
+    await t.mutation(internal.testing.seedStaff, SEED);
+    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+    expect(memberships).toHaveLength(3);
+    expect(memberships.every((m) => m.role === 'leagueOrganizer' && m.leagueIds.length === 0)).toBe(
+      true,
+    );
+    expect(new Set(memberships.map((m) => m.userId)).size).toBe(3);
+    const names = await t.run(async (ctx) =>
+      Promise.all(memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name)),
+    );
+    expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003']);
+    const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
+    expect(emails).toEqual(
+      expect.arrayContaining(['staff-001@example.test', 'staff-003@example.test']),
+    );
+    expect((await appCounts(t)).users).toBe(before.users + 3);
+    const row = await organization(t);
+    expect(row.staffCount).toBe(3);
+    expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(3);
+  }, 30_000);
+
+  const membershipCount = (t: T) =>
+    t.run(async (ctx) => (await ctx.db.query('memberships').collect()).length);
+
+  test('a count above the per-call limit throws and writes nothing, and the limit itself succeeds', async () => {
+    const t = await seededTenant();
+    const before = await appCounts(t);
+    await expect(
+      t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL + 1 }),
+    ).rejects.toThrow(/at most 25/);
+    expect(await membershipCount(t)).toBe(0);
+    expect(await appCounts(t)).toEqual(before);
+    await t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL });
+    expect(await membershipCount(t)).toBe(ACCOUNTS_PER_SEED_CALL);
+  }, 30_000);
+
+  test.each([
+    ['from 0', { from: 0, count: 1 }],
+    ['from 1.5', { from: 1.5, count: 1 }],
+    ['from -1', { from: -1, count: 1 }],
+    ['count 0', { count: 0 }],
+    ['count 1.5', { count: 1.5 }],
+  ])(
+    '%s throws and writes nothing',
+    async (_, extra) => {
+      const t = await seededTenant();
+      const before = await appCounts(t);
+      await expect(t.mutation(internal.testing.seedStaff, { ...SEED, ...extra })).rejects.toThrow(
+        /positive integer/,
+      );
+      expect(await membershipCount(t)).toBe(0);
+      expect(await appCounts(t)).toEqual(before);
+    },
+    30_000,
+  );
+
+  test('two calls number the staff on from one another, and the counter equals a recount', async () => {
+    const t = await seededTenant();
+    for (const from of [1, 3]) {
+      await t.mutation(internal.testing.seedStaff, { ...SEED, from, count: 2 });
+    }
+    const names = await t.run(async (ctx) => {
+      const memberships = await ctx.db.query('memberships').collect();
+      return Promise.all(memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name));
+    });
+    expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003', 'Staff 004']);
+    const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
+    expect(emails).toEqual(
+      expect.arrayContaining(['staff-001@example.test', 'staff-004@example.test']),
+    );
+    const row = await organization(t);
+    expect(row.staffCount).toBe(4);
+    expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(4);
+  }, 30_000);
+
+  test('every seeded user is an account with no credential', async () => {
+    const t = await seededTenant();
+    const before = await authDocs(t, 'account');
+    await t.mutation(internal.testing.seedStaff, SEED);
+    expect(await authDocs(t, 'account')).toEqual(before);
+  }, 30_000);
+
+  test('refuses an unknown organization slug and writes nothing', async () => {
+    const t = await seededTenant();
+    const before = await appCounts(t);
+    await expect(
+      t.mutation(internal.testing.seedStaff, { ...SEED, organizationSlug: 'no-such-org' }),
+    ).rejects.toThrow(/No organization/);
+    expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
+    expect(await appCounts(t)).toEqual(before);
   }, 30_000);
 });

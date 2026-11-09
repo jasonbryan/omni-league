@@ -103,6 +103,25 @@ describe('failingTests', () => {
   });
 });
 
+describe('a run that reaches the Playwright global timeout', () => {
+  const fixture = join(import.meta.dirname, 'fixtures', 'e2e-failures', 'global-timeout-60s.json');
+
+  it('lists a run error line for each timeout message and no test', () => {
+    assert.deepEqual(failuresFromFile(fixture), [
+      'run error: Timed out waiting 60s for the test suite to run',
+      'run error: Timed out waiting 60s for the teardown for test suite to run',
+    ]);
+  });
+
+  it('prints those lines as the failures output the nightly issue reads', () => {
+    const result = spawnSync(process.execPath, [script, fixture], { encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    const listed = JSON.parse(result.stdout.slice('failures='.length));
+    assert.equal(listed.length, 2);
+    assert.match(listed[0], /^run error: Timed out waiting \d+s for the test suite to run$/);
+  });
+});
+
 describe('failuresFromFile', () => {
   it('reads a report file', () => {
     const path = join(scratch, 'results.json');

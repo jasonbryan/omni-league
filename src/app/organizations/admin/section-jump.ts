@@ -37,7 +37,11 @@ export function injectSectionJump(
     cancelPending = cancel;
     onLaterChoiceOrScroll(
       document,
-      { isOwnFocus: (element) => element === section, signal: listening.signal },
+      {
+        isOwnFocus: (element) => element === section,
+        isOwnArea: (element) => section.contains(element),
+        signal: listening.signal,
+      },
       cancel,
     );
   }

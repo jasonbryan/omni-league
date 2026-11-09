@@ -14,6 +14,7 @@ import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
+import { backfillPendingInviteCounts, insertPendingInvite } from './lib/inviteWrites';
 import { backfillStaffCounts, insertMembership } from './lib/memberships';
 import { verifyPassword } from './lib/password';
 import type { Gender, StandardLevel } from './lib/divisions';
@@ -660,6 +661,7 @@ const resultValidator = v.object({
     pendingInviteCounts: v.number(),
     waitlistCounts: v.number(),
     staffCounts: v.number(),
+    staffInviteCounts: v.number(),
     draftLeagueCounts: v.number(),
   }),
   updated: v.object({ organizations: v.number(), leagues: v.number() }),
@@ -786,6 +788,7 @@ export const insertDemoData = internalMutation({
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
       waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
       staffCounts: await backfillStaffCounts(ctx),
+      staffInviteCounts: await backfillPendingInviteCounts(ctx),
       draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
     };
     updated.leagues = await renameDemoLeagues(ctx);
@@ -1162,14 +1165,13 @@ export const insertDemoInvite = internalMutation({
       )
       .first();
     if (pending) return 0;
-    await ctx.db.insert('invites', {
+    await insertPendingInvite(ctx, {
       organizationId: organization._id,
       email: DEMO_INVITE.email,
       role: DEMO_INVITE.role,
       leagueIds,
       tokenHash,
       expiresAt: Date.now() + INVITE_LIFETIME_MS,
-      status: 'pending',
     });
     return 1;
   },

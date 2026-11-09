@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { test } from '@playwright/test';
 import { LOCAL_CONVEX_URL } from './env';
 import timeouts from './convex-timeouts.json';
 
@@ -18,6 +19,23 @@ export async function convexRun(
   name: string,
   args: Record<string, unknown> = {},
 ): Promise<unknown> {
+  // A step puts each call's duration in the JSON report and the trace; a worker fixture has no test
+  // to hold one.
+  return inATest()
+    ? test.step(`convexRun ${name}`, () => runOnce(name, args))
+    : runOnce(name, args);
+}
+
+function inATest(): boolean {
+  try {
+    test.info();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function runOnce(name: string, args: Record<string, unknown>): Promise<unknown> {
   let stdout: string;
   try {
     ({ stdout } = await promisify(execFile)(

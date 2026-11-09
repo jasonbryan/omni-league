@@ -105,6 +105,7 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Write the failing test for each acceptance criterion first, then the code.
 - Build UI against the design system: `src/styles/tokens.css`, `design/mockup-kit/`, [Angular conventions](../conventions/angular.md), and the approved mockups in `design/mockups/` as references. Where an approved mockup covers the screen, match it. Use tokens only: no new colours or tokens, and no new patterns where an existing one fits.
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
+- A production build over the 500 kB `initial` budget (`bundle initial exceeded maximum budget`) stops the work the same way: the implementer reports the `Initial total` and the inputs that add the bytes (`--stats-json`), and the orchestrator moves the issue to `status:blocked` with `Needs owner: the initial bundle would be <n> kB, over the 500 kB budget. Trim or raise?`. From 490 to 500 kB the build warns and passes, and the PR body states the `Initial total` and the kB the PR adds.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
 - Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result in the PR Evidence block, or the empty list when the PR has no own specs. The result is for the head SHA pushed last, including after a review fix: a push after the run means the run is repeated or the evidence is marked stale.
@@ -172,6 +173,8 @@ The PR reviewer reads the full diff against the issue and the conventions files,
 
 It checks that the latest own-specs run on the head SHA under review, in the PR Evidence block or the tester's `Test: PASS` Evidence (a tester push moves the head), lists the [own e2e specs](#own-e2e-specs) and passed. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list and, for a bump, the version diff its rule reads (`package.json`, or `package-lock.json` on a lockfile-only Dependabot PR). For a `low-risk fix push` record, it re-checks that `git diff <last Test: PASS sha> <head>` is only safe changes, and that the stand-in checks and own-specs run are on that head. A classification that does not hold is a **blocking** finding.
 
+A PR that raises or removes the production `initial` `maximumError` in `angular.json` without a link to the owner's record is a **blocking** finding. The record is the owner's own issue comment (or, on a Dependabot PR, a comment on that PR), or the owner's chat message quoted exactly there by the orchestrator ([Approval in chat](#3-gates)); an agent's summary does not count. Tightening a budget needs no record.
+
 It compares the PR's seed change with the issue's own Demo data criterion. A PR that does not deliver it is a **blocking** finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 
 On `CHANGES`, the implementer fixes it, the orchestrator re-classifies the new head SHA ([Low-risk PRs](#low-risk-prs)), the tester re-runs unless the PR is still low-risk, and the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
@@ -233,7 +236,7 @@ The **batch SHA** is the SHA of the last green batch run. It covers a `main` SHA
 
 Merges continue while a run is in progress; a PR merged during the run belongs to the next batch.
 
-**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git fetch origin main`, `git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 25 CI minutes, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check runs on a `main` SHA that the batch SHA covers ([batch SHA rule](#batch-run)). The nightly `E2E` run stays as the backstop.
+**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git fetch origin main`, `git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 21 minutes of wall clock and 126 runner minutes over 11 jobs, none billed on a public repository, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check runs on a `main` SHA that the batch SHA covers ([batch SHA rule](#batch-run)). The nightly `E2E` run stays as the backstop.
 
 **On failure.** The orchestrator re-runs the failing specs once. A spec that passes on the re-run is flaky: the batch counts as `PASS`, and a `type:bug` issue records the flaky test. A spec that fails twice is a regression:
 
@@ -289,6 +292,8 @@ Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`, and the orches
 ## Escalation
 
 When a decision belongs to the owner (an ambiguous requirement, a gate, a loop that hits its cap), the agent moves the issue to `status:blocked`, comments the question with the options and a recommendation, and the orchestrator relays it to the owner in chat. Agents do not guess at product requirements.
+
+A Dependabot PR that pushes the initial bundle over 500 kB fails `ci` and has no issue to block. The orchestrator posts the `Needs owner:` question (trim or raise) on the PR, reports it right away ([Reporting](#reporting-to-the-owner)), and leaves the PR open until the owner answers. The record may be the owner's comment on that PR, or the owner's chat message quoted exactly there by the orchestrator. Either answer, trim or raise, goes in its own PR that links the record, and the Dependabot PR is then rebased.
 
 ## Changing this process
 

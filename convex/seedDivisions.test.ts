@@ -27,6 +27,7 @@ const ZERO_BACKFILL = {
   pendingInviteCounts: 0,
   waitlistCounts: 0,
   staffCounts: 0,
+  staffInviteCounts: 0,
   draftLeagueCounts: 0,
 };
 

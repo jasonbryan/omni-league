@@ -670,3 +670,87 @@ describe('waiting entries are not teams', () => {
     expect(await as(s, 'late').query(api.teams.listMine, {})).toEqual([]);
   });
 });
+
+describe('isFull on the public lists', () => {
+  const SEASON_SLUG = SLUGS.seasonSlug;
+  const of = <Row extends { slug: string; isFull?: boolean }>(rows: Row[] | undefined) =>
+    rows?.find((row) => row.slug === SEASON_SLUG)?.isFull;
+
+  async function listedIsFull(s: Setup) {
+    const { orgSlug, leagueSlug } = SLUGS;
+    const league = (rows: { slug: string; seasons?: { slug: string; isFull?: boolean }[] }[]) =>
+      of(rows.find((row) => row.slug === leagueSlug)?.seasons);
+    return {
+      listPublicLeagues: league(
+        (await s.t.query(api.organizations.listPublicLeagues, { slug: orgSlug, page: 1 })).rows,
+      ),
+      searchLeagues: league((await s.t.query(api.search.leagues, { q: 'coed' })).rows),
+      listPublic: of(
+        (await s.t.query(api.seasons.listPublic, { orgSlug, leagueSlug, page: 1 })).rows,
+      ),
+      leaguePage: of(
+        (await s.t.query(api.leagues.getPublicPage, { orgSlug, leagueSlug }))?.seasons,
+      ),
+      listOpenForOrganization: of(
+        (await s.t.query(api.seasons.listOpenForOrganization, { orgSlug })).filter(
+          (card) => card.league.slug === leagueSlug,
+        ),
+      ),
+    };
+  }
+
+  const every = (isFull: boolean) => ({
+    listPublicLeagues: isFull,
+    searchLeagues: isFull,
+    listPublic: isFull,
+    leaguePage: isFull,
+    listOpenForOrganization: isFull,
+  });
+
+  test('a season at its maximum is full on every list, and one with room and no waiting entry is not', async () => {
+    const s = await setup();
+    expect(await season(s)).toMatchObject({ teamCount: 2, maxTeams: 2 });
+    expect(await listedIsFull(s)).toEqual(every(true));
+    await setMax(s, 3);
+    expect(await listedIsFull(s)).toEqual(every(false));
+  });
+
+  test('a season with room and one waiting entry is full, and follows its team count once the entry is promoted', async () => {
+    const s = await setup();
+    await register(s, 'late', 'Late Lobsters');
+    await setMax(s, 4);
+    expect(await season(s)).toMatchObject({ teamCount: 2, maxTeams: 4, waitlistCount: 1 });
+    expect(await listedIsFull(s)).toEqual(every(true));
+    const [entry] = await waitingEntries(s);
+    await promote(s, entry._id);
+    expect(await season(s)).toMatchObject({ teamCount: 3, waitlistCount: 0 });
+    expect(await listedIsFull(s)).toEqual(every(false));
+    await setMax(s, 3);
+    expect(await listedIsFull(s)).toEqual(every(true));
+  });
+
+  test('a season with no maximum and one waiting entry is full until the entry is promoted', async () => {
+    const s = await setup();
+    await register(s, 'late', 'Late Lobsters');
+    await setMax(s, null);
+    expect(await listedIsFull(s)).toEqual(every(true));
+    const [entry] = await waitingEntries(s);
+    await promote(s, entry._id);
+    expect(await listedIsFull(s)).toEqual(every(false));
+  });
+
+  test('a season one team short of its maximum is full once a team registers', async () => {
+    const s = await setup();
+    await setMax(s, 3);
+    expect(await listedIsFull(s)).toEqual(every(false));
+    expect(await register(s, 'late', 'Late Lobsters')).toMatchObject({ status: 'registered' });
+    expect(await season(s)).toMatchObject({ teamCount: 3, maxTeams: 3 });
+    expect(await listedIsFull(s)).toEqual(every(true));
+  });
+
+  test('a full season whose registration has closed still reads full: the page shows its phase instead', async () => {
+    const s = await setup();
+    vi.setSystemTime(AFTER_DEADLINE);
+    expect(await listedIsFull(s)).toEqual(every(true));
+  });
+});

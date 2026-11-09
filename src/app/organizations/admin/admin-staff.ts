@@ -1,4 +1,4 @@
-import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -35,6 +35,7 @@ import {
   skipToken,
 } from '../../core/data/convex';
 import { injectNowAtDeadlines } from '../../core/now-at-deadlines';
+import { MainFocusRecord } from '../../core/replaced-focus';
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from './admin-alert';
@@ -44,7 +45,11 @@ import { adminPath } from './admin-path';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
 import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
+import { CAP_NOTE } from './note-classes';
+import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
+
+const EMAIL_THEN_LINK_THEN_ALERT = ['#email', '#invite-link-heading', '[data-slot="alert"]'];
 
 type RestoreRefusal =
   'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone' | 'notRevoked';
@@ -79,8 +84,6 @@ function refusalOf(failure: unknown): RestoreRefusal | null {
   const code = codeOf(failure);
   return code !== null && RESTORE_REFUSALS.includes(code) ? (code as RestoreRefusal) : null;
 }
-
-const MAIN = '#main';
 
 const ROLE_LABEL: Record<Role, string> = {
   orgAdmin: 'Org admin',
@@ -182,6 +185,9 @@ const ROLE_LABEL: Record<Role, string> = {
                   </li>
                 }
               </ul>
+              @if (membersCapNote(); as note) {
+                <p [class]="capNote">{{ note }}</p>
+              }
             } @else {
               <p role="status" class="sr-only">Loading the staff.</p>
               <div aria-hidden="true" class="divide-y divide-border">
@@ -361,6 +367,9 @@ const ROLE_LABEL: Record<Role, string> = {
                     </li>
                   }
                 </ul>
+                @if (pendingCapNote(); as note) {
+                  <p [class]="capNote">{{ note }}</p>
+                }
               } @else {
                 <div class="flex flex-col items-center px-6 py-10 text-center">
                   <span
@@ -439,7 +448,7 @@ const ROLE_LABEL: Record<Role, string> = {
 export class AdminStaff {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
-  private readonly document = inject(DOCUMENT);
+  private readonly focusRecord = inject(MainFocusRecord);
   private readonly revokeCall = injectMutation(api.invites.revoke);
   private readonly restoreCall = injectMutation(api.invites.restore);
 
@@ -455,6 +464,7 @@ export class AdminStaff {
     () => !this.online() || this.revokingId() !== null || this.restoring(),
   );
   protected readonly secondaryBadge = BADGE_SECONDARY;
+  protected readonly capNote = CAP_NOTE;
   protected readonly placeholders = [1, 2, 3];
   protected readonly day = formatDay;
   protected readonly initialsOf = initials;
@@ -465,6 +475,16 @@ export class AdminStaff {
   });
 
   private readonly pendingList = injectQuery(api.invites.listPending, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  private readonly staffCount = injectQuery(api.memberships.staffCount, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  private readonly pendingCount = injectQuery(api.invites.pendingCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
@@ -490,6 +510,23 @@ export class AdminStaff {
     return rows.map((row) => ({ ...row, expired: row.expiresAt <= now }));
   });
 
+  protected readonly membersCapNote = computed(() => {
+    const shown = this.memberList.value()?.length ?? 0;
+    const total = this.staffCount.value();
+    // The list is the first 200 memberships by creation, sorted by name, so it cannot say "first" alone.
+    return total !== undefined && shown > 0 && total > shown
+      ? `Showing the ${shown} added first, of ${total} members.`
+      : null;
+  });
+
+  protected readonly pendingCapNote = computed(() => {
+    const shown = this.pendingList.value()?.length ?? 0;
+    const total = this.pendingCount.value();
+    return total !== undefined && shown > 0 && total > shown
+      ? `Showing the first ${shown} of ${total} pending invites.`
+      : null;
+  });
+
   protected readonly leagueChoices = computed(() =>
     this.leagueList.value()?.map(({ leagueId, name }) => ({ leagueId, name })),
   );
@@ -511,6 +548,13 @@ export class AdminStaff {
   });
 
   private readonly panel = viewChild(StaffInvitePanel);
+  private readonly sectionJump = injectSectionJump((section) => {
+    for (const selector of EMAIL_THEN_LINK_THEN_ALERT) {
+      const target = section.querySelector<HTMLElement>(selector);
+      if (target) return target;
+    }
+    return null;
+  });
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
   private readonly noticeHost = viewChild<unknown, ElementRef<HTMLElement>>('noticeAlert', {
     read: ElementRef,
@@ -528,12 +572,10 @@ export class AdminStaff {
 
   protected jumpToPanel(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
-    const panel = this.panel();
-    const section = panel?.scrollTarget();
-    if (!panel || !section) return;
+    const section = this.panel()?.scrollTarget();
+    if (!section) return;
     event.preventDefault();
-    section.scrollIntoView();
-    panel.focusFirst();
+    this.sectionJump.jump(section);
   }
 
   protected async revoke(
@@ -628,18 +670,12 @@ export class AdminStaff {
     if (holdsFocus) this.focusNotice();
   }
 
-  /**
-   * Focus moves to the status only from inside it, from the pressed Revoke, or from nowhere: the pressed element went,
-   * or WebKit did not focus it and `<main>` still holds the focus of the last navigation.
-   */
+  /** WebKit does not focus a clicked button, so `document.activeElement` cannot say what the user pressed last. */
   private show(notice: Notice): void {
-    const active = this.document.activeElement;
+    const host = this.noticeHost()?.nativeElement;
     const focusIsFree =
-      active === null ||
-      active === this.document.body ||
-      active === this.document.querySelector(MAIN) ||
-      active === this.pressedRevoke ||
-      (this.noticeHost()?.nativeElement.contains(active) ?? false);
+      this.focusRecord.lastIs(this.pressedRevoke) ||
+      (host !== undefined && this.focusRecord.lastIsInside(host));
     this.notice.set(notice);
     if (focusIsFree) this.focusNotice();
   }

@@ -5,7 +5,7 @@ import { AccountLink } from './account-link';
 import { injectSignInReturnTo } from './sign-in-return-to';
 
 /**
- * Whether the visitor is signed in is known only in the browser, and only after the session store answers. Until then (a server render, and hydration) the link is "Sign in",
+ * Whether the visitor is signed in is known only in the browser, and only once the auth client has loaded. Until then (a server render, and hydration) the link is "Sign in",
  * so the browser's first render equals the server's and the account link replaces it afterwards, with no hydration mismatch.
  */
 @Component({

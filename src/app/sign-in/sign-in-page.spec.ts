@@ -19,6 +19,7 @@ describe('SignInPage', () => {
 
   async function open(url = '/sign-in') {
     client = new FakeAuthClient();
+    client.storedCookie = '';
     TestBed.configureTestingModule({
       providers: [
         provideFakeAuthClient(client),

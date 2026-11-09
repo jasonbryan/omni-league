@@ -6,11 +6,12 @@ import {
   Injectable,
   PLATFORM_ID,
   afterNextRender,
+  afterRenderEffect,
   inject,
 } from '@angular/core';
 
 const MAIN = '#main';
-const PRESSABLE = 'a[href], button';
+const PRESSABLE = 'a[href], button, input';
 
 @Injectable({ providedIn: 'root' })
 export class MainFocusRecord {
@@ -25,10 +26,12 @@ export class MainFocusRecord {
     if (!this.browser || this.listening) return;
     this.listening = true;
     const onFocusIn = (event: FocusEvent) => this.record(event.target);
-    // A click counts as well as focus, because a click or tap does not focus a link in WebKit.
+    // A click counts as well as focus, because WebKit does not focus a link, button, or radio it
+    // clicks, and fires no focusin when a click lands on plain text while <main> already has focus.
     const onClick = (event: MouseEvent) => {
-      const pressed = event.target instanceof Element ? event.target.closest(PRESSABLE) : null;
-      if (pressed) this.record(pressed);
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(MAIN)) this.last = null;
+      else this.record(target.closest(PRESSABLE) ?? this.document.activeElement);
     };
     const onFocusOut = (event: FocusEvent) => {
       if (event.relatedTarget !== null) return;
@@ -55,6 +58,10 @@ export class MainFocusRecord {
     const active = this.document.activeElement;
     const onBody = active === null || active === this.document.body;
     return onBody && this.last !== null && !this.last.isConnected;
+  }
+
+  lastIs(element: EventTarget | null): boolean {
+    return element !== null && this.last === element;
   }
 
   lastIsInside(host: Element): boolean {
@@ -99,5 +106,25 @@ function focusMainOnDestroyIfHoldingFocus(): void {
       },
       { injector: environment },
     );
+  });
+}
+
+export function keepFocusWhenAlertGoes(
+  alertHost: () => HTMLElement | undefined,
+  fallback: () => HTMLElement | undefined,
+): void {
+  const record = inject(MainFocusRecord);
+  let shownAlert: HTMLElement | undefined;
+  afterRenderEffect(() => {
+    const host = alertHost();
+    if (host) {
+      shownAlert = host;
+      return;
+    }
+    const heldFocus = shownAlert && record.lastIsInside(shownAlert);
+    shownAlert = undefined;
+    if (heldFocus && record.focusFellWithRemovedElement()) {
+      fallback()?.focus({ preventScroll: true });
+    }
   });
 }
