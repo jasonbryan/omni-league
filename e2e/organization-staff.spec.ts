@@ -642,11 +642,14 @@ test.describe('Staff: members and the Overview tile', () => {
     await jumpLink(page).click();
     await expect(page.locator('#invite')).toBeFocused();
     await page.locator('header p.truncate').tap();
+    const focusedAfterTap = await page.evaluateHandle(() => document.activeElement);
     const before = await scrollY(page);
     leagues.release();
     await expect(form(page)).toBeAttached();
     await expect(page.locator('#email')).not.toBeFocused();
-    await expect(page.locator('body')).toBeFocused();
+    expect(
+      await page.evaluate((element) => document.activeElement === element, focusedAfterTap),
+    ).toBe(true);
     expect(await scrollY(page)).toBe(before);
   });
 

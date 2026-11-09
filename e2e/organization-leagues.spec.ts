@@ -363,11 +363,14 @@ test.describe('Leagues: creating a draft', () => {
     }) => {
       const held = await pressWithLocationsHeld(page);
       await headerTitle(page).tap();
+      const focusedAfterTap = await page.evaluateHandle(() => document.activeElement);
       const before = await scrollY(page);
       held.release();
       await expect(form(page)).toBeVisible();
       await expect(page.locator('#name')).not.toBeFocused();
-      await expect(page.locator('body')).toBeFocused();
+      expect(
+        await page.evaluate((element) => document.activeElement === element, focusedAfterTap),
+      ).toBe(true);
       expect(await scrollY(page)).toBe(before);
     });
 
