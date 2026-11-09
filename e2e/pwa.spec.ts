@@ -7,12 +7,12 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import type { BrowserContext, Page, Request, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { initials } from '../src/app/organizations/initials';
 import { expectAccessible } from './support/a11y';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { expectedOpenCards } from './support/open-seasons';
 import { expectLogoLoaded } from './support/organization-mark';
@@ -21,6 +21,8 @@ import {
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
 } from './support/saved-copies';
+import { signUp } from './support/session';
+import { newUser } from './support/users';
 
 interface NgswManifest {
   assetGroups: { name: string; urls: string[] }[];
@@ -28,8 +30,14 @@ interface NgswManifest {
 
 let offline = false;
 let fieldWifi = false;
+let firstSocketOrigin: string | undefined;
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
+
+function socketHttpOrigin(socketUrl: string): string {
+  const url = new URL(socketUrl);
+  return `${url.protocol === 'wss:' ? 'https:' : 'http:'}//${url.host}`;
+}
 
 /**
  * Offline, Chromium logs every socket that fails to connect as a console error
@@ -38,11 +46,17 @@ const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
  * calls `connectToServer()` (Playwright would otherwise open a mocked socket, which the client
  * counts as connected); otherwise they go to the server.
  */
-async function routeConvexSockets(context: BrowserContext): Promise<void> {
+async function routeConvexSockets(
+  context: BrowserContext,
+  { localOnly = false }: { localOnly?: boolean } = {},
+): Promise<void> {
   offline = false;
   fieldWifi = false;
+  firstSocketOrigin = undefined;
   await context.routeWebSocket(CONVEX_SOCKET, (ws) => {
-    if (offline || fieldWifi) void ws.close();
+    const origin = socketHttpOrigin(ws.url());
+    firstSocketOrigin ??= origin;
+    if (offline || fieldWifi || (localOnly && origin !== LOCAL_CONVEX_URL)) void ws.close();
     else ws.connectToServer();
   });
 }
@@ -662,5 +676,124 @@ test.describe('saved copies (production build with seed:demo data)', () => {
         )
         .toMatchObject({ v: { name: organization.name }, version });
     }
+  });
+});
+
+const ROUTE_FILE_TITLE = 'Account settings | Omni League';
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+function shellScripts(manifest: NgswManifest): string[] {
+  const shell = manifest.assetGroups.find((group) => group.name === 'shell');
+  return (shell?.urls ?? []).filter((url) => url.endsWith('.js'));
+}
+
+async function scriptsContaining(page: Page, urls: string[], text: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const url of urls) {
+    if ((await (await page.request.get(url)).text()).includes(text)) found.push(url);
+  }
+  return found;
+}
+
+/** `scripts/ng-convex.mjs` compiles the origin into the bundle as the `__CONVEX_URL__` string. */
+async function buildConvexUrl(page: Page, manifest: NgswManifest): Promise<string | undefined> {
+  if (firstSocketOrigin !== undefined) return firstSocketOrigin;
+  const compiled = await scriptsContaining(page, shellScripts(manifest), LOCAL_CONVEX_URL);
+  return compiled.length > 0 ? LOCAL_CONVEX_URL : undefined;
+}
+
+test.describe('offline navigation inside the app (production build against the local backend)', () => {
+  test.skip(
+    remoteBaseUrl === undefined,
+    'needs E2E_BASE_URL and a production build (docs/process/hosting.md, Service worker)',
+  );
+  test.describe.configure({ timeout: 120_000 });
+  test.beforeEach(async ({ context }, testInfo) => {
+    skipUnlessMobile(testInfo);
+    // The test creates an account, so no socket may reach a deployment other than the local one.
+    await routeConvexSockets(context, { localOnly: true });
+  });
+
+  test('signed in, the account link opens /app offline, with its lazily loaded route file served by the worker', async ({
+    page,
+    context,
+  }) => {
+    test.skip(
+      !LOCAL_HOSTS.has(new URL(baseURL).hostname),
+      'E2E_BASE_URL is not local: this test creates an account, so it runs only against a local ' +
+        'production build (docs/process/hosting.md, Service worker, With data)',
+    );
+    const manifest = await installWorker(page);
+    const convexUrl = await buildConvexUrl(page, manifest);
+    test.skip(
+      convexUrl === undefined,
+      'no Convex URL found: needs a build against the local backend (docs/process/hosting.md, ' +
+        'Service worker, With data)',
+    );
+    test.skip(
+      convexUrl !== LOCAL_CONVEX_URL,
+      `the build's Convex URL ${String(convexUrl)} is not ${LOCAL_CONVEX_URL}: this test creates ` +
+        'an account, so it needs the local backend (docs/process/hosting.md, Service worker, With data)',
+    );
+    const status = (await page.request.get(SAVED_PATH)).status();
+    test.skip(
+      status !== 200,
+      `${SAVED_PATH} answered ${String(status)}: needs a build against a backend seeded by ` +
+        'seed:demo (docs/process/hosting.md, Service worker)',
+    );
+
+    const user = newUser();
+    await signUp(page, user);
+    await page.goto('/');
+    const accountLink = page
+      .getByRole('banner')
+      .getByRole('link', { name: `Account: ${user.name}` });
+    await expect(accountLink).toBeVisible();
+
+    const chunks = shellScripts(manifest).filter((url) => /^\/chunk-[^/]+\.js$/.test(url));
+    const routeFiles = await scriptsContaining(page, chunks, ROUTE_FILE_TITLE);
+    expect(routeFiles, `shell chunks holding "${ROUTE_FILE_TITLE}"`).toHaveLength(1);
+    const routeFile = routeFiles[0];
+    const loaded = await page.evaluate(() =>
+      performance.getEntriesByType('resource').map((entry) => new URL(entry.name).pathname),
+    );
+    expect(loaded, 'the start page already loads the route file').not.toContain(routeFile);
+
+    const scripts: Request[] = [];
+    const failed: string[] = [];
+    page.on('request', (request) => {
+      if (request.resourceType() === 'script') scripts.push(request);
+    });
+    page.on('requestfailed', (request) => {
+      if (request.resourceType() === 'script') failed.push(request.url());
+    });
+    await setOffline(context, true);
+    await accountLink.click();
+
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page).toHaveTitle('Home | Omni League');
+    await expect(page.locator('app-account-page')).toBeAttached();
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toHaveText(
+      "You're offline. Changes need a connection.",
+    );
+    const responses = await Promise.all(
+      scripts.map(async (request) => {
+        const response = await request.response();
+        return {
+          path: new URL(request.url()).pathname,
+          status: response?.status(),
+          fromServiceWorker: response?.fromServiceWorker(),
+        };
+      }),
+    );
+    expect(responses.map((response) => response.path)).toContain(routeFile);
+    for (const response of responses) {
+      expect(response, response.path).toEqual({
+        path: response.path,
+        status: 200,
+        fromServiceWorker: true,
+      });
+    }
+    expect(failed).toEqual([]);
   });
 });
