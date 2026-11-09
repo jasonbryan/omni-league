@@ -13,7 +13,7 @@ describe('Top bar account area', () => {
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
 
-  async function open(url: string, session: { id: string } | null | undefined = null) {
+  async function open(url: string, session: { id: string } | null | 'no answer' = null) {
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
     TestBed.configureTestingModule({
@@ -23,7 +23,7 @@ describe('Top bar account area', () => {
         provideRouter([{ path: '**', component: PublicTopBarTestPage }]),
       ],
     });
-    if (session !== undefined) auth.emitSession(session);
+    if (session !== 'no answer') auth.emitSession(session);
     harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
     await harness.fixture.whenStable();
@@ -154,15 +154,22 @@ describe('Top bar account area', () => {
       }
     });
 
-    it('asks users.me only once Convex has accepted the token', async () => {
+    it('asks users.me only once Convex has accepted the token, reading "Account" until it answers', async () => {
       const page = await open('/organizations/x', { id: 's1' });
       TestBed.tick();
       expect(convex.subscriptions).toEqual([]);
       expect(signInLink(page)).toBeNull();
-      expect(accountLink(page)).toBeNull();
+      expect(accountLink(page)?.textContent?.trim()).toBe('Account');
       TestBed.inject(AuthService).onChange(true);
       TestBed.tick();
       expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([['users:me', {}]]);
+      await harness.fixture.whenStable();
+      expect(accountLink(page)?.textContent?.trim()).toBe('Account');
+      convex.activeSubscriptions[0].emit({ name: 'Maya Okafor' });
+      await harness.fixture.whenStable();
+      expect(accountLink(page)?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'MOAccount: Maya Okafor',
+      );
     });
 
     it('keeps a long name whole for assistive technology, and truncates it on screen', async () => {
@@ -182,6 +189,21 @@ describe('Top bar account area', () => {
       await harness.fixture.whenStable();
       expect(accountLink(page)).toBeNull();
       expect(signInLink(page)?.getAttribute('href')).toBe('/sign-in?returnTo=%2Forganizations%2Fx');
+    });
+
+    it('shows a plain "Account" link to /app, with no name, for a kept session offline', async () => {
+      const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      try {
+        const page = await open('/organizations/x', 'no answer');
+        const link = accountLink(page)!;
+        expect(link.getAttribute('href')).toBe('/app');
+        expect(link.textContent?.replace(/\s+/g, ' ').trim()).toBe('Account');
+        expect(signInLink(page)).toBeNull();
+        expect(auth.sessionListeners).toBe(0);
+        expect(convex.subscriptions).toEqual([]);
+      } finally {
+        online.mockRestore();
+      }
     });
 
     it('falls back to a plain "Account" link when the user has no record', async () => {

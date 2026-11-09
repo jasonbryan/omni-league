@@ -1,9 +1,22 @@
-import { PLATFORM_ID } from '@angular/core';
+import { Component, PLATFORM_ID, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter, type Routes } from '@angular/router';
+import type { MockInstance } from 'vitest';
 import { ChangesInFlight } from '../changes-in-flight';
 import { AUTH_BASE_URL, AUTH_CLIENT } from './auth-client';
-import { AuthService, type SignInResult, type SignUpFailure } from './auth.service';
+import {
+  AuthService,
+  RECHECK_DELAYS_MS,
+  RECHECK_EVERY_MS,
+  SESSION_CHECK_LIMIT_MS,
+  type SignInResult,
+  type SignUpFailure,
+} from './auth.service';
+import { requireSignedIn } from './guards';
 import { FakeAuthClient, provideFakeAuthClient } from './testing/fake-auth-client';
+
+@Component({ template: '' })
+class Page {}
 
 const INPUT = {
   name: 'Maya Okafor',
@@ -28,19 +41,13 @@ describe('AuthService', () => {
   });
 
   describe('session state', () => {
-    it('is unknown until the session store settles, then follows it', async () => {
+    it('is unknown until the client loads, then kept at once on a stored token, then follows the session store', async () => {
       const auth = configure();
       expect(auth.signedIn()).toBe(false);
-      let known = false;
-      const signedIn = auth.isSignedIn().then((value) => {
-        known = true;
-        return value;
-      });
-      await Promise.resolve();
-      expect(known).toBe(false);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+      expect(client.sessionListeners).toBe(1);
 
       client.emitSession({ id: 's1' });
-      await expect(signedIn).resolves.toBe(true);
       expect(auth.signedIn()).toBe(true);
 
       client.emitSession(null);
@@ -81,10 +88,11 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(0);
     });
 
-    it('with a stored session token, waits for the session store', async () => {
+    it('with a stored session token, is signed in before the session store answers, and subscribes once', async () => {
       const auth = configure();
       await loaded();
       expect(client.sessionListeners).toBe(1);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
       client.emitSession(null);
       await expect(auth.isSignedIn()).resolves.toBe(false);
     });
@@ -115,12 +123,22 @@ describe('AuthService', () => {
       const requestedUrl = (input: Parameters<typeof fetch>[0]) =>
         input instanceof Request ? input.url : String(input);
 
-      async function configureReal(stored: string | null) {
-        const fetchStub = vi.fn<typeof fetch>(() =>
-          Promise.resolve(
-            new Response('null', { status: 200, headers: { 'content-type': 'application/json' } }),
-          ),
-        );
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+      const SESSION = {
+        session: { id: 's1', token: 't', expiresAt: new Date(Date.now() + HOUR).toISOString() },
+        user: { id: 'u1', name: 'Maya Okafor' },
+      };
+
+      async function configureReal(
+        stored: string | null,
+        answer: (url: string, init?: RequestInit) => Promise<Response> = () =>
+          Promise.resolve(json(null)),
+      ) {
+        const fetchStub = vi.fn<typeof fetch>((input, init) => answer(requestedUrl(input), init));
         vi.stubGlobal('fetch', fetchStub);
         localStorage.removeItem(KEY);
         if (stored !== null) localStorage.setItem(KEY, stored);
@@ -131,10 +149,33 @@ describe('AuthService', () => {
           providers: [{ provide: AUTH_CLIENT, useValue: Promise.resolve(real) }],
         });
         const requests = () => fetchStub.mock.calls.map(([input]) => requestedUrl(input));
-        return { auth: TestBed.inject(AuthService), subscribe, requests };
+        const storedToken = () => /session_token=[^;]/.test(real.getCookie());
+        return { auth: TestBed.inject(AuthService), subscribe, requests, storedToken };
       }
 
+      const unexpired = () => entry('t', new Date(Date.now() + HOUR).toISOString());
+      const SIGN_OUT_URL = 'https://happy-otter-123.convex.site/api/auth/sign-out';
+      const signOutAnswer = () => Promise.resolve(json({ success: true }));
+      const answerSession =
+        (session: () => Promise<Response>) =>
+        (url: string): Promise<Response> =>
+          url === SIGN_OUT_URL ? signOutAnswer() : session();
+      const hang = (_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((_, reject) =>
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          ),
+        );
+
+      let online: MockInstance<() => boolean>;
+
+      beforeEach(() => {
+        online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+      });
+
       afterEach(() => {
+        vi.useRealTimers();
+        online.mockRestore();
         vi.unstubAllGlobals();
         localStorage.removeItem(KEY);
       });
@@ -162,6 +203,139 @@ describe('AuthService', () => {
         await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
         await loaded();
         expect(requests()).toEqual([]);
+      });
+
+      describe('classifies the check', () => {
+        it('stays kept, keeping the token, on a rejected fetch', async () => {
+          const { auth, requests, storedToken } = await configureReal(unexpired(), () =>
+            Promise.reject(new TypeError('Failed to fetch')),
+          );
+          await vi.waitFor(() => expect(requests()).toEqual([SESSION_URL]));
+          await loaded();
+          expect(auth.signedIn()).toBe(true);
+          expect(storedToken()).toBe(true);
+          expect(requests()).toEqual([SESSION_URL]);
+        });
+
+        it('stays kept, with no token request, on a check that hangs past the limit', async () => {
+          vi.useFakeTimers();
+          const { auth, requests, storedToken } = await configureReal(unexpired(), hang);
+          await vi.advanceTimersByTimeAsync(0);
+          expect(requests()).toEqual([SESSION_URL]);
+          const token = auth.fetchToken({ forceRefreshToken: false });
+          await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+          await expect(token).resolves.toBeNull();
+          expect(auth.signedIn()).toBe(true);
+          expect(storedToken()).toBe(true);
+          expect(requests()).toEqual([SESSION_URL]);
+        });
+
+        it.each([
+          ['a 503', () => Promise.resolve(new Response('', { status: 503 }))],
+          [
+            'a 200 with an HTML body',
+            () =>
+              Promise.resolve(
+                new Response('<html><body>Sign in to the wifi</body></html>', {
+                  status: 200,
+                  headers: { 'content-type': 'text/html' },
+                }),
+              ),
+          ],
+        ])('is signed out on %s, keeping the stored token', async (_, session) => {
+          const { auth, requests, storedToken } = await configureReal(
+            unexpired(),
+            answerSession(session),
+          );
+          await vi.waitFor(() => expect(auth.signedIn()).toBe(false));
+          await loaded();
+          expect(storedToken()).toBe(true);
+          expect(requests()).toEqual([SESSION_URL]);
+        });
+
+        it('is signed out on a 401, and removes the stored token through sign-out', async () => {
+          const { auth, requests, storedToken } = await configureReal(
+            unexpired(),
+            answerSession(() => Promise.resolve(json({ message: 'Unauthorized' }, 401))),
+          );
+          await vi.waitFor(() => expect(auth.signedIn()).toBe(false));
+          await vi.waitFor(() => expect(requests()).toContain(SIGN_OUT_URL));
+          expect(storedToken()).toBe(false);
+          // Better Auth asks for the session once more after a sign-out; with no token stored, nothing follows.
+          await vi.waitFor(() => expect(requests()).toHaveLength(3));
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          expect(requests()).toEqual([SESSION_URL, SIGN_OUT_URL, SESSION_URL]);
+        });
+
+        it('is signed out on a 200 null, whose answer removes the stored token', async () => {
+          const { auth, requests, storedToken } = await configureReal(unexpired());
+          await vi.waitFor(() => expect(auth.signedIn()).toBe(false));
+          await loaded();
+          expect(storedToken()).toBe(false);
+          expect(requests()).toEqual([SESSION_URL]);
+        });
+
+        it('is signed in on a session, and the token request follows', async () => {
+          const { auth, requests } = await configureReal(unexpired(), (url) =>
+            Promise.resolve(url === SESSION_URL ? json(SESSION) : json({ token: 'jwt' })),
+          );
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          expect(auth.signedIn()).toBe(true);
+          expect(auth.authEpoch()).toBe(0);
+          expect(requests()).toEqual([
+            SESSION_URL,
+            'https://happy-otter-123.convex.site/api/auth/convex/token',
+          ]);
+        });
+      });
+
+      it('offline at start, is kept with no request', async () => {
+        online.mockReturnValue(false);
+        const { auth, subscribe, requests } = await configureReal(unexpired());
+        await expect(auth.isSignedIn()).resolves.toBe(true);
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+        await loaded();
+        expect(subscribe).not.toHaveBeenCalled();
+        expect(requests()).toEqual([]);
+      });
+
+      it('signing out while kept and offline removes the stored token', async () => {
+        online.mockReturnValue(false);
+        const { auth, storedToken } = await configureReal(unexpired(), () =>
+          Promise.reject(new TypeError('Failed to fetch')),
+        );
+        await expect(auth.isSignedIn()).resolves.toBe(true);
+        expect(storedToken()).toBe(true);
+        await auth.signOut();
+        expect(auth.signedIn()).toBe(false);
+        expect(storedToken()).toBe(false);
+      });
+
+      it('spaces checks: onOnline within the limit starts none; after it, replaces the hung check with one that confirms', async () => {
+        vi.useFakeTimers();
+        let sessionAnswer: (url: string, init?: RequestInit) => Promise<Response> = hang;
+        const signals: AbortSignal[] = [];
+        const { auth, requests } = await configureReal(unexpired(), (url, init) => {
+          if (init?.signal) signals.push(init.signal);
+          return sessionAnswer(url, init);
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(requests()).toEqual([SESSION_URL]);
+
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS - 1);
+        auth.onOnline();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(requests()).toEqual([SESSION_URL]);
+
+        sessionAnswer = () => Promise.resolve(json(SESSION));
+        await vi.advanceTimersByTimeAsync(1);
+        auth.onOnline();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(requests()).toEqual([SESSION_URL, SESSION_URL]);
+        expect(signals[0].aborted).toBe(true);
+        await vi.waitFor(() => expect(auth.signedIn()).toBe(true));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(auth.authEpoch()).toBe(0);
       });
 
       it.each([
@@ -214,6 +388,346 @@ describe('AuthService', () => {
       expect(client.sessionListeners).toBe(1);
       TestBed.resetTestingModule();
       expect(client.sessionListeners).toBe(0);
+    });
+  });
+
+  describe('kept session (a stored token the server has not answered for)', () => {
+    let online: MockInstance<() => boolean>;
+
+    function setBrowserOnline(value: boolean) {
+      online.mockReturnValue(value);
+    }
+
+    beforeEach(() => {
+      online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      online.mockRestore();
+    });
+
+    it('is signed in and known at once, before any answer', async () => {
+      const auth = configure();
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+      expect(auth.signedIn()).toBe(true);
+      expect(client.sessionListeners).toBe(1);
+    });
+
+    it('stays kept on a check that never reached the server (no status)', async () => {
+      const auth = configure();
+      await loaded();
+      client.emitChecking();
+      client.emitError(new TypeError('Failed to fetch'));
+      expect(auth.signedIn()).toBe(true);
+      expect(client.signOuts).toBe(0);
+    });
+
+    it.each([
+      ['a 503', { status: 503, statusText: 'Service Unavailable' }],
+      ['a 500', { status: 500, statusText: 'Internal Server Error' }],
+    ])('is signed out on %s, keeping the stored token', async (_, error) => {
+      const auth = configure();
+      await loaded();
+      client.emitError(error);
+      expect(auth.signedIn()).toBe(false);
+      expect(client.signOuts).toBe(0);
+    });
+
+    it('is signed out on a 401, and removes the stored token through sign-out', async () => {
+      const auth = configure();
+      await loaded();
+      client.emitError({ status: 401, statusText: 'Unauthorized' });
+      expect(auth.signedIn()).toBe(false);
+      await loaded();
+      expect(client.signOuts).toBe(1);
+      expect(client.storedCookie).toBe('');
+    });
+
+    it('is signed in after a confirmed check', async () => {
+      const auth = configure();
+      await loaded();
+      client.emitSession({ id: 's1' });
+      expect(auth.signedIn()).toBe(true);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+    });
+
+    describe('fetchToken', () => {
+      it('on a check that confirms within the limit, makes one token request and leaves authEpoch alone', async () => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(0);
+        const calls = [
+          auth.fetchToken({ forceRefreshToken: false }),
+          auth.fetchToken({ forceRefreshToken: false }),
+        ];
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS - 1_000);
+        expect(client.tokenRequests).toBe(0);
+        client.emitSession({ id: 's1' });
+        await expect(Promise.all(calls)).resolves.toEqual(['jwt', 'jwt']);
+        expect(client.tokenRequests).toBe(1);
+        expect(auth.authEpoch()).toBe(0);
+      });
+
+      it('on a check that hangs past the limit, returns null with no token request; a later confirm advances authEpoch once', async () => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(0);
+        let settled = false;
+        const token = auth.fetchToken({ forceRefreshToken: false }).then((value) => {
+          settled = true;
+          return value;
+        });
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS - 1);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(token).resolves.toBeNull();
+        expect(client.tokenRequests).toBe(0);
+        expect(auth.authEpoch()).toBe(0);
+
+        client.emitSession({ id: 's1' });
+        expect(auth.authEpoch()).toBe(1);
+        client.emitSession({ id: 's1' });
+        expect(auth.authEpoch()).toBe(1);
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+        expect(client.tokenRequests).toBe(1);
+      });
+
+      it('offline at start, returns null at once with no check and no token request', async () => {
+        setBrowserOnline(false);
+        vi.useFakeTimers();
+        const auth = configure();
+        let settled = false;
+        const token = auth.fetchToken({ forceRefreshToken: false }).then((value) => {
+          settled = true;
+          return value;
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(true);
+        await expect(token).resolves.toBeNull();
+        expect(client.sessionListeners).toBe(0);
+        expect(client.tokenRequests).toBe(0);
+        expect(auth.signedIn()).toBe(true);
+      });
+
+      it('on a refused check, returns null and never advances authEpoch', async () => {
+        const auth = configure();
+        await loaded();
+        const token = auth.fetchToken({ forceRefreshToken: false });
+        client.emitSession(null);
+        await expect(token).resolves.toBeNull();
+        expect(auth.authEpoch()).toBe(0);
+        expect(client.tokenRequests).toBe(0);
+      });
+    });
+
+    describe('onOnline', () => {
+      it('offline at start, subscribes on the first call with the browser online', async () => {
+        setBrowserOnline(false);
+        const auth = configure();
+        await loaded();
+        auth.onOnline();
+        expect(client.sessionListeners).toBe(0);
+        setBrowserOnline(true);
+        auth.onOnline();
+        expect(client.sessionListeners).toBe(1);
+        expect(client.refetches).toBe(0);
+      });
+
+      it('refetches only once the last check started at least the limit ago', async () => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(client.sessionListeners).toBe(1);
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS - 1);
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+        await vi.advanceTimersByTimeAsync(1);
+        auth.onOnline();
+        expect(client.refetches).toBe(1);
+        auth.onOnline();
+        expect(client.refetches).toBe(1);
+      });
+
+      it("counts Better Auth's own refetch as a check", async () => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+        client.emitError(new TypeError('Failed to fetch'));
+        client.emitChecking();
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+        auth.onOnline();
+        expect(client.refetches).toBe(1);
+      });
+
+      it.each([
+        ['signed in', () => client.emitSession({ id: 's1' })],
+        ['signed out', () => client.emitSession(null)],
+      ])('does nothing while %s', async (_, answer) => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(0);
+        answer();
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+        auth.onOnline();
+        await vi.advanceTimersByTimeAsync(10 * RECHECK_EVERY_MS);
+        expect(client.refetches).toBe(0);
+      });
+
+      it('does nothing before the client loads, or with no stored token', async () => {
+        client.storedCookie = '';
+        const auth = configure();
+        auth.onOnline();
+        await loaded();
+        auth.onOnline();
+        expect(client.sessionListeners).toBe(0);
+        expect(client.refetches).toBe(0);
+      });
+
+      it('re-checks after 15 s, 30 s, and 60 s, then every 120 s, while kept with the browser online', async () => {
+        vi.useFakeTimers();
+        const auth = configure();
+        await vi.advanceTimersByTimeAsync(0);
+        const refetchesAfter = async (ms: number) => {
+          await vi.advanceTimersByTimeAsync(ms - 1);
+          const before = client.refetches;
+          await vi.advanceTimersByTimeAsync(1);
+          expect(client.refetches).toBe(before + 1);
+          client.emitError(new TypeError('Failed to fetch'));
+        };
+        expect([...RECHECK_DELAYS_MS, RECHECK_EVERY_MS]).toEqual([15_000, 30_000, 60_000, 120_000]);
+        for (const delay of [...RECHECK_DELAYS_MS, RECHECK_EVERY_MS, RECHECK_EVERY_MS]) {
+          await refetchesAfter(delay);
+        }
+        auth.onOnline();
+        expect(client.refetches).toBe(5);
+        await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+        auth.onOnline();
+        expect(client.refetches).toBe(6);
+        client.emitError(new TypeError('Failed to fetch'));
+        await refetchesAfter(RECHECK_DELAYS_MS[0]);
+
+        setBrowserOnline(false);
+        await vi.advanceTimersByTimeAsync(10 * RECHECK_EVERY_MS);
+        expect(client.refetches).toBe(7);
+
+        setBrowserOnline(true);
+        client.emitSession({ id: 's1' });
+        await vi.advanceTimersByTimeAsync(10 * RECHECK_EVERY_MS);
+        expect(client.refetches).toBe(7);
+      });
+    });
+
+    describe('refusal redirect', () => {
+      let releaseChunk: () => void = () => undefined;
+
+      const heldComponent = (): Promise<Type<unknown>> =>
+        new Promise((resolve) => (releaseChunk = () => resolve(Page)));
+
+      function configureRoutes(routes: Routes) {
+        TestBed.configureTestingModule({
+          providers: [provideFakeAuthClient(client), provideRouter(routes)],
+        });
+        const router = TestBed.inject(Router);
+        const auth = TestBed.inject(AuthService);
+        return { router, auth };
+      }
+
+      const ROUTES: Routes = [
+        { path: 'sign-in', component: Page },
+        { path: 'organizations/x', component: Page },
+        {
+          path: 'app',
+          children: [
+            { path: '', component: Page, canActivate: [requireSignedIn] },
+            { path: 'account', component: Page, canActivate: [requireSignedIn] },
+          ],
+        },
+      ];
+
+      const HELD_ROUTES: Routes = [
+        { path: 'sign-in', component: Page },
+        { path: 'organizations/x', loadComponent: heldComponent },
+        { path: 'organizations/y', component: Page },
+        { path: 'app', canActivate: [requireSignedIn], loadComponent: heldComponent },
+      ];
+
+      it('on a guarded route, goes to sign-in with returnTo, replacing the entry', async () => {
+        const { router } = configureRoutes(ROUTES);
+        await router.navigateByUrl('/app/account');
+        expect(router.url).toBe('/app/account');
+        const navigate = vi.spyOn(router, 'navigate');
+        client.emitSession(null);
+        await vi.waitFor(() => expect(router.url).toBe('/sign-in?returnTo=%2Fapp%2Faccount'));
+        expect(navigate).toHaveBeenCalledWith(['/sign-in'], {
+          queryParams: { returnTo: '/app/account' },
+          replaceUrl: true,
+        });
+      });
+
+      it('on a public page, navigates nowhere', async () => {
+        const { router } = configureRoutes(ROUTES);
+        await router.navigateByUrl('/organizations/x');
+        const navigate = vi.spyOn(router, 'navigate');
+        client.emitSession(null);
+        await loaded();
+        expect(router.url).toBe('/organizations/x');
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('runs no redirect for a sign-out while kept', async () => {
+        const { router, auth } = configureRoutes(ROUTES);
+        await router.navigateByUrl('/app/account');
+        const navigate = vi.spyOn(router, 'navigate');
+        await auth.signOut();
+        await loaded();
+        expect(navigate).not.toHaveBeenCalled();
+        expect(auth.signedIn()).toBe(false);
+      });
+
+      it('while the first navigation to /app waits for its route file, goes to sign-in at NavigationEnd', async () => {
+        const { router } = configureRoutes(HELD_ROUTES);
+        const first = router.navigateByUrl('/app');
+        await vi.waitFor(() => expect(router.currentNavigation()).not.toBeNull());
+        await loaded();
+        client.emitSession(null);
+        await loaded();
+        expect(router.url).toBe('/');
+        releaseChunk();
+        await first;
+        await vi.waitFor(() => expect(router.url).toBe('/sign-in?returnTo=%2Fapp'));
+      });
+
+      it('while a navigation to a public page is in flight, navigates nowhere', async () => {
+        const { router } = configureRoutes(HELD_ROUTES);
+        const first = router.navigateByUrl('/organizations/x');
+        await loaded();
+        expect(router.currentNavigation()).not.toBeNull();
+        const navigate = vi.spyOn(router, 'navigate');
+        client.emitSession(null);
+        releaseChunk();
+        await first;
+        await loaded();
+        expect(router.url).toBe('/organizations/x');
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('for a navigation that is cancelled, runs no redirect', async () => {
+        const { router } = configureRoutes(HELD_ROUTES);
+        const first = router.navigateByUrl('/app');
+        await vi.waitFor(() => expect(router.currentNavigation()).not.toBeNull());
+        await loaded();
+        client.emitSession(null);
+        const navigate = vi.spyOn(router, 'navigate');
+        await router.navigateByUrl('/organizations/y');
+        await expect(first).resolves.toBe(false);
+        releaseChunk();
+        await loaded();
+        expect(router.url).toBe('/organizations/y');
+        expect(navigate).not.toHaveBeenCalled();
+      });
     });
   });
 

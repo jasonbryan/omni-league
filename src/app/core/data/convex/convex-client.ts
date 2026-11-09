@@ -23,6 +23,10 @@ export interface ConvexAuthSource {
   fetchToken: (args: { forceRefreshToken: boolean }) => Promise<string | null | undefined>;
   signedIn: Signal<boolean>;
   onChange?: (isAuthenticated: boolean) => void;
+  /** A change while `signedIn` is true calls `setAuth` again: the Convex client does not ask for a token again after it was given none. */
+  authEpoch?: Signal<number>;
+  /** Called each time the `online` signal turns true, the first time included. */
+  onOnline?: () => void;
 }
 
 export function wrapConvexClient(client: ConvexClient): ConvexClientLike {
@@ -69,6 +73,26 @@ function applyAuth(client: ConvexClientLike, auth: ConvexAuthSource): void {
       else client.clearAuth();
     });
   });
+  const authEpoch = auth.authEpoch;
+  if (!authEpoch) return;
+  let previousEpoch = untracked(authEpoch);
+  effect(() => {
+    const epoch = authEpoch();
+    if (epoch === previousEpoch) return;
+    previousEpoch = epoch;
+    untracked(() => {
+      if (auth.signedIn()) client.setAuth(auth.fetchToken, auth.onChange);
+    });
+  });
+}
+
+function callOnEachOnline(connection: ConvexConnection, onOnline: () => void): void {
+  let wasOnline = false;
+  effect(() => {
+    const online = connection.online();
+    if (online && !wasOnline) untracked(onOnline);
+    wasOnline = online;
+  });
 }
 
 export function provideConvex(): EnvironmentProviders {
@@ -78,7 +102,9 @@ export function provideConvex(): EnvironmentProviders {
       if (isPlatformServer(inject(PLATFORM_ID))) return;
       inject(ConvexHydrationWindow).closeWhenStable();
       // Created at start, so the `online` signal's 5-second rule counts from the start of the app.
-      inject(ConvexConnection);
+      const connection = inject(ConvexConnection);
+      const auth = inject(CONVEX_AUTH, { optional: true });
+      if (auth?.onOnline) callOnEachOnline(connection, () => auth.onOnline?.());
     }),
   ]);
 }
