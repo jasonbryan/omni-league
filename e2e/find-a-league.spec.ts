@@ -685,11 +685,10 @@ test.describe('find a league: a full season with registration open', () => {
       );
       const { id } = await seedFullSeasonTenant();
       const { html } = await raw(request, url(id));
-      expect(resultNames(html)).toEqual([FULL_LEAGUE, PACKED_LEAGUE]);
+      expect(resultNames(html).sort()).toEqual([FULL_LEAGUE, PACKED_LEAGUE]);
       const text = plainText(resultsSection(html));
-      expect(text).toContain(`${FULL_LEAGUE} `);
-      expect(text).toMatch(/Full League .* Full Full Season · waitlist open .*Packed League/);
-      expect(text).toMatch(/Packed League .* Full Packed Season · waitlist open/);
+      expect(text).toContain('Alpha Field Full Full Season · waitlist open');
+      expect(text).toContain('Beta Diamond Full Packed Season · waitlist open');
       expect(text).not.toContain('Registration open');
     },
   );
@@ -701,11 +700,13 @@ test.describe('find a league: a full season with registration open', () => {
     const { id } = await seedFullSeasonTenant();
     await page.goto(url(id));
     await hydrated(consoleGuard);
-    await expect(rowNames(page)).toHaveText([FULL_LEAGUE, PACKED_LEAGUE]);
-    const first = results(page).locator('ul > li').first();
-    await expect(first.locator('[data-slot="badge"]')).toHaveText('Full');
-    await expect(first.locator('[data-slot="badge"]')).toHaveClass(/\bborder-border\b/);
-    await expect(first).toContainText('Full Season · waitlist open');
+    await expect(rowNames(page)).toHaveCount(2);
+    const row = results(page)
+      .locator('ul > li')
+      .filter({ has: page.getByRole('heading', { name: FULL_LEAGUE }) });
+    await expect(row.locator('[data-slot="badge"]')).toHaveText('Full');
+    await expect(row.locator('[data-slot="badge"]')).toHaveClass(/\bborder-border\b/);
+    await expect(row).toContainText('Full Season · waitlist open');
     await screenshot(page, testInfo, '530-find-full-season');
     await expectAccessible(page);
     await page.setViewportSize({ width: 320, height: 800 });

@@ -30,6 +30,7 @@ export const PACKED_SEASON: SeasonSeed = {
   startDate: dateFromToday(35),
   endDate: dateFromToday(95),
   registrationDeadline: dateFromToday(8),
+  playersPerSide: 10,
   maxTeams: 2,
 };
 
