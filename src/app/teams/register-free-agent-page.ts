@@ -58,6 +58,7 @@ import {
   type RegisterTeamState,
 } from './register-team-state';
 import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
+import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
 
 export const FREE_AGENT_MESSAGES = {
   failedTitle: 'You could not be registered.',
@@ -80,21 +81,6 @@ export const FREE_AGENT_MESSAGES = {
 
 /** What the page shows after a refused submit, before the query catches up. */
 type Refusal = 'closed' | 'onTeam' | 'waiting' | 'waitlisted';
-
-interface WaitlistPlace {
-  teamName: string;
-  position: number;
-}
-
-function waitlistPlaceOf(failure: unknown): WaitlistPlace | null {
-  if (!(failure instanceof ConvexError)) return null;
-  const data: unknown = failure.data;
-  if (typeof data !== 'object' || data === null) return null;
-  const { teamName, position } = data as { teamName?: unknown; position?: unknown };
-  return typeof teamName === 'string' && typeof position === 'number'
-    ? { teamName, position }
-    : null;
-}
 
 type FormAlert = 'offline' | 'failed';
 
