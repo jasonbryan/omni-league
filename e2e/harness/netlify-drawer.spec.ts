@@ -156,7 +156,7 @@ test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
   test.describe('remote runs (E2E_BASE_URL)', () => {
     test.skip(
       !remoteBaseUrl,
-      'needs E2E_BASE_URL: the guard checks a deployed site, which Netlify would inject the Drawer into',
+      'needs E2E_BASE_URL: the guard checks a deployed site, and the auto fixture stubs the Drawer only there',
     );
 
     test.describe('Drawer guard', () => {
