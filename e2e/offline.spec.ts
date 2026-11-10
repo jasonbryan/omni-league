@@ -192,3 +192,58 @@ test.describe('open seasons offline', () => {
     await context.setOffline(false);
   });
 });
+
+test.describe('find a league by sport offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('a sport view with a filter, viewed online, opens from its saved copy with its filters offered', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    await seedTenant({
+      name: 'E2E Offline Youth',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: '00 Offline Girls',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { gender: 'womens', playersPerSide: 7, level: 'rec', ageGroup: 'u10' },
+        },
+      ],
+    });
+    const rows = page.locator('section[aria-labelledby="results-heading"] ul > li h3');
+    const filters = page.getByRole('search', { name: 'Filter leagues' });
+
+    const chips = page.getByRole('navigation', { name: 'Sport' });
+
+    await page.goto('/leagues?sport=soccer&age=u10');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows.first()).toBeVisible();
+    await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
+    await chips.getByRole('link', { name: 'Softball' }).click();
+    await expect(page).toHaveURL(/\/leagues\?sport=softball&age=u10$/);
+    await expect(chips.getByRole('link', { name: 'Softball' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(filters.getByRole('status')).toContainText(/of \d+ leagues?/);
+    await expect(page.getByTestId('find-skeleton')).toHaveCount(0);
+    await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await chips.getByRole('link', { name: 'Soccer' }).click();
+    await expect(page).toHaveURL(/\/leagues\?sport=soccer&age=u10$/);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(rows.first()).toBeVisible();
+    await expect(filters.getByRole('button', { name: /^Filters/ })).toBeVisible();
+    await expect(
+      filters.getByRole('list', { name: 'Active filters' }).getByRole('link', { name: /^U10/ }),
+    ).toBeVisible();
+
+    await context.setOffline(false);
+  });
+});

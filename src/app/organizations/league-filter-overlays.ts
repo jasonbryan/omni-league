@@ -271,7 +271,8 @@ export class LeagueFilterOverlays {
   readonly sportLeagueCounts = input.required<SportCounts | undefined>();
   readonly sport = input.required<Sport | undefined>();
   readonly locationsPage = input.required<number>();
-  readonly total = input.required<number>();
+  readonly total = input.required<number | undefined>();
+  readonly queryBuilder = input.required<((filters: DivisionFilters) => Params) | undefined>();
   readonly sheetTrigger = input.required<HTMLElement | undefined>();
 
   /** Called once a Clear link's navigation ends, since the pressed link has left with its overlay. */
@@ -306,15 +307,17 @@ export class LeagueFilterOverlays {
     ),
   );
 
-  private readonly count = computed(() =>
-    draftLeagueCount(
+  private readonly count = computed(() => {
+    const total = this.total();
+    if (total === undefined) return undefined;
+    return draftLeagueCount(
       this.facets(),
       this.draft(),
       this.sportLeagueCounts(),
       this.sport(),
-      this.total(),
-    ),
-  );
+      total,
+    );
+  });
   protected readonly showLabel = computed(() => showLeaguesLabel(this.count()));
   protected readonly countStatus = computed(() => {
     const count = this.count();
@@ -372,10 +375,9 @@ export class LeagueFilterOverlays {
   }
 
   private queryFor(filters: DivisionFilters): Params {
-    return listPagesQuery(
-      { leagues: 1, locations: this.locationsPage() },
-      this.sportView(),
-      filters,
+    return (
+      this.queryBuilder()?.(filters) ??
+      listPagesQuery({ leagues: 1, locations: this.locationsPage() }, this.sportView(), filters)
     );
   }
 

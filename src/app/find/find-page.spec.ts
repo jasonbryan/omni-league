@@ -449,7 +449,7 @@ describe('FindPage when the search fails', () => {
     expect(text(retry)).toBe('Try again');
     expect(retry.getAttribute('href')).toBe('/leagues?q=coed');
     expect(text(main)).not.toContain('internal-db');
-    expect(main.querySelector('ul')).toBeNull();
+    expect(results(harness)!.querySelector('ul')).toBeNull();
     expect(main.querySelector('h1')?.textContent).toContain('Find a league');
     expect(input(harness).value).toBe('coed');
 

@@ -207,6 +207,31 @@ describe('filterGroups', () => {
     expect(age.options).toEqual([{ name: 'age', value: 'u10', label: 'U10', checked: true }]);
   });
 
+  it('offers only the formats of the sport that some league has, and none of another sport', () => {
+    const facets = [2, 7, 9, 11].map((playersPerSide) => ({ playersPerSide }));
+    const group = (sport: 'soccer' | 'softball') =>
+      filterGroups(facets, NO_DIVISION_FILTERS, sport)
+        .find((entry) => entry.legend === 'Format')
+        ?.options.map((option) => option.label);
+    expect(group('soccer')).toEqual(['7v7', '9v9', '11v11']);
+    expect(group('softball')).toEqual(['9v9']);
+  });
+
+  it('offers the U-ages first, then Adult, then the adult brackets', () => {
+    const ages = ['over40', 'adult', 'u14', 'over30', 'u8', 'u10'].map((ageGroup) => ({
+      ageGroup,
+    }));
+    const [age] = filterGroups(ages, NO_DIVISION_FILTERS, 'soccer');
+    expect(age.options.map((option) => option.label)).toEqual([
+      'U8',
+      'U10',
+      'U14',
+      'Adult',
+      '30+',
+      '40+',
+    ]);
+  });
+
   it('leaves out a dimension no league has a value in', () => {
     expect(
       filterGroups([{ gender: 'coed' }], NO_DIVISION_FILTERS, 'soccer').map((g) => g.legend),

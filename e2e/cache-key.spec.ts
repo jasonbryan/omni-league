@@ -141,6 +141,39 @@ test.describe('query strings and the CDN', () => {
   );
 
   test(
+    'the find page by sport: a canary as the sport, a filter, or an unknown level never reaches the response, and each sport gets its own HTML',
+    RAW_HTTP,
+    async () => {
+      const current = (body: string) =>
+        /<a\b[^>]*aria-current="page"[^>]*>\s*([^<]*?)\s*<\/a>/.exec(body)?.[1];
+      for (const sample of [
+        (c: string) => `?sport=${c}`,
+        (c: string) => `?sport=soccer&age=${c}`,
+        (c: string) => `?sport=soccer&gender=${c}&level=${c}&format=${c}&page=${c}`,
+        (c: string) => `?sport=soccer&sport=${c}`,
+        (c: string) => `?q=a&sport=soccer&age=u10&age=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`/leagues${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        expect(sharedCacheable(response.headers['cache-control']), sample(token)).toBe(true);
+      }
+      const soccer = await rawGet('/leagues?sport=soccer');
+      const softball = await rawGet('/leagues?sport=softball&level=bb');
+      expect(current(soccer.body)).toBe('Soccer');
+      expect(current(softball.body)).toBe('Softball');
+      expect(softball.body).not.toContain('level=bb');
+      expect(softball.body).not.toContain('level%3Dbb');
+      const back = await rawGet('/leagues?sport=soccer');
+      expect(current(back.body)).toBe('Soccer');
+    },
+  );
+
+  test(
     'the find page without a search: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
     RAW_HTTP,
     async () => {

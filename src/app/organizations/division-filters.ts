@@ -23,6 +23,12 @@ const ALL_LEVELS = Object.keys(STANDARD_LEVEL_LABELS) as StandardLevel[];
 
 const AGE_GROUP_KEYS = AGE_GROUPS.map((group) => group.key);
 
+/** The U-ages first, then Adult and its brackets, so a youth list does not open on Adult. */
+const AGE_GROUP_OFFER_ORDER = [
+  ...AGE_GROUP_KEYS.filter(isYouth),
+  ...AGE_GROUP_KEYS.filter((key) => !isYouth(key)),
+];
+
 const GENDER_PARAMS: Readonly<Record<string, Gender>> = {
   coed: 'coed',
   mens: 'mens',
@@ -254,7 +260,7 @@ export function filterGroups(
     {
       name: 'age',
       legend: 'Age group',
-      options: offered(AGE_GROUP_KEYS, (facet) => facet.ageGroup, filters.ageGroup).map(
+      options: offered(AGE_GROUP_OFFER_ORDER, (facet) => facet.ageGroup, filters.ageGroup).map(
         ({ value, checked }) => ({ name: 'age', value, label: ageGroupLabel(value), checked }),
       ),
     },

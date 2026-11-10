@@ -1,4 +1,4 @@
-import type { FindResultRow, FindResults } from '../find-path';
+import type { FindResultRow, FindResults, FindSportResults } from '../find-path';
 
 // On this date Summer 2027 is open for registration (see the public league page's test data).
 export { at, OPEN_DAY } from '../../organizations/public-league/testing/league-data';
@@ -59,5 +59,49 @@ export function manyResults(count: number, more: boolean): FindResults {
       name: `Coed League ${i + 1}`,
       slug: `coed-league-${i + 1}`,
     })),
+  };
+}
+
+const FRONT_RANGE = { name: 'Front Range Rec Sports', slug: 'front-range-rec-sports' };
+
+export const GIRLS_ROOKIES_ROW: FindResultRow = {
+  organization: FRONT_RANGE,
+  name: 'U10 Girls Fall Rec',
+  slug: 'u10-girls-fall-rec',
+  sportName: 'Soccer',
+  locationNames: ['Cottonwood Creek Fields'],
+  divisionLabel: 'Girls · 7v7 · Rec · U10',
+  seasons: [],
+};
+
+export const GIRLS_SELECT_ROW: FindResultRow = {
+  organization: FRONT_RANGE,
+  name: 'U10 Girls Select',
+  slug: 'u10-girls-select',
+  sportName: 'Soccer',
+  locationNames: ['Larkspur Turf Center'],
+  divisionLabel: 'Girls · 7v7 · Competitive · U10',
+  seasons: [],
+};
+
+export const SOCCER_FACETS: NonNullable<FindSportResults['facets']> = [
+  { gender: 'womens', playersPerSide: 7, level: 'rec', ageGroup: 'u10' },
+  { gender: 'womens', playersPerSide: 7, level: 'competitive', ageGroup: 'u10' },
+  { gender: 'mens', playersPerSide: 7, level: 'rec', ageGroup: 'u10' },
+  { gender: 'womens', playersPerSide: 11, level: 'intermediate', ageGroup: 'adult' },
+  { gender: 'coed', playersPerSide: 6, level: 'rec', ageGroup: 'over40' },
+];
+
+export function sportResults(
+  rows: FindResultRow[],
+  paging: { page?: number; pageCount?: number; total?: number } = {},
+  facets: FindSportResults['facets'] = SOCCER_FACETS,
+): FindSportResults {
+  return {
+    rows,
+    page: paging.page ?? 1,
+    pageCount: paging.pageCount ?? 1,
+    total: paging.total ?? rows.length,
+    facets,
   };
 }
