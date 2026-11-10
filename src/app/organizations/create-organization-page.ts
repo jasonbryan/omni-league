@@ -428,7 +428,7 @@ export class CreateOrganizationPage {
   };
 
   private readonly takenBeforeSubmit = computed(() =>
-    this.availability.answer() === 'taken' ? this.model().slug : null,
+    !this.submitting() && this.availability.answer() === 'taken' ? this.model().slug : null,
   );
 
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
@@ -442,12 +442,13 @@ export class CreateOrganizationPage {
   );
 
   protected readonly slugAvailable = computed(
-    () => this.availability.answer() === 'available' && this.errors.slug() === null,
+    () =>
+      !this.submitting() &&
+      this.availability.answer() === 'available' &&
+      this.errors.slug() === null,
   );
 
-  protected readonly slugStatusReservesRoom = computed(
-    () => this.clientErrors.slug() === null && this.errors.slug() === null,
-  );
+  protected readonly slugStatusReservesRoom = computed(() => this.errors.slug() === null);
 
   protected readonly reservedParts = computed(() => {
     if (this.errors.slug() !== ORGANIZATION_MESSAGES.slugInvalid) return null;

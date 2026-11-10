@@ -1283,6 +1283,30 @@ describe('AdminLeagues', () => {
       expect(error('slug')).toBeNull();
     });
 
+    it('keeps the status line from one typed value to the next while no error is shown', async () => {
+      await open([]);
+      const before = availability()?.className;
+      for (const value of ['abc', 'abc-', 'abc-d']) {
+        await type('slug', value);
+        expect(availability()?.className, value).toBe(before);
+      }
+    });
+
+    it('shows no taken error while the create is in flight or after it succeeded', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+    });
+
     it('does not use the word slug in any message on the field', async () => {
       await open([]);
       await submit();

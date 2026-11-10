@@ -158,6 +158,61 @@ describe('leagues.isSlugAvailable', () => {
   });
 
   test.each([
+    ['unauthenticated', 'Sign in required', (s: Setup) => s.t],
+    ['a league organizer of the organization', 'Not allowed', (s: Setup) => s.organizerA],
+    ['an org admin of another organization', 'Not allowed', (s: Setup) => s.adminB],
+    ['a non-member', 'Not allowed', (s: Setup) => s.stranger],
+  ])('refuses %s', async (_name, message, caller) => {
+    const s = await setup();
+    await expect(
+      caller(s).query(api.leagues.isSlugAvailable, {
+        organizationId: s.organizationA,
+        slug: 'free-league',
+      }),
+    ).rejects.toThrow(message);
+  });
+});
+
+describe('seasons.isSlugAvailable', () => {
+  test('answers true for a free slug and false for one the league uses', async () => {
+    const s = await setup();
+    const leagueId = s.leagueA;
+    expect(
+      await s.adminA.query(api.seasons.isSlugAvailable, { leagueId, slug: 'spring-2027' }),
+    ).toBe(true);
+    expect(await s.adminA.query(api.seasons.isSlugAvailable, { leagueId, slug: 'fall-2026' })).toBe(
+      false,
+    );
+  });
+
+  test('allows a slug that only another league uses', async () => {
+    const s = await setup();
+    expect(
+      await s.adminA.query(api.seasons.isSlugAvailable, {
+        leagueId: s.leagueOther,
+        slug: 'fall-2026',
+      }),
+    ).toBe(true);
+  });
+
+  test('answers false for a reserved slug', async () => {
+    const s = await setup();
+    expect(
+      await s.adminA.query(api.seasons.isSlugAvailable, { leagueId: s.leagueA, slug: 'new' }),
+    ).toBe(false);
+  });
+
+  test('answers a league organizer of that league', async () => {
+    const s = await setup();
+    expect(
+      await s.organizerA.query(api.seasons.isSlugAvailable, {
+        leagueId: s.leagueA,
+        slug: 'spring-2027',
+      }),
+    ).toBe(true);
+  });
+
+  test.each([
     ['unauthenticated', 'Sign in required', (s: Setup) => s.t, 'leagueA'],
     ['an organizer of another league', 'Not allowed', (s: Setup) => s.organizerA, 'leagueOther'],
     ['an org admin of another organization', 'Not allowed', (s: Setup) => s.adminB, 'leagueA'],

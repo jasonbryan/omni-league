@@ -751,6 +751,34 @@ describe('CreateOrganizationPage', () => {
       expect(availability()?.textContent?.trim()).toBe('Available');
     });
 
+    it('keeps the status line from one typed value to the next while no error is shown', async () => {
+      const classes = () => availability()?.className;
+      const before = classes();
+      for (const value of ['abc', 'abc-', 'abc-d']) {
+        await typeValue('slug', value);
+        expect(classes(), value).toBe(before);
+      }
+      await typeValue('name', 'Ab');
+      expect(classes()).toBe(before);
+      await typeValue('name', 'Abc');
+      expect(classes()).toBe(before);
+    });
+
+    it('shows no taken error while the create is in flight or after it succeeded', async () => {
+      await typeValue('name', NAME);
+      await pause();
+      submitButton().click();
+      await stable();
+      expect(convex.calls).toHaveLength(1);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      expect(input('slug').getAttribute('aria-invalid')).toBeNull();
+      convex.calls[0].resolve({ slug: SLUG });
+      latest().emit(false);
+      expect(page.querySelector('#slug-error')).toBeNull();
+    });
+
     it('does not use the word slug in any message on the field', async () => {
       const messages: string[] = [];
       await submit();

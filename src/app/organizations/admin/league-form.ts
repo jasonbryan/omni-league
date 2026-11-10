@@ -217,11 +217,12 @@ export class LeagueForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () => this.webAddress.answer() === 'available' && this.errors.slug() === null,
+      () =>
+        !this.submitting() &&
+        this.webAddress.answer() === 'available' &&
+        this.errors.slug() === null,
     );
-    this.slugStatusReservesRoom = computed(
-      () => this.clientErrors.slug() === null && this.errors.slug() === null,
-    );
+    this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
       if (this.errors.slug() !== LEAGUE_MESSAGES.slugInvalid) return null;
       const message = LEAGUE_MESSAGES.slugInvalid;
@@ -338,7 +339,7 @@ export class LeagueForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {

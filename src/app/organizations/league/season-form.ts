@@ -185,11 +185,12 @@ export class SeasonForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () => this.webAddress.answer() === 'available' && this.errors.slug() === null,
+      () =>
+        !this.submitting() &&
+        this.webAddress.answer() === 'available' &&
+        this.errors.slug() === null,
     );
-    this.slugStatusReservesRoom = computed(
-      () => this.clientErrors().slug === undefined && this.errors.slug() === null,
-    );
+    this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
       const message = this.errors.slug();
       if (message === null) return null;
@@ -276,7 +277,7 @@ export class SeasonForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {

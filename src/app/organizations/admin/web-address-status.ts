@@ -30,6 +30,6 @@ export class WebAddressStatus {
   readonly reserveRoom = input.required<boolean>();
 
   protected readonly hostClass = computed(() =>
-    this.reserveRoom() || this.available() ? ROOM_FOR_ONE_LINE : 'sr-only',
+    this.reserveRoom() ? ROOM_FOR_ONE_LINE : 'sr-only',
   );
 }
