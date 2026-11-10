@@ -7,12 +7,13 @@ import { describe, it } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { PROBLEMS_FILE, PRODUCTION_RUNS } from './e2e-production-check.mjs';
 
-const SETUP_MINUTES = 2;
+const PRODUCTION_OTHER_SETUP_MINUTES = 4;
 const SPARE_MINUTES = 1;
 const SHARDS = 10;
 const SHARD_NUMBERS = Array.from({ length: SHARDS }, (_, index) => index + 1);
 const GLOBAL_TIMEOUT_MS = 1_800_000;
-const E2E_SETUP_MINUTES = 13;
+const E2E_OTHER_SETUP_MINUTES = 3;
+const BROWSERS_TIMEOUT_MINUTES = 16;
 const E2E_MARGIN_MINUTES = 2;
 const RESULTS = ['failure', 'cancelled', 'success', 'skipped'];
 
@@ -46,6 +47,15 @@ function jobSteps(jobName) {
     steps.push({ name, id, condition, uses, env, run, block });
   }
   return steps;
+}
+
+function jobTimeout(jobName) {
+  return Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job(jobName))?.[1]);
+}
+
+function stepTimeout(step) {
+  const minutes = /^ {8}timeout-minutes: (\d+)$/m.exec(step.block)?.[1];
+  return minutes === undefined ? undefined : Number(minutes);
 }
 
 function e2eSteps() {
@@ -195,7 +205,7 @@ describe('the e2e-production job', () => {
   };
   const runNames = PRODUCTION_RUNS.map((run) => run.name);
 
-  it('runs on the same nights as e2e, in parallel with it, within 20 minutes', () => {
+  it('runs on the same nights as e2e, in parallel with it, within 38 minutes', () => {
     const production = job('e2e-production');
     assert.match(production, /^ {4}needs: nightly-gate$/m);
     assert.match(
@@ -203,7 +213,7 @@ describe('the e2e-production job', () => {
       /^ {4}if: \$\{\{ !cancelled\(\) && needs\.nightly-gate\.outputs\.skip != 'true' \}\}$/m,
     );
     assert.match(production, /^ {4}runs-on: ubuntu-24\.04$/m);
-    assert.match(production, /^ {4}timeout-minutes: 20$/m);
+    assert.match(production, /^ {4}timeout-minutes: 38$/m);
     assert.doesNotMatch(production, /^ {4}permissions:/m, 'the top-level contents: read only');
   });
 
@@ -319,16 +329,32 @@ describe('the e2e-production job', () => {
       'pwa-update': 6,
       'kill-switch': 5,
     });
-    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e-production'))?.[1]);
+    const limit = jobTimeout('e2e-production');
+    assert.equal(limit, 38);
     const runs = Object.values(timeouts).reduce((sum, minutes) => sum + minutes, 0);
+    const setup = (stepTimeout(step('e2e browsers')) ?? limit) + PRODUCTION_OTHER_SETUP_MINUTES;
     assert.ok(
-      runs + SETUP_MINUTES <= limit - SPARE_MINUTES,
-      `${runs} minutes of runs plus ${SETUP_MINUTES} of setup leave under ${SPARE_MINUTES} spare in ${limit}`,
+      runs + setup <= limit - SPARE_MINUTES,
+      `${runs} minutes of runs plus ${setup} of setup leave under ${SPARE_MINUTES} spare in ${limit}`,
     );
     for (const name of ['expected tests', 'e2e failures', 'e2e report']) {
       assert.doesNotMatch(step(name).block, /timeout-minutes/, name);
       assert.match(step(name).condition ?? '', /!cancelled\(\)|failure\(\)/, name);
     }
+  });
+
+  it('installs Chromium alone under a 16-minute limit, with no retry and nothing to hide a failure', () => {
+    const browsers = step('e2e browsers');
+    assert.equal(browsers.run, 'npx playwright install --with-deps --only-shell chromium');
+    assert.equal(stepTimeout(browsers), BROWSERS_TIMEOUT_MINUTES);
+    assert.ok(stepTimeout(browsers) < jobTimeout('e2e-production'));
+    assert.doesNotMatch(browsers.block, /continue-on-error/);
+    const installs = steps.filter((found) => /playwright install/.test(found.run ?? ''));
+    assert.deepEqual(
+      installs.map((found) => found.name),
+      ['e2e browsers'],
+    );
+    assert.equal(names[names.indexOf('e2e browsers') + 1], 'e2e backend');
   });
 
   it('checks every run against the expected table, after a failed run too', () => {
@@ -396,14 +422,38 @@ describe('the e2e job', () => {
     );
   });
 
-  it('keeps the job limit at 45 minutes, with room after the global timeout for setup and the report', () => {
-    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e'))?.[1]);
-    assert.equal(limit, 45);
+  it('keeps the job limit at 51 minutes, with room after the global timeout for the install, setup, and the report', () => {
+    const limit = jobTimeout('e2e');
+    assert.equal(limit, 51);
     const globalMinutes = GLOBAL_TIMEOUT_MS / 60_000;
+    const setup = (stepTimeout(step('e2e browsers')) ?? limit) + E2E_OTHER_SETUP_MINUTES;
     assert.ok(
-      globalMinutes + E2E_SETUP_MINUTES + E2E_MARGIN_MINUTES <= limit,
-      `${globalMinutes} minutes of tests, ${E2E_SETUP_MINUTES} of setup and ${E2E_MARGIN_MINUTES} spare do not fit in ${limit}`,
+      globalMinutes + setup + E2E_MARGIN_MINUTES <= limit,
+      `${globalMinutes} minutes of tests, ${setup} of setup and ${E2E_MARGIN_MINUTES} spare do not fit in ${limit}`,
     );
+  });
+
+  it('installs Chromium under a 16-minute limit, then WebKit in its own step with no limit of its own', () => {
+    const browsers = step('e2e browsers');
+    assert.equal(browsers.run, 'npx playwright install --with-deps --only-shell chromium');
+    assert.equal(stepTimeout(browsers), BROWSERS_TIMEOUT_MINUTES);
+    const webkit = step('e2e webkit');
+    assert.equal(names.indexOf('e2e webkit'), names.indexOf('e2e browsers') + 1);
+    assert.equal(webkit.condition, "${{ env.E2E_WEBKIT == '1' }}");
+    assert.equal(webkit.run, 'npx playwright install --with-deps webkit');
+    assert.equal(stepTimeout(webkit), undefined);
+    assert.equal(names[names.indexOf('e2e webkit') + 1], 'e2e backend');
+  });
+
+  it('installs each browser once, with no retry and nothing to hide a failed install', () => {
+    const installs = steps.filter((found) => /playwright install/.test(found.run ?? ''));
+    assert.deepEqual(
+      installs.map((found) => found.name),
+      ['e2e browsers', 'e2e webkit'],
+    );
+    for (const install of installs) {
+      assert.doesNotMatch(install.block, /continue-on-error/, install.name);
+    }
   });
 
   it('runs e2e after a drift failure, but only once the backend is up', () => {
@@ -828,8 +878,16 @@ describe('a shard that reaches the global timeout', () => {
     assert.doesNotMatch(found('e2e')?.block ?? '', /continue-on-error/);
   });
 
+  it('fails a hung Chromium install at its step limit, so the leg still reaches done', () => {
+    const browsers = found('e2e browsers');
+    assert.ok(browsers);
+    assert.ok(stepTimeout(browsers) < jobTimeout('e2e'));
+    assert.equal(found('e2e backend')?.condition, undefined);
+    assert.equal(found('done')?.condition, '${{ !cancelled() }}');
+  });
+
   it('keeps the global timeout shorter than the job limit by the setup and report budget', () => {
-    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e'))?.[1]);
+    const limit = jobTimeout('e2e');
     const globalMs = Number(/--global-timeout=(\d+)/.exec(found('e2e')?.run ?? '')?.[1]);
     assert.equal(globalMs, GLOBAL_TIMEOUT_MS);
     assert.ok(globalMs < limit * 60_000);
@@ -845,6 +903,40 @@ describe('the sharded nightly in the docs', () => {
   it('amends the CI pipeline decision in a header line and in a section', () => {
     assert.match(adr, new RegExp(`^- \\*\\*Amended:\\*\\* 2026-11-05 .*"${amendment}`, 'm'));
     assert.match(adr, new RegExp(`^## ${amendment} \\(2026-11-05\\)$`, 'm'));
+  });
+
+  it('amends the CI pipeline decision for the install step timeouts, with the trade-off and the WebKit case', () => {
+    const install = 'Amendment: browser install step timeouts';
+    const header = new RegExp(
+      `^- \\*\\*Amended:\\*\\* 2026-11-10 \\(#610\\).*"${install}.*$`,
+      'm',
+    ).exec(adr);
+    assert.ok(header, 'the amendment header line');
+    for (const superseded of ['#426', '#563', '#599', 'SETUP_MINUTES']) {
+      assert.ok(header[0].includes(superseded), superseded);
+    }
+    const section = adr.split(`## ${install} (2026-11-10)\n`)[1];
+    assert.ok(section, 'the amendment section');
+    for (const leadIn of ['The reporting trade-off', 'The unbudgeted WebKit dispatch']) {
+      assert.ok(section.includes(`**${leadIn}.**`), leadIn);
+    }
+  });
+
+  it('gives the install step timeouts, the job limits, and their evidence runs in ci.md', () => {
+    const paragraph = ci.split('\n').find((line) => line.startsWith('**Install step timeouts.**'));
+    assert.ok(paragraph, 'the Install step timeouts lead-in');
+    for (const minutes of ['16', '51', '38']) {
+      assert.match(paragraph, new RegExp(`\\b${minutes}\\b`), minutes);
+    }
+    for (const run of ['42762246537', '42115517094', '41904096741']) {
+      assert.ok(paragraph.includes(`actions/runs/${run}`), run);
+    }
+    const security = ci.split('\n').find((line) => line.startsWith('- **Workflow security:**'));
+    for (const limit of ['20 on `ci`', '51 on each `e2e` shard', '38 on `e2e-production`']) {
+      assert.ok(security?.includes(limit), limit);
+    }
+    const webkitRow = ci.split('\n').find((line) => line.startsWith('| `e2e webkit`'));
+    assert.ok(webkitRow, 'the e2e webkit row of the E2E steps table');
   });
 
   it('defines the term Shard in the glossary', () => {
