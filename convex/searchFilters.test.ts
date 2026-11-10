@@ -383,3 +383,55 @@ describe('search.leagues suggestions with a sport and division filters', () => {
     expect(result.facets).toEqual([{ gender: 'mens' }]);
   });
 });
+
+describe('search by sport with input a caller should not send', () => {
+  test('leaguesBySport reads a page that is zero, negative, fractional, or not a number as page 1', async () => {
+    const t = await setup([]);
+    await insertBulk(
+      t,
+      Array.from({ length: 12 }, (_, i) => ({ name: `League ${String(i).padStart(2, '0')}` })),
+    );
+    for (const page of [0, -3, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const result = await t.query(api.search.leaguesBySport, { sport: 'soccer', page });
+      expect(result, String(page)).toMatchObject({ page: 1, pageCount: 3, total: 12 });
+      expect(names(result), String(page)).toHaveLength(5);
+    }
+  });
+
+  test('both queries refuse a sport or a division value that is not one of the lists', async () => {
+    const t = await setup(ALL);
+    await expect(
+      t.query(api.search.leaguesBySport, { sport: 'curling' as never, page: 1 }),
+    ).rejects.toThrow();
+    await expect(
+      t.query(api.search.leaguesBySport, { sport: 'soccer', page: 1, gender: ['robots' as never] }),
+    ).rejects.toThrow();
+    await expect(
+      t.query(api.search.leagues, { q: 'rookies', sport: 'curling' as never }),
+    ).rejects.toThrow();
+    await expect(
+      t.query(api.search.leagues, { q: 'rookies', ageGroup: ['u99' as never] }),
+    ).rejects.toThrow();
+  });
+
+  test('a search with a sport and division filters never returns a draft', async () => {
+    const t = await setup([
+      ...ALL,
+      league('Girls Rookies Draft', 'soccer', { gender: 'womens', ageGroup: 'u10' }, 'draft'),
+    ]);
+    const result = await t.query(api.search.leagues, {
+      q: 'girls rookies',
+      sport: 'soccer',
+      gender: ['womens'],
+      ageGroup: ['u10'],
+    });
+    expect(names(result)).toEqual(['Girls Rookies']);
+    expect(result.facets).toHaveLength(1);
+  });
+
+  test('a sport with no published league returns an empty page and no facets', async () => {
+    const t = await setup([league('Only Draft', 'softball', { playersPerSide: 10 }, 'draft')]);
+    const result = await t.query(api.search.leaguesBySport, { sport: 'softball', page: 1 });
+    expect(result).toEqual({ rows: [], page: 1, pageCount: 0, total: 0, facets: [] });
+  });
+});
