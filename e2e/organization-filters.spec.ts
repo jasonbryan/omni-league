@@ -1,5 +1,6 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import { answerWithClientShell } from './support/client-shell';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
@@ -209,6 +210,25 @@ test.describe('organization filters: raw server HTML', () => {
   );
 
   test(
+    "Men's 6v6 matches nothing, so the sentence comes first, then a link to the view without each value with its count, then Clear all",
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await filterTenant();
+      const { html } = await fetchRawHtml(request, `${tenant.path}?gender=mens&format=6v6`);
+      const leagues = between(html, 'id="leagues"', '</section>');
+      expect(plainText(leagues)).toContain(
+        `No leagues match these filters ${tenant.name} has no men's 6v6 league. Remove a filter to see more. Remove Men's (3 leagues) Remove 6v6 (1 league) Clear all`,
+      );
+      expect(hrefsIn(leagues)).toEqual([
+        `${tenant.path}?format=6v6`,
+        `${tenant.path}?gender=mens`,
+        tenant.path,
+      ]);
+    },
+  );
+
+  test(
     'Registration open follows the filters, and a view with no match has no open section or Register link',
     RAW_HTTP,
     async ({ request }, testInfo) => {
@@ -312,6 +332,90 @@ test.describe('organization filters in the browser', () => {
     expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
       1,
     );
+  });
+
+  const noMatchesBox = (page: Page) => page.locator('#leagues div.border-dashed');
+  const removeLinks = (page: Page) => noMatchesBox(page).getByRole('link', { name: /^Remove / });
+
+  test('Remove 6v6 in the no-matches view changes the URL without a page load and moves focus to the count', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?gender=mens&format=6v6`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
+    await expect(removeLinks(page)).toHaveText([
+      "Remove Men's (3 leagues)",
+      'Remove 6v6 (1 league)',
+    ]);
+
+    await removeLinks(page).filter({ hasText: 'Remove 6v6' }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
+    await expect(count(page)).toHaveText('1 of 7 leagues');
+    await expect(count(page)).toBeFocused();
+    expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
+      1,
+    );
+  });
+
+  test('the no-matches view passes the axe helper, with links 44px high on a touch screen', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?gender=mens&format=6v6`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(removeLinks(page)).toHaveCount(2);
+    await expectAccessible(page);
+    const expected = isDesktop(testInfo) ? 36 : 44;
+    for (const box of await removeLinks(page).evaluateAll((links) =>
+      links.map((link) => link.getBoundingClientRect().height),
+    )) {
+      expect(box).toBe(expected);
+    }
+  });
+
+  test('Clear all stays where it is while the facets load and the links arrive', async ({
+    page,
+    consoleGuard,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'the client shell route needs a Chromium permission');
+    const tenant = await filterTenant();
+    const path = `${tenant.path}?gender=mens&format=6v6`;
+    await page.goto(path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(removeLinks(page)).toHaveCount(2);
+    // The client shell renders the saved lists at once, so dropping the facets' copy and holding every answer leaves the facets alone loading.
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('cvx-saved:organizations:listPublicLeagueFacets')) {
+          localStorage.removeItem(key);
+        }
+      }
+    });
+    const held = await holdQueries(page, [
+      'organizations:getPublicPage',
+      'organizations:listPublicLeagues',
+      'organizations:listPublicLocations',
+      'seasons:listOpenForOrganization',
+      'organizations:listPublicLeagueFacets',
+    ]);
+    await answerWithClientShell(page, path);
+    await page.reload();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(noMatchesBox(page)).toContainText("has no men's 6v6 league.");
+    await expect(page.locator('[data-suggestions-skeleton] > span')).toHaveCount(2);
+    await expect(removeLinks(page)).toHaveCount(0);
+    const clearAll = noMatchesBox(page).getByRole('link', { name: 'Clear all' });
+    const before = (await clearAll.boundingBox())?.y;
+    expect(before).toBeDefined();
+
+    held.release();
+    await expect(removeLinks(page)).toHaveCount(2);
+    await expect(page.locator('[data-suggestions-skeleton]')).toHaveCount(0);
+    expect((await clearAll.boundingBox())?.y).toBe(before);
   });
 
   test('a pill pressed while the new page loads holds the rows busy and the count never reads the previous result', async ({

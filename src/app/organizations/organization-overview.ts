@@ -29,6 +29,7 @@ import { OrganizationMark } from './organization-mark';
 import { seasonDates } from './league/season-dates';
 import { LIST_PAGE_SIZE } from '../core/list-page';
 import {
+  listPagesQuery,
   organizationPath,
   pageQueryFor,
   sportViewPath,
@@ -42,7 +43,8 @@ import {
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
-import type { FilterGroup, LeagueFacet } from './division-filters';
+import { filterPills, type FilterGroup, type LeagueFacet } from './division-filters';
+import { noMatchSentence, removalSuggestions } from './no-match-suggestions';
 import type { SportCounts } from '../../../convex/lib/sports';
 import {
   NO_DIVISION_FILTERS,
@@ -312,7 +314,40 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                   class="mt-4 flex max-w-md flex-col items-start rounded-xl border border-dashed border-border p-6"
                 >
                   <p class="font-medium">No leagues match these filters</p>
-                  <p class="mt-1 text-sm text-muted-foreground">Remove a filter to see more.</p>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {{ noMatchSentence() }} Remove a filter to see more.
+                  </p>
+                  @if (removals(); as removals) {
+                    @if (removals.length) {
+                      <ul role="list" class="mt-4 flex flex-wrap gap-2">
+                        @for (removal of removals; track removal.label) {
+                          <li>
+                            <a
+                              [routerLink]="pagePath()"
+                              [queryParams]="removal.query"
+                              data-slot="button"
+                              [class]="clearButton"
+                              (click)="filterBar()?.focusCountNext($event)"
+                              >Remove {{ removal.label }}
+                              <span class="text-muted-foreground">{{ removal.text }}</span></a
+                            >
+                          </li>
+                        }
+                      </ul>
+                    }
+                  } @else {
+                    <div
+                      data-suggestions-skeleton
+                      aria-hidden="true"
+                      class="mt-4 flex flex-wrap gap-2"
+                    >
+                      @for (pill of activeValues(); track pill) {
+                        <span
+                          class="block h-11 w-44 rounded-lg bg-muted motion-safe:animate-pulse md:h-9"
+                        ></span>
+                      }
+                    </div>
+                  }
                   <a
                     [routerLink]="pagePath()"
                     [queryParams]="filterBar()?.clearQuery()"
@@ -536,6 +571,28 @@ export class OrganizationOverview {
 
   // The Registration open section and the hero's Register link would speak of the whole organization, so a view with no match leaves them out.
   protected readonly noMatches = computed(() => this.matchingCount() === 0);
+
+  protected readonly noMatchSentence = computed(() =>
+    noMatchSentence(this.page().name, this.filters(), this.sport()?.name),
+  );
+
+  protected readonly activeValues = computed(() => filterPills(this.filters()).map((_, i) => i));
+
+  // Undefined while the facets load online. Offline with no saved facets they are an empty list, so nothing is offered.
+  protected readonly removals = computed(() => {
+    const facets = this.facets();
+    if (facets === undefined) return undefined;
+    const locations = this.locationPaging()?.page ?? 1;
+    return removalSuggestions({
+      facets,
+      filters: this.filters(),
+      sportLeagueCounts: this.sportLeagueCounts(),
+      sport: this.sport()?.key,
+      total: this.leagueTotal(),
+      queryFor: (without) =>
+        listPagesQuery({ leagues: 1, locations }, this.sport() !== undefined, without),
+    });
+  });
 
   protected readonly leaguesHeading = computed(() => {
     const sport = this.sport();
