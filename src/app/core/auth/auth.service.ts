@@ -526,7 +526,10 @@ function isEmailValidationError(message: string | undefined): boolean {
 }
 
 function signInFailureOf(error: AuthError): SignInResult {
-  if (error.status === 401) return { ok: false, error: 'incorrect' };
+  // Sign-up refuses a password over 128 characters, so no account has one: it is a wrong password.
+  if (error.status === 401 || error.code === 'PASSWORD_TOO_LONG') {
+    return { ok: false, error: 'incorrect' };
+  }
   if (error.status === 429 && error.code === 'SIGN_IN_LOCKED')
     return { ok: false, error: 'locked' };
   if (error.status === 429 && error.code === 'TOO_MANY_ATTEMPTS') {

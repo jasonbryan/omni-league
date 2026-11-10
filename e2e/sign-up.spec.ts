@@ -557,7 +557,7 @@ test.describe('sign-up', () => {
     });
   });
 
-  // Better Auth 1.6 refuses a malformed email with 400 VALIDATION_ERROR (convex/auth.test.ts pins
+  // Better Auth refuses a malformed email with 400 VALIDATION_ERROR (convex/auth.test.ts pins
   // the message). The page cannot send one today, so the response is replaced: an email-only
   // refusal shows on Email; one that also names another field is the generic alert.
   test.describe('a VALIDATION_ERROR refusal', VIEWPORT_AGNOSTIC, () => {

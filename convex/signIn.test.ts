@@ -146,6 +146,41 @@ describe('sign-in', () => {
       message: 'Invalid email or password',
     });
   }, 30_000);
+
+  test('a 129-character password gets the same 400 PASSWORD_TOO_LONG for a known and an unknown address, and each attempt is counted', async () => {
+    const t = setup();
+    await signUp(t);
+    const overLength = 'p'.repeat(129);
+    const known = await signIn(t, EMAIL, overLength);
+    const unknown = await signIn(t, UNKNOWN, overLength);
+    expect(known.status, JSON.stringify(known.json)).toBe(400);
+    expect(known.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
+    expect(unknown.status).toBe(400);
+    expect(unknown.json).toEqual(known.json);
+    expect((await rows(t)).map((row) => [row.email, row.failures]).sort()).toEqual(
+      [
+        [EMAIL, 1],
+        [UNKNOWN, 1],
+      ].sort(),
+    );
+  }, 30_000);
+
+  test('a 128-character password signs in, and the same password with one more character gets 400 PASSWORD_TOO_LONG', async () => {
+    const t = setup();
+    const longest = 'q'.repeat(128);
+    const signUpAnswer = await post(t, 'sign-up/email', {
+      name: 'Maya Okafor',
+      email: EMAIL,
+      password: longest,
+      adultConfirmed: true,
+    });
+    expect(signUpAnswer.status, JSON.stringify(signUpAnswer.json)).toBe(200);
+    const atLimit = await signIn(t, EMAIL, longest);
+    expect(atLimit.status, JSON.stringify(atLimit.json)).toBe(200);
+    const overLimit = await signIn(t, EMAIL, `${longest}q`);
+    expect(overLimit.status).toBe(400);
+    expect(overLimit.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
+  }, 30_000);
 });
 
 describe('per-address throttle', () => {
@@ -195,6 +230,17 @@ describe('per-address throttle', () => {
     expect(await rows(t)).toEqual([]);
     await fail(t, EMAIL, 1);
     expect((await rows(t)).map((row) => row.failures)).toEqual([1]);
+  }, 60_000);
+
+  test('after 5 failures, a 129-character password gets the same 429 and wait as the correct password', async () => {
+    const t = setup();
+    await signUp(t);
+    await fail(t, EMAIL, 5);
+    const correct = await signIn(t, EMAIL, PASSWORD);
+    const overLength = await signIn(t, EMAIL, 'p'.repeat(129));
+    expect(correct.status).toBe(429);
+    expect(overLength.status).toBe(429);
+    expect(overLength.json).toEqual(correct.json);
   }, 60_000);
 
   test('an unknown address gets the identical sequence: five 401s, then 429', async () => {

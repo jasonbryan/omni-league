@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #3
 - **Date:** 2026-10-07
+- **Amended:** 2026-11-10 (#452): the `better-auth` `overrides` entry is gone, because `better-auth` 1.7.18 declares `vitest ^2 || ^3 || ^4 || ^5`; `npm ls vitest` shows one copy.
 
 ## Context
 

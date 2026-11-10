@@ -14,9 +14,9 @@ updates:
       # Angular 22 supports TypeScript >=6.0 <6.1.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
-      # @convex-dev/better-auth needs peer better-auth <1.7.0.
+      # @convex-dev/better-auth 0.13 needs peer better-auth <1.8.0, so 1.8 waits for a component that accepts it.
       - dependency-name: better-auth
-        versions: ['>=1.7.0']
+        versions: ['>=1.8.0']
     groups:
       npm-minor-patch:
         applies-to: version-updates

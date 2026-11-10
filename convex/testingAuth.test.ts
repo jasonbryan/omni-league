@@ -17,6 +17,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
+const SITE_URL = 'http://localhost:4000';
 const TENANT = {
   organization: { name: 'E2E Org c3d4', slug: 'e2e-org-c3d4' },
   locations: [],
@@ -82,9 +83,27 @@ async function seedAuthDocs(t: T) {
   });
 }
 
+// The first Convex token creates the signing key; sign-in and sign-up create none.
+async function createSigningKey(t: T): Promise<void> {
+  const signIn = await t.fetch('/api/auth/sign-in/email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: SITE_URL },
+    body: JSON.stringify({ email: USER.email, password: USER.password }),
+  });
+  expect(signIn.status).toBe(200);
+  const cookie = /better-auth\.session_token=[^;]+/.exec(
+    signIn.headers.get('set-cookie') ?? '',
+  )?.[0];
+  expect(cookie).toBeDefined();
+  const token = await t.fetch('/api/auth/convex/token', {
+    headers: { origin: SITE_URL, cookie: cookie ?? '' },
+  });
+  expect(token.status).toBe(200);
+}
+
 beforeEach(() => {
   vi.stubEnv('CONVEX_SITE_URL', 'http://127.0.0.1:3211');
-  vi.stubEnv('SITE_URL', 'http://localhost:4000');
+  vi.stubEnv('SITE_URL', SITE_URL);
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
   // No outside call even if the breached-password check were on.
   vi.stubGlobal('fetch', () => Promise.reject(new Error('no network in tests')));
@@ -173,10 +192,10 @@ describe('testing:reset and the auth component', () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
     await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    await createSigningKey(t);
     await seedAuthDocs(t);
     await seedSignInFailure(t);
-    // The sign-up's JWT already created a signing key; seedAuthDocs added another.
-    expect((await authDocs(t, 'jwks')).length).toBeGreaterThanOrEqual(2);
+    expect(await authDocs(t, 'jwks')).toHaveLength(2);
     let before = 0;
     for (const model of AUTH_COMPONENT_TABLES) before += (await authDocs(t, model)).length;
     expect(before).toBeGreaterThanOrEqual(8);

@@ -5,6 +5,7 @@
 - **Issue:** #1
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 - **Amended:** 2026-10-08 (#47): minimum release age is 3 days (was 1), equal to every Dependabot npm cooldown window (default, patch, minor, and major are all 3 days). See "Amendment: minimum release age (2026-10-08)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-11-10 (#452): the `better-auth` `overrides` entry is gone, because `better-auth` 1.7.18 accepts Vitest 5 and `@convex-dev/better-auth` 0.13.0 accepts 1.7; `package.json` has no `overrides`. The auth packages still add no install script.
 
 ## Context
 

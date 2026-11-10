@@ -1531,7 +1531,7 @@ function authErrorOf(error: unknown): { code?: string; status?: unknown } | null
 
 /**
  * Signs the account up through Better Auth, with the 18+ confirmation, and maps a failure by its
- * error code or status, never by message text (`better-auth` 1.6.33, `sign-up.mjs` and the
+ * error code or status, never by message text (`better-auth` 1.7.18, `sign-up.mjs` and the
  * `haveIBeenPwned` plugin): the length and breach codes are `rejected`, a breach check that could
  * not run (status 500, no code) is `check_unavailable`, an address that already exists, or that a
  * concurrent run took during the create, is `present`, and anything else throws a message that

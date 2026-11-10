@@ -1303,7 +1303,7 @@ describe('AuthService', () => {
         'check-unavailable',
       ],
       ['400 invalid email', { status: 400, code: 'INVALID_EMAIL' }, 'invalid-email'],
-      // Better Auth 1.6 answers a malformed email with its body-validation error.
+      // Better Auth answers a malformed email with its body-validation error.
       [
         '400 validation error on the email',
         { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
@@ -1446,6 +1446,11 @@ describe('AuthService', () => {
         { ok: false, error: 'incorrect' },
       ],
       ['401 without a code', { status: 401 }, { ok: false, error: 'incorrect' }],
+      [
+        '400 over-length password, answered before the address is looked up',
+        { status: 400, code: 'PASSWORD_TOO_LONG', message: 'Password too long' },
+        { ok: false, error: 'incorrect' },
+      ],
       [
         '429 inside the wait, with the seconds left',
         { status: 429, code: 'TOO_MANY_ATTEMPTS', retryAfterSeconds: 240 },

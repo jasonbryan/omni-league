@@ -21,8 +21,8 @@ function checkArgs(key: string, window: number, max: number): void {
   }
 }
 
-// Better Auth's database rule, decided and written in one transaction: Convex runs the mutations one
-// after another, so parallel requests cannot all pass one stale count.
+// Decided and written in one transaction: Convex runs the mutations one after another, so parallel
+// requests cannot all pass one stale count.
 export const consume = internalMutation({
   args: { key: v.string(), window: v.number(), max: v.number() },
   returns: consumeResult,
