@@ -13,7 +13,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { FormField, form, required, validate } from '@angular/forms/signals';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCircleAlert,
@@ -25,6 +25,7 @@ import {
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
+import { injectContinueToReturnTo } from '../core/auth/continue-to-return-to';
 import { returnToOrApp } from '../core/auth/return-to';
 import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
@@ -456,9 +457,9 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
 })
 export class SignUpPage {
   private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
+  private readonly continueToReturnTo = injectContinueToReturnTo();
 
   protected readonly signInReturnTo = returnToOrApp(this.returnTo);
 
@@ -567,8 +568,9 @@ export class SignUpPage {
     this.submitting.set(true);
     const result = await this.auth.signUp({ name: name.trim(), email: email.trim(), password });
     this.submitting.set(false);
+    if (this.continueToReturnTo.underway()) return;
     if (result.ok) {
-      await this.router.navigateByUrl(returnToOrApp(this.returnTo), { replaceUrl: true });
+      await this.continueToReturnTo.go();
       return;
     }
     this.showFailure(result.error, password.length);

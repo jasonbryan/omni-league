@@ -737,6 +737,7 @@ async function signUpOnLocalBuild(page: Page): Promise<{ manifest: NgswManifest;
 
 const OFFLINE_NOTE = "You're offline. Changes need a connection.";
 const STORE_KEY = 'better-auth_cookie';
+const GET_SESSION_PATH = '/api/auth/get-session';
 const SESSION_TOKEN = 'better-auth.session_token';
 
 const offlineNote = (page: Page) => page.locator('header + [role="status"] [data-offline-note]');
@@ -929,5 +930,40 @@ test.describe('offline navigation inside the app (production build against the l
     fieldWifi = false;
     await expect(accountRowName(page, user)).toBeVisible({ timeout: 30_000 });
     await expect(offlineNote(page)).toBeHidden();
+  });
+
+  test.describe('with the session check answering 503', () => {
+    test.use({ expectedFailedRequests: [{ status: 503, path: GET_SESSION_PATH }] });
+
+    test('signed in, the sign-in page a 503 check sent the user to continues to returnTo once the browser is back online, with no press', async ({
+      page,
+      context,
+    }) => {
+      const { user } = await signUpOnLocalBuild(page);
+      await expect(accountRowName(page, user)).toBeVisible();
+
+      const getSession = `${LOCAL_CONVEX_SITE_URL}${GET_SESSION_PATH}*`;
+      // The real answer's CORS headers stay, so the page reads the 503 rather than a failed fetch.
+      await context.route(getSession, async (route) =>
+        route.fulfill({ response: await route.fetch(), status: 503, body: '' }),
+      );
+      await page.goto('/sign-in?returnTo=%2Fapp%2Faccount');
+      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp%2Faccount`, {
+        timeout: 20_000,
+      });
+      await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+      expect(await storedSessionToken(page)).toBeDefined();
+
+      await context.unroute(getSession);
+      await setOffline(context, true);
+      await setOffline(context, false);
+      await expect(page).toHaveURL(`${baseURL}/app/account`, { timeout: 20_000 });
+      await expect(page.getByRole('heading', { level: 1, name: 'Account settings' })).toBeVisible();
+      await expect(page.locator('#main')).toBeFocused();
+      await expect(page).toHaveTitle('Account settings | Omni League');
+      await expect(page.getByRole('region', { name: 'Your details' })).toContainText(user.name, {
+        timeout: 20_000,
+      });
+    });
   });
 });

@@ -12,7 +12,7 @@ import {
   type SignInResult,
   type SignUpFailure,
 } from './auth.service';
-import { requireSignedIn } from './guards';
+import { redirectSignedIn, requireSignedIn } from './guards';
 import { FakeAuthClient, provideFakeAuthClient } from './testing/fake-auth-client';
 
 @Component({ template: '' })
@@ -336,6 +336,51 @@ describe('AuthService', () => {
         await vi.waitFor(() => expect(auth.signedIn()).toBe(true));
         await vi.advanceTimersByTimeAsync(0);
         expect(auth.authEpoch()).toBe(0);
+      });
+
+      describe('signed out on a 503 on /sign-in, with the token still stored', () => {
+        async function refusedOnSignIn() {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          TestBed.configureTestingModule({
+            providers: [
+              provideRouter([
+                { path: 'sign-in', component: Page, canActivate: [redirectSignedIn] },
+              ]),
+            ],
+          });
+          let session = () => Promise.resolve(new Response('', { status: 503 }));
+          const real = await configureReal(
+            unexpired(),
+            answerSession(() => session()),
+          );
+          await expect(real.auth.isSignedIn()).resolves.toBe(true);
+          await vi.waitFor(() => expect(real.auth.signedIn()).toBe(false));
+          await TestBed.inject(Router).navigateByUrl('/sign-in');
+          const signedInByCheck = vi.fn();
+          real.auth.signedInByCheck.subscribe(signedInByCheck);
+          session = () => Promise.resolve(json(SESSION));
+          return { ...real, signedInByCheck };
+        }
+
+        it('onOnline after the limit asks again, and the session signs in by the check', async () => {
+          const { auth, requests, storedToken, signedInByCheck } = await refusedOnSignIn();
+          vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+          auth.onOnline();
+          await vi.waitFor(() => expect(auth.signedIn()).toBe(true));
+          expect(signedInByCheck).toHaveBeenCalledTimes(1);
+          expect(storedToken()).toBe(true);
+          expect(requests()).toEqual([SESSION_URL, SESSION_URL]);
+        });
+
+        it("Better Auth's own refetch on the browser online event signs in by the check, and onOnline then asks nothing", async () => {
+          const { auth, requests, signedInByCheck } = await refusedOnSignIn();
+          vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+          window.dispatchEvent(new Event('online'));
+          auth.onOnline();
+          await vi.waitFor(() => expect(auth.signedIn()).toBe(true));
+          expect(signedInByCheck).toHaveBeenCalledTimes(1);
+          expect(requests()).toEqual([SESSION_URL, SESSION_URL]);
+        });
       });
 
       it.each([
@@ -727,6 +772,155 @@ describe('AuthService', () => {
         await loaded();
         expect(router.url).toBe('/organizations/y');
         expect(navigate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('re-check on a sign-in route while signed out with the token still stored', () => {
+      const ROUTES: Routes = [
+        { path: '', component: Page },
+        { path: 'sign-in', component: Page, canActivate: [redirectSignedIn] },
+        { path: 'sign-up', component: Page, canActivate: [redirectSignedIn] },
+        { path: 'organizations/x', component: Page },
+        { path: 'app', component: Page, canActivate: [requireSignedIn] },
+      ];
+
+      const afterCheckLimit = () => vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+
+      async function refusedOn(url: string) {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        TestBed.configureTestingModule({
+          providers: [provideFakeAuthClient(client), provideRouter(ROUTES)],
+        });
+        const router = TestBed.inject(Router);
+        const auth = TestBed.inject(AuthService);
+        await loaded();
+        client.emitError({ status: 503, statusText: 'Service Unavailable' });
+        await router.navigateByUrl(url);
+        expect(router.url).toBe(url);
+        expect(auth.signedIn()).toBe(false);
+        const signedInByCheck = vi.fn();
+        auth.signedInByCheck.subscribe(signedInByCheck);
+        return { auth, signedInByCheck };
+      }
+
+      it.each(['/sign-in?returnTo=%2Fapp', '/sign-up'])(
+        'on %s, onOnline re-checks once the last check started at least the limit ago, and a session signs in by the check',
+        async (url) => {
+          const { auth, signedInByCheck } = await refusedOn(url);
+          auth.onOnline();
+          expect(client.refetches).toBe(0);
+          afterCheckLimit();
+          auth.onOnline();
+          expect(client.refetches).toBe(1);
+          auth.onOnline();
+          expect(client.refetches).toBe(1);
+          expect(signedInByCheck).not.toHaveBeenCalled();
+
+          client.emitSession({ id: 's1' });
+          expect(auth.signedIn()).toBe(true);
+          expect(signedInByCheck).toHaveBeenCalledTimes(1);
+          client.emitSession({ id: 's1' });
+          expect(signedInByCheck).toHaveBeenCalledTimes(1);
+        },
+      );
+
+      it("counts Better Auth's own refetch on the browser online event as a check", async () => {
+        const { auth, signedInByCheck } = await refusedOn('/sign-in');
+        afterCheckLimit();
+        client.emitChecking();
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+        client.emitSession({ id: 's1' });
+        expect(signedInByCheck).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['a public page', '/organizations/x'],
+        ['the home page', '/'],
+      ])('does not re-check on %s', async (_, url) => {
+        const { auth } = await refusedOn(url);
+        afterCheckLimit();
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+      });
+
+      it('does not re-check with no stored token', async () => {
+        const { auth } = await refusedOn('/sign-in');
+        client.storedCookie = '';
+        afterCheckLimit();
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+      });
+
+      it('does not re-check while the browser reports no network', async () => {
+        const { auth } = await refusedOn('/sign-in');
+        setBrowserOnline(false);
+        afterCheckLimit();
+        auth.onOnline();
+        expect(client.refetches).toBe(0);
+      });
+    });
+
+    describe('signedInByCheck', () => {
+      it('stays quiet when a check confirms a kept session', async () => {
+        const auth = configure();
+        await loaded();
+        const signedInByCheck = vi.fn();
+        auth.signedInByCheck.subscribe(signedInByCheck);
+        client.emitSession({ id: 's1' });
+        expect(auth.signedIn()).toBe(true);
+        expect(signedInByCheck).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['sign-in', (auth: AuthService) => auth.signIn(INPUT), () => client.releaseSignIn()],
+        ['sign-up', (auth: AuthService) => auth.signUp(INPUT), () => client.releaseSignUp()],
+      ] as const)(
+        "a %s that succeeds after a check already signed in advances authEpoch, so Convex asks for the new session's token",
+        async (kind, submit, release) => {
+          const auth = configure();
+          await loaded();
+          client.emitError({ status: 503, statusText: 'Service Unavailable' });
+          if (kind === 'sign-in') client.holdSignIn = true;
+          else client.holdSignUp = true;
+          const result = submit(auth);
+          await loaded();
+          client.emitChecking();
+          client.emitSession({ id: 's1' });
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          expect(auth.authEpoch()).toBe(0);
+
+          client.nextToken = 'jwt-new-session';
+          release();
+          await expect(result).resolves.toEqual({ ok: true });
+          expect(auth.signedIn()).toBe(true);
+          expect(auth.authEpoch()).toBe(1);
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe(
+            'jwt-new-session',
+          );
+          expect(client.tokenRequests).toBe(2);
+        },
+      );
+
+      it('a sign-in from signed out leaves authEpoch alone: signedIn turning true calls setAuth', async () => {
+        client.storedCookie = '';
+        const auth = configure();
+        await loaded();
+        await expect(auth.signIn(INPUT)).resolves.toEqual({ ok: true });
+        expect(auth.signedIn()).toBe(true);
+        expect(auth.authEpoch()).toBe(0);
+      });
+
+      it("stays quiet for this tab's sign-in, and for the check that follows it", async () => {
+        client.storedCookie = '';
+        const auth = configure();
+        await loaded();
+        const signedInByCheck = vi.fn();
+        auth.signedInByCheck.subscribe(signedInByCheck);
+        await expect(auth.signIn(INPUT)).resolves.toEqual({ ok: true });
+        client.emitSession({ id: 's1' });
+        expect(auth.signedIn()).toBe(true);
+        expect(signedInByCheck).not.toHaveBeenCalled();
       });
     });
   });

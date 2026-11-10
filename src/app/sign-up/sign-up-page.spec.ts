@@ -1,8 +1,13 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { Router, provideRouter, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import type { MockInstance } from 'vitest';
+import { AuthService, SESSION_CHECK_LIMIT_MS } from '../core/auth/auth.service';
+import { redirectSignedIn } from '../core/auth/guards';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
+import { CONVEX_CLIENT } from '../core/data/convex';
+import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { MESSAGES, SignUpPage } from './sign-up-page';
 
@@ -13,6 +18,17 @@ const NAME = 'Maya Okafor';
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
 
+type NavigateSpy = MockInstance<Router['navigateByUrl']>;
+
+const ROUTES: Routes = [
+  { path: 'sign-up', component: SignUpPage, canActivate: [redirectSignedIn] },
+  { path: 'sign-in', component: Elsewhere },
+  { path: 'app', component: Elsewhere },
+  { path: 'app/account', component: Elsewhere },
+  { path: 'leagues/x/register', component: Elsewhere },
+  { path: '', component: Elsewhere },
+];
+
 describe('SignUpPage', () => {
   let client: FakeAuthClient;
   let harness: RouterTestingHarness;
@@ -22,21 +38,44 @@ describe('SignUpPage', () => {
     client = new FakeAuthClient();
     client.storedCookie = '';
     TestBed.configureTestingModule({
-      providers: [
-        provideFakeAuthClient(client),
-        provideRouter([
-          { path: 'sign-up', component: SignUpPage },
-          { path: 'sign-in', component: Elsewhere },
-          { path: 'app', component: Elsewhere },
-          { path: 'leagues/x/register', component: Elsewhere },
-          { path: '', component: Elsewhere },
-        ]),
-      ],
+      providers: [provideFakeAuthClient(client), provideRouter(ROUTES)],
     });
     harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
     client.emitSession(null);
     page = harness.routeNativeElement!;
+  }
+
+  /** The stored token stays after a 503, so the page shows its form with the session still confirmable. */
+  async function openRefused(from: string) {
+    client = new FakeAuthClient();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeAuthClient(client),
+        { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+        provideRouter(ROUTES),
+      ],
+    });
+    const auth = TestBed.inject(AuthService);
+    await expect(auth.isSignedIn()).resolves.toBe(true);
+    client.emitError({ status: 503, statusText: 'Service Unavailable' });
+    harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(from);
+    page = harness.routeNativeElement!;
+    expect(url().startsWith('/sign-up')).toBe(true);
+    expect(input('name')).not.toBeNull();
+    return { auth, navigate: vi.spyOn(TestBed.inject(Router), 'navigateByUrl') };
+  }
+
+  async function settle() {
+    await harness.fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await harness.fixture.whenStable();
+  }
+
+  function confirmByCheck() {
+    client.emitChecking();
+    client.emitSession({ id: 's1' });
   }
 
   const input = (id: string) => page.querySelector<HTMLInputElement>(`#${id}`)!;
@@ -724,5 +763,157 @@ describe('SignUpPage', () => {
       expect(error('email')).not.toBeNull();
       expect(alert()).toBeNull();
     });
+  });
+
+  describe('a stored session that a later check confirms', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it.each([
+      ['/sign-up?returnTo=%2Fapp%2Faccount', '/app/account'],
+      ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
+      ['/sign-up?returnTo=%2F%2Fevil.example', '/app'],
+      ['/sign-up', '/app'],
+    ])('from %s, goes to %s with no press, replacing the entry', async (from, to) => {
+      const { navigate } = await openRefused(from);
+      confirmByCheck();
+      await settle();
+      expect(url()).toBe(to);
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(to, { replaceUrl: true });
+      expect(client.signUps).toEqual([]);
+    });
+
+    it('on field wifi, the online signal with no browser online event re-checks once and goes to returnTo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const { auth, navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+      vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+      auth.onOnline();
+      auth.onOnline();
+      expect(client.refetches).toBe(1);
+      client.emitSession({ id: 's1' });
+      await settle();
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+    });
+
+    it.each([
+      ['a 503', { status: 503, statusText: 'Service Unavailable' }],
+      ['a 401', { status: 401, statusText: 'Unauthorized' }],
+    ])(
+      'a re-check that answers %s keeps the page on the form, with what the user typed',
+      async (_, refusal) => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const { auth, navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+        await fill();
+        vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+        auth.onOnline();
+        expect(client.refetches).toBe(1);
+        client.emitChecking();
+        client.emitError(refusal);
+        await settle();
+        expect(auth.signedIn()).toBe(false);
+        expect(url()).toBe('/sign-up?returnTo=%2Fapp%2Faccount');
+        expect(navigate).not.toHaveBeenCalled();
+        expect(input('name').value).toBe(NAME);
+        expect(input('email').value).toBe(EMAIL);
+        expect(input('password').value).toBe(PASSWORD);
+      },
+    );
+
+    it('a check that confirms while the user has typed but not submitted goes to returnTo with no press', async () => {
+      const { navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+      await fill();
+      confirmByCheck();
+      await settle();
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+      expect(client.signUps).toEqual([]);
+    });
+
+    it("the form's own sign-up still navigates once", async () => {
+      const { navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+      await fill();
+      await submit();
+      client.emitSession({ id: 's1' });
+      await settle();
+      expect(client.signUps).toHaveLength(1);
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+    });
+
+    it.each([
+      ['succeeds', null],
+      ['is refused', { status: 422, code: 'USER_ALREADY_EXISTS' }],
+    ])(
+      'a check that confirms while the submit is pending navigates once, and a submit that then %s does not navigate again',
+      async (_, signUpError) => {
+        const { navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+        await fill();
+        client.holdSignUp = true;
+        client.nextSignUpError = signUpError;
+        await submit();
+        expect(submitButton().textContent?.trim()).toBe('Creating account…');
+        confirmByCheck();
+        await settle();
+        expect(url()).toBe('/app/account');
+        client.releaseSignUp();
+        await settle();
+        expect(url()).toBe('/app/account');
+        expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+      },
+    );
+
+    it('a check that confirms while the page file loads still goes to returnTo once the page is built', async () => {
+      client = new FakeAuthClient();
+      let releasePage: () => void = () => undefined;
+      const pageFile = new Promise<typeof SignUpPage>(
+        (resolve) => (releasePage = () => resolve(SignUpPage)),
+      );
+      const loadComponent = vi.fn(() => pageFile);
+      TestBed.configureTestingModule({
+        providers: [
+          provideFakeAuthClient(client),
+          { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+          provideRouter([
+            { path: 'sign-up', loadComponent, canActivate: [redirectSignedIn] },
+            ...ROUTES.filter((route) => route.path !== 'sign-up'),
+          ]),
+        ],
+      });
+      const auth = TestBed.inject(AuthService);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+      client.emitError({ status: 503, statusText: 'Service Unavailable' });
+      harness = await RouterTestingHarness.create();
+      const router = TestBed.inject(Router);
+      const opening = router.navigateByUrl('/sign-up?returnTo=%2Fapp%2Faccount');
+      await vi.waitFor(() => expect(loadComponent).toHaveBeenCalled());
+      confirmByCheck();
+      releasePage();
+      await opening;
+      await settle();
+      expect(url()).toBe('/app/account');
+    });
+
+    it.each([
+      ['is cancelled', (navigate: NavigateSpy) => navigate.mockResolvedValueOnce(false)],
+      [
+        'fails',
+        (navigate: NavigateSpy) =>
+          navigate.mockRejectedValueOnce(new Error('Failed to fetch dynamically imported module')),
+      ],
+    ])(
+      'when the navigation a check started %s, the form still goes to returnTo on its own success',
+      async (_, failNavigation) => {
+        const { navigate } = await openRefused('/sign-up?returnTo=%2Fapp%2Faccount');
+        failNavigation(navigate);
+        confirmByCheck();
+        await settle();
+        expect(navigate).toHaveBeenCalledTimes(1);
+        await fill();
+        await submit();
+        await settle();
+        expect(navigate).toHaveBeenCalledTimes(2);
+        expect(url()).toBe('/app/account');
+      },
+    );
   });
 });
