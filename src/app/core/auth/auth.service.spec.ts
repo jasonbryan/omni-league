@@ -338,6 +338,136 @@ describe('AuthService', () => {
         expect(auth.authEpoch()).toBe(0);
       });
 
+      describe('sign-out while the session check is out', () => {
+        const TOKEN_URL = 'https://happy-otter-123.convex.site/api/auth/convex/token';
+        const LATER_ANSWER_MS = 30;
+        // Longer than Better Auth's 10 ms refetch after a sign-out plus a later answer.
+        const SETTLE_MS = 100;
+        const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        type ReplacingCheck = 'null' | '503' | 'rejected';
+        const REPLACING_ANSWER: Record<ReplacingCheck, () => Promise<Response>> = {
+          null: () => Promise.resolve(json(null)),
+          '503': () => Promise.resolve(new Response('', { status: 503 })),
+          rejected: () => Promise.reject(new TypeError('Failed to fetch')),
+        };
+
+        function answerUnlessAborted(
+          init: RequestInit | undefined,
+          delayMs: number,
+          answer: () => Promise<Response>,
+        ): Promise<Response> {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              void answer().then(resolve, reject);
+            }, delayMs);
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              reject(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          });
+        }
+
+        async function keptSessionWithHeldCheck(
+          signOutStatus: 200 | 500,
+          replacing: ReplacingCheck,
+        ) {
+          let releaseCheck!: () => void;
+          const checkHeld = new Promise<void>((resolve) => (releaseCheck = resolve));
+          let releaseSignOut!: () => void;
+          const signOutHeld = new Promise<void>((resolve) => (releaseSignOut = resolve));
+          let checks = 0;
+          const real = await configureReal(unexpired(), async (url, init) => {
+            if (url === SIGN_OUT_URL) {
+              await signOutHeld;
+              return signOutStatus === 200
+                ? json({ success: true })
+                : json({ message: 'boom' }, 500);
+            }
+            if (url === TOKEN_URL) return json({ token: 'jwt' });
+            checks += 1;
+            return checks === 1
+              ? answerUnlessAborted(init, 0, () => checkHeld.then(() => json(SESSION)))
+              : answerUnlessAborted(init, LATER_ANSWER_MS, REPLACING_ANSWER[replacing]);
+          });
+          await vi.waitFor(() => expect(real.requests()).toEqual([SESSION_URL]));
+          const signedInByCheck = vi.fn();
+          real.auth.signedInByCheck.subscribe(signedInByCheck);
+          const waiting = real.auth.fetchToken({ forceRefreshToken: false });
+          const signingOut = real.auth.signOut();
+          await vi.waitFor(() => expect(real.requests()).toContain(SIGN_OUT_URL));
+          return {
+            ...real,
+            signedInByCheck,
+            waiting,
+            signingOut,
+            releaseCheck,
+            releaseSignOut,
+            checks: () => checks,
+          };
+        }
+
+        it.each([
+          ['while /sign-out is pending', 'pending', 200, 'null'],
+          ['while /sign-out is pending, then /sign-out fails', 'pending', 500, 'null'],
+          ['while /sign-out is pending, and the replacing check gets a 503', 'pending', 200, '503'],
+          [
+            'while /sign-out is pending, /sign-out fails, and the replacing check gets a 503',
+            'pending',
+            500,
+            '503',
+          ],
+          [
+            'while /sign-out is pending, and the replacing check rejects',
+            'pending',
+            200,
+            'rejected',
+          ],
+          [
+            'while /sign-out is pending, /sign-out fails, and the replacing check rejects',
+            'pending',
+            500,
+            'rejected',
+          ],
+          ['after /sign-out answers', 'after', 200, 'null'],
+          ['after /sign-out fails', 'after', 500, 'null'],
+        ] as const)(
+          'a held check that answers with a session %s confirms nothing',
+          async (_, when, signOutStatus, replacing) => {
+            const held = await keptSessionWithHeldCheck(signOutStatus, replacing);
+            if (when === 'pending') {
+              held.releaseCheck();
+              await expect(held.waiting).resolves.toBeNull();
+              held.releaseSignOut();
+              await held.signingOut;
+            } else {
+              held.releaseSignOut();
+              await held.signingOut;
+              held.releaseCheck();
+              await expect(held.waiting).resolves.toBeNull();
+            }
+            await pause(SETTLE_MS);
+
+            const expectNothingConfirmed = async () => {
+              await expect(held.auth.fetchToken({ forceRefreshToken: true })).resolves.toBeNull();
+              expect(held.requests()).not.toContain(TOKEN_URL);
+              expect(held.auth.signedIn()).toBe(false);
+              expect(held.signedInByCheck).not.toHaveBeenCalled();
+              expect(held.auth.authEpoch()).toBe(0);
+            };
+            await expectNothingConfirmed();
+
+            if (replacing !== 'null') {
+              const checksBefore = held.checks();
+              window.dispatchEvent(new Event('online'));
+              await vi.waitFor(() => expect(held.checks()).toBeGreaterThan(checksBefore));
+              await pause(SETTLE_MS);
+              await expectNothingConfirmed();
+            }
+          },
+        );
+      });
+
       describe('signed out on a 503 on /sign-in, with the token still stored', () => {
         async function refusedOnSignIn() {
           vi.useFakeTimers({ toFake: ['Date'] });
@@ -1526,6 +1656,45 @@ describe('AuthService', () => {
       await auth.signOut();
       expect(client.signOuts).toBe(1);
       expect(auth.signedIn()).toBe(false);
+    });
+
+    it('answers a forced token refresh with null, and requests none, while signing out', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.holdSignOut = true;
+      const signingOut = auth.signOut();
+      await vi.waitFor(() => expect(client.signOuts).toBe(1));
+
+      await expect(auth.fetchToken({ forceRefreshToken: true })).resolves.toBeNull();
+      expect(client.tokenRequests).toBe(0);
+
+      client.releaseSignOut();
+      await signingOut;
+    });
+
+    it('starts no extra session check when none was in flight, and a later session confirms', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      await auth.signOut();
+      expect(client.refetches).toBe(0);
+
+      client.emitSession({ id: 's2' });
+      expect(auth.signedIn()).toBe(true);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+    });
+
+    it('replaces the check in flight, and this tab signing in before it answers gets a token', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.emitChecking();
+      await auth.signOut();
+      expect(client.refetches).toBe(1);
+
+      await expect(auth.signIn({ email: INPUT.email, password: INPUT.password })).resolves.toEqual({
+        ok: true,
+      });
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+      expect(client.tokenRequests).toBe(1);
     });
   });
 

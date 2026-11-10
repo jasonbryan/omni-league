@@ -1,10 +1,10 @@
 // Tests sign a user up and seed an organization, so they need the local Convex backend.
 import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
-import { tokensSettled } from './support/auth-tokens';
+import { TOKEN_PATH, tokensSettled } from './support/auth-tokens';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
-import { expect, test } from './support/fixtures';
+import { expect, failedRequests, test } from './support/fixtures';
 import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
@@ -360,6 +360,197 @@ test.describe('the app shell', () => {
       expect(
         await page.evaluate(() => (window as Window & { aliceShown?: boolean }).aliceShown),
       ).toBe(false);
+    });
+
+    test.describe('Sign out while the session check is still out', () => {
+      const SESSION_PATH = '/api/auth/get-session';
+      const SIGN_OUT_PATH = '/api/auth/sign-out';
+      const PAGE_READS_ANSWER_MS = 100;
+      const LATE_FLIP_MS = 1_500;
+
+      type ReleasePoint = 'once sent' | 'while held' | 'after answered';
+
+      const isPath = (path: string) => (url: URL) => url.pathname === path;
+
+      async function keptSessionWithHeldCheck(
+        page: Page,
+        options: { signOutStatus: 200 | 500; holdSignOut: boolean; laterCheckStatus?: 503 },
+      ) {
+        const gate = () => {
+          let open!: () => void;
+          const opened = new Promise<void>((resolve) => (open = resolve));
+          return { open, opened };
+        };
+        const check = gate();
+        const signOut = gate();
+        const checkFetched = gate();
+        const signOutReached = gate();
+        const signOutAnswered = gate();
+
+        let checks = 0;
+        await page.route(isPath(SESSION_PATH), async (route) => {
+          checks += 1;
+          if (checks > 1) {
+            if (options.laterCheckStatus === undefined) {
+              await route.continue();
+              return;
+            }
+            await route.fulfill({
+              response: await route.fetch(),
+              status: options.laterCheckStatus,
+              body: '',
+            });
+            return;
+          }
+          const answer = await route.fetch();
+          checkFetched.open();
+          await check.opened;
+          await route.fulfill({ response: answer });
+        });
+        await page.route(isPath(SIGN_OUT_PATH), async (route) => {
+          signOutReached.open();
+          if (options.holdSignOut) await signOut.opened;
+          if (options.signOutStatus === 200) {
+            await route.continue();
+          } else {
+            await route.fulfill({
+              status: 500,
+              headers: {
+                'access-control-allow-origin': new URL(baseURL).origin,
+                'access-control-allow-credentials': 'true',
+                'content-type': 'application/json',
+              },
+              body: '{"message":"boom"}',
+            });
+          }
+          signOutAnswered.open();
+        });
+
+        await page.goto('/app/account');
+        await checkFetched.opened;
+        return {
+          releaseCheck: check.open,
+          releaseSignOut: signOut.open,
+          signOutReached: signOutReached.opened,
+          signOutAnswered: signOutAnswered.opened,
+        };
+      }
+
+      async function expectSignedOutForGood(page: Page, tokenRequestsAfterSignOut: string[]) {
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await page.waitForTimeout(LATE_FLIP_MS);
+        expect(tokenRequestsAfterSignOut).toEqual([]);
+        await expect(page.locator('header a[href^="/sign-in"]')).toBeVisible();
+      }
+
+      function tokenRequestsAfterSignOut(page: Page): string[] {
+        const sent: string[] = [];
+        let signOutSent = false;
+        page.on('request', (request) => {
+          const { pathname } = new URL(request.url());
+          if (pathname === SIGN_OUT_PATH) signOutSent = true;
+          else if (pathname === TOKEN_PATH && signOutSent) sent.push(request.url());
+        });
+        return sent;
+      }
+
+      async function signOutReleasing(
+        page: Page,
+        point: ReleasePoint,
+        held: Awaited<ReturnType<typeof keptSessionWithHeldCheck>>,
+      ) {
+        await page.getByRole('button', { name: 'Sign out' }).click();
+        await held.signOutReached;
+        if (point === 'once sent') {
+          held.releaseCheck();
+        } else if (point === 'while held') {
+          held.releaseCheck();
+          await page.waitForTimeout(PAGE_READS_ANSWER_MS);
+          held.releaseSignOut();
+        } else {
+          await held.signOutAnswered;
+          held.releaseCheck();
+        }
+      }
+
+      test('a check answered once /sign-out is sent leaves the user signed out with no token request', async ({
+        page,
+      }) => {
+        await signUp(page, newUser('Once'));
+        const tokens = tokenRequestsAfterSignOut(page);
+        const held = await keptSessionWithHeldCheck(page, {
+          signOutStatus: 200,
+          holdSignOut: false,
+        });
+        await signOutReleasing(page, 'once sent', held);
+        await expectSignedOutForGood(page, tokens);
+      });
+
+      test('a check answered while /sign-out is held, then 200, leaves the user signed out with no token request', async ({
+        page,
+      }) => {
+        await signUp(page, newUser('Held'));
+        const tokens = tokenRequestsAfterSignOut(page);
+        const held = await keptSessionWithHeldCheck(page, {
+          signOutStatus: 200,
+          holdSignOut: true,
+        });
+        await signOutReleasing(page, 'while held', held);
+        await expectSignedOutForGood(page, tokens);
+      });
+
+      test.describe('when /sign-out answers 500', () => {
+        test.use({ expectedFailedRequests: [{ status: 500, path: SIGN_OUT_PATH }] });
+
+        test('a check answered while /sign-out is held leaves the user signed out with no token request', async ({
+          page,
+        }) => {
+          await signUp(page, newUser('Held500'));
+          const tokens = tokenRequestsAfterSignOut(page);
+          const held = await keptSessionWithHeldCheck(page, {
+            signOutStatus: 500,
+            holdSignOut: true,
+          });
+          await signOutReleasing(page, 'while held', held);
+          await expectSignedOutForGood(page, tokens);
+        });
+
+        test('a check answered after /sign-out failed leaves the user signed out with no token request', async ({
+          page,
+        }) => {
+          await signUp(page, newUser('After500'));
+          const tokens = tokenRequestsAfterSignOut(page);
+          const held = await keptSessionWithHeldCheck(page, {
+            signOutStatus: 500,
+            holdSignOut: false,
+          });
+          await signOutReleasing(page, 'after answered', held);
+          await expectSignedOutForGood(page, tokens);
+        });
+      });
+
+      test.describe('when /sign-out answers 500 and every later session check answers 503', () => {
+        test.use({
+          expectedFailedRequests: failedRequests(
+            { status: 500, path: SIGN_OUT_PATH },
+            { status: 503, path: SESSION_PATH },
+          ),
+        });
+
+        test('a check answered while /sign-out is held leaves the user signed out with no token request', async ({
+          page,
+        }) => {
+          await signUp(page, newUser('Outage'));
+          const tokens = tokenRequestsAfterSignOut(page);
+          const held = await keptSessionWithHeldCheck(page, {
+            signOutStatus: 500,
+            holdSignOut: true,
+            laterCheckStatus: 503,
+          });
+          await signOutReleasing(page, 'while held', held);
+          await expectSignedOutForGood(page, tokens);
+        });
+      });
     });
   });
 
