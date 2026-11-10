@@ -21,7 +21,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 7 };
+const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 46, seasons: 7 };
 const NONE = {
   organizations: 0,
   locations: 0,
@@ -723,7 +723,7 @@ describe('seed:demo', () => {
       ]);
     }
     expect(organizations.find((o) => o.slug === 'front-range-rec-sports')).toMatchObject({
-      leagueCount: 6,
+      leagueCount: 7,
       locationCount: 3,
     });
     for (const row of [...locations, ...leagues]) {
@@ -732,11 +732,11 @@ describe('seed:demo', () => {
     const stored = await sportStored(t);
     expect(stored).toEqual(await sportRecount(t));
     expect(stored['front-range-rec-sports']).toEqual({
-      leagues: { soccer: 4, softball: 2 },
+      leagues: { soccer: 5, softball: 2 },
       locations: { soccer: 2, softball: 2 },
       rows: [
         'soccer:Cottonwood Creek Fields:2',
-        'soccer:Larkspur Turf Center:2',
+        'soccer:Larkspur Turf Center:3',
         'softball:Bluebird Softball Complex:2',
         'softball:Cottonwood Creek Fields:1',
       ],

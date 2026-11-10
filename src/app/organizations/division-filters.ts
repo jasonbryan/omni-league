@@ -23,6 +23,12 @@ const ALL_LEVELS = Object.keys(STANDARD_LEVEL_LABELS) as StandardLevel[];
 
 const AGE_GROUP_KEYS = AGE_GROUPS.map((group) => group.key);
 
+/** Find a league offers the U-ages first, then Adult and its brackets, so a youth list does not open on Adult. */
+export const YOUTH_FIRST_AGE_ORDER = [
+  ...AGE_GROUP_KEYS.filter(isYouth),
+  ...AGE_GROUP_KEYS.filter((key) => !isYouth(key)),
+];
+
 const GENDER_PARAMS: Readonly<Record<string, Gender>> = {
   coed: 'coed',
   mens: 'mens',
@@ -195,6 +201,7 @@ export function filterGroups(
   facets: readonly LeagueFacet[],
   filters: DivisionFilters,
   formatAndLevelSport: Sport | undefined,
+  ageOrder: readonly AgeGroup[] = AGE_GROUP_KEYS,
 ): FilterGroup[] {
   const youth = youthOnly(filters);
   const offered = <T>(
@@ -254,7 +261,7 @@ export function filterGroups(
     {
       name: 'age',
       legend: 'Age group',
-      options: offered(AGE_GROUP_KEYS, (facet) => facet.ageGroup, filters.ageGroup).map(
+      options: offered(ageOrder, (facet) => facet.ageGroup, filters.ageGroup).map(
         ({ value, checked }) => ({ name: 'age', value, label: ageGroupLabel(value), checked }),
       ),
     },

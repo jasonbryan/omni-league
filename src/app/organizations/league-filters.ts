@@ -24,6 +24,7 @@ import { NavigationStart, Router, RouterLink, type Params } from '@angular/route
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronDown, lucideSlidersHorizontal, lucideX } from '@ng-icons/lucide';
 import { filter } from 'rxjs';
+import type { AgeGroup } from '../../../convex/lib/divisions';
 import {
   NO_DIVISION_FILTERS,
   hasDivisionFilters,
@@ -43,6 +44,7 @@ import {
   type FilterGroup,
   type LeagueFacet,
 } from './division-filters';
+import type { HiddenInput } from './filter-draft';
 import type { FilterOverlay, LeagueFilterOverlays } from './league-filter-overlays';
 import { listPagesQuery } from './organization-path';
 
@@ -74,7 +76,7 @@ const PILL =
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', '(document:keydown.escape)': 'dropPendingPress()' },
   template: `
-    <div class="border-b border-border pt-1 pb-4 md:pb-6">
+    <div [class]="barClass()">
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
         <form
           method="get"
@@ -172,6 +174,9 @@ const PILL =
                   @if (locationsPage() > 1) {
                     <input type="hidden" name="locations" [attr.value]="locationsPage()" />
                   }
+                  @for (field of carried(); track $index) {
+                    <input type="hidden" [attr.name]="field.name" [attr.value]="field.value" />
+                  }
                   <button type="submit" data-slot="button" [class]="submitClass">
                     Show leagues
                   </button>
@@ -234,11 +239,22 @@ export class LeagueFilters {
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
   readonly groups = input<readonly FilterGroup[] | undefined>(undefined);
   readonly locationsPage = input(1);
-  readonly total = input.required<number>();
+  /** Undefined until the leagues it counts have loaded. */
+  readonly total = input.required<number | undefined>();
   readonly matching = input<number | undefined>(undefined);
   readonly facets = input<readonly LeagueFacet[] | undefined>(undefined);
   readonly sportLeagueCounts = input<SportCounts | undefined>(undefined);
   readonly sport = input<Sport | undefined>(undefined);
+  /** For a page whose URL is not an organization's lists: builds the query a set of filters has. */
+  readonly queryBuilder = input<((filters: DivisionFilters) => Params) | undefined>(undefined);
+  /** Fields the page keeps when the form submits before hydration. */
+  readonly carried = input<readonly HiddenInput[]>([]);
+  /** What the count counts, in the singular. */
+  readonly noun = input('league');
+  /** For the sheet and popovers, which list the age groups in this order. */
+  readonly ageOrder = input<readonly AgeGroup[] | undefined>(undefined);
+  /** `above` draws the rule over the bar, for a page whose chips and search sit in the same block. */
+  readonly rule = input<'above' | 'below'>('below');
 
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
@@ -292,21 +308,26 @@ export class LeagueFilters {
   protected readonly count = computed(() => {
     const total = this.total();
     const matching = this.matching();
-    if (this.filtered() && matching === undefined) return undefined;
+    if (total === undefined || (this.filtered() && matching === undefined)) return undefined;
     return {
       shown: matching ?? total,
       of: matching === undefined ? '' : ` of ${total}`,
-      noun: total === 1 ? 'league' : 'leagues',
+      noun: total === 1 ? this.noun() : `${this.noun()}s`,
     };
   });
 
   private queryFor(filters: DivisionFilters): Params {
-    return listPagesQuery(
-      { leagues: 1, locations: this.locationsPage() },
-      this.sportView(),
-      filters,
+    return (
+      this.queryBuilder()?.(filters) ??
+      listPagesQuery({ leagues: 1, locations: this.locationsPage() }, this.sportView(), filters)
     );
   }
+
+  protected readonly barClass = computed(() =>
+    this.rule() === 'above'
+      ? 'border-t border-border pt-5'
+      : 'border-b border-border pt-1 pb-4 md:pb-6',
+  );
 
   protected readonly pills = computed(() =>
     filterPills(this.filters()).map((pill) => ({ ...pill, query: this.queryFor(pill.without) })),
@@ -400,6 +421,8 @@ export class LeagueFilters {
         inputBinding('sport', this.sport),
         inputBinding('locationsPage', this.locationsPage),
         inputBinding('total', this.total),
+        inputBinding('queryBuilder', this.queryBuilder),
+        inputBinding('ageOrder', this.ageOrder),
         inputBinding('sheetTrigger', () => this.sheetButton()?.nativeElement),
         inputBinding('focusCount', () => this.focusCountAfterRender),
       ],

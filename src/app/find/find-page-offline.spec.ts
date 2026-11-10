@@ -124,7 +124,9 @@ describe('FindPage offline', () => {
     const harness = await open('/leagues?q=coed%204s%20austin');
     const main = host(harness).querySelector('main')!;
     expect(text(main)).toContain('Try fewer words:');
-    const link = main.querySelector<HTMLAnchorElement>('ul a')!;
+    const link = main.querySelector<HTMLAnchorElement>(
+      'ul[aria-labelledby="suggestions-heading"] a',
+    )!;
     expect(link.getAttribute('href')).toBe('/leagues?q=coed%204s');
     link.click();
     for (let i = 0; i < 3; i++) {

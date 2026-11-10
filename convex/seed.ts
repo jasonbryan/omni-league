@@ -169,6 +169,12 @@ export const DEMO: readonly Tenant[] = [
         division: division('womens', 11, 'intermediate'),
       },
       {
+        name: 'U10 Girls Select',
+        sport: 'soccer',
+        locations: ['Larkspur Turf Center'],
+        division: division('womens', 7, 'competitive', { ageGroup: 'u10' }),
+      },
+      {
         name: 'Monday Coed Slow-Pitch',
         sport: 'softball',
         locations: ['Bluebird Softball Complex'],

@@ -87,6 +87,7 @@ describe('search.leagues', () => {
     const result = await search(t, 'sunday');
     expect(result).toEqual({
       more: false,
+      facets: [{ gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' }],
       rows: [
         {
           organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf' },
@@ -126,7 +127,7 @@ describe('search.leagues', () => {
 
   test('returns nothing when no league matches', async () => {
     const t = await setup();
-    expect(await search(t, 'pickleball')).toEqual({ rows: [], more: false });
+    expect(await search(t, 'pickleball')).toEqual({ rows: [], more: false, facets: [] });
   });
 
   test('marks a season full at its maximum or with a waiting team, and not with room', async () => {
@@ -265,7 +266,11 @@ describe('search.leagues', () => {
     await insertBulk(t, 1, held.join(' '));
     const words = [...held, ...Array.from({ length: 10 }, (_, i) => `cut${i}`)].join(' ');
     expect((await search(t, words)).rows).toHaveLength(1);
-    await expect(search(t, 'x'.repeat(5000))).resolves.toEqual({ rows: [], more: false });
+    await expect(search(t, 'x'.repeat(5000))).resolves.toEqual({
+      rows: [],
+      more: false,
+      facets: [],
+    });
   });
 });
 

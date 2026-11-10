@@ -119,6 +119,7 @@ export default defineSchema({
       'status',
       'sortName',
     ])
+    .index('by_status_and_sport_and_sortName', ['status', 'sport', 'sortName'])
     // Whether any league still uses a custom level, so deleting one reads an index, not the table.
     .index('by_customLevelId', ['customLevelId'])
     .searchIndex('search_searchText', {
