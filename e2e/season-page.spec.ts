@@ -869,8 +869,7 @@ test.describe('public season page: loading', () => {
     },
   ];
   for (const { name, width, parts } of NAVIGATION_CASES) {
-    const title =
-      'after an in-app navigation the skeleton shows with its status, then the heading, the card, and the details land within 4px of their bars';
+    const title = `after an in-app navigation the skeleton shows with its status, then ${parts.length === 1 ? 'the heading lands within 4px of its bar' : 'the heading, the card, and the details land within 4px of their bars'}`;
     test(name ? `${title} at ${name}` : title, async ({ page, consoleGuard }, testInfo) => {
       if (width) {
         test.skip(testInfo.project.name !== width.project, 'one Chromium project per pointer');
