@@ -15,6 +15,15 @@ const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidat
 /** Netlify removes the spaces after the commas. */
 const noSpaces = (value: string | undefined) => value?.replace(/\s+/g, '');
 
+async function savedPageNames(page: Page, pageNumber: number): Promise<string[] | null> {
+  return page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    const { v } = JSON.parse(raw) as { v: { rows: { name: string }[] } };
+    return v.rows.map((row) => row.name);
+  }, `cvx-saved:search:organizations:{"page":${pageNumber}}`);
+}
+
 const COURTS = { name: 'Sand Courts', address: '1 Beach Rd, Corpus Christi, TX 78401' };
 
 /**
@@ -213,10 +222,20 @@ test.describe('find a league: the organizations list screens', () => {
         leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
       });
     }
+    await freezeOrganizations(page);
     await page.goto('/leagues?page=2');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await expect(rows(page).first()).toBeVisible();
-    const saved = await rows(page).allTextContents();
+    // The saved copy is written only from the live result, which is the one answer the frozen list lets through.
+    await expect.poll(() => savedPageNames(page, 2)).not.toBeNull();
+    const saved = (await savedPageNames(page, 2)) ?? [];
+    await expect(rows(page)).toHaveText(saved);
+
+    // Sorts before every `E2E Org` name, so it shifts page 2 whenever that page holds one, and after the desktop group's digit-named batch.
+    await seedTenant({
+      name: 'E2E Aaa',
+      locations: [COURTS],
+      leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
+    });
 
     // Back is a client-side navigation, so the page opens from the app's saved copy and not from the network. The earlier visit's
     // subscription is dropped while online, so the client holds no result for it.
