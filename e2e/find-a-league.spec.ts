@@ -454,7 +454,7 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
       expect(plainText(pills ?? '')).toContain('Gender: Girls');
       expect(plainText(pills ?? '')).toContain('U10');
       const count = /<p\b[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/.exec(bar)?.[1] ?? '';
-      expect(plainText(count)).toMatch(/^\d+ of \d+ leagues?$/);
+      expect(plainText(count)).toMatch(/^\d+ of \d+ soccer leagues?$/);
     },
   );
 
@@ -1069,7 +1069,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
       await expect(page).toHaveURL(/\/leagues\?sport=softball&age=over55$/);
       await expect(
         page.getByRole('search', { name: 'Filter leagues' }).getByRole('status'),
-      ).toHaveText(new RegExp(`^${String(withFifties)} of \\d+ leagues\\s*$`));
+      ).toHaveText(new RegExp(`^${String(withFifties)} of \\d+ softball leagues\\s*$`));
     });
   });
 

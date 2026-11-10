@@ -229,7 +229,7 @@ test.describe('find a league by sport offline', () => {
       'aria-current',
       'page',
     );
-    await expect(filters.getByRole('status')).toContainText(/of \d+ leagues?/);
+    await expect(filters.getByRole('status')).toContainText(/of \d+ softball leagues?/);
     await expect(page.getByTestId('find-skeleton')).toHaveCount(0);
     await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
 
