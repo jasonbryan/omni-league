@@ -321,12 +321,12 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                     @if (removals.length) {
                       <ul role="list" class="mt-4 flex flex-wrap gap-2">
                         @for (removal of removals; track removal.label) {
-                          <li>
+                          <li class="max-w-full">
                             <a
                               [routerLink]="pagePath()"
                               [queryParams]="removal.query"
                               data-slot="button"
-                              [class]="clearButton"
+                              [class]="removeButton"
                               (click)="filterBar()?.focusCountNext($event)"
                               >Remove {{ removal.label }}
                               <span class="text-muted-foreground">{{ removal.text }}</span></a
@@ -336,14 +336,12 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                       </ul>
                     }
                   } @else {
-                    <div
-                      data-suggestions-skeleton
-                      aria-hidden="true"
-                      class="mt-4 flex flex-wrap gap-2"
-                    >
+                    <div data-suggestions-skeleton class="mt-4 flex flex-wrap gap-2">
+                      <p role="status" class="sr-only">Loading the suggestions.</p>
                       @for (pill of activeValues(); track pill) {
                         <span
-                          class="block h-11 w-44 rounded-lg bg-muted motion-safe:animate-pulse md:h-9"
+                          aria-hidden="true"
+                          class="block h-9 w-44 rounded-lg bg-muted motion-safe:animate-pulse pointer-coarse:h-11"
                         ></span>
                       }
                     </div>
@@ -508,6 +506,7 @@ export class OrganizationOverview {
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly findButton = OUTLINE_BUTTON_LARGE;
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
+  protected readonly removeButton = `${OUTLINE_BUTTON} h-auto min-h-9 max-w-full whitespace-normal py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly openBadge = OPEN_BADGE;
   protected readonly fullBadge = FULL_BADGE;
@@ -578,7 +577,6 @@ export class OrganizationOverview {
 
   protected readonly activeValues = computed(() => filterPills(this.filters()).map((_, i) => i));
 
-  // Undefined while the facets load online. Offline with no saved facets they are an empty list, so nothing is offered.
   protected readonly removals = computed(() => {
     const facets = this.facets();
     if (facets === undefined) return undefined;

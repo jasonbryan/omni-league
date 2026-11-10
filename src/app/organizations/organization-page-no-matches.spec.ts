@@ -149,6 +149,11 @@ describe('the no-matches suggestions after hydration', () => {
   it('holds a skeleton with one pill per active value while the facets load, then swaps it for the links', async () => {
     const harness = await shown(MENS_SIX, sandResults(NO_MATCHES), [FACETS]);
     expect(skeleton(harness)).toHaveLength(2);
+    expect(text(box(harness)?.querySelector('[role="status"]'))).toBe('Loading the suggestions.');
+    for (const pill of skeleton(harness) ?? []) {
+      expect(pill.classList.contains('h-9')).toBe(true);
+      expect(pill.classList.contains('pointer-coarse:h-11')).toBe(true);
+    }
     expect(suggestions(harness)).toHaveLength(0);
     expect(text(box(harness))).toContain("Sand Org has no men's 6v6 league.");
     expect(text(clearAll(harness))).toBe('Clear all');

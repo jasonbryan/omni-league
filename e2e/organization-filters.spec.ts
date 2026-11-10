@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@playwright/test';
-import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { answerWithClientShell } from './support/client-shell';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -374,6 +374,36 @@ test.describe('organization filters in the browser', () => {
     )) {
       expect(box).toBe(expected);
     }
+  });
+
+  test('a long level label wraps inside the no-matches box with no horizontal scroll at 320px', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const soccer = (
+      name: string,
+      gender: DivisionSeed['gender'],
+      level: DivisionSeed['level'],
+    ) => ({
+      name,
+      sport: 'soccer' as const,
+      locations: [LOCATIONS[0].name],
+      division: { gender, playersPerSide: 7, level, ageGroup: 'adult' as const },
+    });
+    const tenant = await seedTenant({
+      name: 'E2E Long Labels',
+      locations: [LOCATIONS[0]],
+      leagues: [
+        soccer('Men Competitive', 'mens', 'competitive'),
+        soccer('Women Rec', 'womens', 'rec'),
+      ],
+    });
+    await page.goto(`${tenant.path}?gender=womens&level=competitive`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(
+      noMatchesBox(page).getByRole('link', { name: 'Remove Level: Competitive (1 league)' }),
+    ).toBeVisible();
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
   });
 
   test('Clear all stays where it is while the facets load and the links arrive', async ({
