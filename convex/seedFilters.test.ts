@@ -49,6 +49,20 @@ describe('the demo data shows the division filters', () => {
     expect(mensSixes.total).toBe(0);
   });
 
+  test('Lakeshore Sand League has one league for men and one for 6v6, so each remove-a-filter link offers 1 league', async () => {
+    const t = await seeded();
+    const total = async (filters: { gender?: ['mens']; playersPerSide?: [6] }) =>
+      (
+        await t.query(api.organizations.listPublicLeagues, {
+          slug: 'lakeshore-sand-league',
+          page: 1,
+          ...filters,
+        })
+      ).total;
+    expect(await total({ gender: ['mens'] })).toBe(1);
+    expect(await total({ playersPerSide: [6] })).toBe(1);
+  });
+
   test('Confluence Sport & Social reads 12 of 26 coed leagues on 3 pages, and 6 of 12 in beach volleyball', async () => {
     const t = await seeded();
     const coed = await t.query(api.organizations.listPublicLeagues, {
