@@ -141,6 +141,24 @@ describe('removalSuggestions', () => {
     ).toEqual([]);
   });
 
+  it('labels a level and an age group as their pills do, and hides only the links that still match nothing', () => {
+    const facets: LeagueFacet[] = [
+      { gender: 'mens', playersPerSide: 6, level: 'bb', ageGroup: 'adult' },
+      { gender: 'mens', playersPerSide: 6, level: 'rec', ageGroup: 'u10' },
+      { gender: 'mens', playersPerSide: 6, level: 'rec', ageGroup: 'u10' },
+    ];
+    const active = filters({
+      gender: ['mens'],
+      playersPerSide: [6],
+      level: ['bb'],
+      ageGroup: ['u10'],
+    });
+    expect(suggest(active, facets).map((s) => [s.label, s.text])).toEqual([
+      ['Level: BB', '(2 leagues)'],
+      ['U10', '(1 league)'],
+    ]);
+  });
+
   it('counts every league of the view when the removed value was the only one', () => {
     const suggestions = suggest(filters({ ageGroup: ['u10'] }), SAND);
     expect(suggestions.map((s) => [s.label, s.count])).toEqual([['U10', 4]]);
