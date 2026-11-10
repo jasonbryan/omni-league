@@ -1244,6 +1244,17 @@ describe('AdminLeagues', () => {
       expect(calls()).toEqual([]);
     });
 
+    it('asks at once when the user leaves the field, and shows the answer without waiting for the pause', async () => {
+      await open([]);
+      await type('slug', 'sunday-coed');
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      expect(asked()).toHaveLength(1);
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe('sunday-coed is already taken. Choose another web address.');
+    });
+
     it('checks the address derived from the name before the user touches the field', async () => {
       await open([]);
       await type('name', 'Sunday Reverse Coed 4s');
