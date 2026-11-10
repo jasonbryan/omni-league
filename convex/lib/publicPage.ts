@@ -71,6 +71,18 @@ const publicLeagueOrganizationValidator = v.object({
   logoUrl: v.optional(v.string()),
 });
 
+// Strings, not the division validators, which would bring all of `divisions.ts` into the first bundle; the page offers only standard values.
+export const publicLeagueFacetsValidator = v.array(
+  v.object({
+    gender: v.optional(v.string()),
+    playersPerSide: v.optional(v.number()),
+    level: v.optional(v.string()),
+    ageGroup: v.optional(v.string()),
+  }),
+);
+
+export type PublicLeagueFacets = Infer<typeof publicLeagueFacetsValidator>;
+
 // The rows of a text search over published leagues: each names its organization, so a result needs no second query.
 const searchLeagueValidator = v.object({
   organization: publicLeagueOrganizationValidator,
@@ -85,11 +97,19 @@ const searchLeagueValidator = v.object({
 export const searchLeaguesValidator = v.object({
   rows: v.array(searchLeagueValidator),
   more: v.boolean(),
-  // Optional so a copy saved before it existed stays valid.
+  // Optional so a copy saved before they existed stays valid.
   suggestions: v.optional(v.array(v.string())),
+  facets: v.optional(publicLeagueFacetsValidator),
 });
 
 export type SearchLeagues = Infer<typeof searchLeaguesValidator>;
+
+export const searchLeaguesBySportValidator = v.object({
+  ...publicListValidator(searchLeagueValidator).fields,
+  facets: publicLeagueFacetsValidator,
+});
+
+export type SearchLeaguesBySport = Infer<typeof searchLeaguesBySportValidator>;
 
 const searchOrganizationValidator = v.object({
   name: v.string(),
@@ -214,15 +234,3 @@ const publicOpenSeasonValidator = v.object({
 export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
-
-// Strings, not the division validators, which would bring all of `divisions.ts` into the first bundle; the page offers only standard values.
-export const publicLeagueFacetsValidator = v.array(
-  v.object({
-    gender: v.optional(v.string()),
-    playersPerSide: v.optional(v.number()),
-    level: v.optional(v.string()),
-    ageGroup: v.optional(v.string()),
-  }),
-);
-
-export type PublicLeagueFacets = Infer<typeof publicLeagueFacetsValidator>;

@@ -20,7 +20,15 @@ import {
 } from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
-import { at, COED_RESULTS, NO_RESULTS, OPEN_DAY } from './testing/find-data';
+import {
+  at,
+  COED_RESULTS,
+  GIRLS_ROOKIES_ROW,
+  GIRLS_SELECT_ROW,
+  NO_RESULTS,
+  OPEN_DAY,
+  sportResults,
+} from './testing/find-data';
 import { NO_ORGANIZATIONS, ORGANIZATIONS, organizationsPage } from './testing/organizations-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
@@ -148,7 +156,7 @@ describe('FindPage server render', () => {
     expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
       `${ORIGIN}/leagues`,
     );
-    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
+    expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sport', 'Footer'] });
   });
 
   it('renders page 2 of the organizations with the canonical /leagues?page=2, and no other parameter in the HTML', async () => {
@@ -318,5 +326,122 @@ describe('FindPage server render', () => {
     expect(responseInit.status).toBe(503);
     expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
+  });
+});
+
+describe('FindPage server render by sport', () => {
+  const BY_SPORT = 'search:leaguesBySport';
+  const answer = (value: unknown) => (name: string) =>
+    Promise.resolve(name === ORGANIZATIONS_QUERY ? ORGANIZATIONS : value);
+  const youth = sportResults([GIRLS_ROOKIES_ROW, GIRLS_SELECT_ROW]);
+  const legends = (body: HTMLElement) => [...body.querySelectorAll('main legend')].map(text);
+  const options = (body: HTMLElement, legend: string) => {
+    const set = [...body.querySelectorAll('main fieldset')].find(
+      (fieldset) => text(fieldset.querySelector('legend')) === legend,
+    );
+    return [...(set?.querySelectorAll('label') ?? [])].map(text);
+  };
+
+  it('renders the leagues of a sport with its filters in the raw HTML, noindex, with the canonical /leagues', async () => {
+    const { html, body, head, responseInit, queries } = await render(
+      '/leagues?sport=soccer&age=u10&gender=girls&ott=SECRET&utm_source=CANARYabc',
+      answer(youth),
+    );
+    expect(queries).toEqual([
+      {
+        name: BY_SPORT,
+        args: { sport: 'soccer', gender: ['womens'], ageGroup: ['u10'], page: 1 },
+      },
+    ]);
+    expect(responseInit.status).toBeUndefined();
+    expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+    expect([...body.querySelectorAll('main section ul > li h3')].map(text)).toEqual([
+      'U10 Girls Fall Rec',
+      'U10 Girls Select',
+    ]);
+    expect(body.querySelector('nav[aria-label="Sport"] a[aria-current="page"]')?.textContent).toBe(
+      'Soccer',
+    );
+    expect(
+      [...body.querySelectorAll('ul[aria-label="Active filters"] a')].map((a) =>
+        text(a).replace(/: remove the .* filter$/, ''),
+      ),
+    ).toEqual(['Gender: Girls', 'U10']);
+    expect(text(body.querySelector('main form[aria-label="Filter leagues"] [role="status"]'))).toBe(
+      '2 of 5 soccer leagues',
+    );
+    expect(meta(head, 'meta[name="robots"]')).toBe('noindex');
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}/leagues`,
+    );
+    expect(text(body.querySelector('main h1'))).toBe('Find a league');
+    expect(html).not.toContain('CANARYabc');
+    expect(html.replace(/returnTo=[^"]*/g, '')).not.toContain('SECRET');
+  });
+
+  it('offers every filter the sport has, before any script, with the U-ages first and Girls under a youth age group', async () => {
+    const { body } = await render('/leagues?sport=soccer&age=u10', answer(youth));
+    expect(legends(body)).toEqual(['Gender', 'Format', 'Level', 'Age group']);
+    expect(options(body, 'Format')).toEqual(['6v6', '7v7', '11v11']);
+    expect(options(body, 'Age group')).toEqual(['U10', 'Adult', '40+']);
+    expect(options(body, 'Gender')).toEqual(['Coed', 'Boys', 'Girls']);
+  });
+
+  it('offers Gender and Age group only, with no format or level, for a search with no sport', async () => {
+    const { body } = await render(
+      '/leagues?q=coed',
+      answer({ ...COED_RESULTS, facets: youth.facets }),
+    );
+    expect(legends(body)).toEqual(['Gender', 'Age group']);
+  });
+
+  it('submits the search and the sport with the filters, when script is off', async () => {
+    const { body } = await render(
+      '/leagues?q=select&sport=soccer',
+      answer({ ...NO_RESULTS, facets: youth.facets }),
+    );
+    const fields = [
+      ...body.querySelectorAll('main form[aria-label="Filter leagues"] input[type="hidden"]'),
+    ].map((input) => [input.getAttribute('name'), input.getAttribute('value')]);
+    expect(fields).toEqual([
+      ['q', 'select'],
+      ['sport', 'soccer'],
+    ]);
+  });
+
+  it('is indexable with its own canonical for a sport alone, and for page 2 of it', async () => {
+    const { head } = await render('/leagues?sport=soccer', answer(youth));
+    expect(head.querySelector('meta[name="robots"]')).toBeNull();
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}/leagues?sport=soccer`,
+    );
+    expect(head.querySelector('title')?.textContent).toBe('Soccer | Find a league | Omni League');
+    const second = await render(
+      '/leagues?sport=soccer&page=2',
+      answer(sportResults([GIRLS_ROOKIES_ROW], { page: 2, pageCount: 2, total: 6 })),
+    );
+    expect(second.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}/leagues?sport=soccer&page=2`,
+    );
+  });
+
+  it('writes no level of another sport into the HTML or the query', async () => {
+    const { body, queries } = await render(
+      '/leagues?sport=softball&level=bb',
+      answer(sportResults([], {}, [{ gender: 'coed', playersPerSide: 10, level: 'rec' }])),
+    );
+    expect(queries).toEqual([{ name: BY_SPORT, args: { sport: 'softball', page: 1 } }]);
+    expect(body.querySelector('main')!.innerHTML).not.toContain('bb');
+  });
+
+  it('renders the server-error view with 503 and no-store when the sport query fails', async () => {
+    const { html, body, responseInit } = await render('/leagues?sport=soccer&ott=SECRET', () =>
+      Promise.reject(new Error(CONNECTION_REFUSED)),
+    );
+    expect(responseInit.status).toBe(503);
+    expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+    expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
+    expect(body.querySelector('main a')?.getAttribute('href')).toBe('/leagues?sport=soccer');
+    expect(html).not.toContain('internal-db');
   });
 });

@@ -10,6 +10,7 @@ import {
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
   publicTeamsValidator,
+  searchLeaguesBySportValidator,
   searchLeaguesValidator,
   searchOrganizationsValidator,
 } from '../../../../../convex/lib/publicPage';
@@ -53,6 +54,7 @@ const SEASON_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
 
 const FIND_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.search.leagues, searchLeaguesValidator, 1),
+  savedQuery(api.search.leaguesBySport, searchLeaguesBySportValidator, 1),
   savedQuery(api.search.organizations, searchOrganizationsValidator, 1),
 ];
 

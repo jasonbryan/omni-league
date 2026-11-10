@@ -256,7 +256,7 @@ async function logoFiles(t: T) {
   });
 }
 
-const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 7 };
+const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 46, seasons: 7 };
 const NO_BACKFILL = {
   organizations: 0,
   locations: 0,

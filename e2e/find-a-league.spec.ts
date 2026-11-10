@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -359,6 +359,231 @@ test.describe('find a league: raw server HTML', () => {
   );
 });
 
+const FIELD = 'Larkspur Turf Center';
+const FIELD_ADDRESS = '455 Larkspur Mesa Dr, Lakewood, CO 80228';
+
+/** Names that sort before any other tenant's, so a sport view lists them among its first rows. */
+const GIRLS_ROOKIES = '00 Girls Rookies';
+const GIRLS_SELECT = '00 Girls Select';
+const BOYS_ROOKIES = '00 Boys Rookies';
+const WOMEN_ELEVEN = '00 Women Eleven';
+const GIRLS_SANDS = '00 Girls Sands';
+
+/** Each test that reads its rows takes its own age group, so another test's leagues never crowd the first page. */
+async function seedYouth(
+  ageGroup: 'u10' | 'over30' | 'over35' | 'over40' = 'u10',
+): Promise<Tenant> {
+  return seedTenant({
+    name: 'Front Range Youth',
+    locations: [{ name: FIELD, address: FIELD_ADDRESS }],
+    leagues: [
+      {
+        name: GIRLS_ROOKIES,
+        sport: 'soccer',
+        locations: [FIELD],
+        division: { gender: 'womens', playersPerSide: 7, level: 'rec', ageGroup },
+      },
+      {
+        name: GIRLS_SELECT,
+        sport: 'soccer',
+        locations: [FIELD],
+        division: { gender: 'womens', playersPerSide: 7, level: 'competitive', ageGroup },
+      },
+      {
+        name: BOYS_ROOKIES,
+        sport: 'soccer',
+        locations: [FIELD],
+        division: { gender: 'mens', playersPerSide: 7, level: 'rec', ageGroup },
+      },
+      {
+        name: WOMEN_ELEVEN,
+        sport: 'soccer',
+        locations: [FIELD],
+        division: {
+          gender: 'womens',
+          playersPerSide: 11,
+          level: 'intermediate',
+          ageGroup: 'adult',
+        },
+      },
+      {
+        name: GIRLS_SANDS,
+        sport: 'beachVolleyball',
+        locations: [FIELD],
+        division: { gender: 'womens', playersPerSide: 2, level: 'a', ageGroup: 'u10' },
+      },
+    ],
+  });
+}
+
+function filterBar(html: string): string {
+  return /<form\b[^>]*aria-label="Filter leagues"[^>]*>([\s\S]*?)<\/form>/.exec(html)?.[1] ?? '';
+}
+
+function currentChip(html: string): string {
+  const chips = /<nav\b[^>]*aria-label="Sport"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? '';
+  return plainText(/<a\b[^>]*aria-current="page"[^>]*>([\s\S]*?)<\/a>/.exec(chips)?.[1] ?? '');
+}
+
+function canonicalOf(html: string): string | undefined {
+  const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(html)?.[0];
+  return tag && /\bhref="([^"]*)"/.exec(tag)?.[1];
+}
+
+test.describe('find a league: sport chips and division filters, raw server HTML', () => {
+  test(
+    '?sport=soccer&age=u10&gender=girls lists only the soccer U10 womens leagues, with the Soccer chip current, the pills, and the count',
+    RAW_HTTP,
+    async ({ request }) => {
+      await seedYouth();
+      const { headers, html } = await raw(request, '/leagues?sport=soccer&age=u10&gender=girls');
+      expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
+      const names = resultNames(html);
+      expect(names).toEqual(expect.arrayContaining([GIRLS_ROOKIES, GIRLS_SELECT]));
+      for (const other of [BOYS_ROOKIES, WOMEN_ELEVEN, GIRLS_SANDS]) {
+        expect(names).not.toContain(other);
+      }
+      for (const row of resultsSection(html)
+        .split('</li>')
+        .filter((part) => part.includes('<h3'))) {
+        expect(plainText(row)).toMatch(/Girls · \d+v\d+ · [A-Za-z]+ · U10/);
+      }
+      expect(currentChip(html)).toBe('Soccer');
+      const bar = filterBar(html);
+      const pills = /<ul\b[^>]*aria-label="Active filters"[^>]*>([\s\S]*?)<\/ul>/.exec(bar)?.[1];
+      expect(plainText(pills ?? '')).toContain('Gender: Girls');
+      expect(plainText(pills ?? '')).toContain('U10');
+      const count = /<p\b[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/.exec(bar)?.[1] ?? '';
+      expect(plainText(count)).toMatch(/^\d+ of \d+ soccer leagues?$/);
+    },
+  );
+
+  test(
+    '?q=coed&sport=beach-volleyball lists only the beach volleyball leagues that match, and the chips keep q',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenant({
+        name: 'Coed Cross Sport',
+        locations: [{ name: FIELD, address: FIELD_ADDRESS }],
+        leagues: [
+          { name: 'Coed Sands', sport: 'beachVolleyball', locations: [FIELD] },
+          { name: 'Coed Turf', sport: 'soccer', locations: [FIELD] },
+        ],
+      });
+      const id = tenant.slug.replace(/^e2e-/, '');
+      const q = `coed ${id}`;
+      const { html } = await raw(
+        request,
+        `/leagues?q=${encodeURIComponent(q)}&sport=beach-volleyball`,
+      );
+      expect(resultNames(html)).toEqual(['Coed Sands']);
+      expect(plainText(resultsSection(html))).toContain(`1 beach volleyball league matches “${q}”`);
+      expect(currentChip(html)).toBe('Beach volleyball');
+      const encoded = encodeURIComponent(q);
+      for (const href of [
+        `/leagues?q=${encoded}`,
+        `/leagues?q=${encoded}&amp;sport=soccer`,
+        `/leagues?q=${encoded}&amp;sport=softball`,
+      ]) {
+        expect(html, href).toContain(`href="${href}"`);
+      }
+    },
+  );
+
+  test(
+    '?sport=softball&level=bb ignores the level, which is not a softball level, and writes it nowhere',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await raw(request, '/leagues?sport=softball&level=bb');
+      expect(html).not.toContain('level=bb');
+      expect(html).not.toContain('level%3Dbb');
+      expect(html).not.toMatch(/name="robots"/);
+      expect(canonicalOf(html)?.endsWith('/leagues?sport=softball')).toBe(true);
+      expect(currentChip(html)).toBe('Softball');
+    },
+  );
+
+  test(
+    'more than 5 matching leagues without a search make numbered pages whose links keep the filters',
+    RAW_HTTP,
+    async ({ request }) => {
+      // A retry runs on the same backend, so the names carry an id of their own.
+      const id = randomUUID().slice(0, 8);
+      const mine = Array.from({ length: 7 }, (_, i) => `00 ${id} Over60 ${String(i + 1)}`);
+      await seedTenant({
+        name: 'Senior Slow-Pitch',
+        locations: [{ name: FIELD, address: FIELD_ADDRESS }],
+        leagues: mine.map((name) => ({
+          name,
+          sport: 'softball' as const,
+          locations: [FIELD],
+          division: {
+            gender: 'mens' as const,
+            playersPerSide: 10,
+            level: 'rec' as const,
+            ageGroup: 'over60' as const,
+          },
+        })),
+      });
+      const path = '/leagues?sport=softball&gender=mens&age=over60';
+      const encoded = path.replaceAll('&', '&amp;');
+      const first = await raw(request, path);
+      expect(resultNames(first.html)).toHaveLength(5);
+      const pager = /<nav\b[^>]*aria-label="Leagues pages"[^>]*>([\s\S]*?)<\/nav>/.exec(
+        first.html,
+      )?.[1];
+      expect(pager).toContain(`href="${encoded}&amp;page=2"`);
+      const found = new Set<string>();
+      for (let page = 1; page <= 4 && found.size < mine.length; page++) {
+        const { html } = await raw(request, page === 1 ? path : `${path}&page=${String(page)}`);
+        for (const name of resultNames(html)) if (mine.includes(name)) found.add(name);
+        if (page > 1) expect(html).toContain(`href="${encoded}"`);
+      }
+      expect([...found].sort()).toEqual(mine);
+    },
+  );
+
+  test(
+    'a sport alone is indexable with the canonical /leagues?sport=soccer; with a division filter it is noindex with the canonical /leagues',
+    RAW_HTTP,
+    async ({ request }) => {
+      await seedYouth();
+      const plain = await raw(request, '/leagues?sport=soccer');
+      expect(plain.html).not.toMatch(/name="robots"/);
+      expect(canonicalOf(plain.html)?.endsWith('/leagues?sport=soccer')).toBe(true);
+      expect(plain.html).toContain('<title>Soccer | Find a league | Omni League</title>');
+      const filtered = await raw(request, '/leagues?sport=soccer&age=u10');
+      expect(filtered.html).toMatch(/<meta\b[^>]*name="robots"[^>]*content="noindex"/);
+      expect(canonicalOf(filtered.html)?.endsWith('/leagues')).toBe(true);
+    },
+  );
+
+  test(
+    'Format and Level are not offered with no sport, and Soccer offers only the soccer formats and levels',
+    RAW_HTTP,
+    async ({ request }) => {
+      await seedYouth();
+      const legends = (html: string) =>
+        [...filterBar(html).matchAll(/<legend\b[^>]*>([\s\S]*?)<\/legend>/g)].map(([, legend]) =>
+          plainText(legend),
+        );
+      const labels = (html: string, legend: string) => {
+        const set = filterBar(html)
+          .split('<fieldset')
+          .find((part) => new RegExp(`<legend\\b[^>]*>\\s*${legend}\\s*</legend>`).test(part));
+        return [...(set ?? '').matchAll(/<span\b[^>]*>([^<]*)<\/span>/g)].map(([, text]) => text);
+      };
+      const anySport = await raw(request, `/leagues?q=${encodeURIComponent('00 girls')}`);
+      expect(legends(anySport.html)).toEqual(['Gender', 'Age group']);
+      const soccer = await raw(request, '/leagues?sport=soccer');
+      expect(legends(soccer.html)).toEqual(['Gender', 'Format', 'Level', 'Age group']);
+      expect(labels(soccer.html, 'Format')).toEqual(expect.arrayContaining(['7v7', '11v11']));
+      expect(labels(soccer.html, 'Format')).not.toContain('2v2');
+      expect(labels(soccer.html, 'Level')).not.toContain('BB');
+    },
+  );
+});
+
 test.describe('find a league: in the browser', () => {
   test('a new search shows skeleton rows with "Searching." until the results arrive, adds a history entry, and Back restores the earlier results', async ({
     page,
@@ -713,6 +938,206 @@ test.describe('find a league: a full season with registration open', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );
+  });
+});
+
+test.describe('find a league: sport chips and division filters, in the browser', () => {
+  const sheet = (page: Page) => page.getByRole('dialog', { name: 'Filters' });
+  const filtersButton = (page: Page) =>
+    page.getByRole('search', { name: 'Filter leagues' }).getByRole('button', { name: /^Filters/ });
+
+  const rowNamed = (page: Page, name: string) => rowNames(page).filter({ hasText: name });
+
+  test('the Soccer chip opens the sport with its pills, and removing a pill loads the sport with the other filter', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await seedYouth('over30');
+    await page.goto('/leagues?sport=soccer&age=over30&gender=womens');
+    await hydrated(consoleGuard);
+    await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
+    await expect(rowNamed(page, GIRLS_SELECT).first()).toBeVisible();
+    await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
+    await expect(
+      page.getByRole('navigation', { name: 'Sport' }).getByRole('link', { name: 'Soccer' }),
+    ).toHaveAttribute('aria-current', 'page');
+
+    await page
+      .getByRole('list', { name: 'Active filters' })
+      .getByRole('link', { name: /^30\+/ })
+      .click();
+    await expect(page).toHaveURL(/\/leagues\?sport=soccer&gender=womens$/);
+    await expect(rowNames(page).first()).toBeVisible();
+    await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
+
+    await page
+      .getByRole('navigation', { name: 'Sport' })
+      .getByRole('link', { name: 'Softball' })
+      .click();
+    await expect(page).toHaveURL(/\/leagues\?sport=softball&gender=womens$/);
+    await expect(
+      page.getByRole('navigation', { name: 'Sport' }).getByRole('link', { name: 'Softball' }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  const WIDTHS = [
+    { name: 'the default width', width: undefined },
+    { name: 'a touch screen 800px wide and a mouse 600px wide', width: { touch: 800, mouse: 600 } },
+  ];
+  for (const { name, width } of WIDTHS) {
+    test(`the results heading stays where it is as the facets arrive at ${name}`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      if (width) {
+        const touch = testInfo.project.name === 'chromium-mobile';
+        await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 900 });
+      }
+      const { id } = await seed();
+      const held = await holdQueries(page, ['search:leagues']);
+      await page.goto('/leagues');
+      await hydrated(consoleGuard);
+      await submit(page, id);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.getByTestId('find-skeleton')).toBeVisible();
+      const headingTop = async () => (await page.locator('#results-heading').boundingBox())?.y;
+      const before = await headingTop();
+      expect(before).toBeGreaterThan(0);
+
+      held.release();
+      await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+      expect(await headingTop()).toBe(before);
+    });
+  }
+
+  test('a new search keeps the sport and the filters', async ({ page, consoleGuard }) => {
+    await seedYouth('over35');
+    await page.goto('/leagues?sport=soccer&age=over35');
+    await hydrated(consoleGuard);
+    await submit(page, 'girls');
+    await expect(page).toHaveURL(/\/leagues\?q=girls&sport=soccer&age=over35$/);
+    await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
+    await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
+  });
+
+  test.describe('the phone sheet', () => {
+    test.skip(({ isMobile }) => !isMobile, 'the sheet runs at phone widths only');
+
+    test('lists the U-ages, then Adult, then the adult brackets, and Show counts as chips change', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      await seedTenant({
+        name: 'Senior Ladder',
+        locations: [{ name: FIELD, address: FIELD_ADDRESS }],
+        leagues: [
+          ...(['over55', 'over55', 'over60'] as const).map((ageGroup, i) => ({
+            name: `00 Ladder ${String(i)}`,
+            sport: 'softball' as const,
+            locations: [FIELD],
+            division: {
+              gender: 'coed' as const,
+              playersPerSide: 10,
+              level: 'rec' as const,
+              ageGroup,
+            },
+          })),
+          {
+            name: '00 Ladder U10',
+            sport: 'softball' as const,
+            locations: [FIELD],
+            division: {
+              gender: 'coed' as const,
+              playersPerSide: 10,
+              level: 'rec' as const,
+              ageGroup: 'u10' as const,
+            },
+          },
+          {
+            name: '00 Ladder Adult',
+            sport: 'softball' as const,
+            locations: [FIELD],
+            division: {
+              gender: 'coed' as const,
+              playersPerSide: 10,
+              level: 'rec' as const,
+              ageGroup: 'adult' as const,
+            },
+          },
+        ],
+      });
+      await page.goto('/leagues?sport=softball');
+      await hydrated(consoleGuard);
+      await filtersButton(page).click();
+      await expect(sheet(page).locator('[data-slot="sheet-content"]')).toBeVisible();
+      const age = sheet(page).getByRole('group', { name: 'Age group' });
+      const labels = await age.locator('label').allTextContents();
+      const rank = (label: string) => (label.startsWith('U') ? 0 : label === 'Adult' ? 1 : 2);
+      expect(labels.map(rank)).toEqual([...labels.map(rank)].sort());
+      expect(labels).toEqual(expect.arrayContaining(['U10', 'Adult', '55+', '60+']));
+      await sheet(page).evaluate((element) =>
+        Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
+      );
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      await screenshot(page, testInfo, 'find-filter-sheet');
+
+      const show = sheet(page).getByRole('button', { name: /^Show \d+ leagues?$/ });
+      const countOf = (label: string) => Number(/\d+/.exec(label)?.[0]);
+      const initial = (await show.textContent()) ?? '';
+      await age.getByText('55+', { exact: true }).click();
+      await expect(show).not.toHaveText(initial);
+      const fifties = (await show.textContent()) ?? '';
+      expect(countOf(fifties)).toBeGreaterThanOrEqual(2);
+      await age.getByText('60+', { exact: true }).click();
+      await expect(show).not.toHaveText(fifties);
+      expect(countOf((await show.textContent()) ?? '')).toBeGreaterThan(countOf(fifties));
+      await age.getByText('60+', { exact: true }).click();
+      await expect(show).toHaveText(fifties);
+      const withFifties = countOf(fifties);
+
+      await show.click();
+      await expect(page).toHaveURL(/\/leagues\?sport=softball&age=over55$/);
+      await expect(
+        page.getByRole('search', { name: 'Filter leagues' }).getByRole('status'),
+      ).toHaveText(new RegExp(`^${String(withFifties)} of \\d+ softball leagues\\s*$`));
+    });
+  });
+
+  test('states 5 and 6 pass the accessibility checks and do not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    await seedYouth();
+    await page.goto('/leagues?sport=soccer&age=u10&gender=girls');
+    await hydrated(consoleGuard);
+    await expect(rowNames(page).first()).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'find-sport-filtered');
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  });
+
+  test('no match for the filters names them and offers each removal', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await seedYouth('over40');
+    await page.goto('/leagues?sport=soccer&gender=womens&age=over40&level=intermediate');
+    await hydrated(consoleGuard);
+    await expect(results(page).getByRole('status')).toHaveText(
+      'No soccer leagues match these filters',
+    );
+    await results(page)
+      .getByRole('link', { name: /^Remove Level: Intermediate/ })
+      .click();
+    await expect(page).toHaveURL(/\/leagues\?sport=soccer&gender=womens&age=over40$/);
+    await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
   });
 });
 

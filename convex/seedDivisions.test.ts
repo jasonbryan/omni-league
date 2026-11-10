@@ -342,6 +342,37 @@ describe('seed:demo divisions on an empty deployment', () => {
     expect(leagues.filter((league) => league.minimumRosterSize !== undefined)).toHaveLength(1);
   });
 
+  test('adds the youth league U10 Girls Select, a second one at a different location, so the youth filters list two', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { leagues, frontRange } = await t.run(async (ctx) => ({
+      leagues: await ctx.db.query('leagues').collect(),
+      frontRange: await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'front-range-rec-sports'))
+        .unique(),
+    }));
+    const select = leagues.find((league) => league.name === 'U10 Girls Select');
+    expect(select).toMatchObject({
+      organizationId: frontRange?._id,
+      gender: 'womens',
+      playersPerSide: 7,
+      level: 'competitive',
+      ageGroup: 'u10',
+      sport: 'soccer',
+      status: 'published',
+    });
+    const location = await t.run((ctx) => ctx.db.get('locations', select!.locationIds[0]));
+    expect(location?.name).toBe('Larkspur Turf Center');
+    const youth = leagues.filter(
+      (league) => league.sport === 'soccer' && league.ageGroup === 'u10',
+    );
+    expect(youth.map((league) => league.name).sort()).toEqual([
+      'U10 Girls Fall Rec',
+      'U10 Girls Select',
+    ]);
+  });
+
   test('a second run inserts nothing and changes nothing', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
