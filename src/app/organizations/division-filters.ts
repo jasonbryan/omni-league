@@ -118,6 +118,13 @@ export interface FilterPill {
   readonly label: string;
   readonly dimension: 'gender' | 'format' | 'level' | 'age group';
   readonly without: DivisionFilters;
+  readonly removeLabel: string;
+  readonly sentenceWord: string;
+}
+
+function genderPossessive(gender: Gender, youth: boolean): string {
+  if (gender === 'coed') return genderName(gender, youth);
+  return `${genderName(gender, youth)}${youth ? "'" : "'s"}`;
 }
 
 export function filterPills(filters: DivisionFilters): FilterPill[] {
@@ -131,21 +138,29 @@ export function filterPills(filters: DivisionFilters): FilterPill[] {
       label: `Gender: ${genderName(gender, youth)}`,
       dimension: 'gender' as const,
       without: without('gender', gender),
+      removeLabel: genderPossessive(gender, youth),
+      sentenceWord: genderPossessive(gender, youth).toLowerCase(),
     })),
     ...filters.playersPerSide.map((count) => ({
       label: formatLabel(count),
       dimension: 'format' as const,
       without: without('playersPerSide', count),
+      removeLabel: formatLabel(count),
+      sentenceWord: formatLabel(count),
     })),
     ...filters.level.map((level) => ({
       label: `Level: ${levelLabel(level)}`,
       dimension: 'level' as const,
       without: without('level', level),
+      removeLabel: `Level: ${levelLabel(level)}`,
+      sentenceWord: levelLabel(level),
     })),
     ...filters.ageGroup.map((ageGroup) => ({
       label: ageGroupLabel(ageGroup),
       dimension: 'age group' as const,
       without: without('ageGroup', ageGroup),
+      removeLabel: ageGroupLabel(ageGroup),
+      sentenceWord: ageGroupLabel(ageGroup),
     })),
   ];
 }
