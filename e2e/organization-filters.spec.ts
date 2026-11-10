@@ -409,7 +409,6 @@ test.describe('organization filters in the browser', () => {
   async function expectClearAllStaysWhileFacetsArrive(
     page: Page,
     consoleGuard: { readonly hydrated: boolean },
-    from: 'page top' | 'box top' = 'page top',
   ): Promise<void> {
     const tenant = await filterTenant();
     const path = `${tenant.path}?gender=mens&format=6v6`;
@@ -438,10 +437,7 @@ test.describe('organization filters in the browser', () => {
     await expect(page.locator('[data-suggestions-skeleton] > span')).toHaveCount(2);
     await expect(removeLinks(page)).toHaveCount(0);
     const clearAll = noMatchesBox(page).getByRole('link', { name: 'Clear all' });
-    const clearAllY = async () => {
-      const top = from === 'box top' ? ((await noMatchesBox(page).boundingBox())?.y ?? 0) : 0;
-      return ((await clearAll.boundingBox())?.y ?? Number.NaN) - top;
-    };
+    const clearAllY = async () => (await clearAll.boundingBox())?.y ?? Number.NaN;
     const before = await clearAllY();
     expect(before).not.toBeNaN();
 
@@ -466,9 +462,9 @@ test.describe('organization filters in the browser', () => {
     browserName,
   }, testInfo) => {
     test.skip(browserName !== 'chromium', 'the client shell route needs a Chromium permission');
-    // The skeleton follows the pointer, not the width, so each project is resized across the md breakpoint the other way. The filter bar above has its own loading height, so Clear all is measured from the top of its box.
+    // The skeleton follows the pointer, not the width, so each project is resized across the md breakpoint the other way.
     await page.setViewportSize({ width: isDesktop(testInfo) ? 600 : 800, height: 900 });
-    await expectClearAllStaysWhileFacetsArrive(page, consoleGuard, 'box top');
+    await expectClearAllStaysWhileFacetsArrive(page, consoleGuard);
   });
 
   test('a pill pressed while the new page loads holds the rows busy and the count never reads the previous result', async ({
