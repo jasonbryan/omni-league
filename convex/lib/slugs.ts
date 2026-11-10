@@ -31,6 +31,10 @@ export function isChoosableSlug(value: string): boolean {
   return isSlug(value) && !isReservedSlug(value);
 }
 
+export function slugTakenMessage(slug: string): string {
+  return `${slug} is already taken. Choose another web address.`;
+}
+
 export function slugify(name: string): string {
   const slug = name
     .normalize('NFKD')

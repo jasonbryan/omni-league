@@ -24,6 +24,10 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
+import { injectSlugAvailability } from '../../core/forms/slug-availability';
+import { publicLeaguePath } from '../public-league/public-league-path';
+import { WebAddressPreview } from '../admin/web-address-preview';
+import { WebAddressStatus } from '../admin/web-address-status';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
@@ -100,6 +104,8 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
     NgIcon,
     StickyFooter,
     StickyFooterFocus,
+    WebAddressPreview,
+    WebAddressStatus,
   ],
   providers: [
     provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucideLoaderCircle, lucidePlus }),
@@ -183,7 +189,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           [attr.data-invalid]="form.errors.slug() ? 'true' : null"
           [class]="fieldClass"
         >
-          <label for="slug" data-slot="field-label" [class]="labelClass">Slug</label>
+          <label for="slug" data-slot="field-label" [class]="labelClass">Web address</label>
           <input
             id="slug"
             type="text"
@@ -202,8 +208,13 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           />
           <p data-slot="field-description" id="slug-description" [class]="descriptionClass">
             3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ leagueName() }}.
+            {{ leagueName() }}. Its public page will be at
+            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
           </p>
+          <app-web-address-status
+            [available]="form.slugAvailable()"
+            [reserveRoom]="form.slugStatusReservesRoom()"
+          />
           @if (form.errors.slug(); as error) {
             <div role="alert" data-slot="field-error" id="slug-error" [class]="errorClass">
               <ng-icon
@@ -515,6 +526,8 @@ export class SeasonCreateForm {
 
   readonly leagueId = input.required<Id<'leagues'>>();
   readonly leagueName = input.required<string>();
+  readonly organizationSlug = input.required<string>();
+  readonly leagueSlug = input.required<string>();
   readonly division = input<OrganizerLeague['division']>();
   readonly detailsHref = input.required<string>();
   readonly detailsOpened = output<MouseEvent>();
@@ -529,7 +542,16 @@ export class SeasonCreateForm {
     const division = this.division();
     return division ? (division.minimumRosterSize ?? division.playersPerSide) : undefined;
   });
-  protected readonly form = new SeasonForm(() => this.minimumRosterSize());
+  private readonly webAddress = injectSlugAvailability({
+    query: api.seasons.isSlugAvailable,
+    slug: (): string => this.form.model().slug,
+    scope: () => ({ leagueId: this.leagueId() }),
+  });
+  protected readonly form = new SeasonForm(() => this.minimumRosterSize(), this.webAddress);
+  protected readonly addressParent = computed(
+    () => `${publicLeaguePath(this.organizationSlug(), this.leagueSlug())}/seasons`,
+  );
+  protected readonly addressSlug = computed(() => this.form.model().slug || 'your-address');
   protected readonly alerts = SEASON_FORM_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
   protected readonly leagueFormatMissingMessage = SEASON_MESSAGES.leagueFormatMissing;

@@ -12,7 +12,7 @@ import { randomBytes } from 'node:crypto';
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 
 const FORMAT_MESSAGE =
-  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
+  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.';
 
 const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.';
 
@@ -82,17 +82,17 @@ test.describe('create an organization', () => {
     },
   );
 
-  test('the empty form: labels, the address under Slug, axe, and Tab order', async ({
+  test('the empty form: labels, the address under Web address, axe, and Tab order', async ({
     page,
     hasTouch,
   }, testInfo) => {
     await signUp(page, newUser('Form'));
     await openForm(page);
     await expect(page.getByLabel('Name')).toHaveAttribute('autocomplete', 'organization');
-    await expect(page.getByLabel('Slug')).toHaveAttribute('autocomplete', 'off');
+    await expect(page.getByLabel('Web address')).toHaveAttribute('autocomplete', 'off');
     const host = new URL(baseURL).host;
     await expect(page.locator('#slug-description')).toContainText(
-      `Your public page will be at ${host}/organizations/your-slug`,
+      `Your public page will be at ${host}/organizations/your-address`,
     );
     // 16px input text on phones so iOS does not zoom.
     const phone = (page.viewportSize()?.width ?? 0) < 768;
@@ -112,7 +112,7 @@ test.describe('create an organization', () => {
   });
 
   test(
-    'Slug follows the name until it is edited; the address follows the slug',
+    'Web address follows the name until it is edited; the address follows the field',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
       await signUp(page, newUser('Follow'));
@@ -139,9 +139,7 @@ test.describe('create an organization', () => {
     await openForm(page);
     await createButton(page).click();
     await expect(fieldError(page, 'name')).toHaveText('Enter your organization’s name.');
-    await expect(fieldError(page, 'slug')).toHaveText(
-      'Enter a slug for your public page’s address.',
-    );
+    await expect(fieldError(page, 'slug')).toHaveText('Enter a web address for your public page.');
     for (const id of ['name', 'slug']) {
       await expect(field(page, id)).toHaveAttribute('aria-invalid', 'true');
       await expect(field(page, id)).toHaveAttribute(
@@ -281,10 +279,70 @@ test.describe('create an organization', () => {
     await expectAccessible(page, { expectedOrder: formOrder() });
   });
 
-  test.describe('a slug that is taken', () => {
+  test.describe('web address availability while typing', () => {
+    const availability = (page: Page) => page.locator('#slug-availability');
+
+    test('a free address says Available in a polite status, before any submit', async ({
+      page,
+    }, testInfo) => {
+      const free = newOrganization('Free');
+      await signUp(page, newUser('Avail'));
+      await openForm(page);
+      await expect(availability(page)).toHaveAttribute('role', 'status');
+      await field(page, 'slug').fill(free.slug);
+      await expect(availability(page)).toHaveText('Available');
+      await expect(fieldError(page, 'slug')).toHaveCount(0);
+      await screenshot(page, testInfo, '208-new-available');
+      await expectAccessible(page, { expectedOrder: formOrder() });
+    });
+
+    test('a typed address that is taken says so before any submit', async ({ page }, testInfo) => {
+      test.skip(!!remoteBaseUrl, NO_SEED);
+      const taken = await seedTenant({ name: 'E2E Typed' });
+      await signUp(page, newUser('Typed'));
+      await openForm(page);
+      await field(page, 'slug').fill(taken.slug);
+      await expect(fieldError(page, 'slug')).toHaveText(
+        `${taken.slug} is already taken. Choose another web address.`,
+      );
+      await expect(fieldError(page, 'slug').locator('strong')).toHaveText(taken.slug);
+      await expect(field(page, 'slug')).toHaveAttribute('aria-invalid', 'true');
+      await expect(availability(page)).toHaveText('');
+      await screenshot(page, testInfo, '208-new-taken-typed');
+      await expectAccessible(page, { expectedOrder: formOrder() });
+    });
+
+    test('a name whose derived address is taken says so before any submit', async ({ page }) => {
+      test.skip(!!remoteBaseUrl, NO_SEED);
+      const taken = await seedTenant({ name: 'E2E Derived' });
+      await signUp(page, newUser('Derived'));
+      await openForm(page);
+      // The seeded address is `e2e-<id>`, which is what this name turns into.
+      await field(page, 'name').fill(`E2E ${taken.slug.slice('e2e-'.length)}`);
+      await expect(field(page, 'slug')).toHaveValue(taken.slug);
+      await expect(fieldError(page, 'slug')).toHaveText(
+        `${taken.slug} is already taken. Choose another web address.`,
+      );
+    });
+
+    test('an address that fails the format rule shows its message only after the field is left', async ({
+      page,
+    }) => {
+      await signUp(page, newUser('Format'));
+      await openForm(page);
+      await field(page, 'slug').pressSequentially('Bad-Address');
+      await page.waitForTimeout(600);
+      await expect(fieldError(page, 'slug')).toHaveCount(0);
+      await expect(availability(page)).toHaveText('');
+      await field(page, 'name').focus();
+      await expect(fieldError(page, 'slug')).toHaveText(FORMAT_MESSAGE);
+    });
+  });
+
+  test.describe('a web address that is taken', () => {
     test.use({ expectedConvexErrors: ['organizations:create'] });
 
-    test('shows the approved message on Slug, keeps the values, and creates nothing', async ({
+    test('shows the approved message on Web address, keeps the values, and creates nothing', async ({
       page,
     }, testInfo) => {
       test.skip(!!remoteBaseUrl, NO_SEED);
@@ -295,7 +353,7 @@ test.describe('create an organization', () => {
       await field(page, 'slug').fill(taken.slug);
       await createButton(page).click();
       await expect(fieldError(page, 'slug')).toHaveText(
-        `${taken.slug} is already taken. Choose another slug.`,
+        `${taken.slug} is already taken. Choose another web address.`,
       );
       await expect(fieldError(page, 'slug').locator('strong')).toHaveText(taken.slug);
       await expect(field(page, 'slug')).toBeFocused();

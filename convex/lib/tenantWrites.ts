@@ -186,7 +186,10 @@ export async function backfillDraftLeagueCounts(ctx: MutationCtx): Promise<numbe
   return backfilled;
 }
 
-export async function organizationSlugTaken(ctx: MutationCtx, slug: string): Promise<boolean> {
+export async function organizationSlugTaken(
+  ctx: Pick<QueryCtx, 'db'>,
+  slug: string,
+): Promise<boolean> {
   const taken = await ctx.db
     .query('organizations')
     .withIndex('by_slug', (q) => q.eq('slug', slug))
@@ -688,7 +691,7 @@ async function countPublishedSeason(ctx: MutationCtx, leagueId: Id<'leagues'>): 
 }
 
 export async function seasonSlugTaken(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: Pick<QueryCtx, 'db'>,
   leagueId: Id<'leagues'>,
   slug: string,
 ): Promise<boolean> {
@@ -777,7 +780,7 @@ function divisionFields(division: LeagueDivision | undefined) {
 }
 
 export async function leagueSlugTaken(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: Pick<QueryCtx, 'db'>,
   organizationId: Id<'organizations'>,
   slug: string,
 ): Promise<boolean> {

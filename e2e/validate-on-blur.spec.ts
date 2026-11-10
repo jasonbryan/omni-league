@@ -22,7 +22,7 @@ const LEAGUES: NonNullable<TenantSeed['leagues']> = [
   { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Pelican Shoals Sand Courts'] },
 ];
 const SLUG_MESSAGE =
-  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
+  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.';
 
 const field = (page: Page, id: string) => page.locator(`#${id}`);
 const fieldError = (page: Page, id: string) => page.locator(`#${id}-error`);

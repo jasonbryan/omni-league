@@ -409,7 +409,7 @@ describe('seasons.create', () => {
       ).toEqual({
         field: 'slug',
         code: 'slugTaken',
-        message: 'fall-2026 is already used by another season of Coed 7v7. Choose another slug.',
+        message: 'fall-2026 is already taken. Choose another web address.',
       });
       expect(await seasons(s.t)).toHaveLength(1);
 

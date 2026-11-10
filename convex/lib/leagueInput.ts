@@ -13,7 +13,7 @@ import {
   hasVisibleCharacter,
 } from './nameCharacters';
 import { ORGANIZATION_MESSAGES } from './organizationInput';
-import { isChoosableSlug } from './slugs';
+import { isChoosableSlug, slugTakenMessage } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX, type Sport } from './sports';
 
 export const MAX_LEAGUE_NAME_LENGTH = 100;
@@ -50,10 +50,9 @@ export const LEAGUE_MESSAGES = {
   nameTooLong: (length: number) =>
     `Use ${MAX_LEAGUE_NAME_LENGTH} characters or fewer. This name has ${length}.`,
   nameInvisible: HIDDEN_CHARACTER_MESSAGE,
-  slugEmpty: 'Enter a slug for the league.',
+  slugEmpty: 'Enter a web address for the league.',
   slugInvalid: ORGANIZATION_MESSAGES.slugInvalid,
-  slugTaken: (slug: string) =>
-    `${slug} is already used by another league here. Choose another slug.`,
+  slugTaken: slugTakenMessage,
   sportEmpty: 'Choose a sport.',
   formatInvalid: 'Choose a format. Players filter leagues by it.',
   levelInvalid: 'Choose one of the levels listed.',

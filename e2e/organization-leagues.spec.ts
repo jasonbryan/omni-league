@@ -184,7 +184,7 @@ test.describe('Leagues: creating a draft', () => {
     await page.goto(`${base}/leagues`);
     await submit(page).click();
     await expect(page.locator('#name-error')).toHaveText('Enter the league’s name.');
-    await expect(page.locator('#slug-error')).toHaveText('Enter a slug for the league.');
+    await expect(page.locator('#slug-error')).toHaveText('Enter a web address for the league.');
     await expect(page.locator('#sport-error')).toHaveText('Choose a sport.');
     await expect(page.locator('#locations-error')).toHaveText('Choose at least one location.');
     await expect(page.locator('#name')).toBeFocused();
@@ -217,7 +217,7 @@ test.describe('Leagues: creating a draft', () => {
       await page.locator('#slug').fill(slug);
       await submit(page).click();
       await expect(page.locator('#slug-error')).toContainText(
-        'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.',
+        'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.',
       );
       await expect(page.locator('#slug')).toBeFocused();
     }
@@ -244,7 +244,7 @@ test.describe('Leagues: creating a draft', () => {
         locations: ['Redfish Flats Fields'],
       });
       await expect(page.locator('#slug-error')).toHaveText(
-        'sand-4s is already used by another league here. Choose another slug.',
+        'sand-4s is already taken. Choose another web address.',
       );
       await expect(page.locator('#slug')).toBeFocused();
       await expect(leagueRows(page)).toHaveCount(1);

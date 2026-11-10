@@ -48,7 +48,7 @@ describe('AdminLeagues: the Division group', () => {
     };
   };
   const status = () =>
-    text(page.querySelector('#create-league form [role="status"]:not(.sr-only)'));
+    text(page.querySelector('#create-league form fieldset [role="status"]:not(.sr-only)'));
   const ageGroup = () => page.querySelector<HTMLSelectElement>('select#age-group')!;
 
   async function type(id: string, value: string) {

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { ConvexError } from 'convex/values';
 import { LEAGUE_MESSAGES, MAX_LEAGUE_NAME_LENGTH } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -717,7 +718,7 @@ describe('AdminLeagues', () => {
         'New leagues start as drafts, which only your staff see.',
       );
       expect(text(page.querySelector('label[for="name"]'))).toBe('Name');
-      expect(text(page.querySelector('label[for="slug"]'))).toBe('Slug');
+      expect(text(page.querySelector('label[for="slug"]'))).toBe('Web address');
       for (const id of ['name', 'slug']) {
         const field = input(id);
         expect([field.type, field.required, field.getAttribute('autocomplete')]).toEqual([
@@ -731,7 +732,7 @@ describe('AdminLeagues', () => {
         'The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.',
       );
       expect(text(page.querySelector('#slug-description'))).toBe(
-        '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coastal Bend Rec Club.',
+        `3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coastal Bend Rec Club. Its public page will be at ${window.location.host}/organizations/${COASTAL.slug}/leagues/your-address`,
       );
       expect(text(submitButton())).toBe('Create draft league');
       expect(tokens(submitButton().className)).toEqual(tokens(`${PRIMARY_BUTTON} w-full`));
@@ -1094,7 +1095,7 @@ describe('AdminLeagues', () => {
       );
     });
 
-    it('the server saying the slug is taken (state 6) shows the message with the slug in bold, and focus on Slug', async () => {
+    it('the server saying the address is taken (state 6) shows the message with the address in bold, and focus on Web address', async () => {
       await open([]);
       await fill();
       await submit();
@@ -1107,7 +1108,7 @@ describe('AdminLeagues', () => {
       );
       await o.flush();
       expect(error('slug')).toBe(
-        'sunday-reverse-coed-4s is already used by another league here. Choose another slug.',
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
       );
       expect(page.querySelector('#slug-error strong')?.textContent).toBe('sunday-reverse-coed-4s');
       expect(document.activeElement).toBe(input('slug'));
@@ -1197,6 +1198,135 @@ describe('AdminLeagues', () => {
         "You're offline. Nothing was sent. Your details are still here. Try again when you're connected.",
       );
       expect(input('name').value).toBe('Sunday Reverse Coed 4s');
+    });
+  });
+  describe('Web address availability', () => {
+    const IS_AVAILABLE = 'leagues:isSlugAvailable';
+    const asked = () => o.convex.subscriptions.filter((s) => s.name === IS_AVAILABLE);
+    const latest = () => asked().at(-1)!;
+    const availability = () => page.querySelector('#slug-availability');
+    const pause = async () => {
+      await new Promise((resolve) => setTimeout(resolve, AVAILABILITY_PAUSE_MS + 50));
+      await o.flush();
+    };
+
+    it('keeps a polite status region in the page, empty until there is an answer', async () => {
+      await open([]);
+      expect(availability()?.getAttribute('role')).toBe('status');
+      expect(text(availability())).toBe('');
+    });
+
+    it('asks with the organization id after the pause, and says Available', async () => {
+      await open([]);
+      await type('slug', 'sunday-coed');
+      expect(asked()).toHaveLength(0);
+      await pause();
+      expect(latest().args).toEqual({
+        organizationId: COASTAL.organizationId,
+        slug: 'sunday-coed',
+      });
+      latest().emit(true);
+      await o.flush();
+      expect(text(availability())).toBe('Available');
+      expect(error('slug')).toBeNull();
+    });
+
+    it('says the address is taken, without a submit', async () => {
+      await open([]);
+      await type('slug', 'sunday-coed');
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe('sunday-coed is already taken. Choose another web address.');
+      expect(page.querySelector('#slug-error strong')?.textContent).toBe('sunday-coed');
+      expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      expect(text(availability())).toBe('');
+      expect(calls()).toEqual([]);
+    });
+
+    it('checks the address derived from the name before the user touches the field', async () => {
+      await open([]);
+      await type('name', 'Sunday Reverse Coed 4s');
+      await pause();
+      expect(latest().args).toEqual({
+        organizationId: COASTAL.organizationId,
+        slug: 'sunday-reverse-coed-4s',
+      });
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe(
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
+      );
+    });
+
+    it('sends no query for an address that fails the format rule, and shows its message only after the field is left', async () => {
+      await open([]);
+      await type('slug', 'Bad-Address');
+      await pause();
+      expect(error('slug')).toBeNull();
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      expect(error('slug')).toBe(LEAGUE_MESSAGES.slugInvalid);
+      await type('slug', 'new');
+      await pause();
+      expect(asked()).toHaveLength(0);
+    });
+
+    it('never shows an answer for an address the field no longer holds', async () => {
+      await open([]);
+      await type('slug', 'abc');
+      await pause();
+      const first = latest();
+      await type('slug', 'abcd');
+      first.emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+    });
+
+    it('does not use the word slug in any message on the field', async () => {
+      await open([]);
+      await submit();
+      const messages = [error('slug')!];
+      await type('slug', 'Bad-Address');
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      messages.push(error('slug')!);
+      await type('slug', 'sunday-coed');
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      messages.push(error('slug')!);
+      for (const message of messages) expect(message).not.toMatch(/slug/i);
+    });
+
+    it('does not block the submit while the answer is pending, and still shows the same message when create refuses', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: LEAGUE_MESSAGES.slugTaken('sunday-reverse-coed-4s'),
+        }),
+      );
+      await o.flush();
+      expect(error('slug')).toBe(
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
+      );
+    });
+
+    it('shows no error and still submits when the check failed', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().fail(new Error('Not reachable'));
+      await o.flush();
+      expect(error('slug')).toBeNull();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
     });
   });
 });

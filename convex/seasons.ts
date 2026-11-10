@@ -35,6 +35,7 @@ import {
   seasonSlugsValidator,
 } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
+import { isChoosableSlug } from './lib/slugs';
 import { formatLabel } from './lib/divisions';
 import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
@@ -60,6 +61,15 @@ function refuse(error: SeasonInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...error });
 }
+
+export const isSlugAvailable = query({
+  args: { leagueId: v.id('leagues'), slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireLeagueOrganizer(ctx, args.leagueId);
+    return isChoosableSlug(args.slug) && !(await seasonSlugTaken(ctx, args.leagueId, args.slug));
+  },
+});
 
 export const create = mutation({
   args: {
@@ -88,7 +98,7 @@ export const create = mutation({
       refuse({
         field: 'slug',
         code: 'slugTaken',
-        message: SEASON_MESSAGES.slugTaken(args.slug, league.name),
+        message: SEASON_MESSAGES.slugTaken(args.slug),
       });
     }
     const seasonId = await insertSeason(ctx, league, {

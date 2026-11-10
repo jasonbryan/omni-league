@@ -107,7 +107,7 @@ describe('checkSeasonSlug', () => {
     expect(checkSeasonSlug('')).toEqual({
       field: 'slug',
       code: 'slugEmpty',
-      message: 'Enter a slug for the season.',
+      message: 'Enter a web address for the season.',
     });
   });
 

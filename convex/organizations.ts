@@ -61,6 +61,7 @@ import {
   scopedFilters,
 } from './lib/leagueFilters';
 import { roleValidator } from './lib/roles';
+import { isChoosableSlug } from './lib/slugs';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
 import {
@@ -393,6 +394,15 @@ function refuse(error: OrganizationInputError | LogoInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...error });
 }
+
+export const isSlugAvailable = query({
+  args: { slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    return isChoosableSlug(args.slug) && !(await organizationSlugTaken(ctx, args.slug));
+  },
+});
 
 export const create = mutation({
   args: { name: v.string(), slug: v.string(), cityState: v.optional(v.string()) },
