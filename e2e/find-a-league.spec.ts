@@ -980,6 +980,40 @@ test.describe('find a league: sport chips and division filters, in the browser',
     ).toHaveAttribute('aria-current', 'page');
   });
 
+  const WIDTHS = [
+    { name: 'the default width', width: undefined },
+    { name: 'a touch screen 800px wide and a mouse 600px wide', width: { touch: 800, mouse: 600 } },
+  ];
+  for (const { name, width } of WIDTHS) {
+    test(`the results heading stays where it is as the facets arrive at ${name}`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      if (width) {
+        const touch = testInfo.project.name === 'chromium-mobile';
+        await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 900 });
+      }
+      const { id } = await seed();
+      const held = await holdQueries(page, ['search:leagues']);
+      await page.goto('/leagues');
+      await hydrated(consoleGuard);
+      await submit(page, id);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.getByTestId('find-skeleton')).toBeVisible();
+      const headingTop = async () => (await page.locator('#results-heading').boundingBox())?.y;
+      const before = await headingTop();
+      expect(before).toBeGreaterThan(0);
+
+      held.release();
+      await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+      expect(await headingTop()).toBe(before);
+    });
+  }
+
   test('a new search keeps the sport and the filters', async ({ page, consoleGuard }) => {
     await seedYouth('over35');
     await page.goto('/leagues?sport=soccer&age=over35');

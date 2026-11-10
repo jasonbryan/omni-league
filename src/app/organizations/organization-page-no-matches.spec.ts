@@ -164,6 +164,18 @@ describe('the no-matches suggestions after hydration', () => {
     expect(suggestions(harness)).toHaveLength(2);
   });
 
+  it('gives the filter bar placeholder the height of the loaded bar and hides it from assistive technology', async () => {
+    const harness = await shown(MENS_SIX, sandResults(NO_MATCHES), [FACETS]);
+    const placeholder = host(harness).querySelector(
+      'form[aria-label="Filter leagues"] > span[aria-hidden="true"]',
+    );
+    expect(placeholder).not.toBeNull();
+    for (const name of ['h-11', 'md:h-9', 'pointer-coarse:min-h-11']) {
+      expect(placeholder?.classList.contains(name), name).toBe(true);
+    }
+    expect(count(harness)?.classList.contains('min-h-5')).toBe(true);
+  });
+
   it('shows no suggestion and no skeleton offline when the saved copy has no facets', async () => {
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     const results = sandResults(NO_MATCHES);

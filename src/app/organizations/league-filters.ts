@@ -186,7 +186,7 @@ const PILL =
           } @else {
             <span
               aria-hidden="true"
-              class="block h-11 w-28 rounded-full bg-muted motion-safe:animate-pulse md:h-9"
+              class="block h-11 w-28 rounded-full bg-muted motion-safe:animate-pulse md:h-9 pointer-coarse:min-h-11"
             ></span>
           }
           <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -194,7 +194,7 @@ const PILL =
               #countStatus
               role="status"
               tabindex="-1"
-              class="text-sm text-muted-foreground focus:outline-none"
+              class="min-h-5 text-sm text-muted-foreground focus:outline-none"
             >
               @if (count(); as count) {
                 <span class="font-medium text-foreground">{{ count.shown }}</span
