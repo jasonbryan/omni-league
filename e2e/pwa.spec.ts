@@ -959,6 +959,8 @@ test.describe('offline navigation inside the app (production build against the l
       await setOffline(context, false);
       await expect(page).toHaveURL(`${baseURL}/app/account`, { timeout: 20_000 });
       await expect(page.getByRole('heading', { level: 1, name: 'Account settings' })).toBeVisible();
+      await expect(page.locator('#main')).toBeFocused();
+      await expect(page).toHaveTitle('Account settings | Omni League');
       await expect(page.getByRole('region', { name: 'Your details' })).toContainText(user.name, {
         timeout: 20_000,
       });

@@ -603,6 +603,39 @@ describe('SignInPage', () => {
       expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
     });
 
+    it.each([
+      ['a 503', { status: 503, statusText: 'Service Unavailable' }],
+      ['a 401', { status: 401, statusText: 'Unauthorized' }],
+    ])(
+      'a re-check that answers %s keeps the page on the form, with what the user typed',
+      async (_, refusal) => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const { auth, navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+        await fill();
+        vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+        auth.onOnline();
+        expect(client.refetches).toBe(1);
+        client.emitChecking();
+        client.emitError(refusal);
+        await settle();
+        expect(auth.signedIn()).toBe(false);
+        expect(url()).toBe('/sign-in?returnTo=%2Fapp%2Faccount');
+        expect(navigate).not.toHaveBeenCalled();
+        expect(input('email').value).toBe(EMAIL);
+        expect(input('password').value).toBe(PASSWORD);
+      },
+    );
+
+    it('a check that confirms while the user has typed but not submitted goes to returnTo with no press', async () => {
+      const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+      await fill();
+      confirmByCheck();
+      await settle();
+      expect(url()).toBe('/app/account');
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+      expect(client.signIns).toEqual([]);
+    });
+
     it("the form's own sign-in still navigates once", async () => {
       const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
       await fill();
