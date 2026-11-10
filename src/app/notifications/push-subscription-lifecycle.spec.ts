@@ -4,13 +4,14 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { SwPush } from '@angular/service-worker';
 import { BehaviorSubject, Subject } from 'rxjs';
+import type { MockInstance } from 'vitest';
 import { AccountSettingsPage } from '../account/account-settings-page';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { NotificationsPage } from './notifications-page';
-import { SIGN_OUT_CHECK_WAIT_MS } from './push-subscription-lifecycle';
+import { PushSubscriptionLifecycle, SIGN_OUT_CHECK_WAIT_MS } from './push-subscription-lifecycle';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 
 function base64Url(bytes: Uint8Array): string {
@@ -26,6 +27,9 @@ const OLD_KEY = keyBytes(7);
 const VAPID_KEY = base64Url(CURRENT_KEY);
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
 const NEW_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-2';
+// Stays under Vitest's 5 s test timeout.
+const LIFECYCLE_LOAD_TIMEOUT_MS = 4_000;
+const LIFECYCLE_LOAD_POLL_MS = 5;
 
 function fakeSubscription(
   endpoint: string,
@@ -185,8 +189,10 @@ describe('PushSubscriptionLifecycle', () => {
   let swPush: FakeSwPush;
   let device: FakePushDevice;
   let registration: FakeRegistration;
+  let check: MockInstance<PushSubscriptionLifecycle['check']>;
 
   beforeEach(() => {
+    check = vi.spyOn(PushSubscriptionLifecycle.prototype, 'check');
     log = [];
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
@@ -242,8 +248,14 @@ describe('PushSubscriptionLifecycle', () => {
     await flush();
   }
 
+  // The lifecycle loads through a dynamic import that, in a full run, can outlast any fixed number of timer turns.
   async function convexAccepts() {
+    const checksBefore = check.mock.calls.length;
     authService().onChange(true);
+    await vi.waitFor(() => expect(check.mock.calls.length).toBeGreaterThan(checksBefore), {
+      timeout: LIFECYCLE_LOAD_TIMEOUT_MS,
+      interval: LIFECYCLE_LOAD_POLL_MS,
+    });
     await flush();
   }
 
