@@ -249,14 +249,14 @@ describe('FindPage filter bar', () => {
     const harness = await open('/leagues?sport=soccer&age=u10&gender=girls');
     subscription('search:leaguesBySport').emit(sportResults([GIRLS_ROOKIES_ROW, GIRLS_SELECT_ROW]));
     await settle(harness);
-    expect(count(harness)).toBe('2 of 5 leagues');
+    expect(count(harness)).toBe('2 of 5 soccer leagues');
   });
 
   it('counts every league of the sport when no filter is chosen', async () => {
     const harness = await open('/leagues?sport=soccer');
     subscription('search:leaguesBySport').emit(sportResults([GIRLS_ROOKIES_ROW], { total: 5 }));
     await settle(harness);
-    expect(count(harness)).toBe('5 leagues');
+    expect(count(harness)).toBe('5 soccer leagues');
   });
 });
 

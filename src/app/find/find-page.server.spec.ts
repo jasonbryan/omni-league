@@ -368,7 +368,7 @@ describe('FindPage server render by sport', () => {
       ),
     ).toEqual(['Gender: Girls', 'U10']);
     expect(text(body.querySelector('main form[aria-label="Filter leagues"] [role="status"]'))).toBe(
-      '2 of 5 leagues',
+      '2 of 5 soccer leagues',
     );
     expect(meta(head, 'meta[name="robots"]')).toBe('noindex');
     expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(

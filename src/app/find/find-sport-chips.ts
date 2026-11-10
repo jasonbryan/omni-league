@@ -51,11 +51,14 @@ export class FindSportChips {
     ];
     return choices.map(({ name, sport }) => {
       const current = sport === this.sport();
+      // With no search, All sports is the organizations list, which no filter applies to.
+      const scoped =
+        sport === undefined && this.query() === '' ? NO_DIVISION_FILTERS : this.filters();
       return {
         name,
         current,
         classes: chipLinkClasses(current),
-        query: findQuery(this.query(), { sport, filters: filtersInScope(this.filters(), sport) }),
+        query: findQuery(this.query(), { sport, filters: filtersInScope(scoped, sport) }),
       };
     });
   });

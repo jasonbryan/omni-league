@@ -22,7 +22,11 @@ import { parseListPage } from '../core/list-page';
 import { injectNow } from '../core/now';
 import { bindPageMeta } from '../core/page-meta';
 import { NotSavedView } from '../offline/not-saved-view';
-import { filterGroups, divisionFilterQueryArgs } from '../organizations/division-filters';
+import {
+  YOUTH_FIRST_AGE_ORDER,
+  divisionFilterQueryArgs,
+  filterGroups,
+} from '../organizations/division-filters';
 import { draftLeagueCount } from '../organizations/filter-draft';
 import { LeagueFilters } from '../organizations/league-filters';
 import { PublicLayout } from '../public-layout/public-layout';
@@ -96,6 +100,8 @@ const TITLE = 'Find a league | Omni League';
                 [facets]="facets()"
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
+                [noun]="noun()"
+                [ageOrder]="ageOrder"
                 [carried]="carried()"
               />
             }
@@ -131,13 +137,18 @@ export class FindPage {
   );
   private readonly filterArgs = computed(() => divisionFilterQueryArgs(this.filters()));
 
-  /** With no search and no sport the page lists organizations, which no filter applies to. */
   protected readonly mode = computed(() => {
     if (this.query() !== '') return 'search';
     return this.sport() === undefined ? 'organizations' : 'sport';
   });
 
   protected readonly path = FIND_PATH;
+  protected readonly ageOrder = YOUTH_FIRST_AGE_ORDER;
+
+  protected readonly noun = computed(() => {
+    const sport = this.sport();
+    return sport === undefined ? 'league' : `${sportName(sport).toLowerCase()} league`;
+  });
 
   protected readonly results = injectQuery(api.search.leagues, () => {
     if (this.mode() !== 'search') return skipToken;
@@ -203,7 +214,7 @@ export class FindPage {
   protected readonly leagueTotal = computed(() => this.shownResults()?.facets?.length);
   protected readonly filterGroupsOffered = computed(() => {
     const facets = this.facets();
-    return facets && filterGroups(facets, this.filters(), this.sport());
+    return facets && filterGroups(facets, this.filters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
   });
 
   // While a filter change loads, the held page is the previous filters' result, so its count is not shown.

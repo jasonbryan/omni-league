@@ -57,10 +57,21 @@ describe('FindSportChips', () => {
       ageGroup: ['u10'],
     };
     expect(render({ query: '', sport: 'soccer', filters }).map((chip) => chip.href)).toEqual([
-      '/leagues?gender=girls&age=u10',
+      '/leagues',
       '/leagues?sport=beach-volleyball&gender=girls&age=u10',
       '/leagues?sport=soccer&gender=girls&format=7v7&level=competitive&age=u10',
       '/leagues?sport=softball&gender=girls&level=competitive&age=u10',
     ]);
+  });
+
+  it('keeps gender and age in All sports for a search, whose results they narrow', () => {
+    const filters: DivisionFilters = {
+      ...NO_DIVISION_FILTERS,
+      gender: ['womens'],
+      ageGroup: ['u10'],
+    };
+    expect(render({ query: 'select', sport: 'soccer', filters })[0].href).toBe(
+      '/leagues?q=select&gender=girls&age=u10',
+    );
   });
 });

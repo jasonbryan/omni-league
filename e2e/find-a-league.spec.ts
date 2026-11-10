@@ -507,11 +507,14 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
     'more than 5 matching leagues without a search make numbered pages whose links keep the filters',
     RAW_HTTP,
     async ({ request }) => {
+      // A retry runs on the same backend, so the names carry an id of their own.
+      const id = randomUUID().slice(0, 8);
+      const mine = Array.from({ length: 7 }, (_, i) => `00 ${id} Over60 ${String(i + 1)}`);
       await seedTenant({
         name: 'Senior Slow-Pitch',
         locations: [{ name: FIELD, address: FIELD_ADDRESS }],
-        leagues: Array.from({ length: 7 }, (_, i) => ({
-          name: `00 Over60 ${String(i + 1)}`,
+        leagues: mine.map((name) => ({
+          name,
           sport: 'softball' as const,
           locations: [FIELD],
           division: {
@@ -523,17 +526,20 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
         })),
       });
       const path = '/leagues?sport=softball&gender=mens&age=over60';
+      const encoded = path.replaceAll('&', '&amp;');
       const first = await raw(request, path);
-      expect(resultNames(first.html).slice(0, 5)).toEqual(
-        [1, 2, 3, 4, 5].map((n) => `00 Over60 ${String(n)}`),
-      );
+      expect(resultNames(first.html)).toHaveLength(5);
       const pager = /<nav\b[^>]*aria-label="Leagues pages"[^>]*>([\s\S]*?)<\/nav>/.exec(
         first.html,
       )?.[1];
-      expect(pager).toContain(`href="${path.replaceAll('&', '&amp;')}&amp;page=2"`);
-      const second = await raw(request, `${path}&page=2`);
-      expect(resultNames(second.html).slice(0, 2)).toEqual(['00 Over60 6', '00 Over60 7']);
-      expect(second.html).toContain(`href="${path.replaceAll('&', '&amp;')}"`);
+      expect(pager).toContain(`href="${encoded}&amp;page=2"`);
+      const found = new Set<string>();
+      for (let page = 1; page <= 4 && found.size < mine.length; page++) {
+        const { html } = await raw(request, page === 1 ? path : `${path}&page=${String(page)}`);
+        for (const name of resultNames(html)) if (mine.includes(name)) found.add(name);
+        if (page > 1) expect(html).toContain(`href="${encoded}"`);
+      }
+      expect([...found].sort()).toEqual(mine);
     },
   );
 

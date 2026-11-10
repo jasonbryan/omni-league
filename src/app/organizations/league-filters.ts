@@ -24,6 +24,7 @@ import { NavigationStart, Router, RouterLink, type Params } from '@angular/route
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronDown, lucideSlidersHorizontal, lucideX } from '@ng-icons/lucide';
 import { filter } from 'rxjs';
+import type { AgeGroup } from '../../../convex/lib/divisions';
 import {
   NO_DIVISION_FILTERS,
   hasDivisionFilters,
@@ -248,6 +249,10 @@ export class LeagueFilters {
   readonly queryBuilder = input<((filters: DivisionFilters) => Params) | undefined>(undefined);
   /** Fields the page keeps when the form submits before hydration. */
   readonly carried = input<readonly HiddenInput[]>([]);
+  /** What the count counts, in the singular. */
+  readonly noun = input('league');
+  /** For the sheet and popovers, which list the age groups in this order. */
+  readonly ageOrder = input<readonly AgeGroup[] | undefined>(undefined);
   /** `above` draws the rule over the bar, for a page whose chips and search sit in the same block. */
   readonly rule = input<'above' | 'below'>('below');
 
@@ -307,7 +312,7 @@ export class LeagueFilters {
     return {
       shown: matching ?? total,
       of: matching === undefined ? '' : ` of ${total}`,
-      noun: total === 1 ? 'league' : 'leagues',
+      noun: total === 1 ? this.noun() : `${this.noun()}s`,
     };
   });
 
@@ -417,6 +422,7 @@ export class LeagueFilters {
         inputBinding('locationsPage', this.locationsPage),
         inputBinding('total', this.total),
         inputBinding('queryBuilder', this.queryBuilder),
+        inputBinding('ageOrder', this.ageOrder),
         inputBinding('sheetTrigger', () => this.sheetButton()?.nativeElement),
         inputBinding('focusCount', () => this.focusCountAfterRender),
       ],

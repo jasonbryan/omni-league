@@ -12,6 +12,7 @@ import { Router, type Params } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideX } from '@ng-icons/lucide';
 import { BrnPopover } from '@spartan-ng/brain/popover';
+import type { AgeGroup } from '../../../convex/lib/divisions';
 import {
   NO_DIVISION_FILTERS,
   formatAndLevelSport,
@@ -273,6 +274,7 @@ export class LeagueFilterOverlays {
   readonly locationsPage = input.required<number>();
   readonly total = input.required<number | undefined>();
   readonly queryBuilder = input.required<((filters: DivisionFilters) => Params) | undefined>();
+  readonly ageOrder = input.required<readonly AgeGroup[] | undefined>();
   readonly sheetTrigger = input.required<HTMLElement | undefined>();
 
   /** Called once a Clear link's navigation ends, since the pressed link has left with its overlay. */
@@ -304,6 +306,7 @@ export class LeagueFilterOverlays {
       offeredFacets(this.facets() ?? [], this.filters()),
       this.draft(),
       this.formatAndLevelSport(),
+      this.ageOrder(),
     ),
   );
 
