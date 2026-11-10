@@ -15,9 +15,6 @@ export const AUTH_COMPONENT_TABLES = [
   'account',
   'verification',
   'twoFactor',
-  'oauthApplication',
-  'oauthAccessToken',
-  'oauthConsent',
   'jwks',
   'rateLimit',
 ] as const;

@@ -146,6 +146,24 @@ describe('sign-in', () => {
       message: 'Invalid email or password',
     });
   }, 30_000);
+
+  test('a 129-character password gets the same 400 PASSWORD_TOO_LONG for a known and an unknown address, and each attempt is counted', async () => {
+    const t = setup();
+    await signUp(t);
+    const overLength = 'p'.repeat(129);
+    const known = await signIn(t, EMAIL, overLength);
+    const unknown = await signIn(t, UNKNOWN, overLength);
+    expect(known.status, JSON.stringify(known.json)).toBe(400);
+    expect(known.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
+    expect(unknown.status).toBe(400);
+    expect(unknown.json).toEqual(known.json);
+    expect((await rows(t)).map((row) => [row.email, row.failures]).sort()).toEqual(
+      [
+        [EMAIL, 1],
+        [UNKNOWN, 1],
+      ].sort(),
+    );
+  }, 30_000);
 });
 
 describe('per-address throttle', () => {

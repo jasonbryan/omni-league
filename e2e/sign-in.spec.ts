@@ -273,6 +273,47 @@ test.describe('sign-in', () => {
     });
   });
 
+  test.describe('a password over 128 characters', () => {
+    test.use({
+      expectedFailedRequests: failedRequests(
+        { status: 400, path: SIGN_IN_PATH },
+        { status: 401, path: SIGN_IN_PATH },
+        { status: 429, path: SIGN_IN_PATH },
+      ),
+    });
+
+    test('gets the incorrect answer for a known and an unknown email, and counts toward the throttle', async ({
+      page,
+    }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = await seedUser();
+      const overLength = 'p'.repeat(129);
+      const answers: { status: number; text: string }[] = [];
+      for (const email of [newUser('Nobody').email, user.email]) {
+        await page.goto('/sign-in');
+        await expect(heading(page)).toBeVisible();
+        await fillForm(page, email, overLength);
+        const status = await press(page);
+        await expect(alert(page)).toBeVisible();
+        answers.push({ status, text: (await alert(page).innerText()).replace(/\s+/g, ' ') });
+        await expect(alert(page)).toBeFocused();
+        await expect(field(page, 'password')).toHaveValue(overLength);
+      }
+      expect(answers[0]?.status).toBe(400);
+      expect(answers[1]).toEqual(answers[0]);
+      expect(answers[0]?.text).toBe('Email or password is incorrect. Check both and try again.');
+
+      await field(page, 'password').fill('wrong password number one');
+      for (let attempt = 2; attempt <= 5; attempt++) {
+        expect(await press(page), `attempt ${attempt}`).toBe(401);
+      }
+      await field(page, 'password').fill(user.password);
+      expect(await press(page)).toBe(429);
+      await expect(alert(page)).toContainText('Too many attempts. Try again in 1 minute.');
+      expect((await accountByEmail(user.email))?.sessions).toBe(1);
+    });
+  });
+
   test.describe('too many attempts', () => {
     test.use({
       expectedFailedRequests: failedRequests(

@@ -91,12 +91,7 @@ type RateLimitStorage = NonNullable<NonNullable<BetterAuthOptions['rateLimit']>[
 const IP_LIMIT_RULE = { window: IP_LIMIT_WINDOW_SECONDS, max: IP_LIMIT_MAX };
 
 function ipLimitStorage(ctx: GenericCtx<DataModel>): RateLimitStorage {
-  // Better Auth calls only `consume` when a store has it; its `get`/`set` path is not atomic.
-  const notAtomic = () =>
-    Promise.reject(new Error('The per-IP limit is counted only through consume'));
   return {
-    get: notAtomic,
-    set: notAtomic,
     consume: async (key, rule) => {
       try {
         return await mutationRunner(ctx).runMutation(internal.ipRateLimits.consume, {
