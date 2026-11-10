@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { OPEN_SEASONS_INTRO } from './season-status';
 
 const FILL = 'block bg-muted motion-safe:animate-pulse';
 const BAR = `rounded-md ${FILL}`;
@@ -34,19 +35,30 @@ export class OrganizationRowsSkeleton {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <span aria-hidden="true" class="${BAR} mt-1 h-4 w-3/4 md:w-1/2"></span>
+    <div class="${BAR} mt-1 w-fit text-sm">
+      <span aria-hidden="true" class="invisible">{{ intro }}</span>
+    </div>
     <div class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
       @for (card of cards; track card) {
         <div
-          class="flex flex-col gap-3 rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
-          <span aria-hidden="true" class="${FILL} h-5 w-28 rounded-full"></span>
-          <span aria-hidden="true" class="${BAR} h-6 w-3/4"></span>
-          <span aria-hidden="true" class="${BAR} h-4 w-1/3"></span>
-          <span aria-hidden="true" class="${BAR} mt-2 h-4 w-2/3"></span>
-          <span aria-hidden="true" class="${BAR} h-4 w-1/2"></span>
-          <span aria-hidden="true" class="${BAR} h-4 w-3/5"></span>
-          <span aria-hidden="true" class="${BAR} mt-3 h-11 w-full md:h-9"></span>
+          <span aria-hidden="true" class="${FILL} h-5.5 w-28 rounded-full"></span>
+          <div class="mt-3 flex h-7 items-center pointer-coarse:h-11">
+            <span aria-hidden="true" class="${BAR} h-6 w-3/4"></span>
+          </div>
+          <span aria-hidden="true" class="${BAR} h-5 w-1/3"></span>
+          <div class="mt-4 space-y-2">
+            <span aria-hidden="true" class="${BAR} h-5 w-2/3"></span>
+            <span aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
+            <span aria-hidden="true" class="${BAR} h-5 w-3/5"></span>
+          </div>
+          <div class="mt-auto pt-5">
+            <div class="flex items-center justify-between gap-3 border-t border-border pt-4">
+              <span aria-hidden="true" class="${BAR} h-5 w-24"></span>
+              <span aria-hidden="true" class="${BAR} h-9 w-28 shrink-0 pointer-coarse:h-11"></span>
+            </div>
+          </div>
         </div>
       }
     </div>
@@ -54,6 +66,7 @@ export class OrganizationRowsSkeleton {
 })
 export class OpenSeasonsSkeleton {
   protected readonly cards = [1, 2];
+  protected readonly intro = OPEN_SEASONS_INTRO;
 }
 
 @Component({

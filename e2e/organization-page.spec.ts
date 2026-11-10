@@ -14,6 +14,7 @@ import {
   PACKED_LEAGUE,
   seedFullSeasonTenant,
 } from './support/full-season';
+import { answerWithClientShell } from './support/client-shell';
 import { organizationHeaderSavedKey } from './support/saved-copies';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
@@ -977,6 +978,54 @@ test.describe('organization page: Registration open', () => {
     );
     await expect(page.locator('#registration')).toBeVisible();
   });
+
+  const SKELETON_WIDTHS = [
+    { name: 'the default width', width: undefined },
+    { name: 'a touch screen 800px wide and a mouse 600px wide', width: { touch: 800, mouse: 600 } },
+  ];
+  for (const { name, width } of SKELETON_WIDTHS) {
+    test(`browser: the Leagues heading stays where it is as the open seasons arrive at ${name}`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      const touch = testInfo.project.name === 'chromium-mobile';
+      const tenant = await openSeasonsTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
+      // The client shell renders the saved lists at once, so dropping the open seasons' copy and holding their answer leaves only that section loading.
+      await page.evaluate(() => {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+            localStorage.removeItem(key);
+          }
+        }
+      });
+      const held = await holdQueries(page, ['seasons:listOpenForOrganization']);
+      await answerWithClientShell(page, tenant.path);
+      if (width) {
+        await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 900 });
+      }
+      await page.reload();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.locator('#registration-open app-open-seasons-skeleton')).toBeVisible();
+      if (touch && !width) await expectAccessible(page);
+      const headingTop = () =>
+        page
+          .locator('#leagues-heading')
+          .evaluate((heading) => heading.getBoundingClientRect().top + window.scrollY);
+      const before = await headingTop();
+      expect(before).toBeGreaterThan(0);
+
+      held.release();
+      await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
+      expect(await headingTop()).toBe(before);
+    });
+  }
 });
 
 test.describe('organization page: a full season with registration open', () => {
