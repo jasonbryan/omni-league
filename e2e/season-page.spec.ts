@@ -855,52 +855,69 @@ test.describe('public season page: loading', () => {
     expect(watched).toEqual({ skeletonSeen: false, sameH1: true });
   });
 
-  test('after an in-app navigation the skeleton shows with its status, then the heading, the card, and the details land within 4px of their bars', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const { tenant, path } = await seed();
-    const held = await holdQueries(page, ['seasons:getPublicPage']);
-    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
-    await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
-    await hydrated(consoleGuard);
+  const NAVIGATION_CASES = [
+    { name: null, width: undefined, parts: ['heading', 'card', 'details'] as const },
+    {
+      name: 'a touch screen 800px wide',
+      width: { project: 'chromium-mobile', px: 800 },
+      parts: ['heading'] as const,
+    },
+    {
+      name: 'a mouse 700px wide',
+      width: { project: 'chromium-desktop', px: 700 },
+      parts: ['heading', 'card', 'details'] as const,
+    },
+  ];
+  for (const { name, width, parts } of NAVIGATION_CASES) {
+    const title = `after an in-app navigation the skeleton shows with its status, then ${parts.length === 1 ? 'the heading lands within 4px of its bar' : 'the heading, the card, and the details land within 4px of their bars'}`;
+    test(name ? `${title} at ${name}` : title, async ({ page, consoleGuard }, testInfo) => {
+      if (width) {
+        test.skip(testInfo.project.name !== width.project, 'one Chromium project per pointer');
+        await page.setViewportSize({ width: width.px, height: 800 });
+      }
+      const { tenant, path } = await seed();
+      const held = await holdQueries(page, ['seasons:getPublicPage']);
+      await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
+      await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
+      await hydrated(consoleGuard);
 
-    await page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true }).click();
-    await expect.poll(() => held.isHolding()).toBe(true);
-    await expect(page).toHaveURL(`${baseURL}${path}`);
+      await page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true }).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page).toHaveURL(`${baseURL}${path}`);
 
-    const skeleton = page.getByTestId('season-skeleton');
-    await expect(skeleton).toBeVisible();
-    await expect(skeleton.getByRole('status')).toHaveText('Loading the season.');
-    await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
-    await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
-    await expect(page.locator('main[id="main"]')).toBeFocused();
-    const scan = await axeScan(page);
-    expect(describeViolations(scan.violations)).toEqual([]);
-    const top = async (locator: Locator) => (await locator.boundingBox())!.y;
-    const barTops = {
-      heading: await top(page.getByTestId('season-skeleton-heading')),
-      card: await top(page.getByTestId('season-skeleton-card')),
-      details: await top(page.getByTestId('season-skeleton-details')),
-    };
+      const skeleton = page.getByTestId('season-skeleton');
+      await expect(skeleton).toBeVisible();
+      await expect(skeleton.getByRole('status')).toHaveText('Loading the season.');
+      await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+      await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
+      await expect(page.locator('main[id="main"]')).toBeFocused();
+      const scan = await axeScan(page);
+      expect(describeViolations(scan.violations)).toEqual([]);
+      const top = async (locator: Locator) => (await locator.boundingBox())!.y;
+      const barTops = {
+        heading: await top(page.getByTestId('season-skeleton-heading')),
+        card: await top(page.getByTestId('season-skeleton-card')),
+        details: await top(page.getByTestId('season-skeleton-details')),
+      };
 
-    held.release();
-    const h1 = page.getByRole('heading', { level: 1, name: 'Summer 2027' });
-    await expect(h1).toBeVisible();
-    await expect(skeleton).toHaveCount(0);
-    const landed = {
-      heading: await top(h1),
-      card: await top(page.locator('#registration > div')),
-      details: await top(page.locator('section[aria-labelledby="details-heading"]')),
-    };
-    for (const part of ['heading', 'card', 'details'] as const) {
-      expect(
-        Math.abs(landed[part] - barTops[part]),
-        `${part}: the bar is at ${barTops[part]}, the page at ${landed[part]}`,
-      ).toBeLessThanOrEqual(4);
-    }
-    await expect(page.locator('main[id="main"]')).toBeFocused();
-  });
+      held.release();
+      const h1 = page.getByRole('heading', { level: 1, name: 'Summer 2027' });
+      await expect(h1).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      const landed = {
+        heading: await top(h1),
+        card: await top(page.locator('#registration > div')),
+        details: await top(page.locator('section[aria-labelledby="details-heading"]')),
+      };
+      for (const part of parts) {
+        expect(
+          Math.abs(landed[part] - barTops[part]),
+          `${part}: the bar is at ${barTops[part]}, the page at ${landed[part]}`,
+        ).toBeLessThanOrEqual(4);
+      }
+      await expect(page.locator('main[id="main"]')).toBeFocused();
+    });
+  }
 });
 
 test.describe('public season page: signed in and on a team', () => {

@@ -11,7 +11,7 @@ const BAR = `rounded-md ${FILL}`;
   template: `
     <p role="status" class="sr-only">Loading the league.</p>
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
-      <div class="flex h-11 items-center md:h-5">
+      <div data-testid="skeleton-breadcrumb-row" class="flex h-5 items-center pointer-coarse:h-11">
         <span aria-hidden="true" class="${BAR} h-4 w-64 md:h-5"></span>
       </div>
       <span aria-hidden="true" class="${BAR} mt-4 h-9 w-4/5 md:mt-6 md:h-12 md:w-1/2"></span>
