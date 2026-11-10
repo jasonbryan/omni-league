@@ -49,7 +49,7 @@ jobs:
     # !cancelled() lets `e2e` run when nightly-gate was skipped (a dispatch) or failed (fail safe).
     if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 51
     strategy:
       fail-fast: false
       matrix:
@@ -90,11 +90,12 @@ jobs:
         run: npm ci
       # Headless shell only: the Playwright config sets no channel.
       - name: e2e browsers
-        run: |
-          npx playwright install --with-deps --only-shell chromium
-          if [ "$E2E_WEBKIT" = "1" ]; then
-            npx playwright install --with-deps webkit
-          fi
+        timeout-minutes: 16
+        run: npx playwright install --with-deps --only-shell chromium
+      # No step limit: at the slowest apt mirror rate on record this install needs more than the job's.
+      - name: e2e webkit
+        if: ${{ env.E2E_WEBKIT == '1' }}
+        run: npx playwright install --with-deps webkit
       - name: e2e backend
         id: e2e-backend
         run: node scripts/e2e-convex.mjs push
@@ -150,13 +151,13 @@ jobs:
   # own project and report folder (E2E_RUN_NAME). Runs after the first use !cancelled(), so one
   # night reports every failing run. Each run has a step timeout below its specs' own (up to 12 min
   # a try, retried once), so a hang fails that step and the check, list, and upload still run inside
-  # the job's 20 minutes.
+  # the job's limit.
   e2e-production:
     name: e2e-production
     needs: nightly-gate
     if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 38
     outputs:
       e2e_failures: ${{ steps.failures.outputs.failures }}
     steps:
@@ -170,6 +171,7 @@ jobs:
         run: npm ci
       - name: e2e browsers
         id: browsers
+        timeout-minutes: 16
         run: npx playwright install --with-deps --only-shell chromium
       - name: e2e backend
         run: |

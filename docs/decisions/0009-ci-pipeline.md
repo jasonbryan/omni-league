@@ -13,6 +13,7 @@
 - **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end. Where the sections above say otherwise, this amendment applies.
 - **Amended:** 2026-11-05 (#563): the nightly job `e2e` is a matrix of Playwright shards under a 30-minute global timeout, and `nightly-issue` runs for a cancelled job and names every shard that did not finish. See "Amendment: sharded nightly e2e and a reported cancel (2026-11-05)" at the end. Where the sections above or the 2026-10-12 amendment say the suite runs in one job, this amendment applies.
 - **Amended:** 2026-11-09 (#599): the `production-mobile` step of `e2e-production` gets 4 minutes by the step timeout rule, and the job keeps 20. See "Amendment: e2e-production step and job timeouts (2026-11-09)" at the end. Where the #426 amendment's table says `pwa.spec.ts` has 10 tests, the amendment applies. Re-measured 2026-11-10 (#607) for 14 tests; the limits are unchanged.
+- **Amended:** 2026-11-10 (#610): `e2e browsers` gets a 16-minute step limit in `e2e` and `e2e-production`, the WebKit install moves to its own step, `e2e webkit`, with no limit, and the job limits go to 51 on `e2e` and 38 on `e2e-production`. See "Amendment: browser install step timeouts (2026-11-10)" at the end. Where the #426 amendment's "Timeout" row says 20 minutes, the #563 amendment says 13 minutes of setup and a 45-minute job, and the #599 amendment says `e2e-production` keeps 20 by its job formula (`SETUP_MINUTES` 2), this amendment applies.
 
 ## Context
 
@@ -934,3 +935,40 @@ Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/
 | `timeout-minutes` on step `production-mobile` | 4                           | 4                           |
 | `timeout-minutes` on step `kill-switch`       | 5                           | 5                           |
 | `timeout-minutes` on job `e2e-production`     | 20                          | 20                          |
+
+## Amendment: browser install step timeouts (2026-11-10)
+
+Issue #610. On attempt 1 of [run 42762246537](https://github.com/jasonbryan/omni-league/actions/runs/42762246537), legs `e2e (1)` and `e2e (10)` hung in the `apt-get update` of `npx playwright install --with-deps --only-shell chromium`: after `noble-security InRelease` from `archive.ubuntu.com` at 05:28:50 the log was silent until the 45-minute job limit cancelled both legs at 06:12:46. Attempt 2 installed in 18 s and 15 s. The install steps had no `timeout-minutes`, so a hang held its leg to the job limit. This amendment sets `timeout-minutes` values and splits one step in accepted jobs. It adds no package, action, service, or tool, so it is not a `gate:technology` change.
+
+| Setting                                                     | Accepted               | Now                       |
+| ----------------------------------------------------------- | ---------------------- | ------------------------- |
+| `timeout-minutes` on step `e2e browsers` (`e2e`)            | none                   | 16                        |
+| `timeout-minutes` on step `e2e browsers` (`e2e-production`) | none                   | 16                        |
+| step `e2e webkit` (`e2e`, when `E2E_WEBKIT` is `1`)         | part of `e2e browsers` | new, no `timeout-minutes` |
+| `timeout-minutes` on job `e2e`                              | 45                     | 51                        |
+| `timeout-minutes` on job `e2e-production`                   | 20                     | 38                        |
+
+**Install step rule.** An install step's `timeout-minutes` is the smallest whole number of minutes at or above its full `--with-deps` fetch at the slowest rate on record, plus the largest measured time outside the fetch (`apt-get update`, unpacking, the Playwright download). If that is not below the job's limit, the step gets no limit of its own, and the job limit bounds it. #599's step timeout rule (3.5 times the measured time) suits test runs, but an install's time depends on the mirror's rate, which varied 400-fold (23.3 kB/s to 10.3 MB/s).
+
+- **Chromium:** 21.1 MB ÷ 23.3 kB/s = 906 s, + 40 s = 946 s, so 16. That is 4.5 minutes over the slowest success (688 s).
+- **WebKit:** 93.1 MB ÷ 23.3 kB/s = 3,996 s, + 40 s = 4,036 s (68 minutes), over the job's 51, so no step limit. Splitting the two installs keeps the Chromium limit off the WebKit install.
+
+**Job budgets.** `scripts/e2e-workflow.test.mjs` reads the browsers limit and the run limits from the workflow and checks both.
+
+- **`e2e`:** 30 minutes of global timeout + 16 browsers + 3 other setup + 2 report = 51. The 3 is 138 s, the worst measured from job start to the `e2e` step minus `e2e browsers` (171 legs since 2026-11-05), plus about 0.5 minutes of push and build inside `e2e`. The #563 amendment's 13 minutes of setup becomes 19 (16 + 3).
+- **`e2e-production`:** 17 minutes of run-step limits (4 + 2 + 6 + 5) + 16 browsers + 4 other setup + 1 spare = 38. The 4 is 183 s, the worst measured from job start to the end of `app server` minus `e2e browsers` ([run 42572412753](https://github.com/jasonbryan/omni-league/actions/runs/42572412753)). It replaces #599's `SETUP_MINUTES` of 2, which was measured on fast installs. The steps after the runs took at most 3 s, so a slow install followed by one run that hangs to its step limit still leaves time for `expected tests`, `e2e failures`, and `e2e report`.
+
+**Evidence.** Install seconds are the step's `completed_at − started_at` from the Actions API for the last 100 E2E runs; fetch time and rate come from apt's `Fetched … in …` lines.
+
+- **Normal:** 271 successful Chromium-only installs in 71 E2E runs (2026-10-26 to 11-10): median 18 s, p90 39 s, 255 under a minute.
+- **Slow mirror (2026-11-04 to 11-06):** 14 Chromium-only installs took 424 to 688 s, the slowest 688 s on [run 42115517094](https://github.com/jasonbryan/omni-league/actions/runs/42115517094). On 11-04 the Chromium dependencies of [run 41904096741](https://github.com/jasonbryan/omni-league/actions/runs/41904096741), a WebKit dispatch, took 7:03 at 49.8 kB/s, and `e2e-production` of run 41885406409 took 2:32 at 139 kB/s. `apt-get` fetched from `azure.archive.ubuntu.com` and printed at least every 205 s. All of these succeeded.
+- **Slowest rates:** 23.3 kB/s (15.7 MB, run 42115517094) and 26.2 kB/s (16.5 MB, [run 42130632263](https://github.com/jasonbryan/omni-league/actions/runs/42130632263)). Both fetches were partial; the full 21.1 MB at those rates takes 906 s and 805 s.
+- **WebKit:** the WebKit part of the install fetches 93.1 MB. It took 57 to 263 s, and 1,205 s at 76.2 kB/s on run 41904096741.
+
+**Why no retry.** A second attempt with its own 16-minute limit adds 16 to each budget: `e2e` would need 67 and `e2e-production` 54. A shorter first attempt would cut off installs that were still printing at measured rates, and their retries would meet the same mirror. The hung leg's log shows `npm exec playwright install` still alive at job end ("Terminate orphan process"), so a retry's `apt-get update` would probably find the apt lock held by the root-owned first attempt; this is inferred from the log and was not probed. Re-running the failed legs (`gh run rerun <id> --failed`) worked in 15 to 18 s. `docs/process/ci.md` names the revisit trigger: a second hang within 30 days, or a timeout on a leg whose log was still printing. Either one calls for a plan for a no-output watchdog with a retry.
+
+**Why `ci.yml` is unchanged.** Its `chromium` step has no limit either, but the 20-minute job limit already bounds a hang there. On 107 measured app runs the steps before `chromium` took a median of 8.1 minutes (max 14.0), so a 16-minute step limit would almost never fire before the job limit, and a limit low enough to matter (4) would have failed 3 measured installs (257, 322, and 483 s).
+
+**The reporting trade-off.** A hung install used to cancel its leg at the job limit, and the nightly issue named it ("`e2e` shard n of 10 did not finish"). A timed-out install now fails the leg, `done` still runs, and the issue reads `Nightly e2e: FAIL` with "No failing test was recorded". The shard is unnamed and found through the run link. In `e2e-production` the later runs are skipped, and the issue lists the four `expected tests: <run>: no report (…): the run did not finish` lines. The issue arrives about 35 minutes sooner for this.
+
+**The unbudgeted WebKit dispatch.** `e2e webkit` has no step limit, so a WebKit dispatch is not inside the budget above. The measured worst (11.5 minutes of Chromium install + 20.1 of WebKit install + 3 setup + 12.6 for the slowest WebKit `e2e` step, run 42572412753) is about 47.2 minutes, inside 51. At the slowest rate on record the WebKit install alone takes about 67 minutes, so such a dispatch reaches the job limit and is cancelled.
