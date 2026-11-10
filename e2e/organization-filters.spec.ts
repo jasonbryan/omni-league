@@ -406,12 +406,11 @@ test.describe('organization filters in the browser', () => {
     expect(await checkReflow(page)).toMatchObject({ passed: true });
   });
 
-  test('Clear all stays where it is while the facets load and the links arrive', async ({
-    page,
-    consoleGuard,
-    browserName,
-  }) => {
-    test.skip(browserName !== 'chromium', 'the client shell route needs a Chromium permission');
+  async function expectClearAllStaysWhileFacetsArrive(
+    page: Page,
+    consoleGuard: { readonly hydrated: boolean },
+    from: 'page top' | 'box top' = 'page top',
+  ): Promise<void> {
     const tenant = await filterTenant();
     const path = `${tenant.path}?gender=mens&format=6v6`;
     await page.goto(path);
@@ -439,13 +438,37 @@ test.describe('organization filters in the browser', () => {
     await expect(page.locator('[data-suggestions-skeleton] > span')).toHaveCount(2);
     await expect(removeLinks(page)).toHaveCount(0);
     const clearAll = noMatchesBox(page).getByRole('link', { name: 'Clear all' });
-    const before = (await clearAll.boundingBox())?.y;
-    expect(before).toBeDefined();
+    const clearAllY = async () => {
+      const top = from === 'box top' ? ((await noMatchesBox(page).boundingBox())?.y ?? 0) : 0;
+      return ((await clearAll.boundingBox())?.y ?? Number.NaN) - top;
+    };
+    const before = await clearAllY();
+    expect(before).not.toBeNaN();
 
     held.release();
     await expect(removeLinks(page)).toHaveCount(2);
     await expect(page.locator('[data-suggestions-skeleton]')).toHaveCount(0);
-    expect((await clearAll.boundingBox())?.y).toBe(before);
+    expect(await clearAllY()).toBe(before);
+  }
+
+  test('Clear all stays where it is while the facets load and the links arrive', async ({
+    page,
+    consoleGuard,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'the client shell route needs a Chromium permission');
+    await expectClearAllStaysWhileFacetsArrive(page, consoleGuard);
+  });
+
+  test('Clear all stays where it is as the facets arrive on a touch screen 800px wide and a mouse 600px wide', async ({
+    page,
+    consoleGuard,
+    browserName,
+  }, testInfo) => {
+    test.skip(browserName !== 'chromium', 'the client shell route needs a Chromium permission');
+    // The skeleton follows the pointer, not the width, so each project is resized across the md breakpoint the other way. The filter bar above has its own loading height, so Clear all is measured from the top of its box.
+    await page.setViewportSize({ width: isDesktop(testInfo) ? 600 : 800, height: 900 });
+    await expectClearAllStaysWhileFacetsArrive(page, consoleGuard, 'box top');
   });
 
   test('a pill pressed while the new page loads holds the rows busy and the count never reads the previous result', async ({
