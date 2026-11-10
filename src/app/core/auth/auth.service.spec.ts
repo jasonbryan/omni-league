@@ -123,10 +123,10 @@ describe('AuthService', () => {
       const requestedUrl = (input: Parameters<typeof fetch>[0]) =>
         input instanceof Request ? input.url : String(input);
 
-      const json = (body: unknown, status = 200) =>
+      const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
         new Response(JSON.stringify(body), {
           status,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...headers },
         });
       const SESSION = {
         session: { id: 's1', token: 't', expiresAt: new Date(Date.now() + HOUR).toISOString() },
@@ -345,11 +345,20 @@ describe('AuthService', () => {
         const SETTLE_MS = 100;
         const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-        type ReplacingCheck = 'null' | '503' | 'rejected';
-        const REPLACING_ANSWER: Record<ReplacingCheck, () => Promise<Response>> = {
-          null: () => Promise.resolve(json(null)),
-          '503': () => Promise.resolve(new Response('', { status: 503 })),
-          rejected: () => Promise.reject(new TypeError('Failed to fetch')),
+        // `by token`: the server still holds the session, as after a failed `/sign-out`, and answers it only to a request that carries the token.
+        type ReplacingCheck = 'null' | '503' | 'rejected' | 'by token';
+        const sentToken = (init?: RequestInit) =>
+          /session_token=[^;]/.test(new Headers(init?.headers).get('Better-Auth-Cookie') ?? '');
+        const REPLACING_ANSWER: Record<ReplacingCheck, (init?: RequestInit) => Promise<Response>> =
+          {
+            null: () => Promise.resolve(json(null)),
+            '503': () => Promise.resolve(new Response('', { status: 503 })),
+            rejected: () => Promise.reject(new TypeError('Failed to fetch')),
+            'by token': (init) => Promise.resolve(json(sentToken(init) ? SESSION : null)),
+          };
+        const REFRESHED_TOKEN = {
+          'set-better-auth-cookie':
+            'better-auth.session_token=t; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax',
         };
 
         function answerUnlessAborted(
@@ -371,6 +380,7 @@ describe('AuthService', () => {
         async function keptSessionWithHeldCheck(
           signOutStatus: 200 | 500,
           replacing: ReplacingCheck,
+          refreshesToken: boolean,
         ) {
           let releaseCheck!: () => void;
           const checkHeld = new Promise<void>((resolve) => (releaseCheck = resolve));
@@ -387,8 +397,10 @@ describe('AuthService', () => {
             if (url === TOKEN_URL) return json({ token: 'jwt' });
             checks += 1;
             return checks === 1
-              ? answerUnlessAborted(init, 0, () => checkHeld.then(() => json(SESSION)))
-              : answerUnlessAborted(init, LATER_ANSWER_MS, REPLACING_ANSWER[replacing]);
+              ? answerUnlessAborted(init, 0, () =>
+                  checkHeld.then(() => json(SESSION, 200, refreshesToken ? REFRESHED_TOKEN : {})),
+                )
+              : answerUnlessAborted(init, LATER_ANSWER_MS, () => REPLACING_ANSWER[replacing](init));
           });
           await vi.waitFor(() => expect(real.requests()).toEqual([SESSION_URL]));
           const signedInByCheck = vi.fn();
@@ -408,33 +420,49 @@ describe('AuthService', () => {
         }
 
         it.each([
-          ['while /sign-out is pending', 'pending', 200, 'null'],
-          ['while /sign-out is pending, then /sign-out fails', 'pending', 500, 'null'],
-          ['while /sign-out is pending, and the replacing check gets a 503', 'pending', 200, '503'],
+          ['while /sign-out is pending', 'pending', 200, 'null', false],
+          ['while /sign-out is pending, then /sign-out fails', 'pending', 500, 'null', false],
+          [
+            'while /sign-out is pending, and the replacing check gets a 503',
+            'pending',
+            200,
+            '503',
+            false,
+          ],
           [
             'while /sign-out is pending, /sign-out fails, and the replacing check gets a 503',
             'pending',
             500,
             '503',
+            false,
           ],
           [
             'while /sign-out is pending, and the replacing check rejects',
             'pending',
             200,
             'rejected',
+            false,
           ],
           [
             'while /sign-out is pending, /sign-out fails, and the replacing check rejects',
             'pending',
             500,
             'rejected',
+            false,
           ],
-          ['after /sign-out answers', 'after', 200, 'null'],
-          ['after /sign-out fails', 'after', 500, 'null'],
+          ['after /sign-out answers', 'after', 200, 'null', false],
+          ['after /sign-out fails', 'after', 500, 'null', false],
+          [
+            'while /sign-out is pending and fails, and the old check refreshed the stored token',
+            'pending',
+            500,
+            'by token',
+            true,
+          ],
         ] as const)(
           'a held check that answers with a session %s confirms nothing',
-          async (_, when, signOutStatus, replacing) => {
-            const held = await keptSessionWithHeldCheck(signOutStatus, replacing);
+          async (_, when, signOutStatus, replacing, refreshesToken) => {
+            const held = await keptSessionWithHeldCheck(signOutStatus, replacing, refreshesToken);
             if (when === 'pending') {
               held.releaseCheck();
               await expect(held.waiting).resolves.toBeNull();
@@ -452,12 +480,13 @@ describe('AuthService', () => {
               await expect(held.auth.fetchToken({ forceRefreshToken: true })).resolves.toBeNull();
               expect(held.requests()).not.toContain(TOKEN_URL);
               expect(held.auth.signedIn()).toBe(false);
+              expect(held.storedToken()).toBe(false);
               expect(held.signedInByCheck).not.toHaveBeenCalled();
               expect(held.auth.authEpoch()).toBe(0);
             };
             await expectNothingConfirmed();
 
-            if (replacing !== 'null') {
+            if (replacing === '503' || replacing === 'rejected') {
               const checksBefore = held.checks();
               window.dispatchEvent(new Event('online'));
               await vi.waitFor(() => expect(held.checks()).toBeGreaterThan(checksBefore));

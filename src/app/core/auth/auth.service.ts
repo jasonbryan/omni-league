@@ -475,12 +475,14 @@ export class AuthService implements ConvexAuthSource {
     this.signOutGuard = 'signing-out';
     // The plugin's `/sign-out` hook clears `refetch` from the store's value, so it is kept before the request; calling it aborts the check in flight.
     const replaceCheck = this.refetching ? this.refetchSession : null;
+    const client = await this.client;
     try {
-      await (await this.client)?.signOut();
+      await client?.signOut();
     } catch {
       // Signed out here regardless; the server session expires on its own.
     } finally {
       if (replaceCheck) {
+        if (client) await this.clearRestoredToken(client);
         this.signOutGuard = 'awaiting-fresh-answer';
         this.startCheck();
         void replaceCheck();
@@ -490,6 +492,12 @@ export class AuthService implements ConvexAuthSource {
       this.endingSession = false;
     }
     this.setSession('signed-out');
+  }
+
+  /** A check due for a session refresh answers with the token, which the plugin writes back after the `/sign-out` hook cleared it; a second sign-out clears it again. */
+  private async clearRestoredToken(client: AuthClientLike): Promise<void> {
+    if (!hasStoredSession(client)) return;
+    await client.signOut().catch(() => undefined);
   }
 
   private setSession(state: Exclude<SessionState, 'unknown'>): void {

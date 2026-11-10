@@ -376,16 +376,16 @@ test.describe('the app shell', () => {
         page: Page,
         options: { signOutStatus: 200 | 500; holdSignOut: boolean; laterCheckStatus?: 503 },
       ) {
-        const gate = () => {
-          let open!: () => void;
-          const opened = new Promise<void>((resolve) => (open = resolve));
-          return { open, opened };
+        const heldUntilOpened = () => {
+          let release!: () => void;
+          const opened = new Promise<void>((resolve) => (release = resolve));
+          return { release, opened };
         };
-        const check = gate();
-        const signOut = gate();
-        const checkFetched = gate();
-        const signOutReached = gate();
-        const signOutAnswered = gate();
+        const check = heldUntilOpened();
+        const signOut = heldUntilOpened();
+        const checkFetched = heldUntilOpened();
+        const signOutReached = heldUntilOpened();
+        const signOutAnswered = heldUntilOpened();
 
         let checks = 0;
         await page.route(isPath(SESSION_PATH), async (route) => {
@@ -403,12 +403,12 @@ test.describe('the app shell', () => {
             return;
           }
           const answer = await route.fetch();
-          checkFetched.open();
+          checkFetched.release();
           await check.opened;
           await route.fulfill({ response: answer });
         });
         await page.route(isPath(SIGN_OUT_PATH), async (route) => {
-          signOutReached.open();
+          signOutReached.release();
           if (options.holdSignOut) await signOut.opened;
           if (options.signOutStatus === 200) {
             await route.continue();
@@ -423,14 +423,14 @@ test.describe('the app shell', () => {
               body: '{"message":"boom"}',
             });
           }
-          signOutAnswered.open();
+          signOutAnswered.release();
         });
 
         await page.goto('/app/account');
         await checkFetched.opened;
         return {
-          releaseCheck: check.open,
-          releaseSignOut: signOut.open,
+          releaseCheck: check.release,
+          releaseSignOut: signOut.release,
           signOutReached: signOutReached.opened,
           signOutAnswered: signOutAnswered.opened,
         };
