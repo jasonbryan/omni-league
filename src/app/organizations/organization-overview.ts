@@ -29,6 +29,7 @@ import { OrganizationMark } from './organization-mark';
 import { seasonDates } from './league/season-dates';
 import { LIST_PAGE_SIZE } from '../core/list-page';
 import {
+  listPagesQuery,
   organizationPath,
   pageQueryFor,
   sportViewPath,
@@ -42,7 +43,8 @@ import {
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
-import type { FilterGroup, LeagueFacet } from './division-filters';
+import { filterPills, type FilterGroup, type LeagueFacet } from './division-filters';
+import { noMatchSentence, removalSuggestions } from './no-match-suggestions';
 import type { SportCounts } from '../../../convex/lib/sports';
 import {
   NO_DIVISION_FILTERS,
@@ -312,7 +314,40 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                   class="mt-4 flex max-w-md flex-col items-start rounded-xl border border-dashed border-border p-6"
                 >
                   <p class="font-medium">No leagues match these filters</p>
-                  <p class="mt-1 text-sm text-muted-foreground">Remove a filter to see more.</p>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {{ noMatchSentence() }} Remove a filter to see more.
+                  </p>
+                  @if (removals(); as removals) {
+                    @if (removals.length) {
+                      <ul role="list" class="mt-4 flex flex-wrap gap-2">
+                        @for (removal of removals; track removal.label) {
+                          <li class="max-w-full">
+                            <a
+                              [routerLink]="pagePath()"
+                              [queryParams]="removal.query"
+                              data-slot="button"
+                              [class]="removeButton"
+                              (click)="filterBar()?.focusCountNext($event)"
+                              >Remove {{ removal.label }}
+                              <span class="whitespace-nowrap text-muted-foreground">{{
+                                removal.text
+                              }}</span></a
+                            >
+                          </li>
+                        }
+                      </ul>
+                    }
+                  } @else {
+                    <div data-suggestions-skeleton class="mt-4 flex flex-wrap gap-2">
+                      <p role="status" class="sr-only">Loading the suggestions.</p>
+                      @for (pill of activeValues(); track pill) {
+                        <span
+                          aria-hidden="true"
+                          class="block h-9 w-44 rounded-lg bg-muted motion-safe:animate-pulse pointer-coarse:h-11"
+                        ></span>
+                      }
+                    </div>
+                  }
                   <a
                     [routerLink]="pagePath()"
                     [queryParams]="filterBar()?.clearQuery()"
@@ -473,6 +508,7 @@ export class OrganizationOverview {
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly findButton = OUTLINE_BUTTON_LARGE;
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
+  protected readonly removeButton = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-normal! py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly openBadge = OPEN_BADGE;
   protected readonly fullBadge = FULL_BADGE;
@@ -536,6 +572,27 @@ export class OrganizationOverview {
 
   // The Registration open section and the hero's Register link would speak of the whole organization, so a view with no match leaves them out.
   protected readonly noMatches = computed(() => this.matchingCount() === 0);
+
+  protected readonly noMatchSentence = computed(() =>
+    noMatchSentence(this.page().name, this.filters(), this.sport()?.name),
+  );
+
+  protected readonly activeValues = computed(() => filterPills(this.filters()).map((_, i) => i));
+
+  protected readonly removals = computed(() => {
+    const facets = this.facets();
+    if (facets === undefined) return undefined;
+    const locations = this.locationPaging()?.page ?? 1;
+    return removalSuggestions({
+      facets,
+      filters: this.filters(),
+      sportLeagueCounts: this.sportLeagueCounts(),
+      sport: this.sport()?.key,
+      total: this.leagueTotal(),
+      queryFor: (without) =>
+        listPagesQuery({ leagues: 1, locations }, this.sport() !== undefined, without),
+    });
+  });
 
   protected readonly leaguesHeading = computed(() => {
     const sport = this.sport();

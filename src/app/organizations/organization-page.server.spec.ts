@@ -835,8 +835,12 @@ describe('filtered views server render', () => {
       sand({ gender: ['mens'], playersPerSide: [6] }),
     );
     expect(text(body.querySelector('#leagues'))).toContain('No leagues match these filters');
-    expect(text(body.querySelector('#leagues'))).toContain('Remove a filter to see more.');
+    expect(text(body.querySelector('#leagues'))).toContain(
+      "Sand Org has no men's 6v6 league. Remove a filter to see more.",
+    );
     expect([...body.querySelectorAll('#leagues a')].map((a) => [text(a), pathOf(a)])).toEqual([
+      ["Remove Men's (3 leagues)", `${SAND_PATH}?format=6v6`],
+      ['Remove 6v6 (1 league)', `${SAND_PATH}?gender=mens`],
       ['Clear all', SAND_PATH],
     ]);
     expect(body.querySelector('#registration-open')).toBeNull();
