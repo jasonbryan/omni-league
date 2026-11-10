@@ -275,7 +275,7 @@ test.describe('find a league: the top bar search beside the organizations list',
     await expect(page).toHaveURL(`${baseURL}/leagues?q=${id}`);
     await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
-    await expect(page.getByRole('search')).toHaveCount(1);
+    await expect(page.getByRole('search')).toHaveCount(2);
   });
 
   test('on a phone the bar link from an organization page opens /leagues with the organizations list', async ({
