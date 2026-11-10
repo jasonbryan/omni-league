@@ -151,7 +151,7 @@ jobs:
   # own project and report folder (E2E_RUN_NAME). Runs after the first use !cancelled(), so one
   # night reports every failing run. Each run has a step timeout below its specs' own (up to 12 min
   # a try, retried once), so a hang fails that step and the check, list, and upload still run inside
-  # the job's 38 minutes.
+  # the job's limit.
   e2e-production:
     name: e2e-production
     needs: nightly-gate

@@ -951,7 +951,7 @@ Issue #610. On attempt 1 of [run 42762246537](https://github.com/jasonbryan/omni
 **Install step rule.** An install step's `timeout-minutes` is the smallest whole number of minutes at or above its full `--with-deps` fetch at the slowest rate on record, plus the largest measured time outside the fetch (`apt-get update`, unpacking, the Playwright download). If that is not below the job's limit, the step gets no limit of its own, and the job limit bounds it. #599's step timeout rule (3.5 times the measured time) suits test runs, but an install's time depends on the mirror's rate, which varied 400-fold (23.3 kB/s to 10.3 MB/s).
 
 - **Chromium:** 21.1 MB ÷ 23.3 kB/s = 906 s, + 40 s = 946 s, so 16. That is 4.5 minutes over the slowest success (688 s).
-- **WebKit:** 93.1 MB ÷ 23.3 kB/s = 3,996 s, + 40 s = 4,036 s (67 minutes), over the job's 51, so no step limit. Splitting the two installs keeps the Chromium limit off the WebKit install.
+- **WebKit:** 93.1 MB ÷ 23.3 kB/s = 3,996 s, + 40 s = 4,036 s (68 minutes), over the job's 51, so no step limit. Splitting the two installs keeps the Chromium limit off the WebKit install.
 
 **Job budgets.** `scripts/e2e-workflow.test.mjs` reads the browsers limit and the run limits from the workflow and checks both.
 
