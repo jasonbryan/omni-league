@@ -124,6 +124,7 @@ export class AuthService implements ConvexAuthSource {
   private loadedClient: AuthClientLike | null = null;
   private watching = false;
   private endingSession = false;
+  private signOutGuard: 'off' | 'signing-out' | 'awaiting-fresh-answer' = 'off';
   private refetchSession: (() => unknown) | null = null;
   private refetching = false;
   private checkStartedAt: number | null = null;
@@ -179,13 +180,20 @@ export class AuthService implements ConvexAuthSource {
     // A fetch with no data is pending: keep the last answer.
     if (value.isPending) return;
     if (!refetching) this.settleCheck();
+    this.endGuardOnFreshAnswer(refetching, value.error);
     if (value.data?.session) {
-      this.confirmSession();
+      if (this.signOutGuard === 'off') this.confirmSession();
       return;
     }
     if (refetching) return;
     if (this.session() === 'kept' && neverReachedServer(value.error)) return;
     this.refuseSession(client, value.error);
+  }
+
+  /** Better Auth keeps the last `data` on a failed check, so only an answer with no error says what the server holds. */
+  private endGuardOnFreshAnswer(refetching: boolean, error: unknown): void {
+    const freshAnswer = !refetching && (error === null || error === undefined);
+    if (this.signOutGuard === 'awaiting-fresh-answer' && freshAnswer) this.signOutGuard = 'off';
   }
 
   private confirmSession(): void {
@@ -349,7 +357,7 @@ export class AuthService implements ConvexAuthSource {
       this.tokenWithheld = true;
       return null;
     }
-    if (!this.signedIn()) return null;
+    if (!this.signedIn() || this.signOutGuard !== 'off') return null;
     if (!forceRefreshToken) {
       if (this.cachedToken) return this.cachedToken;
       if (this.pendingToken) return this.pendingToken;
@@ -447,6 +455,7 @@ export class AuthService implements ConvexAuthSource {
   /** The Convex client calls `setAuth` again only when `signedIn` turns true or `authEpoch` advances, so a new session over a confirmed one advances it. */
   private startFormSession(client: AuthClientLike): void {
     const replacesSignedInSession = this.signedIn();
+    this.signOutGuard = 'off';
     this.forgetToken();
     this.setSession('signed-in');
     if (replacesSignedInSession) this.epoch.update((epoch) => epoch + 1);
@@ -463,14 +472,32 @@ export class AuthService implements ConvexAuthSource {
   private async endSession(): Promise<void> {
     this.forgetToken();
     this.endingSession = true;
+    this.signOutGuard = 'signing-out';
+    // The plugin's `/sign-out` hook clears `refetch` from the store's value, so it is kept before the request; calling it aborts the check in flight.
+    const replaceCheck = this.refetching ? this.refetchSession : null;
+    const client = await this.client;
     try {
-      await (await this.client)?.signOut();
+      await client?.signOut();
     } catch {
       // Signed out here regardless; the server session expires on its own.
     } finally {
+      if (replaceCheck) {
+        if (client) await this.clearRestoredToken(client);
+        this.signOutGuard = 'awaiting-fresh-answer';
+        this.startCheck();
+        void replaceCheck();
+      } else {
+        this.signOutGuard = 'off';
+      }
       this.endingSession = false;
     }
     this.setSession('signed-out');
+  }
+
+  /** A check due for a session refresh answers with the token, which the plugin writes back after the `/sign-out` hook cleared it; a second sign-out clears it again. */
+  private async clearRestoredToken(client: AuthClientLike): Promise<void> {
+    if (!hasStoredSession(client)) return;
+    await client.signOut().catch(() => undefined);
   }
 
   private setSession(state: Exclude<SessionState, 'unknown'>): void {
