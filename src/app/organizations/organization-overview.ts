@@ -329,7 +329,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                               [class]="removeButton"
                               (click)="filterBar()?.focusCountNext($event)"
                               >Remove {{ removal.label }}
-                              <span class="text-muted-foreground">{{ removal.text }}</span></a
+                              <span class="whitespace-nowrap text-muted-foreground">{{
+                                removal.text
+                              }}</span></a
                             >
                           </li>
                         }
@@ -506,7 +508,7 @@ export class OrganizationOverview {
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly findButton = OUTLINE_BUTTON_LARGE;
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
-  protected readonly removeButton = `${OUTLINE_BUTTON} h-auto min-h-9 max-w-full whitespace-normal py-1.5 text-start`;
+  protected readonly removeButton = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-normal! py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly openBadge = OPEN_BADGE;
   protected readonly fullBadge = FULL_BADGE;
