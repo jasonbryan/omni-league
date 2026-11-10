@@ -12,7 +12,7 @@
 - **Amended:** 2026-10-30 (#426): `e2e.yml` gets a second job, `e2e-production`, that builds for production and runs the service-worker specs every night instead of skipping them. See "Amendment: the nightly run builds for production (2026-10-30)" at the end.
 - **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end. Where the sections above say otherwise, this amendment applies.
 - **Amended:** 2026-11-05 (#563): the nightly job `e2e` is a matrix of Playwright shards under a 30-minute global timeout, and `nightly-issue` runs for a cancelled job and names every shard that did not finish. See "Amendment: sharded nightly e2e and a reported cancel (2026-11-05)" at the end. Where the sections above or the 2026-10-12 amendment say the suite runs in one job, this amendment applies.
-- **Amended:** 2026-11-09 (#599): the `production-mobile` step of `e2e-production` gets 4 minutes by the step timeout rule, and the job keeps 20. See "Amendment: e2e-production step and job timeouts (2026-11-09)" at the end. Where the #426 amendment's table says `pwa.spec.ts` has 10 tests, the amendment applies.
+- **Amended:** 2026-11-09 (#599): the `production-mobile` step of `e2e-production` gets 4 minutes by the step timeout rule, and the job keeps 20. See "Amendment: e2e-production step and job timeouts (2026-11-09)" at the end. Where the #426 amendment's table says `pwa.spec.ts` has 10 tests, the amendment applies. Re-measured 2026-11-10 (#607) for 14 tests; the limits are unchanged.
 
 ## Context
 
@@ -925,4 +925,12 @@ Issue #599 adds two tests to `e2e/pwa.spec.ts`, which now lists 13 on `chromium-
 | `timeout-minutes` on step `production-mobile` | 3        | 4   |
 | `timeout-minutes` on job `e2e-production`     | 20       | 20  |
 
-Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/runs/42709660266), a `workflow_dispatch` run of the branch: `production-mobile` 67 s for 13 tests (13 passed), so 3.5 × 67 s = 234.5 s gives 4 minutes. With `production-desktop` 2, `pwa-update` 6, and `kill-switch` 5 unchanged, the job limit is 4 + 2 + 6 + 5 + 2 + 1 = 20, the value the #426 amendment's "Timeout" row already holds. The job took 391 s (6 min 31 s). The #426 table's "Runs" row (`pwa.spec.ts`, 10 tests) is superseded by the 13 above; its other rows are unchanged. Measured figures are in [`docs/process/ci.md`](../process/ci.md#minutes).
+Measured on [run 42709660266](https://github.com/jasonbryan/omni-league/actions/runs/42709660266), a `workflow_dispatch` run of the branch: `production-mobile` 67 s for 13 tests (13 passed), so 3.5 × 67 s = 234.5 s gives 4 minutes. With `production-desktop` 2, `pwa-update` 6, and `kill-switch` 5 unchanged, the job limit is 4 + 2 + 6 + 5 + 2 + 1 = 20, the value the #426 amendment's "Timeout" row already holds. The job took 391 s (6 min 31 s). The #426 table's "Runs" row (`pwa.spec.ts`, 10 tests) is superseded by the 13 above, and by the 14 below; its other rows are unchanged. Measured figures are in [`docs/process/ci.md`](../process/ci.md#minutes).
+
+**Re-measured for 14 tests (2026-11-10, #607).** Issue #607 adds one test, so `e2e/pwa.spec.ts` lists 14 on `chromium-mobile`. On [run 42762246537](https://github.com/jasonbryan/omni-league/actions/runs/42762246537), a `workflow_dispatch` run of the branch at `ef9e221`, `production-mobile` took 56 s for 14 tests (14 of 14 run, 14 passed). By the step timeout rule 3.5 × 56 s = 196 s gives 4 minutes, so the step keeps 4, and with the other three steps unchanged the job keeps 20. The other steps took `production-desktop` 5 s, `pwa-update` 49 s, and `kill-switch` 67 s. `kill-switch` is not under the rule; its 5-minute limit is 4.5 times the 67 s, against 3.06 times the 98 s of run 42709660266, so it stays. The job took 271 s (4 min 31 s).
+
+| Setting                                       | 2026-11-09 (13 tests, 67 s) | 2026-11-10 (14 tests, 56 s) |
+| --------------------------------------------- | --------------------------- | --------------------------- |
+| `timeout-minutes` on step `production-mobile` | 4                           | 4                           |
+| `timeout-minutes` on step `kill-switch`       | 5                           | 5                           |
+| `timeout-minutes` on job `e2e-production`     | 20                          | 20                          |
