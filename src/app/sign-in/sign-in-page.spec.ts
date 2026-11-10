@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import type { MockInstance } from 'vitest';
 import { AuthService, SESSION_CHECK_LIMIT_MS } from '../core/auth/auth.service';
 import { redirectSignedIn } from '../core/auth/guards';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
@@ -15,6 +16,8 @@ class Elsewhere {}
 
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
+
+type NavigateSpy = MockInstance<Router['navigateByUrl']>;
 
 const ROUTES: Routes = [
   { path: 'sign-in', component: SignInPage, canActivate: [redirectSignedIn] },
@@ -651,7 +654,7 @@ describe('SignInPage', () => {
       ['succeeds', null],
       ['is refused', { status: 401 }],
     ])(
-      'a check that confirms while the submit is pending navigates once, and the submit that then %s changes nothing',
+      'a check that confirms while the submit is pending navigates once, and a submit that then %s does not navigate again',
       async (_, signInError) => {
         const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
         await fill();
@@ -666,6 +669,60 @@ describe('SignInPage', () => {
         await settle();
         expect(url()).toBe('/app/account');
         expect(navigate).toHaveBeenCalledExactlyOnceWith('/app/account', { replaceUrl: true });
+      },
+    );
+
+    it('a check that confirms while the page file loads still goes to returnTo once the page is built', async () => {
+      client = new FakeAuthClient();
+      let releasePage: () => void = () => undefined;
+      const pageFile = new Promise<typeof SignInPage>(
+        (resolve) => (releasePage = () => resolve(SignInPage)),
+      );
+      const loadComponent = vi.fn(() => pageFile);
+      TestBed.configureTestingModule({
+        providers: [
+          provideFakeAuthClient(client),
+          { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+          provideRouter([
+            { path: 'sign-in', loadComponent, canActivate: [redirectSignedIn] },
+            ...ROUTES.filter((route) => route.path !== 'sign-in'),
+          ]),
+        ],
+      });
+      const auth = TestBed.inject(AuthService);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+      client.emitError({ status: 503, statusText: 'Service Unavailable' });
+      harness = await RouterTestingHarness.create();
+      const router = TestBed.inject(Router);
+      const opening = router.navigateByUrl('/sign-in?returnTo=%2Fapp%2Faccount');
+      await vi.waitFor(() => expect(loadComponent).toHaveBeenCalled());
+      confirmByCheck();
+      releasePage();
+      await opening;
+      await settle();
+      expect(url()).toBe('/app/account');
+    });
+
+    it.each([
+      ['is cancelled', (navigate: NavigateSpy) => navigate.mockResolvedValueOnce(false)],
+      [
+        'fails',
+        (navigate: NavigateSpy) =>
+          navigate.mockRejectedValueOnce(new Error('Failed to fetch dynamically imported module')),
+      ],
+    ])(
+      'when the navigation a check started %s, the form still goes to returnTo on its own success',
+      async (_, failNavigation) => {
+        const { navigate } = await openRefused('/sign-in?returnTo=%2Fapp%2Faccount');
+        failNavigation(navigate);
+        confirmByCheck();
+        await settle();
+        expect(navigate).toHaveBeenCalledTimes(1);
+        await fill();
+        await submit();
+        await settle();
+        expect(navigate).toHaveBeenCalledTimes(2);
+        expect(url()).toBe('/app/account');
       },
     );
   });

@@ -426,9 +426,7 @@ export class AuthService implements ConvexAuthSource {
     }
     if (error) return { ok: false, error: failureOf(error) };
     // The response set the session; the store refetches it, but the answer is already known.
-    this.forgetToken();
-    this.setSession('signed-in');
-    this.watchSession(client);
+    this.startFormSession(client);
     return { ok: true };
   }
 
@@ -442,10 +440,17 @@ export class AuthService implements ConvexAuthSource {
       return { ok: false, error: 'unexpected' };
     }
     if (error) return signInFailureOf(error);
+    this.startFormSession(client);
+    return { ok: true };
+  }
+
+  /** The Convex client calls `setAuth` again only when `signedIn` turns true or `authEpoch` advances, so a new session over a confirmed one advances it. */
+  private startFormSession(client: AuthClientLike): void {
+    const replacesSignedInSession = this.signedIn();
     this.forgetToken();
     this.setSession('signed-in');
+    if (replacesSignedInSession) this.epoch.update((epoch) => epoch + 1);
     this.watchSession(client);
-    return { ok: true };
   }
 
   private async requestSignOut(): Promise<void> {

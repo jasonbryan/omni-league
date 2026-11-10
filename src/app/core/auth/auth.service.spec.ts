@@ -872,6 +872,45 @@ describe('AuthService', () => {
         expect(signedInByCheck).not.toHaveBeenCalled();
       });
 
+      it.each([
+        ['sign-in', (auth: AuthService) => auth.signIn(INPUT), () => client.releaseSignIn()],
+        ['sign-up', (auth: AuthService) => auth.signUp(INPUT), () => client.releaseSignUp()],
+      ] as const)(
+        "a %s that succeeds after a check already signed in advances authEpoch, so Convex asks for the new session's token",
+        async (kind, submit, release) => {
+          const auth = configure();
+          await loaded();
+          client.emitError({ status: 503, statusText: 'Service Unavailable' });
+          if (kind === 'sign-in') client.holdSignIn = true;
+          else client.holdSignUp = true;
+          const result = submit(auth);
+          await loaded();
+          client.emitChecking();
+          client.emitSession({ id: 's1' });
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          expect(auth.authEpoch()).toBe(0);
+
+          client.nextToken = 'jwt-new-session';
+          release();
+          await expect(result).resolves.toEqual({ ok: true });
+          expect(auth.signedIn()).toBe(true);
+          expect(auth.authEpoch()).toBe(1);
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe(
+            'jwt-new-session',
+          );
+          expect(client.tokenRequests).toBe(2);
+        },
+      );
+
+      it('a sign-in from signed out leaves authEpoch alone: signedIn turning true calls setAuth', async () => {
+        client.storedCookie = '';
+        const auth = configure();
+        await loaded();
+        await expect(auth.signIn(INPUT)).resolves.toEqual({ ok: true });
+        expect(auth.signedIn()).toBe(true);
+        expect(auth.authEpoch()).toBe(0);
+      });
+
       it("stays quiet for this tab's sign-in, and for the check that follows it", async () => {
         client.storedCookie = '';
         const auth = configure();

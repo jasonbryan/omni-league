@@ -13,14 +13,19 @@ export interface ContinueToReturnTo {
 export function injectContinueToReturnTo(): ContinueToReturnTo {
   const router = inject(Router);
   const returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
+  const auth = inject(AuthService);
   let underway = false;
   const go = async (): Promise<void> => {
     if (underway) return;
     underway = true;
-    await router.navigateByUrl(returnToOrApp(returnTo), { replaceUrl: true });
+    // The router's navigation error handler reports a failure; the page only lets the form try again.
+    const navigated = await router
+      .navigateByUrl(returnToOrApp(returnTo), { replaceUrl: true })
+      .catch(() => false);
+    if (!navigated) underway = false;
   };
-  inject(AuthService)
-    .signedInByCheck.pipe(takeUntilDestroyed())
-    .subscribe(() => void go());
+  auth.signedInByCheck.pipe(takeUntilDestroyed()).subscribe(() => void go());
+  // A check can confirm after the guard let the page through but before the page file loaded.
+  if (auth.signedIn()) void go();
   return { go, underway: () => underway };
 }
