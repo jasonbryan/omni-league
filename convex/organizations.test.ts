@@ -10,6 +10,7 @@ import {
   insertTenant,
   type Tenant,
 } from './lib/tenantWrites';
+import { insertPendingInvite } from './lib/inviteWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -1299,5 +1300,323 @@ describe('organizations module source', () => {
   test('the sport list reads through the sport index with the same offset read', () => {
     expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_status_and_sortName/);
     expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);
+  });
+});
+
+describe('organizations.getAttention', () => {
+  const identity = (authUserId: string) => ({
+    subject: authUserId,
+    issuer: 'http://127.0.0.1:3211',
+    email: `${authUserId}@example.test`,
+    emailVerified: false,
+    name: authUserId,
+    sessionId: 's1',
+  });
+
+  async function setupAttention() {
+    const t = setup();
+    const ids = await t.run(async (ctx) => {
+      const a = await insertTenant(ctx, {
+        organization: { name: 'Org A', slug: 'org-a' },
+        locations: [],
+        leagues: [],
+      });
+      const b = await insertTenant(ctx, {
+        organization: { name: 'Org B', slug: 'org-b' },
+        locations: [],
+        leagues: [],
+      });
+      const member = async (
+        authUserId: string,
+        organizationId: Id<'organizations'> | null,
+        role: 'orgAdmin' | 'leagueOrganizer',
+      ) => {
+        const userId = await ctx.db.insert('users', {
+          authUserId,
+          name: authUserId,
+          adultConfirmedAt: 1,
+        });
+        if (organizationId) {
+          await ctx.db.insert('memberships', { userId, organizationId, role, leagueIds: [] });
+        }
+      };
+      await member('admin-a', a, 'orgAdmin');
+      await member('organizer-a', a, 'leagueOrganizer');
+      await member('admin-b', b, 'orgAdmin');
+      await member('stranger', null, 'orgAdmin');
+      return { a, b };
+    });
+    return { t, ...ids };
+  }
+
+  type Setup = Awaited<ReturnType<typeof setupAttention>>;
+
+  const attention = ({ t, a }: Setup) =>
+    t
+      .withIdentity(identity('admin-a'))
+      .query(api.organizations.getAttention, { organizationId: a });
+
+  function addLeagues(
+    { t }: Setup,
+    organizationId: Id<'organizations'>,
+    names: string[],
+    status: 'published' | 'draft' = 'published',
+  ): Promise<Id<'leagues'>[]> {
+    return t.run(async (ctx) => {
+      const ids: Id<'leagues'>[] = [];
+      for (const name of names) {
+        ids.push(
+          await ctx.db.insert('leagues', {
+            organizationId,
+            name,
+            slug: name.toLowerCase().replaceAll(' ', '-'),
+            sport: 'soccer',
+            locationIds: [],
+            sortName: name.toLowerCase(),
+            status,
+          }),
+        );
+      }
+      return ids;
+    });
+  }
+
+  function addSeasons(
+    { t }: Setup,
+    organizationId: Id<'organizations'>,
+    leagueId: Id<'leagues'>,
+    seasons: { name: string; registrationDeadline: string; status?: 'draft' | 'published' }[],
+  ): Promise<void> {
+    return t.run(async (ctx) => {
+      for (const season of seasons) {
+        await ctx.db.insert('seasons', {
+          organizationId,
+          leagueId,
+          name: season.name,
+          slug: season.name.toLowerCase().replaceAll(' ', '-'),
+          startDate: '2031-06-01',
+          endDate: '2031-08-30',
+          registrationDeadline: season.registrationDeadline,
+          minimumRosterSize: 4,
+          status: season.status ?? 'draft',
+        });
+      }
+    });
+  }
+
+  function addInvites(
+    { t }: Setup,
+    organizationId: Id<'organizations'>,
+    invites: { email: string; expiresAt: number }[],
+  ): Promise<void> {
+    return t.run(async (ctx) => {
+      for (const invite of invites) {
+        await insertPendingInvite(ctx, {
+          organizationId,
+          email: invite.email,
+          role: 'orgAdmin',
+          leagueIds: [],
+          tokenHash: `hash-${invite.email}`,
+          expiresAt: invite.expiresAt,
+        });
+      }
+    });
+  }
+
+  const dayOf = (n: number) => `2031-05-${String(n).padStart(2, '0')}`;
+  const numbered = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, i) => `${prefix} ${String(i + 1).padStart(3, '0')}`);
+
+  test('returns an empty answer for an organization with nothing to do', async () => {
+    const s = await setupAttention();
+    expect(await attention(s)).toEqual({
+      draftSeasons: { items: [], total: 0, capped: false },
+      leaguesWithoutSeason: { items: [], total: 0, capped: false },
+      pendingInvites: { total: 0, capped: false, soonest: [] },
+    });
+  });
+
+  test('lists draft seasons by soonest registration deadline with their league', async () => {
+    const s = await setupAttention();
+    const [sunday, coed] = await addLeagues(s, s.a, ['Sunday Reverse Coed 4s', 'Coed 7v7 Rec']);
+    await addSeasons(s, s.a, sunday, [
+      { name: 'Fall 2031', registrationDeadline: dayOf(20) },
+      { name: 'Winter 2031', registrationDeadline: dayOf(5) },
+    ]);
+    await addSeasons(s, s.a, coed, [{ name: 'Spring 2031', registrationDeadline: dayOf(12) }]);
+    const { draftSeasons } = await attention(s);
+    expect(draftSeasons.items.map((item) => [item.name, item.leagueName, item.leagueSlug])).toEqual(
+      [
+        ['Winter 2031', 'Sunday Reverse Coed 4s', 'sunday-reverse-coed-4s'],
+        ['Spring 2031', 'Coed 7v7 Rec', 'coed-7v7-rec'],
+        ['Fall 2031', 'Sunday Reverse Coed 4s', 'sunday-reverse-coed-4s'],
+      ],
+    );
+    expect(draftSeasons).toMatchObject({ total: 3, capped: false });
+  });
+
+  test('leaves out a published season', async () => {
+    const s = await setupAttention();
+    const [league] = await addLeagues(s, s.a, ['Sunday']);
+    await addSeasons(s, s.a, league, [
+      { name: 'Live', registrationDeadline: dayOf(5), status: 'published' },
+      { name: 'Draft', registrationDeadline: dayOf(6) },
+    ]);
+    const { draftSeasons } = await attention(s);
+    expect(draftSeasons.items.map((item) => item.name)).toEqual(['Draft']);
+    expect(draftSeasons.total).toBe(1);
+  });
+
+  test('lists published leagues with no season by name, ignoring case', async () => {
+    const s = await setupAttention();
+    const leagues = await addLeagues(s, s.a, ['Zebra', 'adult', 'Mu', 'Has Season', 'Only Draft']);
+    await addLeagues(s, s.a, ['Draft League'], 'draft');
+    await addSeasons(s, s.a, leagues[3], [
+      { name: 'Live', registrationDeadline: dayOf(5), status: 'published' },
+    ]);
+    await addSeasons(s, s.a, leagues[4], [{ name: 'Draft', registrationDeadline: dayOf(5) }]);
+    const { leaguesWithoutSeason } = await attention(s);
+    expect(leaguesWithoutSeason.items.map((item) => [item.name, item.slug])).toEqual([
+      ['adult', 'adult'],
+      ['Mu', 'mu'],
+      ['Zebra', 'zebra'],
+    ]);
+    expect(leaguesWithoutSeason).toMatchObject({ total: 3, capped: false });
+  });
+
+  test('lists pending invites as a total and the three that expire first', async () => {
+    const s = await setupAttention();
+    await addInvites(s, s.a, [
+      { email: 'd@example.test', expiresAt: 4000 },
+      { email: 'a@example.test', expiresAt: 1000 },
+      { email: 'c@example.test', expiresAt: 3000 },
+      { email: 'b@example.test', expiresAt: 2000 },
+    ]);
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert('invites', {
+        organizationId: s.a,
+        email: 'gone@example.test',
+        role: 'orgAdmin',
+        leagueIds: [],
+        tokenHash: 'hash-gone',
+        expiresAt: 500,
+        status: 'revoked',
+      });
+    });
+    const { pendingInvites } = await attention(s);
+    expect(pendingInvites).toEqual({
+      total: 4,
+      capped: false,
+      soonest: [
+        { email: 'a@example.test', expiresAt: 1000 },
+        { email: 'b@example.test', expiresAt: 2000 },
+        { email: 'c@example.test', expiresAt: 3000 },
+      ],
+    });
+  });
+
+  test('returns 20 draft seasons and the total of 25', async () => {
+    const s = await setupAttention();
+    const [league] = await addLeagues(s, s.a, ['Sunday']);
+    await addSeasons(
+      s,
+      s.a,
+      league,
+      numbered('Season', 25).map((name, i) => ({
+        name,
+        registrationDeadline: `2031-06-${String(25 - i).padStart(2, '0')}`,
+      })),
+    );
+    const { draftSeasons } = await attention(s);
+    expect(draftSeasons.items).toHaveLength(20);
+    expect(draftSeasons).toMatchObject({ total: 25, capped: false });
+    expect(draftSeasons.items[0].name).toBe('Season 025');
+  });
+
+  test('stops counting draft seasons at 100 and says there are more', async () => {
+    const s = await setupAttention();
+    const [league] = await addLeagues(s, s.a, ['Sunday']);
+    await addSeasons(
+      s,
+      s.a,
+      league,
+      numbered('Season', 120).map((name) => ({ name, registrationDeadline: dayOf(9) })),
+    );
+    const { draftSeasons } = await attention(s);
+    expect(draftSeasons.items).toHaveLength(20);
+    expect(draftSeasons).toMatchObject({ total: 100, capped: true });
+  });
+
+  test('exactly 100 draft seasons are not capped', async () => {
+    const s = await setupAttention();
+    const [league] = await addLeagues(s, s.a, ['Sunday']);
+    await addSeasons(
+      s,
+      s.a,
+      league,
+      numbered('Season', 100).map((name) => ({ name, registrationDeadline: dayOf(9) })),
+    );
+    expect((await attention(s)).draftSeasons).toMatchObject({ total: 100, capped: false });
+  });
+
+  test('checks only the first 100 published leagues by name for a season', async () => {
+    const s = await setupAttention();
+    const names = numbered('League', 120);
+    const ids = await addLeagues(s, s.a, names);
+    await addSeasons(s, s.a, ids[0], [
+      { name: 'Live', registrationDeadline: dayOf(5), status: 'published' },
+    ]);
+    const { leaguesWithoutSeason } = await attention(s);
+    expect(leaguesWithoutSeason.capped).toBe(true);
+    expect(leaguesWithoutSeason.total).toBe(99);
+    expect(leaguesWithoutSeason.items).toHaveLength(20);
+    expect(leaguesWithoutSeason.items[0].name).toBe('League 002');
+  });
+
+  test('120 published leagues with no season give 20 items and a capped total of 100', async () => {
+    const s = await setupAttention();
+    await addLeagues(s, s.a, numbered('League', 120));
+    const { leaguesWithoutSeason } = await attention(s);
+    expect(leaguesWithoutSeason.items).toHaveLength(20);
+    expect(leaguesWithoutSeason).toMatchObject({ total: 100, capped: true });
+  });
+
+  test('counts pending invites up to 100 and says there are more', async () => {
+    const s = await setupAttention();
+    await addInvites(
+      s,
+      s.a,
+      numbered('invite', 120).map((name, i) => ({
+        email: `${name.replace(' ', '-')}@example.test`,
+        expiresAt: 1000 + i,
+      })),
+    );
+    const { pendingInvites } = await attention(s);
+    expect(pendingInvites).toMatchObject({ total: 100, capped: true });
+    expect(pendingInvites.soonest).toHaveLength(3);
+  });
+
+  test("never returns another organization's drafts, leagues, or invites", async () => {
+    const s = await setupAttention();
+    const [other] = await addLeagues(s, s.b, ['Other League']);
+    await addLeagues(s, s.b, ['Other Empty']);
+    await addSeasons(s, s.b, other, [{ name: 'Other Draft', registrationDeadline: dayOf(5) }]);
+    await addInvites(s, s.b, [{ email: 'other@example.test', expiresAt: 1000 }]);
+    expect(await attention(s)).toEqual({
+      draftSeasons: { items: [], total: 0, capped: false },
+      leaguesWithoutSeason: { items: [], total: 0, capped: false },
+      pendingInvites: { total: 0, capped: false, soonest: [] },
+    });
+  });
+
+  test('refuses a league organizer, an org admin of another organization, a non-member, and an unauthenticated caller', async () => {
+    const { t, a } = await setupAttention();
+    for (const caller of ['organizer-a', 'admin-b', 'stranger', 'ghost', null]) {
+      const run = caller ? t.withIdentity(identity(caller)) : t;
+      await expect(
+        run.query(api.organizations.getAttention, { organizationId: a }),
+        String(caller),
+      ).rejects.toThrow();
+    }
   });
 });

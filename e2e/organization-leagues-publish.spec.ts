@@ -57,7 +57,10 @@ const publishButton = (page: Page, league: string) =>
   page.getByRole('button', { name: `Publish ${league}` });
 const result = (page: Page) =>
   main(page).locator('section[aria-labelledby="leagues-heading"] [role="status"]');
-const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
+const leagueCount = (page: Page) =>
+  main(page)
+    .locator('[data-slot="overview-counts"]')
+    .getByRole('link', { name: /leagues?$/ });
 
 test.describe('Leagues: publishing a draft', () => {
   test('confirming publishes it: Published in the list, the result announced and focused, and the league on the public page, live and in the raw HTML', async ({
@@ -207,7 +210,7 @@ test.describe('Leagues: publishing a draft', () => {
     await expect(status(page, 'Sunday Reverse Coed 4s')).toHaveText('Draft');
   });
 
-  test('publishing the first league moves the Overview tile from "1 draft" to "1 published" and hides "Get set up"', async ({
+  test('publishing the first league hides "Get set up" on the Overview and lists the league as having no season', async ({
     page,
   }) => {
     const { tenant, base } = await orgAdmin(page, {
@@ -215,8 +218,7 @@ test.describe('Leagues: publishing a draft', () => {
       leagues: [LEAGUES[1]],
     });
     await page.goto(base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
+    await expect(leagueCount(page)).toHaveText('1 league');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     // Through the navigation, so the page keeps its live connection.
@@ -239,8 +241,12 @@ test.describe('Leagues: publishing a draft', () => {
     await dialog(page).getByRole('button', { name: 'Publish league' }).click();
     await expect(result(page)).toBeFocused();
     await openSection('Overview');
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 published');
+    await expect(leagueCount(page)).toHaveText('1 league');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
+    await expect(
+      page
+        .getByRole('region', { name: 'Needs your attention' })
+        .getByText('Sunday Reverse Coed 4s has no season'),
+    ).toBeVisible();
   });
 });
