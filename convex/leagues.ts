@@ -31,6 +31,7 @@ import { logoUrlField } from './lib/organizationLogo';
 import { leaguePageSeasons, leagueLocations } from './lib/publicLeague';
 import { getLeaguePublicPageReturns, type PublicLeaguePage } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
+import { isChoosableSlug } from './lib/slugs';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import { ROSTER_SIZE_INPUT_MAX, sportName, sportValidator, type Sport } from './lib/sports';
 import {
@@ -156,6 +157,17 @@ async function checkedDivision(
     ...(input.minimumRosterSize !== undefined && { minimumRosterSize: input.minimumRosterSize }),
   };
 }
+
+export const isSlugAvailable = query({
+  args: { organizationId: v.id('organizations'), slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    return (
+      isChoosableSlug(args.slug) && !(await leagueSlugTaken(ctx, args.organizationId, args.slug))
+    );
+  },
+});
 
 export const create = mutation({
   args: {

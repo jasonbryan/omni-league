@@ -45,7 +45,7 @@ async function refusal(call: Promise<unknown>) {
 }
 
 const FORMAT_MESSAGE =
-  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
+  'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.';
 
 describe('organizations.create', () => {
   test('creates the organization with its counters, and the caller as its org admin', async () => {
@@ -152,7 +152,7 @@ describe('organizations.create', () => {
       expect(data).toEqual({
         field: 'slug',
         code: 'slugTaken',
-        message: `${slug} is already taken. Choose another slug.`,
+        message: `${slug} is already taken. Choose another web address.`,
       });
     }
     expect(await counts(t)).toEqual(before);
@@ -186,7 +186,7 @@ describe('organizations.create', () => {
     expect(data).toEqual({
       field: 'slug',
       code: 'slugEmpty',
-      message: 'Enter a slug for your public page’s address.',
+      message: 'Enter a web address for your public page.',
     });
     expect((await counts(t)).organizations).toBe(0);
   });

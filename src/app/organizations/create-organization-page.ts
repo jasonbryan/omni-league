@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DOCUMENT,
   ElementRef,
   Injector,
   afterNextRender,
@@ -31,7 +30,7 @@ import {
   ORGANIZATION_MESSAGES,
   type OrganizationInputError,
 } from '../../../convex/lib/organizationInput';
-import { slugify } from '../../../convex/lib/slugs';
+import { slugify, slugTakenMessage } from '../../../convex/lib/slugs';
 import {
   api,
   ConvexOfflineError,
@@ -40,8 +39,11 @@ import {
   injectOnline,
 } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
+import { injectSlugAvailability } from '../core/forms/slug-availability';
 import { Shell } from '../shell';
 import { adminPath } from './admin/admin-path';
+import { WebAddressPreview } from './admin/web-address-preview';
+import { WebAddressStatus } from './admin/web-address-status';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 
 export const MESSAGES = {
@@ -84,7 +86,15 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
 
 @Component({
   selector: 'app-create-organization-page',
-  imports: [MousePressKeepsFocus, FormField, NgIcon, RouterLink, Shell],
+  imports: [
+    MousePressKeepsFocus,
+    FormField,
+    NgIcon,
+    RouterLink,
+    Shell,
+    WebAddressPreview,
+    WebAddressStatus,
+  ],
   providers: [
     provideIcons({ lucideArrowLeft, lucideCircleAlert, lucideLoaderCircle, lucideWifiOff }),
   ],
@@ -265,7 +275,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     for="slug"
                     data-slot="field-label"
                     class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                    >Slug</label
+                    >Web address</label
                   >
                   <input
                     #slug
@@ -291,12 +301,12 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                   >
                     3 to 60 lowercase letters and digits, with single hyphens between them. Your
                     public page will be at
-                    <span class="block break-words text-foreground"
-                      >{{ host }}/<wbr />organizations/<wbr /><strong class="font-semibold">{{
-                        addressSlug()
-                      }}</strong></span
-                    >
+                    <app-web-address-preview parent="/organizations" [slug]="addressSlug()" />
                   </p>
+                  <app-web-address-status
+                    [available]="slugAvailable()"
+                    [reserveRoom]="slugStatusReservesRoom()"
+                  />
                   @if (errors.slug(); as error) {
                     <div
                       role="alert"
@@ -312,7 +322,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                       @if (takenSlug(); as taken) {
                         <span
                           ><strong class="font-semibold">{{ taken }}</strong> is already taken.
-                          Choose another slug.</span
+                          Choose another web address.</span
                         >
                       } @else if (reservedParts(); as parts) {
                         <span
@@ -359,12 +369,16 @@ export class CreateOrganizationPage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly create = injectMutation(api.organizations.create);
+  private readonly availability = injectSlugAvailability({
+    query: api.organizations.isSlugAvailable,
+    slug: () => this.model().slug,
+    scope: () => ({}),
+  });
 
   protected readonly messages = MESSAGES;
   protected readonly cityStateHint = CITY_STATE_HINT;
   protected readonly online = injectOnline();
   protected readonly offlineTitle = injectOfflineTitle();
-  protected readonly host = inject(DOCUMENT).location.host;
 
   private readonly model = signal<CreateModel>({ name: '', cityState: '', slug: '' });
   // `required` puts the attribute on both inputs; the messages are ours (checkOrganizationName and
@@ -378,7 +392,7 @@ export class CreateOrganizationPage {
   protected readonly submitting = signal(false);
   protected readonly formAlert = signal<FormAlert | null>(null);
 
-  protected readonly addressSlug = computed(() => this.model().slug || 'your-slug');
+  protected readonly addressSlug = computed(() => this.model().slug || 'your-address');
 
   private readonly clientErrors: Record<FieldName, Signal<string | null>> = {
     name: computed(() => {
@@ -413,6 +427,10 @@ export class CreateOrganizationPage {
     slug: this.untilChanged(() => this.model().slug),
   };
 
+  private readonly takenBeforeSubmit = computed(() =>
+    !this.submitting() && this.availability.answer() === 'taken' ? this.model().slug : null,
+  );
+
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     name: this.shownError('name'),
     cityState: this.shownError('cityState'),
@@ -420,8 +438,17 @@ export class CreateOrganizationPage {
   };
 
   protected readonly takenSlug = computed(() =>
-    this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
+    this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
   );
+
+  protected readonly slugAvailable = computed(
+    () =>
+      !this.submitting() &&
+      this.availability.answer() === 'available' &&
+      this.errors.slug() === null,
+  );
+
+  protected readonly slugStatusReservesRoom = computed(() => this.errors.slug() === null);
 
   protected readonly reservedParts = computed(() => {
     if (this.errors.slug() !== ORGANIZATION_MESSAGES.slugInvalid) return null;
@@ -442,6 +469,7 @@ export class CreateOrganizationPage {
 
   protected left(field: FieldName): void {
     this.shown[field].left();
+    if (field === 'slug') this.availability.left();
   }
 
   protected nameTyped(event: Event): void {
@@ -527,10 +555,12 @@ export class CreateOrganizationPage {
   }
 
   private shownError(field: FieldName): Signal<string | null> {
-    return computed(() =>
-      this.shown[field].shown()
-        ? this.clientErrors[field]()
-        : (this.serverErrors[field]()?.text ?? null),
-    );
+    return computed(() => {
+      if (this.shown[field].shown()) return this.clientErrors[field]();
+      const refused = this.serverErrors[field]()?.text;
+      if (refused !== undefined) return refused;
+      const taken = field === 'slug' ? this.takenBeforeSubmit() : null;
+      return taken === null ? null : slugTakenMessage(taken);
+    });
   }
 }

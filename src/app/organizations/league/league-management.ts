@@ -337,6 +337,8 @@ interface PublishedSeason {
           <app-season-create-form
             [leagueId]="league.leagueId"
             [leagueName]="league.name"
+            [organizationSlug]="context.orgSlug()"
+            [leagueSlug]="context.leagueSlug()"
             [division]="league.division"
             [detailsHref]="detailsPath()"
             (detailsOpened)="jumpTo($event, detailsSection)"

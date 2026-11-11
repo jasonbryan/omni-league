@@ -5,7 +5,7 @@ import {
   hasControlOrBidiCharacter,
   hasVisibleCharacter,
 } from './nameCharacters';
-import { isChoosableSlug } from './slugs';
+import { isChoosableSlug, slugTakenMessage } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX } from './sports';
 
 export const MAX_SEASON_NAME_LENGTH = 100;
@@ -69,10 +69,9 @@ export const SEASON_MESSAGES = {
   nameTooLong: (length: number) =>
     `Use ${MAX_SEASON_NAME_LENGTH} characters or fewer. This name has ${length}.`,
   nameInvisible: HIDDEN_CHARACTER_MESSAGE,
-  slugEmpty: 'Enter a slug for the season.',
+  slugEmpty: 'Enter a web address for the season.',
   slugInvalid: LEAGUE_MESSAGES.slugInvalid,
-  slugTaken: (slug: string, leagueName: string) =>
-    `${slug} is already used by another season of ${leagueName}. Choose another slug.`,
+  slugTaken: slugTakenMessage,
   dateEmpty: (field: SeasonDateField) => `Enter ${DATE_LABELS[field]}.`,
   dateInvalid: 'Enter a real date.',
   endBeforeStart: 'The end date must be on or after the start date.',

@@ -5,6 +5,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { ConvexError } from 'convex/values';
 import { CITY_STATE_HINT, ORGANIZATION_MESSAGES } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
+import { AVAILABILITY_PAUSE_MS } from '../core/forms/slug-availability';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
@@ -47,7 +48,10 @@ describe('CreateOrganizationPage', () => {
   const alert = () => page.querySelector<HTMLElement>('#form-error');
   const status = () => page.querySelector('form > p[role="status"]');
   const address = () =>
-    page.querySelector('#slug-description span')?.textContent?.replace(/\s+/g, '').trim();
+    page
+      .querySelector('#slug-description app-web-address-preview')
+      ?.textContent?.replace(/\s+/g, '')
+      .trim();
   const url = () => TestBed.inject(Router).url;
   const flush = async () => {
     await harness.fixture.whenStable();
@@ -87,9 +91,9 @@ describe('CreateOrganizationPage', () => {
       expect(page.textContent).toContain('You’ll be its first org admin.');
     });
 
-    it('names the fields Name and Slug, with the attributes of the mockup', () => {
+    it('names the fields Name and Web address, with the attributes of the mockup', () => {
       expect(page.querySelector('label[for="name"]')?.textContent?.trim()).toBe('Name');
-      expect(page.querySelector('label[for="slug"]')?.textContent?.trim()).toBe('Slug');
+      expect(page.querySelector('label[for="slug"]')?.textContent?.trim()).toBe('Web address');
       expect(page.querySelector('label[for="slug"]')?.textContent).not.toContain('URL');
       const name = input('name');
       expect([name.type, name.required, name.getAttribute('autocomplete')]).toEqual([
@@ -115,13 +119,13 @@ describe('CreateOrganizationPage', () => {
       expect(slug.getAttribute('aria-describedby')).toBe('slug-description');
     });
 
-    it('shows the rule and the full public address under Slug, with a placeholder slug at first', () => {
+    it('shows the rule and the full public address under Web address, with a placeholder address at first', () => {
       const description = page.querySelector('#slug-description')?.textContent;
       expect(description).toContain(
         '3 to 60 lowercase letters and digits, with single hyphens between them.',
       );
       expect(description).toContain('Your public page will be at');
-      expect(address()).toBe(`${location.host}/organizations/your-slug`);
+      expect(address()).toBe(`${location.host}/organizations/your-address`);
     });
 
     it("draws the buttons with the mockup's unmerged class strings", () => {
@@ -133,7 +137,7 @@ describe('CreateOrganizationPage', () => {
     });
   });
 
-  describe('Slug follows the name until it is edited', () => {
+  describe('Web address follows the name until it is edited', () => {
     beforeEach(() => open());
 
     it('typing a name sets Slug to slugify(name), and the address follows', async () => {
@@ -146,14 +150,14 @@ describe('CreateOrganizationPage', () => {
       expect(address()).toBe(`${location.host}/organizations/cafe-nandu`);
     });
 
-    it('emptying the name empties Slug, and the address shows the placeholder', async () => {
+    it('emptying the name empties Web address, and the address shows the placeholder', async () => {
       await type('name', NAME);
       await type('name', '   ');
       expect(input('slug').value).toBe('');
-      expect(address()).toBe(`${location.host}/organizations/your-slug`);
+      expect(address()).toBe(`${location.host}/organizations/your-address`);
     });
 
-    it('once the user edits Slug, the name no longer changes it', async () => {
+    it('once the user edits Web address, the name no longer changes it', async () => {
       await type('name', NAME);
       await type('slug', 'my-own-slug');
       await type('name', 'Another Name Entirely');
@@ -197,12 +201,12 @@ describe('CreateOrganizationPage', () => {
       expect(convex.calls).toEqual([]);
     });
 
-    it('Name valid and Slug empty: the slug message, focus on Slug', async () => {
+    it('Name valid and Web address empty: its message, focus on Web address', async () => {
       await type('name', NAME);
       await type('slug', '');
       await submit();
       expect(error('name')).toBeNull();
-      expect(error('slug')).toBe('Enter a slug for your public page’s address.');
+      expect(error('slug')).toBe('Enter a web address for your public page.');
       expect(document.activeElement).toBe(input('slug'));
     });
 
@@ -213,7 +217,7 @@ describe('CreateOrganizationPage', () => {
       expect(error('name')).toBe('Use 100 characters or fewer. This name has 108.');
       expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
       expect(error('slug')).toBe(
-        'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.',
+        'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.',
       );
       expect(document.activeElement).toBe(input('name'));
       expect(convex.calls).toEqual([]);
@@ -331,9 +335,9 @@ describe('CreateOrganizationPage', () => {
         }),
       );
       await flush();
-      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another slug.`);
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
       await leave('slug');
-      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another slug.`);
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
       await type('slug', 'another-slug');
       expect(error('slug')).toBeNull();
     });
@@ -398,7 +402,7 @@ describe('CreateOrganizationPage', () => {
   describe('server answers (mockup states 10 and 12)', () => {
     beforeEach(() => open());
 
-    it('slug taken: the approved message repeats the slug, focus on Slug, values kept; cleared by editing', async () => {
+    it('address taken: the approved message repeats the address, focus on Web address, values kept; cleared by editing', async () => {
       await type('name', NAME);
       await submit();
       convex.calls[0]?.reject(
@@ -409,7 +413,7 @@ describe('CreateOrganizationPage', () => {
         }),
       );
       await flush();
-      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another slug.`);
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
       expect(page.querySelector('#slug-error strong')?.textContent).toBe(SLUG);
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
       expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
@@ -644,6 +648,187 @@ describe('CreateOrganizationPage', () => {
       await submit();
       expect(error('name')).toBe(ORGANIZATION_MESSAGES.nameEmpty);
       expect(alert()).toBeNull();
+    });
+  });
+  describe('Web address availability', () => {
+    const IS_AVAILABLE = 'organizations:isSlugAvailable';
+
+    beforeEach(() => open());
+
+    const asked = () => convex.subscriptions.filter((s) => s.name === IS_AVAILABLE);
+    const latest = () => asked().at(-1)!;
+    const availability = () => page.querySelector('#slug-availability');
+    const stable = () => harness.fixture.whenStable();
+
+    async function typeValue(id: string, value: string) {
+      const element = input(id);
+      element.value = value;
+      element.dispatchEvent(new Event('input'));
+      await stable();
+    }
+
+    async function pause() {
+      await new Promise((resolve) => setTimeout(resolve, AVAILABILITY_PAUSE_MS + 50));
+      await stable();
+    }
+
+    it('keeps a polite status region in the page that stays empty until there is an answer', async () => {
+      expect(availability()?.getAttribute('role')).toBe('status');
+      expect(availability()?.textContent?.trim()).toBe('');
+      await typeValue('slug', 'coastal-bend');
+      await pause();
+      expect(availability()?.textContent?.trim()).toBe('');
+    });
+
+    it('says Available after the pause once the address is free', async () => {
+      await typeValue('slug', 'coastal-bend');
+      expect(asked()).toHaveLength(0);
+      await pause();
+      expect(latest().args).toEqual({ slug: 'coastal-bend' });
+      latest().emit(true);
+      await stable();
+      expect(availability()?.textContent?.trim()).toBe('Available');
+      expect(error('slug')).toBeNull();
+      expect(input('slug').getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it('says the address is taken, with the address in bold, after the pause and without a submit', async () => {
+      await typeValue('slug', 'coastal-bend');
+      await pause();
+      latest().emit(false);
+      await stable();
+      expect(error('slug')).toBe('coastal-bend is already taken. Choose another web address.');
+      expect(page.querySelector('#slug-error strong')?.textContent).toBe('coastal-bend');
+      expect(page.querySelector('#slug-error')?.getAttribute('role')).toBe('alert');
+      expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+      expect(availability()?.textContent?.trim()).toBe('');
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('asks at once when the user leaves the field', async () => {
+      await typeValue('slug', 'coastal-bend');
+      input('slug').dispatchEvent(new Event('blur'));
+      await stable();
+      expect(asked()).toHaveLength(1);
+    });
+
+    it('checks the address derived from the name before the user touches the field', async () => {
+      await typeValue('name', NAME);
+      expect(asked()).toHaveLength(0);
+      await pause();
+      expect(latest().args).toEqual({ slug: SLUG });
+      latest().emit(false);
+      await stable();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+
+    it('sends no query for an address that fails the format rule, and shows its message only after the field is left', async () => {
+      await typeValue('slug', 'Bad-Address');
+      await pause();
+      expect(error('slug')).toBeNull();
+      input('slug').dispatchEvent(new Event('blur'));
+      await stable();
+      expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
+      await typeValue('slug', 'new');
+      await pause();
+      expect(asked()).toHaveLength(0);
+    });
+
+    it('never shows an answer for an address the field no longer holds', async () => {
+      await typeValue('slug', 'abc');
+      await pause();
+      const first = latest();
+      await typeValue('slug', 'abcd');
+      first.emit(false);
+      await stable();
+      expect(error('slug')).toBeNull();
+      await pause();
+      latest().emit(true);
+      first.emit(false);
+      await stable();
+      expect(error('slug')).toBeNull();
+      expect(availability()?.textContent?.trim()).toBe('Available');
+    });
+
+    it('keeps the status line from one typed value to the next while no error is shown', async () => {
+      const classes = () => availability()?.className;
+      const before = classes();
+      for (const value of ['abc', 'abc-', 'abc-d']) {
+        await typeValue('slug', value);
+        expect(classes(), value).toBe(before);
+      }
+      await typeValue('name', 'Ab');
+      expect(classes()).toBe(before);
+      await typeValue('name', 'Abc');
+      expect(classes()).toBe(before);
+    });
+
+    it('shows no taken error while the create is in flight or after it succeeded', async () => {
+      await typeValue('name', NAME);
+      await pause();
+      submitButton().click();
+      await stable();
+      expect(convex.calls).toHaveLength(1);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      expect(input('slug').getAttribute('aria-invalid')).toBeNull();
+      convex.calls[0].resolve({ slug: SLUG });
+      latest().emit(false);
+      expect(page.querySelector('#slug-error')).toBeNull();
+    });
+
+    it('does not use the word slug in any message on the field', async () => {
+      const messages: string[] = [];
+      await submit();
+      messages.push(error('slug')!);
+      await typeValue('slug', 'Bad-Address');
+      input('slug').dispatchEvent(new Event('blur'));
+      await stable();
+      messages.push(error('slug')!);
+      await typeValue('slug', 'coastal-bend');
+      await pause();
+      latest().emit(false);
+      await stable();
+      messages.push(error('slug')!);
+      for (const message of messages) expect(message).not.toMatch(/slug/i);
+      expect(messages).toHaveLength(3);
+    });
+
+    it('does not block the submit while the answer is pending or failed', async () => {
+      await typeValue('name', NAME);
+      await pause();
+      submitButton().click();
+      await stable();
+      expect(convex.calls).toHaveLength(1);
+      expect(convex.calls[0]?.name).toBe(CREATE);
+    });
+
+    it('shows no error and still submits when the check failed', async () => {
+      await typeValue('name', NAME);
+      await pause();
+      latest().fail(new Error('Not reachable'));
+      await stable();
+      expect(error('slug')).toBeNull();
+      expect(availability()?.textContent?.trim()).toBe('');
+      submitButton().click();
+      await stable();
+      expect(convex.calls).toHaveLength(1);
+    });
+
+    it('still refuses a taken address on submit when no answer came, with the same message', async () => {
+      await typeValue('name', NAME);
+      await submit();
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: ORGANIZATION_MESSAGES.slugTaken(SLUG),
+        }),
+      );
+      await flush();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
     });
   });
 });

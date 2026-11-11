@@ -315,7 +315,7 @@ test.describe('League management: an org admin', () => {
       await fillFall2026(page);
       await submit(page).click();
       await expect(page.locator('#slug-error')).toHaveText(
-        'fall-2026 is already used by another season of Coed 7v7 Rec. Choose another slug.',
+        'fall-2026 is already taken. Choose another web address.',
       );
       await expect(page.locator('#slug')).toBeFocused();
       await expect(rows(page)).toHaveCount(1);

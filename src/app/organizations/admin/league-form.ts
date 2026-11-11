@@ -15,10 +15,11 @@ import {
   type LeagueField,
   type LeagueInputError,
 } from '../../../../convex/lib/leagueInput';
-import { slugify } from '../../../../convex/lib/slugs';
+import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
 import { LeagueDivision } from './league-division';
 
@@ -112,9 +113,16 @@ export class LeagueForm {
 
   readonly takenSlug: Signal<string | null>;
 
+  readonly slugAvailable: Signal<boolean>;
+
+  readonly slugStatusReservesRoom: Signal<boolean>;
+
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
-  constructor(available: () => readonly Id<'locations'>[]) {
+  constructor(
+    available: () => readonly Id<'locations'>[],
+    private readonly webAddress: WebAddressCheck = NOT_CHECKED,
+  ) {
     // `required` puts the attribute on both inputs; the messages are ours (`leagueInput.ts`), so
     // the form and `leagues.create` agree.
     this.fields = form(this.model, (path) => {
@@ -204,8 +212,17 @@ export class LeagueForm {
       LEAGUE_FIELDS.map((field) => [field, this.shownError(field)]),
     ) as Record<LeagueField, Signal<string | null>>;
     this.takenSlug = computed(() =>
-      this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
+      this.shown.slug.shown()
+        ? null
+        : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
+    this.slugAvailable = computed(
+      () =>
+        !this.submitting() &&
+        this.webAddress.answer() === 'available' &&
+        this.errors.slug() === null,
+    );
+    this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
       if (this.errors.slug() !== LEAGUE_MESSAGES.slugInvalid) return null;
       const message = LEAGUE_MESSAGES.slugInvalid;
@@ -249,6 +266,7 @@ export class LeagueForm {
   left(field: LeagueField): void {
     this.shown[field].left();
     if (field === 'name') this.fillDivisionFromName();
+    if (field === 'slug') this.webAddress.left();
   }
 
   leftGroup(field: LeagueField, event: FocusEvent): void {
@@ -320,15 +338,21 @@ export class LeagueForm {
     return { sent: false, alert };
   }
 
+  private takenBeforeSubmit(): string | null {
+    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+  }
+
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
     return linkedSignal<unknown, ServerError | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: LeagueField): Signal<string | null> {
-    return computed(() =>
-      this.shown[field].shown()
-        ? this.clientErrors[field]()
-        : (this.serverErrors[field]()?.text ?? null),
-    );
+    return computed(() => {
+      if (this.shown[field].shown()) return this.clientErrors[field]();
+      const refused = this.serverErrors[field]()?.text;
+      if (refused !== undefined) return refused;
+      const taken = field === 'slug' ? this.takenBeforeSubmit() : null;
+      return taken === null ? null : slugTakenMessage(taken);
+    });
   }
 }

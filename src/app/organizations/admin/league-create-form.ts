@@ -24,6 +24,10 @@ import {
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
+import { injectSlugAvailability } from '../../core/forms/slug-availability';
+import { organizationPath } from '../organization-path';
+import { WebAddressPreview } from './web-address-preview';
+import { WebAddressStatus } from './web-address-status';
 import { Checkbox } from '../../ui/checkbox';
 import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
@@ -69,6 +73,8 @@ export interface LeagueLocationChoice {
     RouterLink,
     StickyFooter,
     StickyFooterFocus,
+    WebAddressPreview,
+    WebAddressStatus,
   ],
   providers: [
     provideIcons({
@@ -158,7 +164,7 @@ export interface LeagueLocationChoice {
           [attr.data-invalid]="form.errors.slug() ? 'true' : null"
           [class]="fieldClass"
         >
-          <label for="slug" data-slot="field-label" [class]="labelClass">Slug</label>
+          <label for="slug" data-slot="field-label" [class]="labelClass">Web address</label>
           <input
             #slug
             id="slug"
@@ -178,8 +184,13 @@ export interface LeagueLocationChoice {
           />
           <p data-slot="field-description" id="slug-description" [class]="descriptionClass">
             3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ organizationName() }}.
+            {{ organizationName() }}. Its public page will be at
+            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
           </p>
+          <app-web-address-status
+            [available]="form.slugAvailable()"
+            [reserveRoom]="form.slugStatusReservesRoom()"
+          />
           @if (form.errors.slug(); as error) {
             <div role="alert" data-slot="field-error" id="slug-error" [class]="errorClass">
               <ng-icon
@@ -189,8 +200,8 @@ export interface LeagueLocationChoice {
               />
               @if (form.takenSlug(); as taken) {
                 <span
-                  ><strong class="font-semibold">{{ taken }}</strong> is already used by another
-                  league here. Choose another slug.</span
+                  ><strong class="font-semibold">{{ taken }}</strong
+                  >{{ error.slice(taken.length) }}</span
                 >
               } @else if (form.reservedParts(); as parts) {
                 <span
@@ -369,7 +380,19 @@ export class LeagueCreateForm {
   readonly locations = input.required<readonly LeagueLocationChoice[]>();
 
   protected readonly online = injectOnline();
-  protected readonly form = new LeagueForm(() => this.locations().map((l) => l.locationId));
+  private readonly webAddress = injectSlugAvailability({
+    query: api.leagues.isSlugAvailable,
+    slug: (): string => this.form.model().slug,
+    scope: () => ({ organizationId: this.organizationId() }),
+  });
+  protected readonly form = new LeagueForm(
+    () => this.locations().map((l) => l.locationId),
+    this.webAddress,
+  );
+  protected readonly addressParent = computed(
+    () => `${organizationPath(this.organizationSlug())}/leagues`,
+  );
+  protected readonly addressSlug = computed(() => this.form.model().slug || 'your-address');
   protected readonly alerts = LEAGUE_FORM_ALERTS;
   protected readonly sports: readonly ChipOption[] = (Object.keys(SPORT_NAMES) as Sport[]).map(
     (key) => ({ key, label: SPORT_NAMES[key] }),

@@ -1,5 +1,5 @@
 // Imports only `./slugs`, so the app can import it.
-import { isChoosableSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH } from './slugs';
+import { isChoosableSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugTakenMessage } from './slugs';
 
 export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 export const MIN_CITY_STATE_LENGTH = 2;
@@ -19,10 +19,10 @@ export const ORGANIZATION_MESSAGES = {
   nameEmpty: 'Enter your organization’s name.',
   nameTooLong: (length: number) =>
     `Use ${MAX_ORGANIZATION_NAME_LENGTH} characters or fewer. This name has ${length}.`,
-  slugEmpty: 'Enter a slug for your public page’s address.',
-  slugInvalid: `Use ${MIN_SLUG_LENGTH} to ${MAX_SLUG_LENGTH} lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.`,
+  slugEmpty: 'Enter a web address for your public page.',
+  slugInvalid: `Use ${MIN_SLUG_LENGTH} to ${MAX_SLUG_LENGTH} lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.`,
   cityStateInvalid: `Use ${MIN_CITY_STATE_LENGTH} to ${MAX_CITY_STATE_LENGTH} characters, such as Corpus Christi, TX.`,
-  slugTaken: (slug: string) => `${slug} is already taken. Choose another slug.`,
+  slugTaken: slugTakenMessage,
 } as const;
 
 export function checkOrganizationName(

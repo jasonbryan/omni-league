@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
 import { MAX_SEASON_NAME_LENGTH, SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { expectStickyFooterWithFocusFix } from '../admin/testing/sticky-footer-check';
@@ -9,6 +10,7 @@ import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
   CREATE_SEASON,
+  GULF,
   GET_ORGANIZER_CONTEXT,
   LEAGUE_ROUTES,
   LEAGUE_URL,
@@ -122,11 +124,11 @@ describe('SeasonCreateForm', () => {
       expect(text(formStatus())).toBe('');
     });
 
-    it('has Name, Slug, three native date fields, Maximum teams, and Maximum roster size, in focus order', async () => {
+    it('has Name, Web address, three native date fields, Maximum teams, and Maximum roster size, in focus order', async () => {
       await open();
       const fields = [
         ['name', 'Name', 'text'],
-        ['slug', 'Slug', 'text'],
+        ['slug', 'Web address', 'text'],
         ['start-date', 'Start date', 'date'],
         ['end-date', 'End date', 'date'],
         ['registration-deadline', 'Registration deadline', 'date'],
@@ -157,7 +159,7 @@ describe('SeasonCreateForm', () => {
         'Up to 100 characters, for example Fall 2027. Players see it with the league’s name.',
       );
       expect(text(page.querySelector('#slug-description'))).toBe(
-        '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coed 7v7 Rec.',
+        `3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coed 7v7 Rec. Its public page will be at ${location.host}/organizations/${GULF.slug}/leagues/${COED.slug}/seasons/your-address`,
       );
       expect(page.querySelector('#start-date-description')).toBeNull();
       expect(input('start-date').hasAttribute('aria-describedby')).toBe(false);
@@ -221,7 +223,7 @@ describe('SeasonCreateForm', () => {
       await open();
       await submit();
       expect(error('name')).toBe('Enter the season’s name.');
-      expect(error('slug')).toBe('Enter a slug for the season.');
+      expect(error('slug')).toBe('Enter a web address for the season.');
       expect(error('start-date')).toBe('Enter the start date.');
       expect(error('end-date')).toBe('Enter the end date.');
       expect(error('registration-deadline')).toBe('Enter the registration deadline.');
@@ -633,7 +635,7 @@ describe('SeasonCreateForm', () => {
       expect(text(createdStatus())).toBe('');
     });
 
-    it('the server saying the slug is taken (state 7) shows the message with the slug in bold, and focus on Slug', async () => {
+    it('the server saying the address is taken (state 7) shows the message with the address in bold, and focus on Web address', async () => {
       await open();
       await fill();
       await submit();
@@ -641,13 +643,11 @@ describe('SeasonCreateForm', () => {
         new ConvexError({
           field: 'slug',
           code: 'slugTaken',
-          message: SEASON_MESSAGES.slugTaken('fall-2026', 'Coed 7v7 Rec'),
+          message: SEASON_MESSAGES.slugTaken('fall-2026'),
         }),
       );
       await o.flush();
-      expect(error('slug')).toBe(
-        'fall-2026 is already used by another season of Coed 7v7 Rec. Choose another slug.',
-      );
+      expect(error('slug')).toBe('fall-2026 is already taken. Choose another web address.');
       expect(page.querySelector('#slug-error strong')?.textContent).toBe('fall-2026');
       expect(document.activeElement).toBe(input('slug'));
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
@@ -841,6 +841,160 @@ describe('SeasonCreateForm', () => {
       expect(holding).toEqual([status()]);
       expect(form().querySelectorAll('[role="status"] [role="status"]')).toHaveLength(0);
       expect(status().contains(action())).toBe(true);
+    });
+  });
+  describe('Web address availability', () => {
+    const IS_AVAILABLE = 'seasons:isSlugAvailable';
+    const asked = () => o.convex.subscriptions.filter((s) => s.name === IS_AVAILABLE);
+    const latest = () => asked().at(-1)!;
+    const availability = () => page.querySelector('#slug-availability');
+    const pause = async () => {
+      await new Promise((resolve) => setTimeout(resolve, AVAILABILITY_PAUSE_MS + 50));
+      await o.flush();
+    };
+
+    it('keeps a polite status region in the page, empty until there is an answer', async () => {
+      await open();
+      expect(availability()?.getAttribute('role')).toBe('status');
+      expect(text(availability())).toBe('');
+    });
+
+    it('asks with the league id after the pause, and says Available', async () => {
+      await open();
+      await type('slug', 'spring-2027');
+      expect(asked()).toHaveLength(0);
+      await pause();
+      expect(latest().args).toEqual({ leagueId: COED.leagueId, slug: 'spring-2027' });
+      latest().emit(true);
+      await o.flush();
+      expect(text(availability())).toBe('Available');
+      expect(error('slug')).toBeNull();
+    });
+
+    it('says the address is taken, without a submit', async () => {
+      await open();
+      await type('slug', 'spring-2027');
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe('spring-2027 is already taken. Choose another web address.');
+      expect(page.querySelector('#slug-error strong')?.textContent).toBe('spring-2027');
+      expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      expect(text(availability())).toBe('');
+      expect(calls()).toEqual([]);
+    });
+
+    it('asks at once when the user leaves the field, and shows the answer without waiting for the pause', async () => {
+      await open();
+      await type('slug', 'spring-2027');
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      expect(asked()).toHaveLength(1);
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe('spring-2027 is already taken. Choose another web address.');
+    });
+
+    it('checks the address derived from the name before the user touches the field', async () => {
+      await open();
+      await type('name', 'Fall 2026');
+      await pause();
+      expect(latest().args).toEqual({ leagueId: COED.leagueId, slug: 'fall-2026' });
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBe('fall-2026 is already taken. Choose another web address.');
+    });
+
+    it('sends no query for an address that fails the format rule, and shows its message only after the field is left', async () => {
+      await open();
+      await type('slug', 'Bad-Address');
+      await pause();
+      expect(error('slug')).toBeNull();
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      expect(error('slug')).toBe(SEASON_MESSAGES.slugInvalid);
+      await type('slug', 'new');
+      await pause();
+      expect(asked()).toHaveLength(0);
+    });
+
+    it('never shows an answer for an address the field no longer holds', async () => {
+      await open();
+      await type('slug', 'abc');
+      await pause();
+      const first = latest();
+      await type('slug', 'abcd');
+      first.emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+    });
+
+    it('keeps the status line from one typed value to the next while no error is shown', async () => {
+      await open();
+      const before = availability()?.className;
+      for (const value of ['abc', 'abc-', 'abc-d']) {
+        await type('slug', value);
+        expect(availability()?.className, value).toBe(before);
+      }
+    });
+
+    it('shows no taken error while the create is in flight or after it succeeded', async () => {
+      await open();
+      await fill();
+      await pause();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+      o.convex.calls[0].resolve({ seasonId: 'sn_new' });
+      latest().emit(false);
+      await o.flush();
+      expect(error('slug')).toBeNull();
+    });
+
+    it('does not use the word slug in any message on the field', async () => {
+      await open();
+      await submit();
+      const messages = [error('slug')!];
+      await type('slug', 'Bad-Address');
+      input('slug').dispatchEvent(new Event('blur'));
+      await o.flush();
+      messages.push(error('slug')!);
+      await type('slug', 'spring-2027');
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      messages.push(error('slug')!);
+      for (const message of messages) expect(message).not.toMatch(/slug/i);
+    });
+
+    it('does not block the submit while the answer is pending, and still shows the same message when create refuses', async () => {
+      await open();
+      await fill();
+      await pause();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: SEASON_MESSAGES.slugTaken('fall-2026'),
+        }),
+      );
+      await o.flush();
+      expect(error('slug')).toBe('fall-2026 is already taken. Choose another web address.');
+    });
+
+    it('shows no error and still submits when the check failed', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().fail(new Error('Not reachable'));
+      await o.flush();
+      expect(error('slug')).toBeNull();
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
     });
   });
 });

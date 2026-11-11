@@ -8,9 +8,10 @@ import {
   type SeasonField,
   type SeasonInputError,
 } from '../../../../convex/lib/seasonInput';
-import { slugify } from '../../../../convex/lib/slugs';
+import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
+import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from '../admin/alert-text';
 
 export { SEASON_FIELDS };
@@ -111,12 +112,19 @@ export class SeasonForm {
 
   readonly takenSlug: Signal<string | null>;
 
+  readonly slugAvailable: Signal<boolean>;
+
+  readonly slugStatusReservesRoom: Signal<boolean>;
+
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
   private readonly minimumRosterSize: () => number | undefined;
 
   /** `minimumRosterSize` is the league's; `undefined` while the league has no format, which `seasons.create` refuses. */
-  constructor(minimumRosterSize: () => number | undefined = () => undefined) {
+  constructor(
+    minimumRosterSize: () => number | undefined = () => undefined,
+    private readonly webAddress: WebAddressCheck = NOT_CHECKED,
+  ) {
     this.minimumRosterSize = minimumRosterSize;
     // `required` puts the attribute on the inputs; the messages are ours (`seasonInput.ts`), so the
     // form and `seasons.create` agree.
@@ -172,8 +180,17 @@ export class SeasonForm {
       SEASON_FIELDS.map((field) => [field, this.shownError(field)]),
     ) as Record<SeasonField, Signal<string | null>>;
     this.takenSlug = computed(() =>
-      this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
+      this.shown.slug.shown()
+        ? null
+        : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
+    this.slugAvailable = computed(
+      () =>
+        !this.submitting() &&
+        this.webAddress.answer() === 'available' &&
+        this.errors.slug() === null,
+    );
+    this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
       const message = this.errors.slug();
       if (message === null) return null;
@@ -196,6 +213,7 @@ export class SeasonForm {
 
   left(field: SeasonField): void {
     this.shown[field].left();
+    if (field === 'slug') this.webAddress.left();
   }
 
   async submit(
@@ -258,15 +276,21 @@ export class SeasonForm {
     return { sent: false, alert };
   }
 
+  private takenBeforeSubmit(): string | null {
+    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+  }
+
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
     return linkedSignal<unknown, ServerError | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: SeasonField): Signal<string | null> {
-    return computed(() =>
-      this.shown[field].shown()
-        ? (this.clientErrors()[field]?.message ?? null)
-        : (this.serverErrors[field]()?.text ?? null),
-    );
+    return computed(() => {
+      if (this.shown[field].shown()) return this.clientErrors()[field]?.message ?? null;
+      const refused = this.serverErrors[field]()?.text;
+      if (refused !== undefined) return refused;
+      const taken = field === 'slug' ? this.takenBeforeSubmit() : null;
+      return taken === null ? null : slugTakenMessage(taken);
+    });
   }
 }

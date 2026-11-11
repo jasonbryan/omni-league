@@ -478,7 +478,11 @@ describe('leagues.create', () => {
     const before = await snapshot(s.t);
     expect(
       await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), slug: '' })),
-    ).toMatchObject({ field: 'slug', code: 'slugEmpty', message: 'Enter a slug for the league.' });
+    ).toMatchObject({
+      field: 'slug',
+      code: 'slugEmpty',
+      message: 'Enter a web address for the league.',
+    });
     for (const slug of [
       'Upper',
       'has space',
@@ -515,7 +519,7 @@ describe('leagues.create', () => {
     ).toEqual({
       field: 'slug',
       code: 'slugTaken',
-      message: 'coed-7v7 is already used by another league here. Choose another slug.',
+      message: 'coed-7v7 is already taken. Choose another web address.',
     });
     expect(await snapshot(s.t)).toEqual(before);
     await expect(
