@@ -9,6 +9,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignUpPage } from './sign-up-page';
 
 @Component({ template: 'elsewhere' })
@@ -915,5 +916,98 @@ describe('SignUpPage', () => {
         expect(url()).toBe('/app/account');
       },
     );
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const describedBy = (id: string, error: boolean) => ({
+      'aria-describedby': error ? `${id}-description ${id}-error` : `${id}-description`,
+    });
+
+    const form = (errors: {
+      name?: boolean;
+      email?: boolean;
+      password?: boolean;
+      adult?: boolean;
+    }) => [
+      shapeOf('field-group', {}, 'mt-4'),
+      fieldShape(!!errors.name),
+      shapeOf('field-label', { for: 'name' }),
+      inputShape(
+        'name',
+        { type: 'text', autocomplete: 'name', ...describedBy('name', !!errors.name) },
+        !!errors.name,
+      ),
+      shapeOf('field-description', { id: 'name-description' }),
+      ...(errors.name ? [shapeOf('field-error', { id: 'name-error' })] : []),
+      fieldShape(!!errors.email),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          type: 'email',
+          autocomplete: 'email',
+          ...(errors.email ? { 'aria-describedby': 'email-error' } : {}),
+        },
+        !!errors.email,
+      ),
+      ...(errors.email ? [shapeOf('field-error', { id: 'email-error' })] : []),
+      fieldShape(!!errors.password),
+      shapeOf('field-label', { for: 'password' }),
+      inputShape(
+        'password',
+        {
+          type: 'password',
+          autocomplete: 'new-password',
+          ...describedBy('password', !!errors.password),
+        },
+        !!errors.password,
+        'flex-1',
+      ),
+      shapeOf('field-description', { id: 'password-description' }),
+      ...(errors.password ? [shapeOf('field-error', { id: 'password-error' })] : []),
+      fieldShape(!!errors.adult, 'horizontal'),
+      shapeOf('field-content'),
+      shapeOf('field-label', { for: 'adult' }),
+      shapeOf('field-description', { id: 'adult-description' }),
+      ...(errors.adult ? [shapeOf('field-error', { id: 'adult-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(page)).toEqual(form({}));
+    });
+
+    it('marks every field invalid, the 18+ field included, after an empty submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(page)).toEqual(
+        form({ name: true, email: true, password: true, adult: true }),
+      );
+    });
+
+    it('marks only the Email field when the server says the account exists', async () => {
+      await open();
+      await fill();
+      client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' };
+      await submit();
+      expect(formShapes(page)).toEqual(form({ email: true }));
+    });
+
+    it('keeps the 18+ checkbox ahead of its content, and the content holds the label, description, and error', async () => {
+      await open();
+      await submit();
+      const field = page.querySelector('[data-slot="field"][data-orientation="horizontal"]')!;
+      expect([...field.children].map((child) => child.tagName.toLowerCase())).toEqual([
+        'app-checkbox',
+        'div',
+      ]);
+      const content = field.querySelector('[data-slot="field-content"]')!;
+      expect([...content.children].map((child) => child.getAttribute('data-slot'))).toEqual([
+        'field-label',
+        'field-description',
+        'field-error',
+      ]);
+      expect(error('adult')).toBe(MESSAGES.adult);
+    });
   });
 });

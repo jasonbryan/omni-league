@@ -45,6 +45,8 @@ import { adminPath } from './admin/admin-path';
 import { WebAddressPreview } from './admin/web-address-preview';
 import { WebAddressStatus } from './admin/web-address-status';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 
 export const MESSAGES = {
   failedTitle: 'The organization could not be created.',
@@ -89,6 +91,8 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
   imports: [
     MousePressKeepsFocus,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     NgIcon,
     RouterLink,
     Shell,
@@ -156,29 +160,18 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                   </div>
                 </div>
               }
-              <div
-                data-slot="field-group"
-                class="group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4"
-              >
+              <div hlmFieldGroup>
                 <div
-                  role="group"
-                  data-slot="field"
-                  data-orientation="vertical"
+                  hlmField
                   [attr.data-matches-spartan-invalid]="errors.name() ? 'true' : null"
                   [attr.data-invalid]="errors.name() ? 'true' : null"
-                  class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
                 >
-                  <label
-                    for="name"
-                    data-slot="field-label"
-                    class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                    >Name</label
-                  >
+                  <label hlmFieldLabel for="name">Name</label>
                   <input
+                    hlmInput
                     #name
                     id="name"
                     type="text"
-                    data-slot="input"
                     autocomplete="organization"
                     [formField]="fields.name"
                     (blur)="left('name')"
@@ -187,22 +180,12 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     [attr.aria-invalid]="errors.name() ? 'true' : null"
                     [attr.data-invalid]="errors.name() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.name() ? 'true' : null"
-                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                   />
-                  <p
-                    data-slot="field-description"
-                    id="name-description"
-                    class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                  >
+                  <p hlmFieldDescription id="name-description">
                     Shown on your public page. Up to 100 characters.
                   </p>
                   @if (errors.name(); as error) {
-                    <div
-                      role="alert"
-                      data-slot="field-error"
-                      id="name-error"
-                      class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                    >
+                    <div hlmFieldError id="name-error">
                       <ng-icon
                         name="lucideCircleAlert"
                         class="mt-0.5 shrink-0 text-base"
@@ -213,24 +196,16 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                   }
                 </div>
                 <div
-                  role="group"
-                  data-slot="field"
-                  data-orientation="vertical"
+                  hlmField
                   [attr.data-matches-spartan-invalid]="errors.cityState() ? 'true' : null"
                   [attr.data-invalid]="errors.cityState() ? 'true' : null"
-                  class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
                 >
-                  <label
-                    for="cityState"
-                    data-slot="field-label"
-                    class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                    >City, state</label
-                  >
+                  <label hlmFieldLabel for="cityState">City, state</label>
                   <input
+                    hlmInput
                     #cityState
                     id="cityState"
                     type="text"
-                    data-slot="input"
                     autocomplete="off"
                     [formField]="fields.cityState"
                     (blur)="left('cityState')"
@@ -238,22 +213,12 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     [attr.aria-invalid]="errors.cityState() ? 'true' : null"
                     [attr.data-invalid]="errors.cityState() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.cityState() ? 'true' : null"
-                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                   />
-                  <p
-                    data-slot="field-description"
-                    id="cityState-description"
-                    class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                  >
+                  <p hlmFieldDescription id="cityState-description">
                     {{ cityStateHint }}
                   </p>
                   @if (errors.cityState(); as error) {
-                    <div
-                      role="alert"
-                      data-slot="field-error"
-                      id="cityState-error"
-                      class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                    >
+                    <div hlmFieldError id="cityState-error">
                       <ng-icon
                         name="lucideCircleAlert"
                         class="mt-0.5 shrink-0 text-base"
@@ -264,24 +229,16 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                   }
                 </div>
                 <div
-                  role="group"
-                  data-slot="field"
-                  data-orientation="vertical"
+                  hlmField
                   [attr.data-matches-spartan-invalid]="errors.slug() ? 'true' : null"
                   [attr.data-invalid]="errors.slug() ? 'true' : null"
-                  class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
                 >
-                  <label
-                    for="slug"
-                    data-slot="field-label"
-                    class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                    >Web address</label
-                  >
+                  <label hlmFieldLabel for="slug">Web address</label>
                   <input
+                    hlmInput
                     #slug
                     id="slug"
                     type="text"
-                    data-slot="input"
                     autocomplete="off"
                     spellcheck="false"
                     autocapitalize="none"
@@ -292,13 +249,8 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     [attr.aria-invalid]="errors.slug() ? 'true' : null"
                     [attr.data-invalid]="errors.slug() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.slug() ? 'true' : null"
-                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                   />
-                  <p
-                    data-slot="field-description"
-                    id="slug-description"
-                    class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                  >
+                  <p hlmFieldDescription id="slug-description">
                     3 to 60 lowercase letters and digits, with single hyphens between them. Your
                     public page will be at
                     <app-web-address-preview parent="/organizations" [slug]="addressSlug()" />
@@ -308,12 +260,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     [reserveRoom]="slugStatusReservesRoom()"
                   />
                   @if (errors.slug(); as error) {
-                    <div
-                      role="alert"
-                      data-slot="field-error"
-                      id="slug-error"
-                      class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                    >
+                    <div hlmFieldError id="slug-error">
                       <ng-icon
                         name="lucideCircleAlert"
                         class="mt-0.5 shrink-0 text-base"
