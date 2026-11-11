@@ -11,6 +11,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { captureTeamInviteToken } from '../invites/capture-invite-token';
 import { INVITE_TOKEN_KEY, TEAM_INVITE_TOKEN_KEY } from '../invites/invite-token-store';
 import { JoinTeamPage } from './join-team-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'teamtokenABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_abc';
 const STAFF_TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
@@ -229,6 +230,7 @@ describe('JoinTeamPage', () => {
       await flush();
       const button = [...page.querySelectorAll('button')].find((b) => text(b) === 'Accepting…');
       expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
       expect(text(page.querySelector('main [role="status"]'))).toBe('Accepting the invite.');
       button?.click();
       await flush();

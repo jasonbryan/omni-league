@@ -13,6 +13,7 @@ import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const VAPID_KEY = 'BPublicKeyFromGetConfig';
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
@@ -386,6 +387,10 @@ describe('NotificationsPage', () => {
         'Getting this device ready. This takes a few seconds the first time.',
       );
       expect(help?.getAttribute('role')).toBe('status');
+      const spinner = help!.querySelector('hlm-spinner');
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+      expect(spinner?.hasAttribute('data-icon')).toBe(false);
+      expect(help!.firstElementChild).toBe(spinner);
 
       button()!.click();
       expect(log).toEqual([]);
@@ -408,6 +413,7 @@ describe('NotificationsPage', () => {
       await settle();
       expect(text(button())).toBe('Turning on…');
       expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button());
       expect(text(panel().querySelector('[role="status"]'))).toBe(
         "Choose Allow in your browser's prompt.",
       );
@@ -558,6 +564,7 @@ describe('NotificationsPage', () => {
       await settle();
       expect(text(button())).toBe('Turning off…');
       expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button());
       expect(text(panel().querySelector('[role="status"]'))).toBe('Turning off notifications.');
       expect(convex.calls.map((c) => [c.name, c.args])).toEqual([
         ['push:unsubscribe', { endpoint: ENDPOINT }],
@@ -724,6 +731,7 @@ describe('NotificationsPage', () => {
       expect(convex.calls.map((c) => [c.name, c.args])).toEqual([['push:sendTest', {}]]);
       expect(text(testButton())).toBe('Sending…');
       expect(testButton()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(testButton());
       expect(text(panel().querySelector('app-test-notification [role="status"]'))).toBe(
         'Sending the test notification.',
       );
@@ -880,7 +888,7 @@ describe('NotificationsPage', () => {
       [...panel().querySelectorAll('button')].find((b) => text(b) === 'Reload page') ?? null;
     const describedBy = (el: Element | null) =>
       text(panel().querySelector(`#${el?.getAttribute('aria-describedby') ?? ''}`));
-    const spinners = () => panel().querySelectorAll('ng-icon[name="lucideLoaderCircle"]');
+    const spinners = () => panel().querySelectorAll('hlm-spinner');
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
     const subscriptionUnsubscribes = () => unsubscribeHeld.mock.calls.length;
 

@@ -17,7 +17,6 @@ import {
   lucideBan,
   lucideClock,
   lucideClockAlert,
-  lucideLoaderCircle,
   lucideMail,
   lucideUndo2,
   lucideUserPlus,
@@ -38,6 +37,7 @@ import { injectNowAtDeadlines } from '../../core/now-at-deadlines';
 import { MainFocusRecord } from '../../core/replaced-focus';
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
+import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
@@ -98,13 +98,12 @@ const ROLE_LABEL: Record<Role, string> = {
  */
 @Component({
   selector: 'app-admin-staff',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, NgTemplateOutlet, StaffInvitePanel],
+  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon, NgTemplateOutlet, StaffInvitePanel],
   providers: [
     provideIcons({
       lucideBan,
       lucideClock,
       lucideClockAlert,
-      lucideLoaderCircle,
       lucideMail,
       lucideUndo2,
       lucideUserPlus,
@@ -349,12 +348,7 @@ const ROLE_LABEL: Record<Role, string> = {
                           (click)="revoke(row.inviteId, row.email, $event.currentTarget)"
                         >
                           @if (revokingId() === row.inviteId) {
-                            <ng-icon
-                              name="lucideLoaderCircle"
-                              class="motion-safe:animate-spin"
-                              data-icon="inline-start"
-                              aria-hidden="true"
-                            />Revoking…
+                            <hlm-spinner data-icon="inline-start" />Revoking…
                           } @else {
                             <ng-icon
                               name="lucideBan"
@@ -426,12 +420,7 @@ const ROLE_LABEL: Record<Role, string> = {
             (click)="restore(target.inviteId, target.email)"
           >
             @if (restoring()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Undoing…
+              <hlm-spinner data-icon="inline-start" />Undoing…
             } @else {
               <ng-icon name="lucideUndo2" data-icon="inline-start" aria-hidden="true" />Undo<span
                 class="sr-only"

@@ -14,6 +14,7 @@ import {
   text,
 } from './testing/admin-harness';
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
 const URL = `/app/organizations/${COASTAL.slug}/details`;
@@ -187,6 +188,7 @@ describe('AdminDetails', () => {
       expect(text(save())).toBe('Saving…');
       expect(save().getAttribute('aria-disabled')).toBe('true');
       expect(save().disabled).toBe(false);
+      expectPendingSpinner(save());
       expect(text(srStatus())).toBe('Saving the details.');
       await press(save());
       expect(o.convex.calls).toHaveLength(1);
@@ -217,6 +219,7 @@ describe('AdminDetails', () => {
       });
       expect(text(undo())).toBe('Undoing…');
       expect(undo()?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(undo());
       o.convex.calls[1]?.resolve(null);
       await o.flush();
       expect(input('cityState').value).toBe('Corpus Christi, TX');

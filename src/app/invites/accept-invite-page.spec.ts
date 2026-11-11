@@ -11,6 +11,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { AcceptInvitePage } from './accept-invite-page';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY } from './invite-token-store';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
 const GET_BY_TOKEN = 'invites:getByToken';
@@ -266,6 +267,7 @@ describe('AcceptInvitePage', () => {
       await flush();
       const button = [...page.querySelectorAll('button')].find((b) => text(b) === 'Accepting…');
       expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
       expect(text(page.querySelector('main [role="status"]'))).toBe('Accepting the invite.');
       button?.click();
       await flush();

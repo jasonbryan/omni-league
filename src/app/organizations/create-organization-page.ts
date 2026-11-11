@@ -15,12 +15,7 @@ import {
 import { FormField, form, required } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideArrowLeft,
-  lucideCircleAlert,
-  lucideLoaderCircle,
-  lucideWifiOff,
-} from '@ng-icons/lucide';
+import { lucideArrowLeft, lucideCircleAlert, lucideWifiOff } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import {
   checkCityState,
@@ -47,6 +42,7 @@ import { WebAddressStatus } from './admin/web-address-status';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
+import { HlmSpinner } from '../ui/spinner';
 
 export const MESSAGES = {
   failedTitle: 'The organization could not be created.',
@@ -89,6 +85,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
 @Component({
   selector: 'app-create-organization-page',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     FormField,
     HlmFieldImports,
@@ -99,9 +96,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
     WebAddressPreview,
     WebAddressStatus,
   ],
-  providers: [
-    provideIcons({ lucideArrowLeft, lucideCircleAlert, lucideLoaderCircle, lucideWifiOff }),
-  ],
+  providers: [provideIcons({ lucideArrowLeft, lucideCircleAlert, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell>
@@ -292,12 +287,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                 [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
               >
                 @if (submitting()) {
-                  <ng-icon
-                    name="lucideLoaderCircle"
-                    class="motion-safe:animate-spin"
-                    data-icon="inline-start"
-                    aria-hidden="true"
-                  />Creating organization…
+                  <hlm-spinner data-icon="inline-start" />Creating organization…
                 } @else {
                   Create organization
                 }

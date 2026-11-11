@@ -15,7 +15,6 @@ import {
   lucideCalendarDays,
   lucideCircleArrowUp,
   lucideListOrdered,
-  lucideLoaderCircle,
   lucideMail,
   lucideUserRound,
 } from '@ng-icons/lucide';
@@ -26,6 +25,7 @@ import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import type { AlertText } from '../admin/alert-text';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { formatDay } from '../admin/format-day';
+import { HlmSpinner } from '../../ui/spinner';
 import type { SeasonWaitlist } from './season-context';
 import {
   promotedText,
@@ -63,13 +63,12 @@ function localDay(ms: number): string {
 /** Promote acts at once, with no confirmation: it only adds a team, and the result says what happened. */
 @Component({
   selector: 'app-season-waitlist-panel',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon],
   providers: [
     provideIcons({
       lucideCalendarDays,
       lucideCircleArrowUp,
       lucideListOrdered,
-      lucideLoaderCircle,
       lucideMail,
       lucideUserRound,
     }),
@@ -153,12 +152,9 @@ function localDay(ms: number): string {
                       (click)="promote(row)"
                     >
                       @if (promoting() === row.waitlistEntryId) {
-                        <ng-icon
-                          name="lucideLoaderCircle"
-                          class="motion-safe:animate-spin"
-                          data-icon="inline-start"
-                          aria-hidden="true"
-                        />Promoting…<span class="sr-only"> {{ row.teamName }}</span>
+                        <hlm-spinner data-icon="inline-start" />Promoting…<span class="sr-only">
+                          {{ row.teamName }}</span
+                        >
                       } @else {
                         <ng-icon
                           name="lucideCircleArrowUp"

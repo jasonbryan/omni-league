@@ -12,8 +12,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideLoaderCircle } from '@ng-icons/lucide';
+import { NgIcon } from '@ng-icons/core';
 import {
   BrnAlertDialog,
   BrnAlertDialogContent,
@@ -23,6 +22,7 @@ import {
 } from '@spartan-ng/brain/alert-dialog';
 import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import { injectOnline } from '../../core/data/convex';
+import { HlmSpinner } from '../../ui/spinner';
 import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
@@ -68,13 +68,11 @@ const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_au
     BrnAlertDialogDescription,
     BrnAlertDialogOverlay,
     BrnAlertDialogTitle,
+    HlmSpinner,
     NgIcon,
     NgTemplateOutlet,
   ],
-  providers: [
-    provideIcons({ lucideLoaderCircle }),
-    provideSpartanOverlay(Dialog, BrnDialogService),
-  ],
+  providers: [provideSpartanOverlay(Dialog, BrnDialogService)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog
@@ -136,12 +134,7 @@ const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_au
             (click)="confirmed.emit()"
           >
             @if (pending()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />{{ pendingLabel() }}
+              <hlm-spinner data-icon="inline-start" />{{ pendingLabel() }}
             } @else {
               @if (buttonIcon()) {
                 <ng-icon [name]="icon()" data-icon="inline-start" aria-hidden="true" />

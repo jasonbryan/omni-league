@@ -10,6 +10,7 @@ import { convexRun } from './support/convex';
 import { TOKEN_PATH } from './support/auth-tokens';
 import { LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { expectSpinnerAtButtonStart } from './support/pending-spinner';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
@@ -356,6 +357,7 @@ test.describe('Staff: undoing a revoke', () => {
     await undoButton(page, email).click();
     const working = page.getByRole('button', { name: 'Undoing…' });
     await expect(working).toHaveAttribute('aria-disabled', 'true');
+    await expectSpinnerAtButtonStart(working);
     await expect(revokeButton(page, other)).toHaveAttribute('aria-disabled', 'true');
     await expect(revokeButton(page, other)).toHaveClass(/opacity-50/);
     // Playwright waits for an aria-disabled button to be enabled, and a real press is what is under test.

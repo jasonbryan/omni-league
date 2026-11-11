@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideBellRing, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideBellRing } from '@ng-icons/lucide';
 import { TEST_SEND_LIMIT, TEST_SEND_WINDOW_MINUTES } from '../../../convex/lib/pushTestSend';
 import { ConvexOfflineError, api, injectMutation, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
+import { HlmSpinner } from '../ui/spinner';
 
 type Result =
   | { kind: 'sent'; devices: number }
@@ -19,8 +20,8 @@ const SECONDS_PER_MINUTE = 60;
 
 @Component({
   selector: 'app-test-notification',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
-  providers: [provideIcons({ lucideBellRing, lucideLoaderCircle })],
+  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon],
+  providers: [provideIcons({ lucideBellRing })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -37,12 +38,7 @@ const SECONDS_PER_MINUTE = 60;
         (click)="send()"
       >
         @if (pending()) {
-          <ng-icon
-            name="lucideLoaderCircle"
-            class="motion-safe:animate-spin"
-            data-icon="inline-start"
-            aria-hidden="true"
-          />Sending…
+          <hlm-spinner data-icon="inline-start" />Sending…
         } @else {
           <ng-icon name="lucideBellRing" data-icon="inline-start" aria-hidden="true" />Send a test
           notification

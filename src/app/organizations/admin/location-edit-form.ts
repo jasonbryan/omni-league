@@ -10,8 +10,6 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideLoaderCircle } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
@@ -20,6 +18,7 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface AdminLocation {
   locationId: Id<'locations'>;
@@ -29,8 +28,7 @@ export interface AdminLocation {
 
 @Component({
   selector: 'app-location-edit-form',
-  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
-  providers: [provideIcons({ lucideLoaderCircle })],
+  imports: [HlmSpinner, MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, LocationFields],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -77,12 +75,7 @@ export interface AdminLocation {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save changes
           }

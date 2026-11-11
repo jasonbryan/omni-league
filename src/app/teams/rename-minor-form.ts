@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideCircleAlert } from '@ng-icons/lucide';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { api, injectMutation, injectOnline } from '../core/data/convex';
@@ -27,6 +27,7 @@ import {
   LABEL,
 } from '../organizations/admin/field-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm } from './minor-name-form';
 
@@ -50,11 +51,12 @@ export interface RenameMinorOutcome {
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmSpinner,
     MinorNameErrorText,
     MousePressKeepsFocus,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle })],
+  providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -128,12 +130,7 @@ export interface RenameMinorOutcome {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save name
           }

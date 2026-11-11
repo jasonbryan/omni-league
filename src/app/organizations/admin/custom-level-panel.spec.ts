@@ -11,6 +11,7 @@ import {
   openAdmin,
   text,
 } from './testing/admin-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
@@ -240,6 +241,7 @@ describe('The custom level panel in the create form', () => {
       await press(buttonNamed('Add level'));
       expect(text(buttonNamed('Adding'))).toBe('Adding…');
       expect(buttonNamed('Adding').getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(buttonNamed('Adding'));
     });
 
     it('shows a server refusal under the name and keeps what was entered', async () => {
