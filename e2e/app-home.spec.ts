@@ -404,7 +404,7 @@ test.describe('/app: the teams cannot be loaded', () => {
 });
 
 test.describe('/app: keyboard, touch, and live changes', () => {
-  test('Tab reaches Invite players, then each team name, in reading order, and Enter opens the invite panel', async ({
+  test('Tab reaches Invite players, then each team name, in reading order, and Enter goes to the team page', async ({
     page,
   }) => {
     const user = tasha();
@@ -431,7 +431,7 @@ test.describe('/app: keyboard, touch, and live changes', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(nextStep(page).getByRole('link')).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}`);
   });
 
   test('links and the button are 44px tall on touch screens and keep their size with a mouse', async ({
