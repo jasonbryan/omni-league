@@ -3,9 +3,11 @@ import { formatCalendarDate } from '../convex/lib/seasonInput';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { homeHeading } from './support/home';
+import { expectLinkHeights, pointerOf } from './support/link-heights';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
@@ -369,5 +371,110 @@ test.describe('/app: while the teams load', () => {
     expect(Math.abs(arrived.card.y - placeholder.card.y), 'first card moved').toBeLessThanOrEqual(
       4,
     );
+  });
+});
+
+test.describe('/app: the teams cannot be loaded', () => {
+  test('shows an alert with Try again in place of the cards, and the cards return once the answer succeeds', async ({
+    page,
+  }, testInfo) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedTashasTeams(user);
+    await failFirstAnswer(page, 'teams:listMine');
+    await page.goto('/app');
+
+    const alert = main(page).getByRole('alert');
+    await expect(alert).toContainText('Your teams could not be loaded.');
+    await expect(alert).toContainText('Check your connection.');
+    await expect(alert).not.toContainText('forced failure');
+    await expect(teams(page)).toHaveCount(0);
+    await expect(nextStep(page)).toHaveCount(0);
+    await expect(main(page).getByRole('status')).toHaveCount(0);
+    await expect(main(page).getByRole('link', { name: 'Manage notifications' })).toBeVisible();
+    await screenshot(page, testInfo, '300-home-error');
+    await expectAccessible(page);
+
+    await alert.getByRole('link', { name: 'Try again' }).click();
+    await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText([
+      'Sand Sharks',
+      'Pair of Aces',
+    ]);
+    await expect(main(page).getByRole('alert')).toHaveCount(0);
+  });
+});
+
+test.describe('/app: keyboard, touch, and live changes', () => {
+  test('Tab reaches Invite players, then each team name, in reading order, and Enter opens the invite panel', async ({
+    page,
+  }) => {
+    const user = tasha();
+    await signUp(page, user);
+    const { sharks } = await seedTashasTeams(user);
+    await openHome(page, 'Hi, Tasha');
+
+    await main(page).focus();
+    const focusedLink = () =>
+      page.evaluate(() => {
+        const active = document.activeElement;
+        return active instanceof HTMLAnchorElement
+          ? (active.getAttribute('aria-label') ?? active.textContent?.trim())
+          : null;
+      });
+    const reached: (string | null | undefined)[] = [];
+    for (let step = 0; step < 3; step++) {
+      await page.keyboard.press('Tab');
+      reached.push(await focusedLink());
+    }
+    expect(reached).toEqual(['Invite players to Sand Sharks', 'Sand Sharks', 'Pair of Aces']);
+
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(nextStep(page).getByRole('link')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
+  });
+
+  test('links and the button are 44px tall on touch screens and keep their size with a mouse', async ({
+    page,
+  }, testInfo) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedTashasTeams(user);
+    await openHome(page, 'Hi, Tasha');
+
+    const pointer = pointerOf(testInfo);
+    await expectLinkHeights(page, teams(page).getByRole('link'), pointer);
+    await expectLinkHeights(page, nextStep(page).getByRole('link'), pointer);
+  });
+
+  test('a player joining the team while the home is open clears the next step and completes the roster', async ({
+    page,
+  }) => {
+    const user = tasha();
+    await signUp(page, user);
+    const { sharks } = await seedTashasTeams(user);
+    await openHome(page, 'Hi, Tasha');
+    await expect(nextStep(page)).toContainText('Sand Sharks needs 1 more player');
+
+    await addToTeam(sharks, await seedUser(newUser('Fourth')));
+    await expect(nextStep(page)).toHaveCount(0);
+    await expect(cardOf(page, 'Sand Sharks')).toContainText('4 of 4 needed');
+  });
+
+  test('a team added while the home is open takes the new-user state away', async ({ page }) => {
+    const user = tasha();
+    await signUp(page, user);
+    await expect(homeHeading(page)).toHaveText('Hi, Tasha');
+    await expect(
+      main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
+    ).toBeVisible();
+
+    await seedTashasTeams(user);
+    await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText([
+      'Sand Sharks',
+      'Pair of Aces',
+    ]);
+    await expect(main(page)).not.toContainText("You're not on a team yet");
   });
 });
