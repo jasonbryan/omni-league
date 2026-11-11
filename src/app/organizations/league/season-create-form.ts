@@ -13,13 +13,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideGlobe,
-  lucideLoaderCircle,
-  lucidePlus,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucideGlobe, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
@@ -47,6 +41,7 @@ import {
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 const NOT_SET = 'Not set yet';
 
@@ -97,6 +92,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 @Component({
   selector: 'app-season-create-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
@@ -107,9 +103,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
     WebAddressPreview,
     WebAddressStatus,
   ],
-  providers: [
-    provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucideLoaderCircle, lucidePlus }),
-  ],
+  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -503,12 +497,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Creating season…
+            <hlm-spinner data-icon="inline-start" />Creating season…
           } @else {
             <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
             season

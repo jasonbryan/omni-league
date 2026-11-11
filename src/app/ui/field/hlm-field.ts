@@ -1,10 +1,16 @@
-import { Directive } from '@angular/core';
+import { computed, Directive, input } from '@angular/core';
 
 export const FIELD_GROUP_CLASSES =
   'group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4';
 
-export const FIELD_CLASSES =
+export const FIELD_VERTICAL_CLASSES =
   'group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2';
+
+export const FIELD_HORIZONTAL_CLASSES =
+  'group/field flex w-full flex-row items-center *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px data-[matches-spartan-invalid=true]:text-destructive gap-2';
+
+export const FIELD_CONTENT_CLASSES =
+  'group/field-content flex flex-1 flex-col leading-snug gap-0.5';
 
 export const FIELD_LABEL_CLASSES =
   'flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5';
@@ -20,16 +26,30 @@ export const FIELD_ERROR_CLASSES = 'text-destructive text-sm font-normal flex it
 })
 export class HlmFieldGroup {}
 
+export type FieldOrientation = 'vertical' | 'horizontal';
+
 @Directive({
   selector: '[hlmField]',
   host: {
     role: 'group',
     'data-slot': 'field',
-    'data-orientation': 'vertical',
-    class: FIELD_CLASSES,
+    '[attr.data-orientation]': 'orientation()',
+    '[class]': 'classes()',
   },
 })
-export class HlmField {}
+export class HlmField {
+  readonly orientation = input<FieldOrientation>('vertical');
+
+  protected readonly classes = computed(() =>
+    this.orientation() === 'horizontal' ? FIELD_HORIZONTAL_CLASSES : FIELD_VERTICAL_CLASSES,
+  );
+}
+
+@Directive({
+  selector: '[hlmFieldContent]',
+  host: { 'data-slot': 'field-content', class: FIELD_CONTENT_CLASSES },
+})
+export class HlmFieldContent {}
 
 @Directive({
   selector: 'label[hlmFieldLabel]',

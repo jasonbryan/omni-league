@@ -12,6 +12,7 @@ import {
 } from '../league/testing/league-harness';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { SeasonPage } from './season-page';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const GET_VIEW = 'seasons:getOrganizerView';
 const LIST_FREE_AGENTS = 'freeAgents:listForOrganizer';
@@ -472,6 +473,7 @@ describe('SeasonPage', () => {
       const busy = dialogButton('Placing');
       expect(text(busy)).toBe('Placing…');
       expect(busy.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(busy);
       expect(dialogButton('Cancel').getAttribute('aria-disabled')).toBe('true');
       o.convex.calls[0].resolve(null);
       await o.flush();
@@ -634,6 +636,10 @@ describe('SeasonPage', () => {
       await edit('6');
       await save();
       expect(calls()).toEqual([[SET_MAX, { seasonId: 'se_summer27', maxTeams: 6 }]]);
+      const pending = page.querySelector('app-limit-edit-form button[type="submit"]');
+      expect(text(pending)).toBe('Saving…');
+      expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve(null);
       await o.flush();
       const status = page.querySelector<HTMLElement>(
@@ -854,6 +860,7 @@ describe('SeasonPage', () => {
       const pending = [...page.querySelectorAll('#waitlist button')][0];
       expect(text(pending)).toBe('Promoting… Late Lobsters');
       expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve({ teamId: 'tm_late', teamCount: 4, maxTeams: 5 });
       await o.flush();
       const status = page.querySelector<HTMLElement>(

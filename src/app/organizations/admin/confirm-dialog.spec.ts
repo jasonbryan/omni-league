@@ -6,6 +6,7 @@ import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { ConfirmDialog, type ConfirmAlertView } from './confirm-dialog';
 import { text } from './testing/admin-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 @Component({
   imports: [ConfirmDialog],
@@ -158,6 +159,7 @@ describe('ConfirmDialog', () => {
       fixture.componentInstance.pending.set(true);
       await fixture.whenStable();
       expect(text(confirm())).toBe('Publishing…');
+      expectPendingSpinner(confirm());
       expect(confirm().querySelector('ng-icon')!.getAttribute('name')).toBe('lucideLoaderCircle');
       expect(paths(confirm().querySelector('ng-icon svg'))).toEqual(drawing(lucideLoaderCircle));
       expect(cancel().getAttribute('aria-disabled')).toBe('true');

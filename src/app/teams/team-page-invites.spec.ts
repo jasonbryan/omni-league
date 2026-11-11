@@ -6,6 +6,7 @@ import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { TeamPage } from './team-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const GET = 'teams:getForMember';
 const LIST_PENDING = 'teamInvites:listPending';
@@ -200,6 +201,8 @@ describe('TeamPage: invites', () => {
       ]);
       expect(o.convex.calls[0].kind).toBe('action');
       expect(text(submitButton())).toBe('Creating invite link…');
+      expect(submitButton().getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(submitButton());
       o.convex.calls[0].resolve({ inviteId: 'ti_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
       await o.flush();
       expect(linkBox().value).toBe(`${window.location.origin}/teams/join#${TOKEN}`);

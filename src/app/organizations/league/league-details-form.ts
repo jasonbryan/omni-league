@@ -16,13 +16,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideLoaderCircle,
-  lucideSparkles,
-  lucideUndo2,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucideSparkles, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import { filledFromNameMessage } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
@@ -57,6 +51,7 @@ import {
 } from './league-details-state';
 import { formatHint, publishedSeasonsEarliestFirst } from './league-format-hint';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 type Earlier = FunctionReturnType<typeof api.leagues.update>;
 
@@ -89,6 +84,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 @Component({
   selector: 'app-league-details-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
@@ -103,7 +99,6 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
-      lucideLoaderCircle,
       lucideSparkles,
       lucideUndo2,
     }),
@@ -249,12 +244,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
           [attr.aria-disabled]="details.submitting() || !online() ? 'true' : null"
         >
           @if (details.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save changes
           }

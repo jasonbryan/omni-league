@@ -19,7 +19,6 @@ import {
   lucideCircleCheck,
   lucideHouse,
   lucideLink2Off,
-  lucideLoaderCircle,
   lucideLogOut,
   lucideMailOpen,
 } from '@ng-icons/lucide';
@@ -45,6 +44,7 @@ import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
 import { InviteOfflineAlert } from './invite-offline-alert';
 import type { AlertTexts } from '../organizations/admin/alert-text';
+import { HlmSpinner } from '../ui/spinner';
 import { InviteTokenStore } from './invite-token-store';
 
 interface InviteSummary {
@@ -94,6 +94,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
 @Component({
   selector: 'app-accept-invite-page',
   imports: [
+    HlmSpinner,
     InviteAlert,
     InviteOfflineAlert,
     NgIcon,
@@ -108,7 +109,6 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
       lucideCircleCheck,
       lucideHouse,
       lucideLink2Off,
-      lucideLoaderCircle,
       lucideLogOut,
       lucideMailOpen,
     }),
@@ -337,12 +337,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                             (click)="accept()"
                           >
                             @if (accepting()) {
-                              <ng-icon
-                                name="lucideLoaderCircle"
-                                class="motion-safe:animate-spin"
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                              />Accepting…
+                              <hlm-spinner data-icon="inline-start" />Accepting…
                             } @else {
                               <ng-icon
                                 name="lucideCheck"

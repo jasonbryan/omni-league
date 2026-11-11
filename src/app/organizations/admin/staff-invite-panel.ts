@@ -18,7 +18,6 @@ import {
   lucideCircleAlert,
   lucideCopy,
   lucideLink,
-  lucideLoaderCircle,
   lucideUserPlus,
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -48,6 +47,7 @@ import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form'
 import { formatDay } from './format-day';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { RevealOnFocus } from '../../core/forms/reveal-on-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
@@ -69,6 +69,7 @@ const TEXTAREA =
 @Component({
   selector: 'app-staff-invite-panel',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     RevealOnFocus,
     AdminAlert,
@@ -83,7 +84,6 @@ const TEXTAREA =
       lucideCircleAlert,
       lucideCopy,
       lucideLink,
-      lucideLoaderCircle,
       lucideUserPlus,
     }),
   ],
@@ -432,12 +432,7 @@ const TEXTAREA =
               [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
             >
               @if (form.submitting()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Creating invite link…
+                <hlm-spinner data-icon="inline-start" />Creating invite link…
               } @else {
                 <ng-icon name="lucideLink" data-icon="inline-start" aria-hidden="true" />Create
                 invite link

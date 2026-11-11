@@ -5,6 +5,8 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
+import { expectSpinnerAtButtonStart } from './support/pending-spinner';
 import { screenshot } from './support/screenshot';
 import { seedAccountsInCalls } from './support/seed-accounts';
 import { signUp } from './support/session';
@@ -368,6 +370,32 @@ test.describe('Staff: copying the link', () => {
 });
 
 test.describe('Staff: revoking', () => {
+  test('Revoke while the request is held: the spinner sits at the button start', async ({
+    page,
+  }) => {
+    const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    const held = await holdMutations(page);
+    await convexRun('testing:addInvite', {
+      organizationSlug: org.tenant.slug,
+      email: 'dana@example.com',
+      role: 'orgAdmin',
+      expiresAt: Date.now() + 14 * DAY,
+    });
+    await page.goto(`${org.base}/staff`);
+    await expect(pendingRows(page)).toHaveCount(1);
+    held.hold();
+    await page.getByRole('button', { name: 'Revoke the invite to dana@example.com' }).click();
+
+    const busy = pendingRows(page)
+      .first()
+      .getByRole('button', { name: /^Revoking…/ });
+    await expect(busy).toHaveAttribute('aria-disabled', 'true');
+    await expectSpinnerAtButtonStart(busy);
+
+    held.release();
+    await expect(pendingRows(page)).toHaveCount(0);
+  });
+
   test('acts at once with no confirmation; the status is above the list with focus; the address can be invited again', async ({
     page,
   }, testInfo) => {

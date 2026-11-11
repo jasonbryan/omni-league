@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { FormField, form } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle, lucideUndo2 } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideUndo2 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { checkCityState, CITY_STATE_HINT } from '../../../../convex/lib/organizationInput';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
@@ -28,6 +28,7 @@ import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './fi
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 type Notice =
   | { kind: 'saved'; previous: string | null }
@@ -52,6 +53,7 @@ function cityStateRefusal(failure: unknown): string | null {
 @Component({
   selector: 'app-admin-details',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminLogo,
@@ -62,7 +64,7 @@ function cityStateRefusal(failure: unknown): string | null {
     StickyFooter,
     StickyFooterFocus,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucideUndo2 })],
+  providers: [provideIcons({ lucideCircleAlert, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
@@ -224,12 +226,7 @@ function cityStateRefusal(failure: unknown): string | null {
               [attr.aria-disabled]="saving() || !online() ? 'true' : null"
             >
               @if (saving()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Saving…
+                <hlm-spinner data-icon="inline-start" />Saving…
               } @else {
                 Save
               }
@@ -252,12 +249,7 @@ function cityStateRefusal(failure: unknown): string | null {
             (click)="undo(target.previous)"
           >
             @if (undoing()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Undoing…
+              <hlm-spinner data-icon="inline-start" />Undoing…
             } @else {
               <ng-icon name="lucideUndo2" data-icon="inline-start" aria-hidden="true" />Undo<span
                 class="sr-only"

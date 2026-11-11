@@ -17,6 +17,7 @@ import {
   LIST_FOR_ORGANIZER,
   SEASONS,
 } from './testing/league-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -559,6 +560,7 @@ describe('SeasonCreateForm', () => {
       expect(text(submitButton())).toBe('Creating season…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(text(formStatus())).toBe('Creating the season.');
       await submit();
       expect(o.convex.calls).toHaveLength(1);

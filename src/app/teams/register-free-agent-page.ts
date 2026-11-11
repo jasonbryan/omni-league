@@ -21,7 +21,6 @@ import {
   lucideCalendarX,
   lucideHourglass,
   lucideListOrdered,
-  lucideLoaderCircle,
   lucideUser,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -51,6 +50,7 @@ import { publicSeasonPath } from '../organizations/public-league/public-league-p
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmSpinner } from '../ui/spinner';
 import { RegisterCard, RegisterSkeleton } from './register-card';
 import {
   registerTeamState,
@@ -108,6 +108,7 @@ function refusalOf(failure: unknown): Refusal | null {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
+    HlmSpinner,
     NgIcon,
     NotFoundView,
     RegisterCard,
@@ -123,7 +124,6 @@ function refusalOf(failure: unknown): Refusal | null {
       lucideCalendarX,
       lucideHourglass,
       lucideListOrdered,
-      lucideLoaderCircle,
       lucideUser,
       lucideUsers,
     }),
@@ -289,12 +289,7 @@ function refusalOf(failure: unknown): Refusal | null {
                       [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
                     >
                       @if (submitting()) {
-                        <ng-icon
-                          name="lucideLoaderCircle"
-                          class="motion-safe:animate-spin"
-                          data-icon="inline-start"
-                          aria-hidden="true"
-                        />Registering…
+                        <hlm-spinner data-icon="inline-start" />Registering…
                       } @else {
                         <ng-icon
                           name="lucideUser"

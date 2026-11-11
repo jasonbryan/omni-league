@@ -16,7 +16,7 @@ import {
 } from '@angular/core';
 import { FormField, form } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideCircleAlert } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError, injectOnline } from '../../core/data/convex';
@@ -26,6 +26,7 @@ import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
+import { HlmSpinner } from '../../ui/spinner';
 import { LIMIT_ALERTS } from './limit-text';
 
 type FormAlert = 'offline' | 'failed';
@@ -50,8 +51,8 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
 
 @Component({
   selector: 'app-limit-edit-form',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle })],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, HlmSpinner, MousePressKeepsFocus, NgIcon],
+  providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -133,12 +134,7 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
           [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
         >
           @if (submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save changes
           }
