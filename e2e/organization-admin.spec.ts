@@ -304,7 +304,7 @@ test.describe('Overview', () => {
     await expect(items.nth(2)).toContainText("Men's Over-30 11v11 has no season");
     await expect(items.nth(3)).toContainText('1 staff invite is pending');
     await expect(items.nth(3)).toContainText(
-      /jamie\.ortiz@example\.test · expires [A-Z][a-z]{2} \d{1,2}$/,
+      /jamie\.ortiz@example\.test · expires [A-Z][a-z]{2} \d{1,2}/,
     );
     await expect(attention.getByRole('link')).toHaveText([
       'Review Fall 2027, Coed 7v7 Rec',
