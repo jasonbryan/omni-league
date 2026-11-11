@@ -93,6 +93,10 @@ async function signedUp(browser: Browser, user: TestUser): Promise<Account> {
 const MOCKUP_FILE = join(process.cwd(), 'design', 'mockups', '125-126-seasons.html');
 const WIDTHS = [360, 1280] as const;
 const MOCKUP_ORGANIZATION = 'Gulf Coast Sport & Social';
+const MOCKUP_ADDRESS = addressPrefix(
+  'charming-longma-28c00d.netlify.app',
+  'gulf-coast-sport-social',
+);
 
 const LOCATIONS = [
   {
@@ -324,7 +328,7 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, F
       const text = await page.locator('main#main').first().innerText();
       const dialog = page.locator('[role="alertdialog"]');
       texts.set(state, {
-        main: normalize(text, MOCKUP_ORGANIZATION),
+        main: normalize(text, MOCKUP_ORGANIZATION, MOCKUP_ADDRESS),
         dialog:
           (await dialog.count()) > 0 ? normalizeDialog(await dialog.first().innerText()) : null,
       });
@@ -336,21 +340,34 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, F
   }
 }
 
-// The address preview names the page's own origin and the test organization's generated address.
-const withoutOriginAndOrganizationSlug = (line: string): string =>
-  line.replace(/^\S+(\/organizations\/)[^/\s]+/, 'ORIGIN$1ORG-ADDRESS');
+// The preview line names the page's own origin and the organization's address, which the test generates.
+const withoutAddress = (line: string, prefixes: string[]): string => {
+  const prefix = prefixes.find((candidate) => line.startsWith(candidate));
+  return prefix === undefined
+    ? line
+    : `ORIGIN/organizations/ORG-ADDRESS/${line.slice(prefix.length)}`;
+};
+
+function addressPrefix(origin: string, slug: string): string {
+  return `${origin}/organizations/${slug}/`;
+}
+
+const appAddressPrefix = (page: Page) => {
+  const url = new URL(page.url());
+  return addressPrefix(url.host, url.pathname.split('/')[3]);
+};
 
 // The app shows it once the availability answer arrives, which the mockup does not wait for.
 const AVAILABLE = 'Available';
 
-function normalize(text: string, organization: string): string {
+function normalize(text: string, organization: string, address: string): string {
   const lines = text
     .replaceAll(organization, 'ORG')
     .replaceAll(' View public page', '')
     .replaceAll(' View season page', '')
     .split('\n')
     .map((line) => line.trim())
-    .map(withoutOriginAndOrganizationSlug)
+    .map((line) => withoutAddress(line, [address]))
     .filter((line) => line !== '' && line !== AVAILABLE);
   // The mockup writes the organization above the h1 as plain text; the app writes a breadcrumb there, which is hidden while the text is read.
   if (lines[0] === 'ORG') lines.shift();
@@ -383,7 +400,7 @@ async function appText(page: Page, organization: string): Promise<string> {
     apart.forEach((element, index) => (element.style.display = displays[index]!));
     return read;
   });
-  return normalize(text, organization);
+  return normalize(text, organization, appAddressPrefix(page));
 }
 
 /**
