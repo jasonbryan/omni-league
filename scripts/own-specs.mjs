@@ -1,4 +1,3 @@
-// A PR's own e2e specs, as docs/process/dev-cycle.md (Own e2e specs) defines them.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, extname, join, posix } from 'node:path';
@@ -15,7 +14,7 @@ const SPEC_FILE = /\.spec\.ts$/;
 const E2E_TEXT_FILE = /\.(?:ts|mts|mjs|js|json|html|css|md)$/;
 const E2E_DIR = 'e2e';
 
-// A union past this size is what the batch run covers, so only the mockup specs stay.
+// Specs past the cap are left to the batch run, whose full suite covers them.
 export const SCREEN_SPEC_CAP = 20;
 
 function git(root, args) {
@@ -61,7 +60,6 @@ function readE2eFiles(root) {
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Follows the documented `git grep` loop: a spec that imports a changed file, directly or through other files under e2e/.
  * @param {string} root
  * @param {string[]} changed
  * @returns {string[]}

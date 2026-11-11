@@ -15,7 +15,6 @@ const gitReturning = (files) => () => files.join('\n') + '\n';
 const specNames = (count) =>
   Array.from({ length: count }, (_, i) => `e2e/screen-${String(i).padStart(2, '0')}.spec.ts`);
 
-// A selector that answers every file with the same specs, plus the always set the real one adds.
 const selectingFor = (specs) => () => ({
   scope: 'affected',
   specs: [SMOKE, 'e2e/convex-backend.spec.ts', 'e2e/harness/', ...specs],
@@ -44,6 +43,32 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
     assert.ok(list.includes('e2e/organization-staff.spec.ts'));
     assert.ok(list.includes('e2e/shell-sheet.spec.ts'));
     assert.ok(list.includes('e2e/organization-admin.spec.ts'));
+  });
+
+  it('finds the specs that read the Overview tiles from the source files alone', () => {
+    const list = listFor([
+      'src/app/organizations/admin/admin-attention.ts',
+      'src/app/organizations/admin/admin-open-seasons.ts',
+      'src/app/organizations/admin/admin-overview.ts',
+      'src/app/organizations/admin/attention-text.ts',
+    ]);
+    assert.ok(list.includes('e2e/organization-staff.spec.ts'));
+    assert.ok(list.includes('e2e/shell-sheet.spec.ts'));
+  });
+
+  it('lists the mockup specs for the whole set of files that changed with the web address field', () => {
+    const list = listFor([
+      'convex/leagues.ts',
+      'convex/lib/slugs.ts',
+      'convex/organizations.ts',
+      'docs/glossary.md',
+      'src/app/core/forms/slug-availability.ts',
+      'src/app/organizations/admin/league-create-form.ts',
+      'src/app/organizations/create-organization-page.ts',
+      'src/app/organizations/league/season-create-form.ts',
+    ]);
+    assert.ok(list.includes('e2e/league-management-mockup.spec.ts'));
+    assert.ok(list.includes('e2e/organization-leagues-mockup.spec.ts'));
   });
 
   it('lists only the mockup specs for a change whose screen specs pass the cap', () => {
