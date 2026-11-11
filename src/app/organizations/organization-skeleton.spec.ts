@@ -2,8 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { OpenSeasonsSkeleton } from './organization-skeleton';
 import { OPEN_SEASONS_INTRO } from './season-status';
 
-function render(): HTMLElement {
+function render(inputs: { count?: number; noOpenText?: string } = {}): HTMLElement {
   const fixture = TestBed.createComponent(OpenSeasonsSkeleton);
+  for (const [name, value] of Object.entries(inputs)) fixture.componentRef.setInput(name, value);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -19,6 +20,19 @@ describe('OpenSeasonsSkeleton', () => {
     const spans = [...host.querySelectorAll('span')];
     expect(spans.length).toBeGreaterThan(10);
     for (const span of spans) expect(span.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it.each([1, 3, 4])('shows as many cards as the count of %i', (count) => {
+    expect(cards(render({ count }))).toHaveLength(count);
+  });
+
+  it('keeps the intro bar above the cards for any count above zero', () => {
+    for (const count of [1, 2, 3]) {
+      const host = render({ count });
+      expect(host.firstElementChild?.querySelector('span')?.textContent.trim()).toBe(
+        OPEN_SEASONS_INTRO,
+      );
+    }
   });
 
   it('has no md: height class on any element', () => {
@@ -80,6 +94,37 @@ describe('OpenSeasonsSkeleton', () => {
       expect(copy.textContent.trim()).toBe(OPEN_SEASONS_INTRO);
       expect(classes(copy)).toContain('invisible');
       expect(copy.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  describe('with a count of zero', () => {
+    const NO_OPEN = 'No softball season is open for registration right now.';
+    const bar = () => render({ count: 0, noOpenText: NO_OPEN }).firstElementChild!;
+
+    it('shows the no-open bar and no card', () => {
+      const host = render({ count: 0, noOpenText: NO_OPEN });
+      expect(host.children).toHaveLength(1);
+      expect(cards(host)).toHaveLength(0);
+      expect(host.querySelector('.rounded-xl')).toBeNull();
+    });
+
+    it('is a muted text-sm block that fits its text, so it wraps where the loaded line does', () => {
+      expect(classes(bar())).toEqual(
+        expect.arrayContaining(['mt-1', 'w-fit', 'text-sm', 'bg-muted']),
+      );
+    });
+
+    it('holds the no-open copy invisibly and hidden from assistive technology', () => {
+      const copy = bar().querySelector('span')!;
+      expect(copy.textContent.trim()).toBe(NO_OPEN);
+      expect(classes(copy)).toContain('invisible');
+      expect(copy.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('does not hold the intro copy', () => {
+      expect(render({ count: 0, noOpenText: NO_OPEN }).textContent).not.toContain(
+        OPEN_SEASONS_INTRO,
+      );
     });
   });
 });
