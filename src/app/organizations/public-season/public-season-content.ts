@@ -17,7 +17,6 @@ import {
   lucideArrowRight,
   lucideCalendarDays,
   lucideCheck,
-  lucideChevronRight,
   lucideClock,
   lucideMapPin,
   lucideShirt,
@@ -27,6 +26,7 @@ import {
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import {
   BUTTON_BASE,
   OUTLINE_BUTTON_LARGE,
@@ -49,8 +49,7 @@ import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
 const CRUMB_LINK =
-  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
-const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
+  'inline-flex items-center rounded-md font-medium hover:underline pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const REGISTRATION_CARD =
   'rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
@@ -75,13 +74,12 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
-  imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
       lucideCalendarDays,
       lucideCheck,
-      lucideChevronRight,
       lucideClock,
       lucideMapPin,
       lucideShirt,
@@ -93,28 +91,26 @@ const FACT_ICON =
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
-      <nav aria-label="Breadcrumb">
-        <ol role="list" class="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
-          <li>
-            <a [routerLink]="organizationHref()" [class]="crumbLink">{{
+      <nav hlmBreadcrumb aria-label="Breadcrumb">
+        <ol hlmBreadcrumbList class="flex-wrap gap-x-1.5">
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbLink [link]="organizationHref()" [class]="crumbLink">{{
               season().organization.name
             }}</a>
           </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
+            <a
+              hlmBreadcrumbLink
+              [link]="leagueHref()"
+              [state]="leagueNames()"
+              [class]="crumbLink"
+              >{{ season().league.name }}</a
+            >
           </li>
-          <li>
-            <a [routerLink]="leagueHref()" [state]="leagueNames()" [class]="crumbLink">{{
-              season().league.name
-            }}</a>
-          </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
-          </li>
-          <li>
-            <a [routerLink]="seasonHref()" aria-current="page" [class]="currentCrumbLink">{{
-              season().name
-            }}</a>
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbPage [link]="seasonHref()" [class]="crumbLink">{{ season().name }}</a>
           </li>
         </ol>
       </nav>
@@ -431,7 +427,6 @@ export class PublicSeasonContent {
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
   protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly crumbLink = CRUMB_LINK;
-  protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 

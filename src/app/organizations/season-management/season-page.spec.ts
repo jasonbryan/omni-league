@@ -13,6 +13,7 @@ import {
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { SeasonPage } from './season-page';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { slotsOf } from '../../ui/testing/helm-slots';
 
 const GET_VIEW = 'seasons:getOrganizerView';
 const LIST_FREE_AGENTS = 'freeAgents:listForOrganizer';
@@ -148,6 +149,15 @@ describe('SeasonPage', () => {
       ).toEqual([
         ['Coed 7v7 Rec', `/app/organizations/${GULF.slug}/leagues/${COED.slug}`, null],
         ['Summer 2027', URL, 'page'],
+      ]);
+      expect(slotsOf(page.querySelector('nav[aria-label="Breadcrumb"]'))).toEqual([
+        'breadcrumb',
+        'breadcrumb-list',
+        'breadcrumb-item',
+        'breadcrumb-link',
+        'breadcrumb-separator',
+        'breadcrumb-item',
+        'breadcrumb-page',
       ]);
       const [leagueCrumb, seasonCrumb] = crumbs;
       expect(leagueCrumb?.classList.contains('underline')).toBe(true);

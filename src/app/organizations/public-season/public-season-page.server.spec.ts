@@ -20,6 +20,7 @@ import {
 } from '../../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import {
   NO_TEAMS,
   seasonQueryResults,
@@ -188,6 +189,18 @@ describe('PublicSeasonPage server render', () => {
       '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s',
       SEASON_PATH,
     ]);
+    expect(slotsOf(body.querySelector('main nav[aria-label="Breadcrumb"]'))).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
+    ]);
     expect([...body.querySelectorAll('main dl > div')].map((row) => text(row))).toEqual([
       'Dates Jun 6 – Aug 29, 2027',
       'Division Coed · 4v4 · Rec From the league · teams need at least 4 players',
@@ -348,6 +361,14 @@ describe('PublicSeasonPage server render', () => {
     );
     const nav = panel?.querySelector('nav[aria-label="Teams pages"]');
     expect(text(nav?.querySelector('p'))).toBe('1–5 of 7 teams');
+    expect(slotsOf(nav)).toEqual(
+      expect.arrayContaining([
+        'pagination',
+        'pagination-content',
+        'pagination-item',
+        'pagination-link',
+      ]),
+    );
     expect([...(nav?.querySelectorAll('a') ?? [])].map((a) => href(a))).toEqual([
       `${SEASON_PATH}#teams`,
       `${SEASON_PATH}?page=2#teams`,

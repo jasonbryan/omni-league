@@ -64,7 +64,7 @@ describe('src/styles/base.css', () => {
     const block = css.slice(start);
     assert.match(
       block,
-      /\[data-slot='button'\],\s*\[data-slot='sheet-close'\]\s*\{\s*min-height:\s*--spacing\(11\);\s*min-width:\s*--spacing\(11\);\s*\}/,
+      /\[data-slot='button'\],\s*\[data-slot='pagination-link'\],\s*\[data-slot='sheet-close'\]\s*\{\s*min-height:\s*--spacing\(11\);\s*min-width:\s*--spacing\(11\);\s*\}/,
     );
     assert.match(block, /\[data-slot='input'\]\s*\{\s*min-height:\s*--spacing\(11\);\s*\}/);
     assert.doesNotMatch(css.slice(0, start), /pointer:\s*coarse/);

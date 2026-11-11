@@ -10,6 +10,7 @@ import {
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import { FULL_BADGE, OPEN_BADGE } from '../season-status';
 import { PublicLeaguePage } from './public-league-page';
 import {
@@ -232,7 +233,8 @@ describe('PublicLeaguePage skeleton names', () => {
       ),
     };
 
-    expect(placeholders.list).toBe(loaded.list);
+    const classSet = (className: string | undefined) => new Set(className?.split(/\s+/));
+    expect(classSet(loaded.list)).toEqual(classSet(placeholders.list));
     expect(placeholders.heading).toBe(loaded.heading);
     for (const [i, className] of placeholders.crumbs.entries()) {
       expect(loaded.crumbs[i]).toContain(className);
@@ -246,6 +248,20 @@ describe('PublicLeaguePage populated', () => {
     harness = await open();
     emit();
     await settle(harness);
+  });
+
+  it('renders helm breadcrumb, with no current-page item because the h1 names the league', () => {
+    const nav = host(harness).querySelector('main nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(nav)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+    ]);
+    expect(nav?.querySelector('[aria-current]')).toBeNull();
   });
 
   it('renders the breadcrumb organization and sport, and the league as the only h1', () => {
@@ -494,6 +510,14 @@ describe('PublicLeaguePage populated', () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(crumbs)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+    ]);
     expect(text(crumbs)).toContain('Curling');
     expect([...(crumbs?.querySelectorAll('a') ?? [])].map(text)).not.toContain('Curling');
   });

@@ -1,15 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { buttonVariants } from '../ui/button/hlm-button';
-import {
-  CURRENT_PAGE_BUTTON,
-  GHOST_BUTTON,
-  GHOST_ICON_BUTTON,
-  PageControl,
-  pageWindow,
-  rangeText,
-} from './page-control';
+import { PageControl, pageWindow, rangeText } from './page-control';
 
 @Component({ selector: 'app-blank', template: '' })
 class Blank {}
@@ -243,19 +235,38 @@ describe('PageControl', () => {
     ]);
   });
 
-  it('uses the helm button classes of the mockup', () => {
-    expect(GHOST_BUTTON).toBe(
-      `${buttonVariants({ variant: 'ghost', size: 'default' })} max-sm:w-8 max-sm:px-0`,
-    );
-    expect(GHOST_ICON_BUTTON).toBe(
-      `${buttonVariants({ variant: 'ghost', size: 'icon' })} tabular-nums`,
-    );
-    expect(CURRENT_PAGE_BUTTON).toBe(
-      `${buttonVariants({ variant: 'secondary', size: 'icon' })} font-semibold tabular-nums`,
-    );
-    const fixture = render({ page: 1, pageCount: 2, total: 7 });
+  it('renders helm pagination: a nav, a list, items, and links, and marks only the current page', () => {
+    const fixture = render({ page: 3, pageCount: 6, total: 26 });
     const nav = navOf(fixture)!;
-    const current = nav.querySelector<HTMLElement>('a[aria-current="page"]')!;
+    const slot = (name: string) => [...nav.querySelectorAll(`[data-slot="${name}"]`)];
+    expect(nav.getAttribute('data-slot')).toBe('pagination');
+    expect(nav.hasAttribute('role')).toBe(false);
+    expect(nav.querySelector('ul')!.getAttribute('data-slot')).toBe('pagination-content');
+    expect(nav.querySelector('ul')!.getAttribute('role')).toBe('list');
+    expect(slot('pagination-item')).toHaveLength(nav.querySelectorAll('ul > li').length);
+    expect(slot('pagination-link').map(text)).toEqual([
+      'Previous page',
+      'Page 1',
+      'Page 2',
+      'Page 3',
+      'Page 4',
+      'Page 6',
+      'Next page',
+    ]);
+    expect(
+      slot('pagination-link')
+        .filter((a) => a.hasAttribute('data-active'))
+        .map(text),
+    ).toEqual(['Page 3']);
+    expect(nav.querySelectorAll('[aria-current]')).toHaveLength(1);
+    expect(
+      nav.querySelector('li[aria-hidden="true"] [data-slot="pagination-ellipsis"]'),
+    ).not.toBeNull();
+  });
+
+  it('shows the current page as the secondary button', () => {
+    const fixture = render({ page: 1, pageCount: 2, total: 7 });
+    const current = navOf(fixture)!.querySelector<HTMLElement>('a[aria-current="page"]')!;
     expect(current.className).toContain('bg-secondary');
     expect(current.className).toContain('tabular-nums');
   });
