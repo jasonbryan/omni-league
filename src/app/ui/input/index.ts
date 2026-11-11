@@ -8,6 +8,7 @@
 // - no outline reset and no focus border or ring classes: the solid `:focus-visible` outline in src/styles/base.css is the
 //   focus indicator;
 // - static classes, so a chunk that uses it carries no class-merging code.
+// - the selector matches `input` elements only, and there is no `exportAs`.
 import { HlmInput } from './hlm-input';
 
 export * from './hlm-input';

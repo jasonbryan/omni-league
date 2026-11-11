@@ -10,6 +10,7 @@
 // - the field error is a directive with `role="alert"` that the page renders only while the error shows, in place of helm's
 //   component that decides that from the form control, and it adds `flex items-start gap-1.5` for the icon beside its text;
 // - static classes, so a chunk that uses them carries no class-merging code: the field picks one of two strings by orientation.
+// - attribute selectors only (no `hlm-field*` element selectors) and no `exportAs`; the field label matches `label` elements only.
 import {
   HlmField,
   HlmFieldContent,
