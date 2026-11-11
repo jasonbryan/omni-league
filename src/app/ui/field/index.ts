@@ -10,8 +10,8 @@
 // - the field error is a directive with `role="alert"` that the page renders only while the error shows, in place of helm's
 //   component that decides that from the form control, and it adds `flex items-start gap-1.5` for the icon beside its text;
 // - static classes, so a chunk that uses them carries no class-merging code: the field picks one of two strings by orientation.
-// - the field set and field legend are in `hlm-field-set.ts`, as upstream has them, and `HlmFieldImports` leaves them out: a page
-//   that draws no fieldset imports `HlmFieldSetImports` as well or not at all, so the initial chunk carries neither directive;
+// - the field set and field legend share `hlm-field-set.ts`, where upstream has `hlm-field-set.ts` and `hlm-field-legend.ts`, and
+//   `HlmFieldImports` leaves them out for `HlmFieldSetImports`, so a chunk whose page draws no fieldset carries neither directive;
 // - attribute selectors only (no `hlm-field*` element selectors) and no `exportAs`; the field label and field legend match `label`
 //   and `legend` elements only, and the field set matches `fieldset` elements only.
 import {
