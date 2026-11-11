@@ -15,13 +15,7 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCircleAlert,
-  lucideEye,
-  lucideEyeOff,
-  lucideLoaderCircle,
-  lucideWifiOff,
-} from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff } from '@ng-icons/lucide';
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
@@ -32,6 +26,7 @@ import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../ui/spinner';
 
 // Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
 export const MIN_PASSWORD = 15;
@@ -80,10 +75,16 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
 
 @Component({
   selector: 'app-sign-up-page',
-  imports: [MousePressKeepsFocus, Checkbox, FormField, NgIcon, RouterLink, PublicLayout],
-  providers: [
-    provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle, lucideWifiOff }),
+  imports: [
+    HlmSpinner,
+    MousePressKeepsFocus,
+    Checkbox,
+    FormField,
+    NgIcon,
+    RouterLink,
+    PublicLayout,
   ],
+  providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -429,12 +430,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
               [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
             >
               @if (submitting()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Creating account…
+                <hlm-spinner data-icon="inline-start" />Creating account…
               } @else {
                 Create account
               }

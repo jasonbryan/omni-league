@@ -14,6 +14,7 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
@@ -1040,6 +1041,7 @@ describe('AdminStaff', () => {
       expect(text(submitButton())).toBe('Creating invite link…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(text(page.querySelector('#invite form p[role="status"].sr-only'))).toBe(
         'Creating the invite link.',
       );
@@ -1436,6 +1438,7 @@ describe('AdminStaff', () => {
       expect(text(revokeButton(0))).toBe('Revoking…');
       expect(revokeButton(0).getAttribute('aria-disabled')).toBe('true');
       expect(revokeButton(0).hasAttribute('disabled')).toBe(false);
+      expectPendingSpinner(revokeButton(0));
       expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
       expect(text(revokeButton(1))).toBe('Revoke the invite to r.castillo@example.com');
       expect(revokeButton(1).getAttribute('aria-disabled')).toBe('true');
@@ -1655,6 +1658,7 @@ describe('AdminStaff', () => {
       expect(text(pendingUndo)).toBe('Undoing…');
       expect(pendingUndo.getAttribute('aria-disabled')).toBe('true');
       expect(pendingUndo.hasAttribute('disabled')).toBe(false);
+      expectPendingSpinner(pendingUndo);
       await pressUndo();
       expect(o.convex.calls).toHaveLength(2);
     });

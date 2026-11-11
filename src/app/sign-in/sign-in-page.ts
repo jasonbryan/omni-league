@@ -14,13 +14,7 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCircleAlert,
-  lucideEye,
-  lucideEyeOff,
-  lucideLoaderCircle,
-  lucideWifiOff,
-} from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff } from '@ng-icons/lucide';
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
@@ -30,6 +24,7 @@ import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../ui/spinner';
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -69,10 +64,8 @@ type FormAlert = { title: string; description: string } | 'offline';
 /** A wrong password and an address with no account get the same alert, with neither field marked invalid, so the page reveals nothing about which addresses exist. */
 @Component({
   selector: 'app-sign-in-page',
-  imports: [MousePressKeepsFocus, FormField, NgIcon, RouterLink, PublicLayout],
-  providers: [
-    provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle, lucideWifiOff }),
-  ],
+  imports: [HlmSpinner, MousePressKeepsFocus, FormField, NgIcon, RouterLink, PublicLayout],
+  providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -254,12 +247,7 @@ type FormAlert = { title: string; description: string } | 'offline';
               [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
             >
               @if (submitting()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Signing in…
+                <hlm-spinner data-icon="inline-start" />Signing in…
               } @else {
                 Sign in
               }

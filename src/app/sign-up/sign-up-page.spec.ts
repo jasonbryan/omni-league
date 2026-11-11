@@ -10,6 +10,7 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { MESSAGES, SignUpPage } from './sign-up-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -549,6 +550,7 @@ describe('SignUpPage', () => {
       expect(submitButton().textContent?.trim()).toBe('Creating account…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(page.querySelector('form > p[role="status"]')?.textContent?.trim()).toBe(
         'Creating your account.',
       );

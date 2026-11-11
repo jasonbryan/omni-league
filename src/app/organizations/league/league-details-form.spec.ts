@@ -16,6 +16,7 @@ import {
   UNDO_UPDATE_LEAGUE,
   UPDATE_LEAGUE,
 } from './testing/league-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const SUNDAY = {
   ...COED,
@@ -340,6 +341,7 @@ describe('LeagueDetailsForm', () => {
       ]);
       expect(text(save())).toBe('Saving…');
       expect(save().getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(save());
       o.convex.calls[0].resolve(EARLIER);
       await o.flush();
       expect(text(save())).toBe('Save changes');

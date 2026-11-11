@@ -7,7 +7,9 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { holdQueries } from './support/hold-queries';
+import { expectSpinnerAtButtonStart, spinnerAnimationName } from './support/pending-spinner';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -400,6 +402,35 @@ test.describe('Leagues: creating a draft', () => {
         await expect(page.locator('#name')).not.toBeFocused();
       });
     });
+  });
+});
+
+test.describe('Leagues: Create while the request is held', () => {
+  test('the spinner sits at the button start and spins only when motion is welcome', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    const held = await holdMutations(page);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').fill('Spinner Check 4s');
+    await chooseChip(chipLabel(page, 'Beach volleyball'));
+    await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
+    held.hold();
+    await submit(page).click();
+
+    const busy = form(page).getByRole('button', { name: 'Creating league…' });
+    await expect(busy).toHaveAttribute('aria-disabled', 'true');
+    await expect(busy.getByRole('status')).toHaveCount(0);
+    await expectSpinnerAtButtonStart(busy);
+    expect(await spinnerAnimationName(busy)).not.toBe('none');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(() => spinnerAnimationName(busy)).toBe('none');
+
+    held.release();
+    await expect(
+      form(page).getByRole('status').filter({ hasText: 'created as a draft' }),
+    ).toBeVisible();
   });
 });
 

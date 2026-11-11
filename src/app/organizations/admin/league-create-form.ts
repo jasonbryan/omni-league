@@ -14,13 +14,7 @@ import {
 import { FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideLoaderCircle,
-  lucidePlus,
-  lucideSparkles,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucidePlus, lucideSparkles } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
@@ -53,6 +47,7 @@ import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields } from './league-division-fields';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface LeagueLocationChoice {
   locationId: Id<'locations'>;
@@ -62,6 +57,7 @@ export interface LeagueLocationChoice {
 @Component({
   selector: 'app-league-create-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
@@ -80,7 +76,6 @@ export interface LeagueLocationChoice {
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
-      lucideLoaderCircle,
       lucidePlus,
       lucideSparkles,
     }),
@@ -354,12 +349,7 @@ export interface LeagueLocationChoice {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Creating league…
+            <hlm-spinner data-icon="inline-start" />Creating league…
           } @else {
             <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
             league

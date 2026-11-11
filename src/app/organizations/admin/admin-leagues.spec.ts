@@ -21,6 +21,7 @@ import {
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
@@ -987,6 +988,7 @@ describe('AdminLeagues', () => {
       expect(text(submitButton())).toBe('Creating league…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(text(formStatus())).toBe('Creating the league.');
       await submit();
       expect(o.convex.calls).toHaveLength(1);

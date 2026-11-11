@@ -20,7 +20,6 @@ import {
   lucideBell,
   lucideBellOff,
   lucideChevronRight,
-  lucideLoaderCircle,
   lucideShare,
   lucideSmartphone,
   lucideSquarePlus,
@@ -47,6 +46,7 @@ import {
 } from '../organizations/admin/field-classes';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmSpinner } from '../ui/spinner';
 import { PUSH_DEVICE } from './push-device';
 import { TestNotification } from './test-notification';
 
@@ -70,13 +70,12 @@ const STEP_NUMBER =
 
 @Component({
   selector: 'app-notifications-page',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, RouterLink, Shell, TestNotification],
+  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon, RouterLink, Shell, TestNotification],
   providers: [
     provideIcons({
       lucideBell,
       lucideBellOff,
       lucideChevronRight,
-      lucideLoaderCircle,
       lucideShare,
       lucideSmartphone,
       lucideSquarePlus,
@@ -270,12 +269,7 @@ const STEP_NUMBER =
                   (click)="turnOff()"
                 >
                   @if (busy() === 'turning-off') {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Turning off…
+                    <hlm-spinner data-icon="inline-start" />Turning off…
                   } @else {
                     <ng-icon name="lucideBellOff" data-icon="inline-start" aria-hidden="true" />Turn
                     off
@@ -306,12 +300,7 @@ const STEP_NUMBER =
                   (click)="turnOn()"
                 >
                   @if (busy() === 'turning-on') {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Turning on…
+                    <hlm-spinner data-icon="inline-start" />Turning on…
                   } @else {
                     <ng-icon name="lucideBell" data-icon="inline-start" aria-hidden="true" />Turn on
                     notifications
@@ -343,11 +332,8 @@ const STEP_NUMBER =
                     role="status"
                     class="flex items-center gap-1.5 text-sm text-muted-foreground"
                   >
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin text-base"
-                      aria-hidden="true"
-                    />Getting this device ready. This takes a few seconds the first time.
+                    <hlm-spinner />Getting this device ready. This takes a few seconds the first
+                    time.
                   </p>
                 } @else if (busy() === 'turning-on') {
                   <p role="status" class="text-sm text-muted-foreground">

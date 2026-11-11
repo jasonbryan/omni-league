@@ -23,7 +23,6 @@ import {
   lucideCircleAlert,
   lucideHourglass,
   lucideListOrdered,
-  lucideLoaderCircle,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
@@ -55,6 +54,7 @@ import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
+import { HlmSpinner } from '../ui/spinner';
 import { RegisterCard, RegisterSkeleton } from './register-card';
 import {
   registerTeamState,
@@ -126,6 +126,7 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
     FormField,
     HlmFieldImports,
     HlmInputImports,
+    HlmSpinner,
     NgIcon,
     NotFoundView,
     RegisterCard,
@@ -142,7 +143,6 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
       lucideCircleAlert,
       lucideHourglass,
       lucideListOrdered,
-      lucideLoaderCircle,
       lucideUsers,
     }),
   ],
@@ -361,12 +361,9 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                       [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
                     >
                       @if (submitting()) {
-                        <ng-icon
-                          name="lucideLoaderCircle"
-                          class="motion-safe:animate-spin"
-                          data-icon="inline-start"
-                          aria-hidden="true"
-                        />{{ joinsWaitlist() ? 'Joining the waitlist…' : 'Registering team…' }}
+                        <hlm-spinner data-icon="inline-start" />{{
+                          joinsWaitlist() ? 'Joining the waitlist…' : 'Registering team…'
+                        }}
                       } @else {
                         {{ joinsWaitlist() ? 'Join the waitlist' : 'Register team' }}
                       }
