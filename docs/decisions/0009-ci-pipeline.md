@@ -975,7 +975,7 @@ Issue #610. On attempt 1 of [run 42762246537](https://github.com/jasonbryan/omni
 
 ## Amendment: own specs include the screen specs of a UI change (2026-11-11)
 
-Issue #634. The owner chose option C, [up to 20, else mockups](https://github.com/jasonbryan/omni-league/issues/634#issuecomment-6786641125), in chat on 2026-11-10. This changes process and one script: it adds no package, service, or workflow, and `package.json` gains one script, so it is not a `gate:technology` change.
+Issue #634. The owner chose option C, [up to 20, else mockups](https://github.com/jasonbryan/omni-league/issues/634#issuecomment-6786641125), in chat on 2026-11-10. This changes process, adds one script (`scripts/own-specs.mjs`), and changes one (`scripts/e2e-affected.mjs`). It adds no package, service, or workflow, and `package.json` gains one script, so it is not a `gate:technology` change.
 
 The 2026-10-31 amendment made the PR's own specs the pre-merge run, and a PR that passed them still turned the batch run red twice: [#628](https://github.com/jasonbryan/omni-league/pull/628) and [#633](https://github.com/jasonbryan/omni-league/pull/633) changed a screen whose mockup spec compares its text, and [#632](https://github.com/jasonbryan/omni-league/pull/632) removed Overview tiles that `organization-staff` and `shell-sheet` read, neither of which imports a changed file.
 

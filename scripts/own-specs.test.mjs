@@ -578,6 +578,30 @@ describe('main', () => {
     assert.deepEqual(ran, [['e2e/x.spec.ts', '--project=chromium-desktop']]);
   });
 
+  for (const flagArguments of [
+    ['--project', 'chromium-desktop'],
+    ['--workers', '1'],
+    ['-g', 'sign in'],
+    ['--shard', '1/2'],
+    ['--repeat-each', '3', '--project=chromium-mobile'],
+  ]) {
+    it(`passes ${flagArguments.join(' ')} to Playwright in order and names no spec`, async () => {
+      const { ran, received, result } = run(flagArguments, { specs: ['e2e/smoke.spec.ts'] });
+      assert.equal(await result, 0);
+      assert.deepEqual(received[0].named, []);
+      assert.deepEqual(ran, [['e2e/smoke.spec.ts', ...flagArguments]]);
+    });
+  }
+
+  it('names a spec path that follows a flag, and keeps the flag value', async () => {
+    const { ran, received, result } = run(['--headed', 'e2e/x.spec.ts', '--workers', '1'], {
+      specs: ['e2e/x.spec.ts'],
+    });
+    await result;
+    assert.deepEqual(received[0].named, ['e2e/x.spec.ts']);
+    assert.deepEqual(ran, [['e2e/x.spec.ts', '--headed', '--workers', '1']]);
+  });
+
   it('runs nothing and exits 0 when the list is empty', async () => {
     const { ran, result } = run([], { specs: [] });
     assert.equal(await result, 0);

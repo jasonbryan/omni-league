@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, extname, join, posix } from 'node:path';
 import { classify, deriveAppScripts } from './ci-scope.mjs';
 import { ALWAYS, buildImportGraph, deriveSessionSpecs, selectSpecs } from './e2e-affected.mjs';
@@ -13,6 +14,7 @@ const MOCKUP_SPEC = /-mockup\.spec\.ts$/;
 const SPEC_FILE = /\.spec\.ts$/;
 const E2E_TEXT_FILE = /\.(?:ts|mts|mjs|js|json|html|css|md)$/;
 const E2E_DIR = 'e2e';
+const ARCHIVE_MAX_BYTES = 1024 ** 3;
 
 // Specs past the cap are left to the batch run, whose full suite covers them.
 export const SCREEN_SPEC_CAP = 20;
@@ -25,6 +27,21 @@ function git(root, args) {
   return result.stdout;
 }
 
+// The PR's list belongs to its head SHA, so every file the script reads comes from a copy of HEAD.
+function headSnapshot(root) {
+  const dir = mkdtempSync(join(tmpdir(), 'own-specs-head-'));
+  const cleanup = () => rmSync(dir, { recursive: true, force: true });
+  const archive = spawnSync('git', ['-C', root, 'archive', '--format=tar', 'HEAD'], {
+    maxBuffer: ARCHIVE_MAX_BYTES,
+  });
+  const extracted =
+    archive.status === 0 &&
+    spawnSync('tar', ['-x', '-C', dir], { input: archive.stdout }).status === 0;
+  if (extracted) return { dir, cleanup };
+  cleanup();
+  return { dir: root, cleanup: () => {} };
+}
+
 function defaultCiScope(root, files) {
   let appScripts;
   try {
@@ -35,8 +52,8 @@ function defaultCiScope(root, files) {
   return classify(files, { event: 'pull_request', base: 'main', appScripts }).scope;
 }
 
-/** @returns {Map<string, string>} the text of each file under e2e/, by repo path */
-function readE2eFiles(root) {
+/** @returns {Map<string, string>} */
+function readE2eTextsByPath(root) {
   const texts = new Map();
   let entries;
   try {
@@ -60,14 +77,14 @@ function readE2eFiles(root) {
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * @param {string} root
+ * @param {() => string} root
  * @param {string[]} changed
  * @returns {string[]}
  */
 function importingSpecs(root, changed) {
   const starting = changed.filter((file) => !SPEC_FILE.test(file));
   if (starting.length === 0) return [];
-  const texts = readE2eFiles(root);
+  const texts = readE2eTextsByPath(root());
   const files = new Set(starting);
   const specs = new Set();
   for (const file of files) {
@@ -86,7 +103,7 @@ function importingSpecs(root, changed) {
 /**
  * @param {string[]} changed
  * @param {{
- *   root: string,
+ *   root: () => string,
  *   buildGraph: typeof buildImportGraph,
  *   select: typeof selectSpecs,
  *   sessionSpecs: () => string[],
@@ -97,13 +114,13 @@ function importingSpecs(root, changed) {
 function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
   const screenFiles = changed.filter((file) => SCREEN_DIRS.some((dir) => file.startsWith(dir)));
   if (screenFiles.length === 0) return [];
-  const graph = buildGraph(root);
+  const graph = buildGraph(root());
   const union = new Set();
   for (const file of screenFiles) {
     const selection = select([file], {
       event: 'pull_request',
       base: 'main',
-      root,
+      root: root(),
       sessionSpecs,
       graph,
       warn: () => {},
@@ -125,6 +142,7 @@ function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
  * @param {{
  *   root?: string,
  *   runGit?: (args: string[]) => string,
+ *   snapshot?: typeof headSnapshot,
  *   buildGraph?: typeof buildImportGraph,
  *   select?: typeof selectSpecs,
  *   sessionSpecs?: () => string[],
@@ -138,31 +156,66 @@ function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
 export function ownSpecs({
   root = ROOT,
   runGit = (args) => git(root, args),
+  snapshot = headSnapshot,
   buildGraph = buildImportGraph,
   select = selectSpecs,
-  sessionSpecs = () => deriveSessionSpecs(root),
-  ciScope = (files) => defaultCiScope(root, files),
-  exists = (path) => existsSync(join(root, path)),
+  sessionSpecs,
+  ciScope,
+  exists,
   named = [],
   log = () => {},
 } = {}) {
   const changed = runGit(DIFF_ARGS).split('\n').filter(Boolean);
+  let head;
+  const tree = () => (head ??= snapshot(root)).dir;
+  const existsInTree = exists ?? ((path) => existsSync(join(tree(), path)));
+  const ciScopeOf = ciScope ?? ((files) => defaultCiScope(tree(), files));
+  const sessionSpecsOf = sessionSpecs ?? (() => deriveSessionSpecs(tree()));
   let sessions;
-  const specs = new Set(named);
-  for (const file of changed) {
-    if (file.startsWith(`${E2E_DIR}/`) && SPEC_FILE.test(file) && exists(file)) specs.add(file);
+  try {
+    const specs = new Set(named);
+    for (const file of changed) {
+      if (file.startsWith(`${E2E_DIR}/`) && SPEC_FILE.test(file) && existsInTree(file)) {
+        specs.add(file);
+      }
+    }
+    for (const spec of importingSpecs(tree, changed)) specs.add(spec);
+    const screen = screenSpecs(changed, {
+      root: tree,
+      buildGraph,
+      select,
+      sessionSpecs: () => (sessions ??= sessionSpecsOf()),
+      log,
+    });
+    for (const spec of screen) specs.add(spec);
+    if (specs.size === 0 && ciScopeOf(changed) === 'app') specs.add(SMOKE_SPEC);
+    return [...specs].sort();
+  } finally {
+    head?.cleanup();
   }
-  for (const spec of importingSpecs(root, changed)) specs.add(spec);
-  const screen = screenSpecs(changed, {
-    root,
-    buildGraph,
-    select,
-    sessionSpecs: () => (sessions ??= sessionSpecs()),
-    log,
-  });
-  for (const spec of screen) specs.add(spec);
-  if (specs.size === 0 && ciScope(changed) === 'app') specs.add(SMOKE_SPEC);
-  return [...specs].sort();
+}
+
+const SPEC_PATH = /^e2e\/|\.spec\.ts$/;
+
+/**
+ * @param {string[]} args
+ * @returns {{ named: string[], passthrough: string[] }}
+ */
+function splitArgs(args) {
+  const named = [];
+  const passthrough = [];
+  let takesValue = false;
+  for (const arg of args) {
+    if (arg.startsWith('-')) {
+      passthrough.push(arg);
+      takesValue = !arg.includes('=');
+      continue;
+    }
+    if (takesValue && !SPEC_PATH.test(arg)) passthrough.push(arg);
+    else named.push(arg);
+    takesValue = false;
+  }
+  return { named, passthrough };
 }
 
 /**
@@ -180,8 +233,7 @@ export async function main(
   { own = ownSpecs, run = runE2e, print = console.log, log = console.error } = {},
 ) {
   const args = argv.filter((arg) => arg !== '--list');
-  const named = args.filter((arg) => !arg.startsWith('-'));
-  const flags = args.filter((arg) => arg.startsWith('-'));
+  const { named, passthrough } = splitArgs(args);
   const specs = own({ named, log });
   if (argv.includes('--list')) {
     for (const spec of specs) print(spec);
@@ -192,7 +244,7 @@ export async function main(
     return 0;
   }
   log(`e2e:own: running ${specs.join(' ')}`);
-  return run([...specs, ...flags]);
+  return run([...specs, ...passthrough]);
 }
 
 if (import.meta.main) {
