@@ -26,6 +26,8 @@ import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 
 // Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
@@ -80,6 +82,8 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
     MousePressKeepsFocus,
     Checkbox,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     NgIcon,
     RouterLink,
     PublicLayout,
@@ -169,29 +173,18 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
               </div>
             }
             <p class="text-sm text-muted-foreground">All fields are required.</p>
-            <div
-              data-slot="field-group"
-              class="group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4 mt-4"
-            >
+            <div hlmFieldGroup class="mt-4">
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="errors.name() ? 'true' : null"
                 [attr.data-invalid]="errors.name() ? 'true' : null"
-                class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
-                <label
-                  for="name"
-                  data-slot="field-label"
-                  class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                  >Name</label
-                >
+                <label hlmFieldLabel for="name">Name</label>
                 <input
+                  hlmInput
                   #name
                   id="name"
                   type="text"
-                  data-slot="input"
                   autocomplete="name"
                   autocapitalize="words"
                   [formField]="fields.name"
@@ -200,22 +193,12 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                   [attr.aria-invalid]="errors.name() ? 'true' : null"
                   [attr.data-invalid]="errors.name() ? 'true' : null"
                   [attr.data-matches-spartan-invalid]="errors.name() ? 'true' : null"
-                  class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                 />
-                <p
-                  data-slot="field-description"
-                  id="name-description"
-                  class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                >
+                <p hlmFieldDescription id="name-description">
                   Shown to your teammates and organizers.
                 </p>
                 @if (errors.name(); as error) {
-                  <div
-                    role="alert"
-                    data-slot="field-error"
-                    id="name-error"
-                    class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                  >
+                  <div hlmFieldError id="name-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
@@ -226,24 +209,16 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                 }
               </div>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="errors.email() ? 'true' : null"
                 [attr.data-invalid]="errors.email() ? 'true' : null"
-                class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
-                <label
-                  for="email"
-                  data-slot="field-label"
-                  class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                  >Email</label
-                >
+                <label hlmFieldLabel for="email">Email</label>
                 <input
+                  hlmInput
                   #email
                   id="email"
                   type="email"
-                  data-slot="input"
                   autocomplete="email"
                   spellcheck="false"
                   autocapitalize="none"
@@ -253,15 +228,9 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                   [attr.aria-invalid]="errors.email() ? 'true' : null"
                   [attr.data-invalid]="errors.email() ? 'true' : null"
                   [attr.data-matches-spartan-invalid]="errors.email() ? 'true' : null"
-                  class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                 />
                 @if (errors.email(); as error) {
-                  <div
-                    role="alert"
-                    data-slot="field-error"
-                    id="email-error"
-                    class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                  >
+                  <div hlmFieldError id="email-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
@@ -284,19 +253,11 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                 }
               </div>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
                 [attr.data-invalid]="errors.password() ? 'true' : null"
-                class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
-                <label
-                  for="password"
-                  data-slot="field-label"
-                  class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                  >Password</label
-                >
+                <label hlmFieldLabel for="password">Password</label>
                 <!-- Password and Show are one group: the check waits until focus leaves both, so tabbing or clicking to Show does not talk over its status. -->
                 <div
                   class="flex items-center gap-2"
@@ -304,9 +265,9 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                 >
                   <!-- No maxlength: a long paste is never cut silently (WCAG 3.3.8). -->
                   <input
+                    hlmInput
                     #password
                     id="password"
-                    data-slot="input"
                     autocomplete="new-password"
                     spellcheck="false"
                     autocapitalize="none"
@@ -316,7 +277,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
-                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm flex-1"
+                    class="flex-1"
                   />
                   <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it out as a flex item, so the button gets the approved mockup's width. -->
                   <button
@@ -343,20 +304,11 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                     }
                   </button>
                 </div>
-                <p
-                  data-slot="field-description"
-                  id="password-description"
-                  class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                >
+                <p hlmFieldDescription id="password-description">
                   At least 15 characters; a phrase of several words works.
                 </p>
                 @if (errors.password(); as error) {
-                  <div
-                    role="alert"
-                    data-slot="field-error"
-                    id="password-error"
-                    class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                  >
+                  <div hlmFieldError id="password-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
@@ -370,12 +322,10 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                 </p>
               </div>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="horizontal"
+                hlmField
+                orientation="horizontal"
                 [attr.data-matches-spartan-invalid]="errors.adult() ? 'true' : null"
                 [attr.data-invalid]="errors.adult() ? 'true' : null"
-                class="group/field flex w-full flex-row items-center *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
                 <app-checkbox
                   #adult
@@ -385,31 +335,14 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                   [describedBy]="describedBy('adult', 'adult-description')"
                   [showInvalid]="!!errors.adult()"
                 />
-                <div
-                  data-slot="field-content"
-                  class="group/field-content flex flex-1 flex-col leading-snug gap-0.5"
-                >
-                  <label
-                    for="adult"
-                    data-slot="field-label"
-                    class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                    >I am 18 or older</label
-                  >
-                  <p
-                    data-slot="field-description"
-                    id="adult-description"
-                    class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
-                  >
+                <div hlmFieldContent>
+                  <label hlmFieldLabel for="adult">I am 18 or older</label>
+                  <p hlmFieldDescription id="adult-description">
                     Accounts are for adults. A parent, guardian, or organizer adds players under 18
                     to a roster.
                   </p>
                   @if (errors.adult(); as error) {
-                    <div
-                      role="alert"
-                      data-slot="field-error"
-                      id="adult-error"
-                      class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                    >
+                    <div hlmFieldError id="adult-error">
                       <ng-icon
                         name="lucideCircleAlert"
                         class="mt-0.5 shrink-0 text-base"
