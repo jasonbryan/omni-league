@@ -6,7 +6,6 @@ function present(badge: Element | null | undefined): Element {
   return badge;
 }
 
-/** Signed-in pages draw the 20px `default` size and the public pages the 22px `fit` size. */
 export function expectBadgeSize(badge: Element | null | undefined, size: HlmBadgeSize): void {
   const heights = [...present(badge).classList].filter((name) => name.startsWith('h-'));
   expect(heights).toEqual(size === 'default' ? ['h-5'] : []);

@@ -1,4 +1,5 @@
 import { expectAccessible } from './support/a11y';
+import { expectBadges, SIGNED_IN_BADGE_HEIGHT } from './support/badges';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
@@ -43,6 +44,7 @@ test.describe('notifications on this device', () => {
 
     const device = page.getByRole('region', { name: 'This device' });
     await expect(device).toContainText('Not available');
+    await expectBadges(device.locator('[data-slot="badge"]'), SIGNED_IN_BADGE_HEIGHT);
     await expect(device).toContainText("This browser can't show notifications from Omni League.");
     await expect(device.getByRole('button')).toHaveCount(0);
     await expect(

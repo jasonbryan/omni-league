@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Browser, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import { expectBadges, SIGNED_IN_BADGE_HEIGHT } from './support/badges';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdMutations } from './support/hold-mutations';
@@ -170,6 +171,11 @@ test.describe('Season management: an org admin', () => {
     await expect(dig.locator('[data-slot="invites"]')).toHaveText('1 pending invite');
     await expect(dig.getByText('Below minimum')).toBeVisible();
     await expect(teamRows(page).getByText('Below minimum')).toHaveCount(1);
+    await expectBadges(main(page).locator('[data-slot="badge"]'), SIGNED_IN_BADGE_HEIGHT);
+    await expect(dig.locator('[data-slot="badge"]')).toHaveAttribute(
+      'data-variant',
+      'outline-destructive',
+    );
     await expect(
       teamRows(page).filter({ hasText: 'Block Party' }).locator('[data-slot="roster"]'),
     ).toHaveText('4 of 4 players');

@@ -2,6 +2,7 @@ import type { Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { expectBadges, PUBLIC_BADGE_HEIGHT } from './support/badges';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -1248,6 +1249,7 @@ test.describe('organization page: a full season with registration open', () => {
     await expect(cards.nth(0).locator('[data-slot="badge"]')).toHaveText(['Soccer', 'Full']);
     await expect(cards.nth(0)).toContainText('Waitlist open · closes');
     await expect(cards.nth(2).locator('[data-slot="badge"]')).toHaveText(['Soccer']);
+    await expectBadges(page.locator('main [data-slot="badge"]'), PUBLIC_BADGE_HEIGHT);
     await expect(cards.nth(2)).not.toContainText('Waitlist open');
     await screenshot(page, testInfo, '530-organization-full-season');
     await expectAccessible(page);
