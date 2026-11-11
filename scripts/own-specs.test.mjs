@@ -374,6 +374,12 @@ describe('ownSpecs: the copy of HEAD', () => {
     return { dir, write };
   }
 
+  // Assigning undefined to process.env stores the string "undefined".
+  function restoreEnv(name, saved) {
+    if (saved === undefined) delete process.env[name];
+    else process.env[name] = saved;
+  }
+
   // os.tmpdir() reads TMPDIR on each call, so a private one shows the copies this call makes.
   function withPrivateTmpdir(task) {
     const scratch = mkdtempSync(join(tmpdir(), 'own-specs-scratch-'));
@@ -383,7 +389,7 @@ describe('ownSpecs: the copy of HEAD', () => {
     try {
       return task(copies);
     } finally {
-      process.env.TMPDIR = saved;
+      restoreEnv('TMPDIR', saved);
       rmSync(scratch, { recursive: true, force: true });
     }
   }
@@ -397,6 +403,19 @@ describe('ownSpecs: the copy of HEAD', () => {
     ciScope: () => 'app',
     buildGraph: () => ({}),
     ...more,
+  });
+
+  it('leaves TMPDIR unset after a private temp directory when it was unset before', () => {
+    const saved = process.env.TMPDIR;
+    delete process.env.TMPDIR;
+    try {
+      withPrivateTmpdir(() => {});
+      assert.equal('TMPDIR' in process.env, false);
+      const probe = mkdtempSync(join(tmpdir(), 'own-specs-unset-probe-'));
+      rmSync(probe, { recursive: true, force: true });
+    } finally {
+      restoreEnv('TMPDIR', saved);
+    }
   });
 
   it('removes the copy after a call that returns, and makes one during it', () => {
@@ -562,12 +581,12 @@ describe('ownSpecs: the copy of HEAD', () => {
           try {
             assert.throws(() => ownSpecs(options(dir, { select: selectingFor([]) })), /tar failed/);
           } finally {
-            process.env.PATH = savedPath;
+            restoreEnv('PATH', savedPath);
           }
           assert.deepEqual(copies(), []);
         });
       } finally {
-        process.env.PATH = savedPath;
+        restoreEnv('PATH', savedPath);
         rmSync(dir, { recursive: true, force: true });
         rmSync(bin, { recursive: true, force: true });
       }
