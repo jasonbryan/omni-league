@@ -1,112 +1,62 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideArrowRight,
-  lucideGlobe,
-  lucideMapPin,
-  lucideTrophy,
-  lucideUsers,
-} from '@ng-icons/lucide';
+import { lucideArrowRight, lucidePlus } from '@ng-icons/lucide';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
+import { AdminAttention } from './admin-attention';
 import { AdminContext, bindAdminTitle } from './admin-context';
+import { AdminOpenSeasons } from './admin-open-seasons';
 import { adminPath } from './admin-path';
-import { OUTLINE_BUTTON } from './button-classes';
+import { PRIMARY_BUTTON } from './button-classes';
+
+const COUNT_LINK =
+  'rounded-sm hover:text-foreground hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center';
 
 /**
- * The Leagues tile reads the organization's published and draft counters, which hold past the 200 rows the league list stops at. The setup list hides
- * once any league is published (by the counter), and is not drawn while the counter loads, so an established organization never sees it flash.
- * The Staff tile reads the organization's `staffCount` and `pendingInviteCount`, since the member list and the pending-invite list stop at 200 rows.
+ * The header counts read the organization's published and draft league counters and its staff counter, which hold past the 200 rows the lists stop at.
+ * The setup list hides once any league is published (by the counter), and is not drawn while the counter loads, so an established organization never sees it flash.
  */
 @Component({
   selector: 'app-admin-overview',
-  imports: [NgIcon, RouterLink],
-  providers: [
-    provideIcons({ lucideArrowRight, lucideGlobe, lucideMapPin, lucideTrophy, lucideUsers }),
-  ],
+  imports: [AdminAttention, AdminOpenSeasons, NgIcon, RouterLink],
+  providers: [provideIcons({ lucideArrowRight, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
     @if (organization(); as organization) {
-      <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+      <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div class="min-w-0">
-          <p class="text-sm font-medium text-muted-foreground">{{ organization.name }}</p>
-          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-            Overview
-          </h1>
+          <h1 class="text-2xl font-semibold tracking-tight text-balance md:text-3xl">Overview</h1>
+          <p
+            data-slot="overview-counts"
+            class="mt-1 flex min-h-6 flex-wrap items-center gap-x-2 text-muted-foreground pointer-coarse:min-h-11"
+          >
+            @if (counts(); as counts) {
+              @for (count of counts; track count.path; let last = $last) {
+                <a [routerLink]="count.path" class="${COUNT_LINK}">{{ count.label }}</a>
+                @if (!last) {
+                  <span aria-hidden="true">·</span>
+                }
+              }
+            } @else {
+              <span
+                aria-hidden="true"
+                class="block h-5 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
+              ></span>
+            }
+          </p>
         </div>
-        <a [routerLink]="publicPath()" data-slot="button" [class]="outlineButton"
-          ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View public
-          page</a
+        <a
+          [routerLink]="leaguesPath()"
+          fragment="create-league"
+          data-slot="button"
+          [class]="createButton"
+          ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
+          league</a
         >
       </div>
-      <dl class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
-        <div
-          class="rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 px-3 py-3 md:px-4 md:py-4"
-        >
-          <dt class="flex items-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
-            <span
-              class="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground md:flex"
-              ><ng-icon name="lucideMapPin" class="text-base" aria-hidden="true" /></span
-            >Locations
-          </dt>
-          @if (locationTile(); as tile) {
-            <dd class="mt-1 text-2xl font-semibold tabular-nums md:mt-2">{{ tile.count }}</dd>
-            <dd class="mt-0.5 text-sm text-muted-foreground">{{ tile.note }}</dd>
-          } @else {
-            <dd class="mt-1 md:mt-2">
-              <span
-                aria-hidden="true"
-                class="block h-8 w-8 rounded-md bg-muted motion-safe:animate-pulse"
-              ></span>
-            </dd>
-          }
-        </div>
-        <div
-          class="rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 px-3 py-3 md:px-4 md:py-4"
-        >
-          <dt class="flex items-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
-            <span
-              class="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground md:flex"
-              ><ng-icon name="lucideTrophy" class="text-base" aria-hidden="true" /></span
-            >Leagues
-          </dt>
-          @if (leagueTile(); as tile) {
-            <dd class="mt-1 text-2xl font-semibold tabular-nums md:mt-2">{{ tile.count }}</dd>
-            <dd class="mt-0.5 text-sm text-muted-foreground">{{ tile.note }}</dd>
-          } @else {
-            <dd class="mt-1 md:mt-2">
-              <span
-                aria-hidden="true"
-                class="block h-8 w-8 rounded-md bg-muted motion-safe:animate-pulse"
-              ></span>
-            </dd>
-          }
-        </div>
-        <div
-          class="rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 px-3 py-3 md:px-4 md:py-4"
-        >
-          <dt class="flex items-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
-            <span
-              class="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground md:flex"
-              ><ng-icon name="lucideUsers" class="text-base" aria-hidden="true" /></span
-            >Staff
-          </dt>
-          @if (staffTile(); as tile) {
-            <dd class="mt-1 text-2xl font-semibold tabular-nums md:mt-2">{{ tile.count }}</dd>
-            <dd class="mt-0.5 text-sm text-muted-foreground">{{ tile.note }}</dd>
-          } @else {
-            <dd class="mt-1 md:mt-2">
-              <span
-                aria-hidden="true"
-                class="block h-8 w-8 rounded-md bg-muted motion-safe:animate-pulse"
-              ></span>
-            </dd>
-          }
-        </div>
-      </dl>
       @if (showSetup()) {
-        <div class="mt-4 max-w-3xl md:mt-6">
+        <div class="mt-6 max-w-3xl md:mt-8">
           <section
             aria-labelledby="setup-heading"
             class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
@@ -197,6 +147,10 @@ import { OUTLINE_BUTTON } from './button-classes';
           </section>
         </div>
       }
+      <div class="mt-6 grid gap-4 md:mt-8 md:gap-6 xl:grid-cols-5">
+        <app-admin-attention />
+        <app-admin-open-seasons />
+      </div>
     }
   `,
 })
@@ -204,72 +158,44 @@ export class AdminOverview {
   private readonly context = inject(AdminContext);
 
   protected readonly organization = this.context.organization;
-  protected readonly outlineButton = OUTLINE_BUTTON;
+  protected readonly createButton = `${PRIMARY_BUTTON} w-full sm:w-auto`;
 
-  private readonly locations = injectQuery(api.locations.listForAdmin, () => {
-    const organization = this.context.organization();
-    return organization ? { organizationId: organization.organizationId } : skipToken;
-  });
-
-  protected readonly publicPath = computed(
-    () => `/organizations/${encodeURIComponent(this.context.slug())}`,
+  private readonly locations = injectQuery(api.locations.listForAdmin, () =>
+    this.organizationArgs(),
   );
+  private readonly published = injectQuery(api.leagues.publishedCount, () =>
+    this.organizationArgs(),
+  );
+  private readonly drafts = injectQuery(api.leagues.draftCount, () => this.organizationArgs());
+  private readonly staff = injectQuery(api.memberships.staffCount, () => this.organizationArgs());
+
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
   protected readonly leaguesPath = computed(() => adminPath(this.context.slug(), 'leagues'));
   protected readonly staffPath = computed(() => adminPath(this.context.slug(), 'staff'));
 
-  private readonly published = injectQuery(api.leagues.publishedCount, () => {
-    const organization = this.context.organization();
-    return organization ? { organizationId: organization.organizationId } : skipToken;
-  });
-
-  private readonly drafts = injectQuery(api.leagues.draftCount, () => {
-    const organization = this.context.organization();
-    return organization ? { organizationId: organization.organizationId } : skipToken;
-  });
-
-  protected readonly leagueTile = computed(() => {
-    if (this.published.error()) return { count: '–', note: 'Could not be loaded' };
-    const published = this.published.value();
-    if (published === undefined) return null;
-    if (this.drafts.error()) {
-      return { count: String(published), note: 'Drafts could not be loaded' };
-    }
-    const drafts = this.drafts.value();
-    if (drafts === undefined) return null;
-    const parts = [
-      published > 0 ? `${published} published` : null,
-      drafts > 0 ? `${drafts} ${drafts === 1 ? 'draft' : 'drafts'}` : null,
-    ].filter((part) => part !== null);
-    return {
-      count: String(published + drafts),
-      note: parts.length > 0 ? parts.join(', ') : 'None yet',
-    };
-  });
-
-  private readonly staff = injectQuery(api.memberships.staffCount, () => {
-    const organization = this.context.organization();
-    return organization ? { organizationId: organization.organizationId } : skipToken;
-  });
-
-  private readonly pendingInvites = injectQuery(api.invites.pendingCount, () => {
-    const organization = this.context.organization();
-    return organization ? { organizationId: organization.organizationId } : skipToken;
-  });
-
-  protected readonly staffTile = computed(() => {
-    if (this.staff.error()) return { count: '–', note: 'Could not be loaded' };
+  /** A failed count is left out, because a 0 in its place would be false. */
+  protected readonly counts = computed(() => {
+    const leagueCounts = [this.published, this.drafts];
+    const pending = [...leagueCounts, this.locations, this.staff].some(
+      (query) => query.value() === undefined && query.error() === undefined,
+    );
+    if (pending) return null;
+    const leagues = leagueCounts.every((query) => query.value() !== undefined)
+      ? (this.published.value() ?? 0) + (this.drafts.value() ?? 0)
+      : undefined;
+    const locations = this.locations.value()?.length;
     const staff = this.staff.value();
-    if (staff === undefined) return null;
-    const count = String(staff);
-    if (this.pendingInvites.error()) return { count, note: 'Pending invites could not be loaded' };
-    const pending = this.pendingInvites.value();
-    if (pending === undefined) return null;
-    const note =
-      pending === 0
-        ? 'No pending invites'
-        : `${pending} pending ${pending === 1 ? 'invite' : 'invites'}`;
-    return { count, note };
+    return [
+      leagues !== undefined && {
+        label: `${leagues} ${leagues === 1 ? 'league' : 'leagues'}`,
+        path: this.leaguesPath(),
+      },
+      locations !== undefined && {
+        label: `${locations} ${locations === 1 ? 'location' : 'locations'}`,
+        path: this.locationsPath(),
+      },
+      staff !== undefined && { label: `${staff} staff`, path: this.staffPath() },
+    ].filter((count) => count !== false);
   });
 
   /** A failed counter shows it, because it cannot say a league is published. */
@@ -279,15 +205,10 @@ export class AdminOverview {
     return count !== undefined && count < 1;
   });
 
-  protected readonly locationTile = computed(() => {
-    if (this.locations.error()) return { count: '–', note: 'Could not be loaded' };
-    const rows = this.locations.value();
-    if (rows === undefined) return null;
-    return {
-      count: String(rows.length),
-      note: rows.length > 0 ? 'All on your public page' : 'None yet',
-    };
-  });
+  private organizationArgs() {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  }
 
   constructor() {
     bindAdminTitle('Overview');

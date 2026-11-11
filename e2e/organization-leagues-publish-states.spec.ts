@@ -286,16 +286,18 @@ test('two admins publish the same league at once: it is counted once', async ({
 });
 
 for (const width of [375, 1280]) {
-  test(`keyboard-only publish at ${width}: the result has a visible focus ring, and the Overview moves`, async ({
+  test(`keyboard-only publish at ${width}: the result has a visible focus ring, and the Overview still counts every league`, async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'the width is set here');
     await page.setViewportSize({ width, height: 800 });
     const { tenant, base } = await admin(page);
-    const tile = page.getByRole('main').locator('dl > div').filter({ hasText: 'Leagues' });
+    const leagueCount = page
+      .getByRole('main')
+      .locator('[data-slot="overview-counts"]')
+      .getByRole('link', { name: /leagues?$/ });
     await page.goto(base);
-    await expect(tile.locator('dd').first()).toHaveText('3');
-    await expect(tile.locator('dd').nth(1)).toHaveText('1 published, 2 drafts');
+    await expect(leagueCount).toHaveText('3 leagues');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
 
     await page.goto(`${base}/leagues`);
@@ -314,8 +316,7 @@ for (const width of [375, 1280]) {
     await expect(result(page).getByRole('link', { name: 'View public page' })).toBeFocused();
 
     await page.goto(base);
-    await expect(tile.locator('dd').first()).toHaveText('3');
-    await expect(tile.locator('dd').nth(1)).toHaveText('2 published, 1 draft');
+    await expect(leagueCount).toHaveText('3 leagues');
     expect(tenant.name).toContain('States Publish');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
   });

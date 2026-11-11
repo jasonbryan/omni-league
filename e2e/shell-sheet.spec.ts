@@ -148,8 +148,9 @@ test.describe('the phone sheet on the admin area', () => {
     page,
   }) => {
     await openAdminOverview(page);
-    // The tiles arrive from separate queries and shift the layout until all three show a count.
-    await expect(page.locator('main dd.tabular-nums')).toHaveCount(3);
+    // The counts and the two lists arrive from separate queries and shift the layout until all have loaded.
+    await expect(page.locator('main [data-slot="overview-counts"] a')).toHaveCount(3);
+    await expect(page.getByRole('status').filter({ hasText: /^Loading/ })).toHaveCount(0);
     await makeTall(page);
     await expect
       .poll(async () => {

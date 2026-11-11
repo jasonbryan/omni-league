@@ -59,7 +59,10 @@ const main = (page: Page) => page.getByRole('main');
 const form = (page: Page) => page.locator('#create-league form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft league/ });
 const leagueRows = (page: Page) => page.locator('#leagues-list > li');
-const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
+const leagueCount = (page: Page) =>
+  main(page)
+    .locator('[data-slot="overview-counts"]')
+    .getByRole('link', { name: /leagues?$/ });
 
 const DEFAULT_FORMAT: Record<string, string> = {
   'Beach volleyball': '4v4',
@@ -777,14 +780,13 @@ test.describe('Leagues: no locations', () => {
   });
 });
 
-test.describe('Overview: the Leagues tile and the checklist', () => {
-  test('a new organization shows 0 and "None yet" and the four steps; the sidebar lists Leagues', async ({
+test.describe('Overview: the league count and the checklist', () => {
+  test('a new organization shows "0 leagues" and the four steps; the sidebar lists Leagues', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
     await page.goto(base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None yet');
+    await expect(leagueCount(page)).toHaveText('0 leagues');
     const setup = page.getByRole('region', { name: 'Get set up' });
     await expect(setup.getByRole('heading', { level: 3 })).toHaveText([
       'Add a location',
@@ -832,8 +834,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       ],
     });
     await page.goto(drafts.base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 drafts');
+    await expect(leagueCount(page)).toHaveText('2 leagues');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     const mixed = await seedTenant({
@@ -862,8 +863,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       role: 'orgAdmin',
     });
     await page.goto(`/app/organizations/${mixed.slug}`);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('4');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 published, 2 drafts');
+    await expect(leagueCount(page)).toHaveText('4 leagues');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
     await screenshot(page, testInfo, '66-overview-published');
     await expectAccessible(page);
@@ -893,8 +893,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
         .getByRole('link', { name: 'Overview' })
         .click();
     }
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
+    await expect(leagueCount(page)).toHaveText('1 league');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
   });
 });
