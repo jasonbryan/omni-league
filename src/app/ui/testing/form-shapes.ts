@@ -30,6 +30,7 @@ const REPORTED_ATTRIBUTES = [
   'name',
   'type',
   'autocomplete',
+  'inputmode',
   'readonly',
   'for',
   'role',
