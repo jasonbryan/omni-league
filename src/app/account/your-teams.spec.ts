@@ -9,7 +9,7 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
-import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { expectBadge } from '../ui/testing/badge';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { YourTeams } from './your-teams';
@@ -144,7 +144,7 @@ describe('YourTeams', () => {
       'Gulf Coast Sport & Social',
     ]);
     expect(text(badge(row))).toBe('Captain');
-    expect([...badge(row)!.classList].sort()).toEqual(BADGE_SECONDARY.split(' ').sort());
+    expectBadge(badge(row), 'secondary', 'default');
     expect(badge(row)?.querySelector('ng-icon')?.getAttribute('name')).toBe('lucideCrown');
     const link = row.querySelector('a')!;
     expect(link.getAttribute('href')).toBe('/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e');

@@ -35,6 +35,7 @@ import { PageControl } from '../organizations/page-control';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { publicPageNames } from '../organizations/public-league/public-page-names';
 import { leagueSeasonStatus } from '../organizations/season-status';
+import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, findQuery, type FindResultRow } from './find-path';
 import { FindSkeleton } from './find-skeleton';
@@ -70,7 +71,15 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
 
 @Component({
   selector: 'app-find-content',
-  imports: [FindSkeleton, NgIcon, OrganizationMark, PageControl, RouterLink, SavedCopyNote],
+  imports: [
+    FindSkeleton,
+    HlmBadge,
+    NgIcon,
+    OrganizationMark,
+    PageControl,
+    RouterLink,
+    SavedCopyNote,
+  ],
   providers: [provideIcons({ lucideChevronRight, lucideCircleAlert, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -188,8 +197,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ row.where }}</p>
                           @if (row.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              @if (status.badge) {
-                                <span data-slot="badge" [class]="status.badgeClass">{{
+                              @if (status.badge && status.badgeVariant; as variant) {
+                                <span hlmBadge size="fit" [variant]="variant">{{
                                   status.badge
                                 }}</span>
                               }

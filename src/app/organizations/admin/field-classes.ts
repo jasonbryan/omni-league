@@ -38,11 +38,3 @@ export const RADIO_INPUT =
 
 export const RADIO_INDICATOR =
   'pointer-events-none absolute start-1/2 top-1/2 hidden size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground group-has-checked/radio:block';
-
-const BADGE =
-  'group/badge focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:ring-[3px] [&>ng-icon]:pointer-events-none h-5 gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&>ng-icon]:text-[length:--spacing(3)]';
-export const BADGE_DEFAULT = `${BADGE} bg-primary text-primary-foreground [a]:hover:bg-primary/80`;
-export const BADGE_SECONDARY = `${BADGE} bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80`;
-export const BADGE_OUTLINE = `${BADGE} border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground`;
-export const BADGE_OUTLINE_DESTRUCTIVE = `${BADGE} border-border text-destructive`;
-export const BADGE_DESTRUCTIVE = `${BADGE} bg-destructive/10 [a]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive dark:bg-destructive/20`;

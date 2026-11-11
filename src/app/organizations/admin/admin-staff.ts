@@ -43,7 +43,7 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
-import { BADGE_SECONDARY } from './field-classes';
+import { HlmBadge } from '../../ui/badge';
 import { formatDay } from './format-day';
 import { CAP_NOTE } from './note-classes';
 import { injectSectionJump } from './section-jump';
@@ -98,7 +98,15 @@ const ROLE_LABEL: Record<Role, string> = {
  */
 @Component({
   selector: 'app-admin-staff',
-  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon, NgTemplateOutlet, StaffInvitePanel],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    HlmBadge,
+    HlmSpinner,
+    NgIcon,
+    NgTemplateOutlet,
+    StaffInvitePanel,
+  ],
   providers: [
     provideIcons({
       lucideBan,
@@ -171,9 +179,7 @@ const ROLE_LABEL: Record<Role, string> = {
                         {{ row.email }}
                       </p>
                       <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                        <span data-slot="badge" data-variant="secondary" [class]="secondaryBadge">{{
-                          roleLabel(row.role)
-                        }}</span>
+                        <span hlmBadge variant="secondary">{{ roleLabel(row.role) }}</span>
                         @if (row.leagueNames.length > 0) {
                           <span class="text-muted-foreground"
                             >&ngsp;for {{ row.leagueNames.join(', ') }}</span
@@ -452,7 +458,6 @@ export class AdminStaff {
   protected readonly revokeDimmed = computed(
     () => !this.online() || this.revokingId() !== null || this.restoring(),
   );
-  protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly capNote = CAP_NOTE;
   protected readonly placeholders = [1, 2, 3];
   protected readonly day = formatDay;

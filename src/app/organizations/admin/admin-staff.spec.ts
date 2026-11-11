@@ -22,6 +22,7 @@ import {
   type FormShape,
 } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { expectBadge } from '../../ui/testing/badge';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
@@ -262,7 +263,7 @@ describe('AdminStaff', () => {
       expect(text(members()[2].querySelectorAll('p')[1])).toBe(
         'League organizer for Sunday Reverse Coed 4s, Thursday Night Coed 2s',
       );
-      expect(members()[0].querySelector('[data-variant="secondary"]')).not.toBeNull();
+      expectBadge(members()[0].querySelector('[data-slot="badge"]'), 'secondary', 'default');
       expect(text(members()[0].querySelector('[aria-hidden="true"]'))).toBe('LH');
     });
 

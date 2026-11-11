@@ -23,12 +23,13 @@ import {
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBadge } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
-import { FULL_BADGE, FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
+import { FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
 import { CRUMB_BOX, CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
@@ -39,7 +40,7 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-public-league-content',
-  imports: [HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -129,7 +130,7 @@ function plural(count: number, noun: string): string {
                         aria-hidden="true"
                       />
                       @if (card.full) {
-                        <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                        <span hlmBadge variant="outline" size="fit">{{ fullBadgeText }}</span>
                       }
                       {{ card.closesText }}
                     </li>
@@ -190,7 +191,7 @@ function plural(count: number, noun: string): string {
                         </p>
                         @if (season.status; as status) {
                           <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span data-slot="badge" [class]="status.badgeClass">{{
+                            <span hlmBadge size="fit" [variant]="status.badgeVariant">{{
                               status.badge
                             }}</span>
                             @if (status.note) {
@@ -291,7 +292,6 @@ export class PublicLeagueContent {
   readonly savedAt = input<number | undefined>(undefined);
 
   protected readonly registerButton = PRIMARY_BUTTON_LARGE;
-  protected readonly fullBadge = FULL_BADGE;
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
 
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');

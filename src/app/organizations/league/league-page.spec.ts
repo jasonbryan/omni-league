@@ -14,6 +14,7 @@ import {
   SEASONS,
 } from './testing/league-harness';
 import { LeagueLanding } from './league-landing';
+import { expectBadgeSize } from '../../ui/testing/badge';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -267,6 +268,8 @@ describe('LeaguePage', () => {
       };
       expect(badge(rows()[0])).toEqual(['outline', 'Draft']);
       expect(badge(rows()[1])).toEqual(['default', 'Published']);
+      for (const row of rows())
+        expectBadgeSize(row.querySelector('[data-slot="badge"]'), 'default');
       expect([...rows()[0].querySelectorAll('p')].map((p) => text(p))).toEqual([
         'Dates: Sep 8 – Nov 10, 2027',
         'Registration deadline Aug 25, 2027',

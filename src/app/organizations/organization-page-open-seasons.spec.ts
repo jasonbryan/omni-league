@@ -9,7 +9,7 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
-import { FULL_BADGE, MUTED_BADGE, OPEN_BADGE } from './season-status';
+import { expectBadge } from '../ui/testing/badge';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -66,8 +66,6 @@ const section = (harness: RouterTestingHarness) =>
   host(harness).querySelector('#registration-open');
 const heroLink = (harness: RouterTestingHarness) =>
   host(harness).querySelector<HTMLAnchorElement>('main a[href$="#registration-open"]');
-const classes = (value: Element | string) =>
-  (typeof value === 'string' ? value : value.className).split(' ').sort();
 const rowStatus = (harness: RouterTestingHarness, n: number) =>
   [...(host(harness).querySelector(`#league-${n} p:last-of-type`)?.children ?? [])].map(text);
 const COED_7V7 = {
@@ -252,9 +250,10 @@ describe('the Registration open section', () => {
         'In progress',
         'Registration closed',
       ]);
-      expect(classes(badges[0])).toEqual(classes(OPEN_BADGE));
-      expect(classes(badges[2])).toEqual(classes(MUTED_BADGE));
-      expect(classes(badges[3])).toEqual(classes(MUTED_BADGE));
+      expectBadge(badges[0], 'secondary', 'fit');
+      expectBadge(badges[1], 'secondary', 'fit');
+      expectBadge(badges[2], 'muted', 'fit');
+      expectBadge(badges[3], 'muted', 'fit');
     });
 
     it('leads with the season open for registration when another is in progress, and links to its registration card', async () => {
@@ -350,7 +349,7 @@ describe('the Registration open section', () => {
         'Register for Coed 7v7 Rec, Summer 2027',
       ]);
       const badge = host(harness).querySelector('#league-1 [data-slot="badge"]');
-      expect(classes(badge!)).toEqual(classes(FULL_BADGE));
+      expectBadge(badge, 'outline', 'fit');
       expect(
         host(harness).querySelector('#league-1 a[href$="#registration"]')?.getAttribute('href'),
       ).toBe(`${SEASON_PATH}/summer-2027#registration`);
@@ -379,7 +378,8 @@ describe('the Registration open section', () => {
       const [full, room] = cards(harness);
       const badges = (card: Element) => [...card.querySelectorAll('[data-slot="badge"]')];
       expect(badges(full).map(text)).toEqual(['Soccer', 'Full']);
-      expect(classes(badges(full)[1])).toEqual(classes(FULL_BADGE));
+      expectBadge(badges(full)[0], 'secondary', 'fit');
+      expectBadge(badges(full)[1], 'outline', 'fit');
       expect(badges(full)[0].parentElement).toBe(badges(full)[1].parentElement);
       expect(closingLine(full)).toBe('Waitlist open · closes May 19');
       expect(

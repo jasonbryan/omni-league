@@ -35,7 +35,7 @@ import type { Id } from '../../../convex/_generated/dataModel';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { NotFoundView } from '../not-found/not-found-view';
 import { AdminAlert } from '../organizations/admin/admin-alert';
-import { BADGE_OUTLINE, BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
 import { organizationPath } from '../organizations/organization-path';
 import {
   publicLeaguePath,
@@ -81,6 +81,7 @@ export interface TeamPageNavigationState {
   imports: [
     AddMinorPanel,
     AdminAlert,
+    HlmBadge,
     NgIcon,
     NotFoundView,
     RemovePlayerDialog,
@@ -318,7 +319,7 @@ export interface TeamPageNavigationState {
                                 <p
                                   class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
                                 >
-                                  <span data-slot="badge" [class]="captainBadge"
+                                  <span hlmBadge variant="secondary"
                                     ><ng-icon
                                       name="lucideCrown"
                                       data-icon="inline-start"
@@ -331,7 +332,7 @@ export interface TeamPageNavigationState {
                                 <p
                                   class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
                                 >
-                                  <span data-slot="badge" [class]="minorBadge">Minor</span>
+                                  <span hlmBadge variant="outline">Minor</span>
                                 </p>
                                 <p class="mt-1 text-sm text-muted-foreground">
                                   Guardian: {{ minor.guardianName }}
@@ -451,11 +452,9 @@ export class TeamPage {
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly destructiveButton = DESTRUCTIVE_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly minorBadge = BADGE_OUTLINE;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly backLink = BACK_LINK;
   protected readonly inlineLink = INLINE_LINK;
-  protected readonly captainBadge = BADGE_SECONDARY;
   protected readonly initials = initialsOf;
 
   protected readonly teamId = toSignal(

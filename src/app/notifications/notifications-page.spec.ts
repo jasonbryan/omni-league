@@ -13,6 +13,7 @@ import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
+import { expectBadge } from '../ui/testing/badge';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 import { slotsOf } from '../ui/testing/helm-slots';
 
@@ -186,6 +187,8 @@ describe('NotificationsPage', () => {
   const text = (el: Element | null | undefined) =>
     el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   const badge = () => text(panel().querySelector('[data-slot="badge"]'));
+  const expectDeviceBadge = (variant: Parameters<typeof expectBadge>[1]) =>
+    expectBadge(panel().querySelector('[data-slot="badge"]'), variant, 'default');
   const button = () => panel().querySelector<HTMLButtonElement>('button');
   // The result region sits last in the panel, in the page from the first render, so a change is announced.
   const changeStatus = () => text([...panel().querySelectorAll('[role="status"]')].at(-1));
@@ -273,6 +276,7 @@ describe('NotificationsPage', () => {
       await open();
       await emitConfig(key);
       expect(badge()).toBe('Not available');
+      expectDeviceBadge('secondary');
       expect(text(panel())).toContain(NOT_AVAILABLE);
       expect(button()).toBeNull();
     });
@@ -319,6 +323,7 @@ describe('NotificationsPage', () => {
     await open();
     await emitConfig(VAPID_KEY);
     expect(badge()).toBe('Install first');
+    expectDeviceBadge('secondary');
     const body = text(panel());
     expect(body).toContain(
       'On iPhone and iPad, notifications work only in the Omni League app on your Home Screen.',
@@ -348,6 +353,7 @@ describe('NotificationsPage', () => {
     await open();
     await emitConfig(VAPID_KEY);
     expect(badge()).toBe('Blocked');
+    expectDeviceBadge('destructive');
     expect(text(panel())).toContain(
       "Notifications for Omni League are blocked in this browser's settings, so they can't be turned on from here.",
     );
@@ -364,6 +370,7 @@ describe('NotificationsPage', () => {
     device.permission.set('default');
     await settle();
     expect(badge()).toBe('Off');
+    expectDeviceBadge('outline-muted');
   });
 
   describe('off', () => {
@@ -446,6 +453,7 @@ describe('NotificationsPage', () => {
       convex.calls[0].resolve(null);
       await settle();
       expect(badge()).toBe('On');
+      expectDeviceBadge('default');
       // The pressed button is gone; focus moves to the one that replaced it, and the result is announced.
       expect(document.activeElement).toBe(button());
       expect(text(button())).toBe('Turn off');

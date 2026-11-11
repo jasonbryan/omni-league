@@ -1,7 +1,4 @@
 import {
-  FULL_BADGE,
-  OPEN_BADGE,
-  MUTED_BADGE,
   closesText,
   leagueSeasonStatus,
   nextSeason,
@@ -42,7 +39,7 @@ describe('leagueSeasonStatus', () => {
   it('names an open season with its closing date', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-03-01'))).toEqual({
       badge: 'Registration open',
-      badgeClass: OPEN_BADGE,
+      badgeVariant: 'secondary',
       registrationOpen: true,
       text: 'NEXT · closes May 19',
       season: { name: 'NEXT', slug: 'next' },
@@ -52,7 +49,7 @@ describe('leagueSeasonStatus', () => {
   it('names a season whose registration closed', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-05-25'))).toEqual({
       badge: 'Registration closed',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       registrationOpen: false,
       text: 'NEXT',
       season: { name: 'NEXT', slug: 'next' },
@@ -62,7 +59,7 @@ describe('leagueSeasonStatus', () => {
   it('names a season in progress', () => {
     expect(leagueSeasonStatus([CURRENT, ENDED], noon('2026-10-27'))).toEqual({
       badge: 'In progress',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       registrationOpen: false,
       text: 'CURRENT',
       season: { name: 'CURRENT', slug: 'current' },
@@ -72,7 +69,7 @@ describe('leagueSeasonStatus', () => {
   it('says there is no upcoming season when only ended seasons remain, and when there are none', () => {
     const none = {
       badge: null,
-      badgeClass: null,
+      badgeVariant: null,
       registrationOpen: false,
       text: 'No upcoming season',
       season: null,
@@ -84,7 +81,7 @@ describe('leagueSeasonStatus', () => {
   it('leads with the season open for registration over one in progress', () => {
     expect(leagueSeasonStatus([CURRENT, LATER], noon('2027-08-01'))).toEqual({
       badge: 'Registration open',
-      badgeClass: OPEN_BADGE,
+      badgeVariant: 'secondary',
       registrationOpen: true,
       text: 'LATER · closes Aug 29',
       season: { name: 'LATER', slug: 'later' },
@@ -122,7 +119,7 @@ describe('leagueSeasonStatus', () => {
   it('marks a full open season Full, with its waitlist open, and keeps it open for the Register link', () => {
     expect(leagueSeasonStatus([{ ...NEXT, isFull: true }], noon('2027-03-01'))).toEqual({
       badge: 'Full',
-      badgeClass: FULL_BADGE,
+      badgeVariant: 'outline',
       registrationOpen: true,
       text: 'NEXT · waitlist open',
       season: { name: 'NEXT', slug: 'next' },
@@ -140,13 +137,13 @@ describe('leagueSeasonStatus', () => {
     const full = { ...NEXT, isFull: true };
     expect(leagueSeasonStatus([full], noon('2027-05-25'))).toMatchObject({
       badge: 'Registration closed',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       registrationOpen: false,
       text: 'NEXT',
     });
     expect(leagueSeasonStatus([full], noon('2027-06-02'))).toMatchObject({
       badge: 'In progress',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       text: 'NEXT',
     });
   });
@@ -250,17 +247,5 @@ describe('closesText', () => {
   it('writes the month and day of the deadline', () => {
     expect(closesText('2027-05-19')).toBe('May 19');
     expect(closesText('2027-12-01')).toBe('Dec 1');
-  });
-});
-
-describe('badge classes', () => {
-  it('are the secondary badge for Registration open and the muted badge for the other phases', () => {
-    expect(OPEN_BADGE).toContain('bg-secondary text-secondary-foreground');
-    expect(MUTED_BADGE).toContain('bg-muted text-muted-foreground');
-  });
-
-  it('are the outline badge for Full, with no fill and no link hover', () => {
-    expect(FULL_BADGE).toContain('border-border text-foreground');
-    expect(FULL_BADGE).not.toMatch(/\bbg-|hover:/);
   });
 });
