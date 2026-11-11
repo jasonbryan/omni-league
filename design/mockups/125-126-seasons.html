@@ -52,7 +52,7 @@
         </p>
         <p class="mt-3 max-w-3xl text-sm/relaxed text-muted-foreground">
           Focus order at 1280px: skip link, Omni League, Account, the sidebar, each season link and
-          draft&apos;s Publish, then Name, Slug, Start date, End date, Registration deadline,
+          draft&apos;s Publish, then Name, Web address, Start date, End date, Registration deadline,
           Format, Minimum roster size, Maximum teams, Maximum roster size, Create draft season.
           Below 1024px the menu button comes first and the header&apos;s "Create a season" jump link
           comes before the list.
@@ -92,7 +92,7 @@
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#errors-slug"
-                >7. Create, slug taken</a
+                >7. Create, web address taken</a
               >
             </li>
             <li>
@@ -324,7 +324,7 @@
       <section id="filled" aria-labelledby="filled-label" class="mt-12">
         <h2 id="filled-label" class="text-lg font-semibold">4. Create, filled</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          Slug fills from the name until edited (as #66). Dates are native date fields (no
+          Web address fills from the name until edited (as #66). Dates are native date fields (no
           date-picker library). Choosing 7v7 sets Minimum roster size to 7; the organizer may raise
           it. Limits are #143 and #144: the fieldset ships with them, and #125&apos;s form ends at
           Minimum roster size.
@@ -438,23 +438,23 @@
         </div>
       </section>
       <section id="errors-slug" aria-labelledby="errors-slug-label" class="mt-12">
-        <h2 id="errors-slug-label" class="text-lg font-semibold">7. Create, slug taken</h2>
+        <h2 id="errors-slug-label" class="text-lg font-semibold">7. Create, web address taken</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          A slug already used by a season of this league; the same slug in another league is
-          allowed. An invalid slug gets #64&apos;s format message instead (table below). Nothing is
-          created; focus moves to Slug.
+          A web address already used by a season of this league; the same web address in another
+          league is allowed. An invalid web address gets #64&apos;s format message instead (table
+          below). Nothing is created; focus moves to Web address.
         </p>
         <div
           tabindex="0"
           role="region"
-          aria-label="7. Create, slug taken: frames"
+          aria-label="7. Create, web address taken: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=errors-slug"
-              title="7. Create, slug taken at 360px"
+              title="7. Create, web address taken at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -464,7 +464,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=errors-slug"
-              title="7. Create, slug taken at 1280px"
+              title="7. Create, web address taken at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -715,7 +715,8 @@
       <section id="not-found" aria-labelledby="not-found-label" class="mt-12">
         <h2 id="not-found-label" class="text-lg font-semibold">15. Unknown league: not found</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          An unknown organization or league slug, or a draft league for someone who is not staff:
+          An unknown organization or league web address, or a draft league for someone who is not
+          staff:
           <code>null</code>, and #23&apos;s not-found view. No season data is requested.
         </p>
         <div
@@ -1110,29 +1111,30 @@
                 <td class="px-4 py-2 align-top">Name</td>
               </tr>
               <tr>
-                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Slug empty</th>
-                <td class="px-4 py-2 align-top">"Enter a slug for the season."</td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug, if Name is valid</td>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">
+                  Web address empty
+                </th>
+                <td class="px-4 py-2 align-top">"Enter a web address for the season."</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address, if Name is valid</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  Slug format, length, or reserved
+                  Web address format, length, or reserved
                 </th>
                 <td class="px-4 py-2 align-top">#64&apos;s format message</td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug, if Name is valid</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address, if Name is valid</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  Slug used in this league
+                  Web address used in this league
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "&lt;slug&gt; is already used by another season of &lt;league&gt;. Choose another
-                  slug."
+                  "&lt;address&gt; is already taken. Choose another web address."
                 </td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">A date empty</th>
@@ -2033,7 +2035,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -2052,7 +2054,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Men Over-30 11v11.
+                          Unique within Men Over-30 11v11. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />men-over-30-11v11/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -3192,7 +3200,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -3211,7 +3219,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -4352,7 +4366,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -4372,7 +4386,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2028</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -5545,7 +5565,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -5567,7 +5587,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                         <hlm-field-error
                           role="alert"
@@ -5587,7 +5613,7 @@
                               <circle cx="12" cy="12" r="10"></circle>
                               <line x1="12" x2="12" y1="8" y2="12"></line>
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
-                          ><span>Enter a slug for the season.</span></hlm-field-error
+                          ><span>Enter a web address for the season.</span></hlm-field-error
                         >
                       </div>
                       <div
@@ -6853,7 +6879,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -6873,7 +6899,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2028</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -8135,7 +8167,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -8158,7 +8190,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2027</strong
+                            ></span
+                          >
                         </p>
                         <hlm-field-error
                           role="alert"
@@ -8179,8 +8217,7 @@
                               <line x1="12" x2="12" y1="8" y2="12"></line>
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
                           ><span
-                            >spring-2027 is already used by another season of Coed 7v7 Rec. Choose
-                            another slug.</span
+                            >spring-2027 is already taken. Choose another web address.</span
                           ></hlm-field-error
                         >
                       </div>
@@ -9328,7 +9365,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -9348,7 +9385,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2028</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -10622,7 +10665,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -10641,7 +10684,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -11864,7 +11913,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -11884,7 +11933,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2028</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -13093,7 +13148,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -13113,7 +13168,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >spring-2028</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -14169,7 +14230,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -14188,7 +14249,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Sunday Reverse Coed 4s.
+                          Unique within Sunday Reverse Coed 4s. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />sunday-reverse-coed-4s/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -15271,7 +15338,7 @@
                             for="slug"
                             data-slot="field-label"
                             class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                            >Slug</label
+                            >Web address</label
                           ><input
                             id="slug"
                             name="slug"
@@ -15290,7 +15357,13 @@
                             class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                           >
                             3 to 60 lowercase letters and digits, with single hyphens between them.
-                            Unique within Sunday Reverse Coed 4s.
+                            Unique within Sunday Reverse Coed 4s. Its public page will be at
+                            <span class="block break-words text-foreground"
+                              >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />sunday-reverse-coed-4s/<wbr />seasons/<wbr /><strong
+                                class="font-semibold"
+                                >your-address</strong
+                              ></span
+                            >
                           </p>
                         </div>
                         <div
@@ -17570,7 +17643,7 @@
                             for="slug"
                             data-slot="field-label"
                             class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                            >Slug</label
+                            >Web address</label
                           ><input
                             id="slug"
                             name="slug"
@@ -17589,7 +17662,13 @@
                             class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                           >
                             3 to 60 lowercase letters and digits, with single hyphens between them.
-                            Unique within Coed 7v7 Rec.
+                            Unique within Coed 7v7 Rec. Its public page will be at
+                            <span class="block break-words text-foreground"
+                              >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                                class="font-semibold"
+                                >your-address</strong
+                              ></span
+                            >
                           </p>
                         </div>
                         <div
@@ -18862,7 +18941,7 @@
                             for="slug"
                             data-slot="field-label"
                             class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                            >Slug</label
+                            >Web address</label
                           ><input
                             id="slug"
                             name="slug"
@@ -18881,7 +18960,13 @@
                             class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                           >
                             3 to 60 lowercase letters and digits, with single hyphens between them.
-                            Unique within Coed 7v7 Rec.
+                            Unique within Coed 7v7 Rec. Its public page will be at
+                            <span class="block break-words text-foreground"
+                              >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                                class="font-semibold"
+                                >your-address</strong
+                              ></span
+                            >
                           </p>
                         </div>
                         <div
@@ -20120,7 +20205,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -20139,7 +20224,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Coed 7v7 Rec.
+                          Unique within Coed 7v7 Rec. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -21326,7 +21417,7 @@
                             for="slug"
                             data-slot="field-label"
                             class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                            >Slug</label
+                            >Web address</label
                           ><input
                             id="slug"
                             name="slug"
@@ -21345,7 +21436,13 @@
                             class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                           >
                             3 to 60 lowercase letters and digits, with single hyphens between them.
-                            Unique within Coed 7v7 Rec.
+                            Unique within Coed 7v7 Rec. Its public page will be at
+                            <span class="block break-words text-foreground"
+                              >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                                class="font-semibold"
+                                >your-address</strong
+                              ></span
+                            >
                           </p>
                         </div>
                         <div
@@ -22676,7 +22773,7 @@
                             for="slug"
                             data-slot="field-label"
                             class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                            >Slug</label
+                            >Web address</label
                           ><input
                             id="slug"
                             name="slug"
@@ -22695,7 +22792,13 @@
                             class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                           >
                             3 to 60 lowercase letters and digits, with single hyphens between them.
-                            Unique within Coed 7v7 Rec.
+                            Unique within Coed 7v7 Rec. Its public page will be at
+                            <span class="block break-words text-foreground"
+                              >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />coed-7v7-rec/<wbr />seasons/<wbr /><strong
+                                class="font-semibold"
+                                >your-address</strong
+                              ></span
+                            >
                           </p>
                         </div>
                         <div
@@ -23692,7 +23795,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -23711,7 +23814,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Tuesday Coed Slow-Pitch.
+                          Unique within Tuesday Coed Slow-Pitch. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />tuesday-coed-slow-pitch/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -24511,7 +24620,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -24530,7 +24639,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Friday Night Coed 6s.
+                          Unique within Friday Night Coed 6s. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />friday-night-coed-6s/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div
@@ -25506,7 +25621,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         ><input
                           id="slug"
                           name="slug"
@@ -25525,7 +25640,13 @@
                           class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
                         >
                           3 to 60 lowercase letters and digits, with single hyphens between them.
-                          Unique within Tuesday Coed Slow-Pitch.
+                          Unique within Tuesday Coed Slow-Pitch. Its public page will be at
+                          <span class="block break-words text-foreground"
+                            >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr />coastal-bend-rec-club/<wbr />leagues/<wbr />tuesday-coed-slow-pitch/<wbr />seasons/<wbr /><strong
+                              class="font-semibold"
+                              >your-address</strong
+                            ></span
+                          >
                         </p>
                       </div>
                       <div

@@ -52,7 +52,7 @@
           Focus order on <code>/app</code>: skip link, Omni League, Account: Maya Okafor, Sign out,
           Create an organization, then for each organization Public page and Manage. On
           <code>/app/organizations/new</code>: skip link, Omni League, Account, Your organizations,
-          Name, Slug, Create organization.
+          Name, Web address, Create organization.
         </p>
         <nav aria-label="States" class="mt-4">
           <p class="mt-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -101,17 +101,17 @@
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#new-errors-format"
-                >8. Create, name too long and slug format</a
+                >8. Create, name too long and web address format</a
               >
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#new-reserved"
-                >9. Create, reserved slug</a
+                >9. Create, reserved web address</a
               >
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#new-taken"
-                >10. Create, slug taken</a
+                >10. Create, web address taken</a
               >
             </li>
             <li>
@@ -282,9 +282,9 @@
         <h2 id="new-empty-label" class="text-lg font-semibold">5. Create, empty</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
           Client route, top bar only (no organization yet, so no sidebar), one panel at most 512px
-          wide, like sign-in. Name is <code>autocomplete="organization"</code>. Slug says where the
-          public page will be, and its rule, before anything is typed. The label is the glossary
-          term (decision 4).
+          wide, like sign-in. Name is <code>autocomplete="organization"</code>. Web address says
+          where the public page will be, and its rule, before anything is typed. The label is the
+          glossary term (decision 4).
         </p>
         <div
           tabindex="0"
@@ -317,8 +317,9 @@
       <section id="new-filled" aria-labelledby="new-filled-label" class="mt-12">
         <h2 id="new-filled-label" class="text-lg font-semibold">6. Create, filled</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          Typing a name fills Slug with <code>slugify(name)</code> (#93&apos;s helper) until the
-          user edits Slug themselves (decision 3). The address preview follows the slug.
+          Typing a name fills Web address with <code>slugify(name)</code> (#93&apos;s helper) until
+          the user edits Web address themselves (decision 3). The address preview follows the web
+          address.
         </p>
         <div
           tabindex="0"
@@ -388,27 +389,27 @@
       </section>
       <section id="new-errors-format" aria-labelledby="new-errors-format-label" class="mt-12">
         <h2 id="new-errors-format-label" class="text-lg font-semibold">
-          8. Create, name too long and slug format
+          8. Create, name too long and web address format
         </h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          A 108-character name (the limit is 100 after trimming) and the slug
+          A 108-character name (the limit is 100 after trimming) and the web address
           <code>Coastal-Bend</code>. The client checks both rules;
           <code>organizations.create</code> checks them again and answers with the same messages.
-          The format message covers every slug case in #64 criterion 3: <code>ab</code>,
-          <code>Bad-Slug</code>, <code>a--b</code>, <code>-ab</code>, a 61-character slug, and
-          reserved slugs.
+          The format message covers every web address case in #64 criterion 3: <code>ab</code>,
+          <code>Bad-Slug</code>, <code>a--b</code>, <code>-ab</code>, a 61-character web address,
+          and reserved web addresses.
         </p>
         <div
           tabindex="0"
           role="region"
-          aria-label="8. Create, name too long and slug format: frames"
+          aria-label="8. Create, name too long and web address format: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">320px</figcaption>
             <iframe
               src="?state=new-errors-format"
-              title="8. Create, name too long and slug format at 320px"
+              title="8. Create, name too long and web address format at 320px"
               width="320"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -418,7 +419,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=new-errors-format"
-              title="8. Create, name too long and slug format at 360px"
+              title="8. Create, name too long and web address format at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -428,7 +429,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=new-errors-format"
-              title="8. Create, name too long and slug format at 1280px"
+              title="8. Create, name too long and web address format at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -437,23 +438,26 @@
         </div>
       </section>
       <section id="new-reserved" aria-labelledby="new-reserved-label" class="mt-12">
-        <h2 id="new-reserved-label" class="text-lg font-semibold">9. Create, reserved slug</h2>
+        <h2 id="new-reserved-label" class="text-lg font-semibold">
+          9. Create, reserved web address
+        </h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          The slug <code>new</code> is reserved, because <code>/app/organizations/new</code> is this
-          form. The demo organizations&apos; slugs are reserved too (#99). The server refuses it
-          with the same format message, which names reserved slugs so the refusal makes sense.
+          The web address <code>new</code> is reserved, because
+          <code>/app/organizations/new</code> is this form. The demo organizations&apos; web
+          addresses are reserved too (#99). The server refuses it with the same format message,
+          which names reserved web addresses so the refusal makes sense.
         </p>
         <div
           tabindex="0"
           role="region"
-          aria-label="9. Create, reserved slug: frames"
+          aria-label="9. Create, reserved web address: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=new-reserved"
-              title="9. Create, reserved slug at 360px"
+              title="9. Create, reserved web address at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -463,7 +467,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=new-reserved"
-              title="9. Create, reserved slug at 1280px"
+              title="9. Create, reserved web address at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -472,22 +476,23 @@
         </div>
       </section>
       <section id="new-taken" aria-labelledby="new-taken-label" class="mt-12">
-        <h2 id="new-taken-label" class="text-lg font-semibold">10. Create, slug taken</h2>
+        <h2 id="new-taken-label" class="text-lg font-semibold">10. Create, web address taken</h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          The server found the slug in use (#64 criterion 2). Nothing is created. The message
-          repeats the slug, and focus moves to Slug with the text kept, so the user can edit it.
+          The server found the web address in use (#64 criterion 2). Nothing is created. The message
+          repeats the web address, and focus moves to Web address with the text kept, so the user
+          can edit it.
         </p>
         <div
           tabindex="0"
           role="region"
-          aria-label="10. Create, slug taken: frames"
+          aria-label="10. Create, web address taken: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=new-taken"
-              title="10. Create, slug taken at 360px"
+              title="10. Create, web address taken at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -497,7 +502,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=new-taken"
-              title="10. Create, slug taken at 1280px"
+              title="10. Create, web address taken at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -613,33 +618,33 @@
                 <td class="px-4 py-2 align-top">Name</td>
               </tr>
               <tr>
-                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Slug empty</th>
-                <td class="px-4 py-2 align-top">
-                  "Enter a slug for your public page&rsquo;s address."
-                </td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug, if Name is valid</td>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">
+                  Web address empty
+                </th>
+                <td class="px-4 py-2 align-top">"Enter a web address for your public page."</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address, if Name is valid</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  Slug format, length, or reserved
+                  Web address format, length, or reserved
                 </th>
                 <td class="px-4 py-2 align-top">
                   "Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some
-                  slugs, like new, are reserved."
+                  web addresses, like new, are reserved."
                 </td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug, if Name is valid</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address, if Name is valid</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  Slug taken (server)
+                  Web address taken (server)
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "&lt;slug&gt; is already taken. Choose another slug."
+                  "&lt;web address&gt; is already taken. Choose another web address."
                 </td>
-                <td class="px-4 py-2 align-top">Slug field</td>
-                <td class="px-4 py-2 align-top">Slug</td>
+                <td class="px-4 py-2 align-top">Web address field</td>
+                <td class="px-4 py-2 align-top">Web address</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
@@ -691,7 +696,7 @@
                 </td>
               </tr>
               <tr>
-                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Slug</th>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Web address</th>
                 <td class="px-4 py-2 align-top"><code>input type="text"</code></td>
                 <td class="px-4 py-2 align-top"><code>off</code></td>
                 <td class="px-4 py-2 align-top">
@@ -1546,7 +1551,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -1570,7 +1575,7 @@
                           <span class="block break-words text-foreground"
                             >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr /><strong
                               class="font-semibold"
-                              >your-slug</strong
+                              >your-address</strong
                             ></span
                           >
                         </p>
@@ -1717,7 +1722,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -1915,7 +1920,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -1942,7 +1947,7 @@
                           <span class="block break-words text-foreground"
                             >charming-longma-28c00d.netlify.app/<wbr />organizations/<wbr /><strong
                               class="font-semibold"
-                              >your-slug</strong
+                              >your-address</strong
                             ></span
                           >
                         </p>
@@ -1964,9 +1969,7 @@
                               <circle cx="12" cy="12" r="10"></circle>
                               <line x1="12" x2="12" y1="8" y2="12"></line>
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
-                          ><span
-                            >Enter a slug for your public page&rsquo;s address.</span
-                          ></hlm-field-error
+                          ><span>Enter a web address for your public page.</span></hlm-field-error
                         >
                       </div>
                     </div>
@@ -2140,7 +2143,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -2192,8 +2195,8 @@
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
                           ><span
                             >Use 3 to 60 lowercase letters and digits, with single hyphens between
-                            them. Some slugs, like <strong class="font-semibold">new</strong>, are
-                            reserved.</span
+                            them. Some web addresses, like
+                            <strong class="font-semibold">new</strong>, are reserved.</span
                           ></hlm-field-error
                         >
                       </div>
@@ -2341,7 +2344,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -2393,8 +2396,8 @@
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
                           ><span
                             >Use 3 to 60 lowercase letters and digits, with single hyphens between
-                            them. Some slugs, like <strong class="font-semibold">new</strong>, are
-                            reserved.</span
+                            them. Some web addresses, like
+                            <strong class="font-semibold">new</strong>, are reserved.</span
                           ></hlm-field-error
                         >
                       </div>
@@ -2542,7 +2545,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -2594,7 +2597,7 @@
                               <line x1="12" x2="12.01" y1="16" y2="16"></line></svg></ng-icon
                           ><span
                             ><strong class="font-semibold">coastal-bend-rec-club</strong> is already
-                            taken. Choose another slug.</span
+                            taken. Choose another web address.</span
                           ></hlm-field-error
                         >
                       </div>
@@ -2740,7 +2743,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"
@@ -2962,7 +2965,7 @@
                           for="slug"
                           data-slot="field-label"
                           class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                          >Slug</label
+                          >Web address</label
                         >
                         <input
                           id="slug"

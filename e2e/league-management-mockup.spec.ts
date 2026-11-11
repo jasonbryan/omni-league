@@ -336,6 +336,13 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, F
   }
 }
 
+// The address preview names the page's own origin and the test organization's generated address.
+const withoutOriginAndOrganizationSlug = (line: string): string =>
+  line.replace(/^\S+(\/organizations\/)[^/\s]+/, 'ORIGIN$1ORG-ADDRESS');
+
+// The app shows it once the availability answer arrives, which the mockup does not wait for.
+const AVAILABLE = 'Available';
+
 function normalize(text: string, organization: string): string {
   const lines = text
     .replaceAll(organization, 'ORG')
@@ -343,7 +350,8 @@ function normalize(text: string, organization: string): string {
     .replaceAll(' View season page', '')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '');
+    .map(withoutOriginAndOrganizationSlug)
+    .filter((line) => line !== '' && line !== AVAILABLE);
   // The mockup writes the organization above the h1 as plain text; the app writes a breadcrumb there, which is hidden while the text is read.
   if (lines[0] === 'ORG') lines.shift();
   const kept: string[] = [];

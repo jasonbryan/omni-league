@@ -66,13 +66,21 @@ async function mockupText(page: Page, state: string, width: number): Promise<str
   return normalize(text, MOCKUP_ORGANIZATIONS);
 }
 
+// The address preview names the page's own origin and the test organization's generated address.
+const withoutOriginAndOrganizationSlug = (line: string): string =>
+  line.replace(/^\S+(\/organizations\/)[^/\s]+/, 'ORIGIN$1ORG-ADDRESS');
+
+// The app shows it once the availability answer arrives, which the mockup does not wait for.
+const AVAILABLE = 'Available';
+
 function normalize(text: string, organizations: string[]): string {
   let result = text;
   for (const name of organizations) result = result.replaceAll(name, 'ORG');
   const lines = result
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '');
+    .map(withoutOriginAndOrganizationSlug)
+    .filter((line) => line !== '' && line !== AVAILABLE);
   return withoutPublishButtonNames(lines).join('\n');
 }
 
