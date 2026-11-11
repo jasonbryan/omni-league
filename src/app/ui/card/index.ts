@@ -1,4 +1,4 @@
-// Vendored from spartan helm 1.9.0. Local changes are listed in hlm-card.ts.
+// Vendored from spartan helm 1.9.0. Local changes are listed in hlm-card.ts and hlm-card-header.ts.
 import { HlmCard } from './hlm-card';
 import { HlmCardAction } from './hlm-card-action';
 import { HlmCardContent } from './hlm-card-content';
