@@ -3,16 +3,12 @@ import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { onLaterChoiceOrScroll } from '../../core/later-choice';
+import { pathOf } from '../league/league-landing';
 import { AdminContext } from './admin-context';
 import { adminPath } from './admin-path';
 
 const LEAGUES_SECTION = 'leagues';
 const CREATE_LEAGUE_FRAGMENT = 'create-league';
-
-function pathOf(url: string): string {
-  const end = url.search(/[?#]/);
-  return end === -1 ? url : url.slice(0, end);
-}
 
 /**
  * Provided by the admin area, which renders its pages only once it is ready, so it starts at each arrival

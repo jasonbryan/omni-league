@@ -623,6 +623,7 @@ describe('AdminLeagues', () => {
     afterEach(() => {
       if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
       else delete (Element.prototype as Partial<Element>).scrollIntoView;
+      vi.restoreAllMocks();
     });
 
     const section = () => page.querySelector<HTMLElement>('#create-league')!;
@@ -677,7 +678,6 @@ describe('AdminLeagues', () => {
       window.dispatchEvent(new Event('online'));
       await locationsArrive();
       expect(document.activeElement).toBe(input('name'));
-      vi.restoreAllMocks();
     });
 
     it('does nothing without the fragment', async () => {

@@ -57,6 +57,7 @@ async function memberOf(page: Page, role: Role | null, seed: TenantSeed = {}) {
 }
 
 const main = (page: Page) => page.getByRole('main');
+const headerTitle = (page: Page) => page.locator('header p.truncate');
 const form = (page: Page) => page.locator('#create-league form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft league/ });
 const leagueRows = (page: Page) => page.locator('#leagues-list > li');
@@ -338,7 +339,6 @@ test.describe('Leagues: creating a draft', () => {
 
     const jump = (page: Page) => main(page).getByRole('link', { name: 'Create a league' });
     const section = (page: Page) => page.locator('#create-league');
-    const headerTitle = (page: Page) => page.locator('header p.truncate');
     const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
 
     async function pressWithLocationsHeld(page: Page) {
@@ -553,7 +553,7 @@ test.describe('Leagues: landing on #create-league', () => {
 
     test('a tap on the header title cancels the landing', async ({ page }) => {
       const held = await openHeld(page);
-      await page.locator('header p.truncate').tap();
+      await headerTitle(page).tap();
       const focused = await page.evaluateHandle(() => document.activeElement);
       const before = await scrollY(page);
       held.release();

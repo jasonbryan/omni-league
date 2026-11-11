@@ -96,10 +96,10 @@ describe('CreateLeagueLanding', () => {
       expect(landing().pending()).toBe(false);
     });
 
-    it('clears a waiting target on an arrival at the Leagues path with no fragment', async () => {
+    it('clears a waiting target on an arrival straight at the Leagues path of another organization with no fragment', async () => {
       await open(`${LEAGUES}#create-league`);
-      await arrive(BASE);
-      await arrive(LEAGUES);
+      expect(landing().pending()).toBe(true);
+      await arrive('/app/organizations/other-club/leagues');
       expect(landing().pending()).toBe(false);
     });
 
