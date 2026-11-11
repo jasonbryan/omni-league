@@ -14,6 +14,13 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import {
+  fieldShape,
+  formShapes,
+  inputShape,
+  shapeOf,
+  type FormShape,
+} from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
@@ -880,6 +887,116 @@ describe('AdminStaff', () => {
         'The leagues could not be loaded. Check your connection and try again.',
       );
       expect(page.querySelector('#invite form')).toBeNull();
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const horizontal = (invalid = false) => ({
+      ...fieldShape(false, 'horizontal'),
+      attributes: {
+        ...fieldShape(false, 'horizontal').attributes,
+        ...(invalid ? { 'data-matches-spartan-invalid': 'true' } : {}),
+      },
+    });
+
+    const radio = (id: string, labelClasses = ''): FormShape[] => [
+      horizontal(),
+      shapeOf('field-content'),
+      shapeOf('field-label', { for: id }, labelClasses),
+      shapeOf('field-description', { id: `${id}-description` }),
+    ];
+
+    const shapes = (errors: { email?: boolean; leagues?: boolean }, leagueCount = 4) => [
+      shapeOf('field-group'),
+      fieldShape(!!errors.email),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          type: 'email',
+          autocomplete: 'off',
+          'aria-describedby': errors.email ? 'email-description email-error' : 'email-description',
+        },
+        !!errors.email,
+      ),
+      shapeOf('field-description', { id: 'email-description' }),
+      ...(errors.email ? [shapeOf('field-error', { id: 'email-error' })] : []),
+      shapeOf('field-set', { id: 'role' }),
+      shapeOf('field-legend', { 'data-variant': 'label' }),
+      ...radio('role-organizer'),
+      ...radio('role-admin'),
+      shapeOf('field-set', {
+        id: 'leagues',
+        'aria-describedby': errors.leagues
+          ? 'leagues-description leagues-error'
+          : 'leagues-description',
+        ...(errors.leagues ? { 'data-invalid': 'true' } : {}),
+      }),
+      shapeOf(
+        'field-legend',
+        { 'data-variant': 'label' },
+        errors.leagues ? 'text-destructive' : '',
+      ),
+      shapeOf('field-description', { id: 'leagues-description' }, '-mt-1.5'),
+      ...Array.from({ length: leagueCount }, (_, i) => [
+        horizontal(!!errors.leagues),
+        shapeOf('field-content'),
+        shapeOf('field-label', { for: `league-${i + 1}` }),
+      ]).flat(),
+      ...(errors.leagues ? [shapeOf('field-error', { id: 'leagues-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await openFull();
+      expect(formShapes(form())).toEqual(shapes({}));
+    });
+
+    it('marks Email and Leagues invalid and ties each error to its field after an empty submit', async () => {
+      await openFull();
+      await submit();
+      expect(formShapes(form())).toEqual(shapes({ email: true, leagues: true }));
+    });
+
+    it('marks only Email when the server says the account is already staff', async () => {
+      await openFull();
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'email',
+          code: 'alreadyMember',
+          message: INVITE_MESSAGES.alreadyMember('jordan.mills@example.com'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes({ email: true }));
+    });
+
+    it('dims the League organizer label while no league exists, and shows why', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [] });
+      expect(formShapes(form()).slice(5)).toEqual([
+        shapeOf('field-set', { id: 'role' }),
+        shapeOf('field-legend', { 'data-variant': 'label' }),
+        ...radio('role-organizer', 'opacity-50'),
+        ...radio('role-admin'),
+        shapeOf('field-description', { id: 'role-unavailable' }),
+      ]);
+    });
+
+    it('draws the invite link with a vertical field, the helm label, and the textarea', async () => {
+      await openFull();
+      await createInvite();
+      const link = page.querySelector('#invite')!;
+      expect(formShapes(link)).toEqual([
+        shapeOf('field', { 'data-orientation': 'vertical' }, 'mt-5'),
+        shapeOf('field-label', { for: 'invite-link' }),
+        shapeOf(
+          'textarea',
+          { id: 'invite-link', readonly: '', 'aria-describedby': 'copy-status' },
+          'resize-none font-mono break-all',
+        ),
+      ]);
+      expect(linkBox().getAttribute('spellcheck')).toBe('false');
     });
   });
 

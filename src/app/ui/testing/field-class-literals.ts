@@ -21,3 +21,12 @@ export const DESCRIPTION_CLASSES =
 export const ERROR_CLASSES = 'text-destructive text-sm font-normal flex items-start gap-1.5';
 
 export const CONTENT_CLASSES = 'group/field-content flex flex-1 flex-col leading-snug gap-0.5';
+
+export const FIELD_SET_CLASSES =
+  'flex flex-col gap-4 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3';
+
+export const LEGEND_CLASSES =
+  'mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base';
+
+export const TEXTAREA_CLASSES =
+  'border-input dark:bg-input/30 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors data-[matches-spartan-invalid=true]:ring-3 md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50';
