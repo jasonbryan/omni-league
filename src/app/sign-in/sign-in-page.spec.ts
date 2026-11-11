@@ -9,6 +9,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignInPage } from './sign-in-page';
 
 @Component({ template: 'elsewhere' })
@@ -725,5 +726,61 @@ describe('SignInPage', () => {
         expect(url()).toBe('/app/account');
       },
     );
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const emailField = (error: boolean) => [
+      fieldShape(error),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          type: 'email',
+          autocomplete: 'email',
+          ...(error ? { 'aria-describedby': 'email-error' } : {}),
+        },
+        error,
+      ),
+      ...(error ? [shapeOf('field-error', { id: 'email-error' })] : []),
+    ];
+    const passwordField = (error: boolean) => [
+      fieldShape(error),
+      shapeOf('field-label', { for: 'password' }),
+      inputShape(
+        'password',
+        {
+          type: 'password',
+          autocomplete: 'current-password',
+          ...(error ? { 'aria-describedby': 'password-error' } : {}),
+        },
+        error,
+        'flex-1',
+      ),
+      ...(error ? [shapeOf('field-error', { id: 'password-error' })] : []),
+    ];
+    const form = (emailError: boolean, passwordError: boolean) => [
+      shapeOf('field-group'),
+      ...emailField(emailError),
+      ...passwordField(passwordError),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(page)).toEqual(form(false, false));
+    });
+
+    it('marks both fields invalid and ties each error to its input after an empty submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(page)).toEqual(form(true, true));
+    });
+
+    it('marks only the Email field when the server refuses the address', async () => {
+      await open();
+      await fill();
+      client.nextSignInError = { status: 400, code: 'INVALID_EMAIL' };
+      await submit();
+      expect(formShapes(page)).toEqual(form(true, false));
+    });
   });
 });

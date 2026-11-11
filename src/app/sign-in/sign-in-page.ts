@@ -30,6 +30,8 @@ import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -69,7 +71,15 @@ type FormAlert = { title: string; description: string } | 'offline';
 /** A wrong password and an address with no account get the same alert, with neither field marked invalid, so the page reveals nothing about which addresses exist. */
 @Component({
   selector: 'app-sign-in-page',
-  imports: [MousePressKeepsFocus, FormField, NgIcon, RouterLink, PublicLayout],
+  imports: [
+    MousePressKeepsFocus,
+    FormField,
+    HlmFieldImports,
+    HlmInputImports,
+    NgIcon,
+    RouterLink,
+    PublicLayout,
+  ],
   providers: [
     provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle, lucideWifiOff }),
   ],
@@ -120,29 +130,18 @@ type FormAlert = { title: string; description: string } | 'offline';
                 </div>
               </div>
             }
-            <div
-              data-slot="field-group"
-              class="group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4"
-            >
+            <div hlmFieldGroup>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="errors.email() ? 'true' : null"
                 [attr.data-invalid]="errors.email() ? 'true' : null"
-                class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
-                <label
-                  for="email"
-                  data-slot="field-label"
-                  class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                  >Email</label
-                >
+                <label hlmFieldLabel for="email">Email</label>
                 <input
+                  hlmInput
                   #email
                   id="email"
                   type="email"
-                  data-slot="input"
                   autocomplete="email"
                   spellcheck="false"
                   autocapitalize="none"
@@ -152,15 +151,9 @@ type FormAlert = { title: string; description: string } | 'offline';
                   [attr.aria-invalid]="errors.email() ? 'true' : null"
                   [attr.data-invalid]="errors.email() ? 'true' : null"
                   [attr.data-matches-spartan-invalid]="errors.email() ? 'true' : null"
-                  class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
                 />
                 @if (errors.email(); as error) {
-                  <div
-                    role="alert"
-                    data-slot="field-error"
-                    id="email-error"
-                    class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                  >
+                  <div hlmFieldError id="email-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
@@ -171,25 +164,17 @@ type FormAlert = { title: string; description: string } | 'offline';
                 }
               </div>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
                 [attr.data-invalid]="errors.password() ? 'true' : null"
-                class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
               >
-                <label
-                  for="password"
-                  data-slot="field-label"
-                  class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
-                  >Password</label
-                >
+                <label hlmFieldLabel for="password">Password</label>
                 <div class="flex items-center gap-2">
                   <!-- No maxlength: a long paste is never cut silently (WCAG 3.3.8). -->
                   <input
+                    hlmInput
                     #password
                     id="password"
-                    data-slot="input"
                     autocomplete="current-password"
                     spellcheck="false"
                     autocapitalize="none"
@@ -200,7 +185,7 @@ type FormAlert = { title: string; description: string } | 'offline';
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
-                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm flex-1"
+                    class="flex-1"
                   />
                   <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it out as a flex item, so the button gets the approved mockup's width. -->
                   <button
@@ -226,12 +211,7 @@ type FormAlert = { title: string; description: string } | 'offline';
                   </button>
                 </div>
                 @if (errors.password(); as error) {
-                  <div
-                    role="alert"
-                    data-slot="field-error"
-                    id="password-error"
-                    class="text-destructive text-sm font-normal flex items-start gap-1.5"
-                  >
+                  <div hlmFieldError id="password-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
