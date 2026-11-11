@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCrown } from '@ng-icons/lucide';
-import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
+import { HlmCardImports } from '../ui/card';
 import type { TeamForNextStep } from './next-step';
 import { rosterProgress } from './roster-progress';
 import { seasonRange } from './season-range';
@@ -21,7 +22,7 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
 
 @Component({
   selector: 'app-home-team-cards',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmBadge, HlmCardImports, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCheck, lucideCrown })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mt-8 md:mt-10' },
@@ -30,51 +31,53 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
       <h2 id="teams-heading" class="text-lg font-semibold tracking-tight">Your teams</h2>
       <ul role="list" class="mt-4 grid gap-4 md:grid-cols-2">
         @for (card of cards(); track card.teamId) {
-          <li
-            class="flex flex-col p-5 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h3 class="text-lg font-semibold tracking-tight">
-                  <a
-                    [routerLink]="card.path"
-                    class="inline-flex items-center rounded-md pointer-coarse:min-h-11 hover:underline"
-                    >{{ card.teamName }}</a
-                  >
-                </h3>
-                <p class="mt-0.5 text-sm text-muted-foreground">
-                  {{ card.leagueName }} &middot; {{ card.seasonName }}
-                </p>
-              </div>
-              @if (card.badge; as badge) {
-                <span data-slot="badge" data-variant="secondary" [class]="badgeClass">
-                  @if (badge.crown) {
-                    <ng-icon name="lucideCrown" data-icon="inline-start" aria-hidden="true" />
-                  }
-                  {{ badge.label }}</span
+          <li hlmCard>
+            <div hlmCardHeader>
+              <h3 hlmCardTitle>
+                <a
+                  [routerLink]="card.path"
+                  class="inline-flex items-center rounded-md text-lg font-semibold tracking-tight pointer-coarse:min-h-11 hover:underline"
+                  >{{ card.teamName }}</a
                 >
+              </h3>
+              <p hlmCardDescription>{{ card.leagueName }} &middot; {{ card.seasonName }}</p>
+              @if (card.badge; as badge) {
+                <div hlmCardAction>
+                  <span hlmBadge variant="secondary">
+                    @if (badge.crown) {
+                      <ng-icon name="lucideCrown" data-icon="inline-start" aria-hidden="true" />
+                    }
+                    {{ badge.label }}</span
+                  >
+                </div>
               }
             </div>
-            <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt class="text-muted-foreground">Season</dt>
-                <dd class="mt-0.5 font-medium">{{ card.dates }}</dd>
+            <div hlmCardContent>
+              <dl class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt class="text-muted-foreground">Season</dt>
+                  <dd class="mt-0.5 font-medium">{{ card.dates }}</dd>
+                </div>
+                <div>
+                  <dt class="text-muted-foreground">Roster</dt>
+                  <dd class="mt-0.5 flex items-center gap-1.5 font-medium">
+                    @if (card.progress.met) {
+                      <ng-icon
+                        name="lucideCheck"
+                        class="text-base text-primary"
+                        aria-hidden="true"
+                      />
+                    }
+                    {{ card.progress.text }}
+                  </dd>
+                </div>
+              </dl>
+              <div aria-hidden="true" class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  class="h-full rounded-full bg-primary"
+                  [style.width.%]="card.progress.percent"
+                ></div>
               </div>
-              <div>
-                <dt class="text-muted-foreground">Roster</dt>
-                <dd class="mt-0.5 flex items-center gap-1.5 font-medium">
-                  @if (card.progress.met) {
-                    <ng-icon name="lucideCheck" class="text-base text-primary" aria-hidden="true" />
-                  }
-                  {{ card.progress.text }}
-                </dd>
-              </div>
-            </dl>
-            <div aria-hidden="true" class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                class="h-full rounded-full bg-primary"
-                [style.width.%]="card.progress.percent"
-              ></div>
             </div>
           </li>
         }
@@ -85,7 +88,6 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
 export class HomeTeamCards {
   readonly teams = input.required<readonly HomeTeam[]>();
 
-  protected readonly badgeClass = BADGE_SECONDARY;
   protected readonly cards = computed(() =>
     this.teams().map((team) => ({
       ...team,

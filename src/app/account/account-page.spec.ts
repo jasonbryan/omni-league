@@ -171,7 +171,7 @@ describe('AccountPage', () => {
   });
 
   describe('next step', () => {
-    it('names the captained team that is short, its league, minimum and deadline, and links to the invite panel', async () => {
+    it('names the captained team that is short, its league, minimum and deadline, and links to the team page', async () => {
       await show([SAND_SHARKS, PAIR_OF_ACES]);
       const region = nextStepRegion()!;
       expect(text(region.querySelector('p.font-semibold'))).toBe('Sand Sharks needs 1 more player');
@@ -179,7 +179,7 @@ describe('AccountPage', () => {
         'Sunday Reverse Coed 4s needs 4 players per team by May 23, 2027.',
       );
       const link = region.querySelector('a')!;
-      expect(link.getAttribute('href')).toBe('/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e#invite');
+      expect(link.getAttribute('href')).toBe('/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e');
       expect(text(link)).toBe('Invite players to Sand Sharks');
       expect(text(link.querySelector('.sr-only'))).toBe('to Sand Sharks');
     });
@@ -299,7 +299,7 @@ describe('AccountPage', () => {
       await show([{ ...SAND_SHARKS, teamId: '../x?y' }]);
       expect(cards()[0]?.querySelector('h3 a')?.getAttribute('href')).toBe('/app/teams/..%2Fx%3Fy');
       expect(nextStepRegion()?.querySelector('a')?.getAttribute('href')).toBe(
-        '/app/teams/..%2Fx%3Fy#invite',
+        '/app/teams/..%2Fx%3Fy',
       );
     });
 

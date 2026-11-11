@@ -135,10 +135,7 @@ test.describe('/app: a user with teams', () => {
     await expect(nextStep(page).getByRole('link')).toHaveAccessibleName(
       'Invite players to Sand Sharks',
     );
-    await expect(nextStep(page).getByRole('link')).toHaveAttribute(
-      'href',
-      `/app/teams/${sharks}#invite`,
-    );
+    await expect(nextStep(page).getByRole('link')).toHaveAttribute('href', `/app/teams/${sharks}`);
 
     await expect(teams(page).getByRole('heading', { level: 2 })).toHaveText('Your teams');
     await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText([
@@ -195,14 +192,14 @@ test.describe('/app: a user with teams', () => {
     await expect(sidebar(page).locator('[aria-current]')).toHaveCount(1);
   });
 
-  test('Invite players opens the invite panel of the team', async ({ page }) => {
+  test('Invite players goes to the team page', async ({ page }) => {
     const user = tasha();
     await signUp(page, user);
     const { sharks } = await seedTashasTeams(user);
     await openHome(page, 'Hi, Tasha');
 
     await nextStep(page).getByRole('link', { name: 'Invite players to Sand Sharks' }).click();
-    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Sand Sharks' })).toBeVisible();
   });
 
@@ -317,7 +314,9 @@ test.describe('/app: a user on no team', () => {
     await expectAccessible(page);
   });
 
-  test('a league organizer’s sidebar link opens their first assigned league', async ({ page }) => {
+  test('a league organizer’s sidebar link goes to their first assigned league', async ({
+    page,
+  }) => {
     const user = devon();
     await signUp(page, user);
     const tenant = await gulfCoast();
