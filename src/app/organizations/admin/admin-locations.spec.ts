@@ -17,6 +17,7 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'locations', component: AdminLocations }]);
@@ -512,6 +513,62 @@ describe('AdminLocations', () => {
         expect(error('name')).toBe(LOCATION_MESSAGES.nameEmpty);
         expect(addForm().querySelector('[data-slot="alert"]')).toBeNull();
       });
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const shapes = (prefix: string, invalid: { name?: boolean; address?: boolean }) => [
+      { ...shapeOf('field-group', {}, prefix ? 'mt-3' : ''), tag: 'app-location-fields' },
+      ...(['name', 'address'] as const).flatMap((field) => {
+        const id = `${prefix}${field}`;
+        const bad = !!invalid[field];
+        return [
+          fieldShape(bad),
+          shapeOf('field-label', { for: id }),
+          inputShape(
+            id,
+            {
+              name: `form.${field}`,
+              type: 'text',
+              autocomplete: 'off',
+              'aria-describedby': bad ? `${id}-description ${id}-error` : `${id}-description`,
+            },
+            bad,
+          ),
+          shapeOf('field-description', { id: `${id}-description` }),
+          ...(bad ? [shapeOf('field-error', { id: `${id}-error` })] : []),
+        ];
+      }),
+    ];
+
+    it('draws the add form with the same elements, class sets, and attributes when valid', async () => {
+      await open([]);
+      expect(formShapes(addForm())).toEqual(shapes('', {}));
+    });
+
+    it('marks both fields invalid and ties each error to its input after an empty submit', async () => {
+      await open([]);
+      await submitAdd();
+      expect(formShapes(addForm())).toEqual(shapes('', { name: true, address: true }));
+    });
+
+    it('marks only the field the server refuses', async () => {
+      await open([]);
+      await type('name', 'Redfish Flats Fields');
+      await type('address', '880 Redfish Flats Ln, Rockport, TX 78382');
+      await submitAdd();
+      o.convex.calls[0]?.reject(
+        new ConvexError({ field: 'name', code: 'nameTooLong', message: 'The server says no.' }),
+      );
+      await flushNow();
+      expect(formShapes(addForm())).toEqual(shapes('', { name: true }));
+    });
+
+    it('draws the edit form with the same elements, prefixed ids, and class sets', async () => {
+      await open(COASTAL_LOCATIONS);
+      page.querySelectorAll<HTMLButtonElement>('#locations-list button')[1].click();
+      await flushNow();
+      expect(formShapes(page.querySelector('#locations-list form')!)).toEqual(shapes('edit-', {}));
     });
   });
 

@@ -3,10 +3,13 @@ import {
   DESCRIPTION_CLASSES,
   ERROR_CLASSES,
   FIELD_HORIZONTAL_CLASSES,
+  FIELD_SET_CLASSES,
   FIELD_VERTICAL_CLASSES,
   GROUP_CLASSES,
   INPUT_CLASSES,
   LABEL_CLASSES,
+  LEGEND_CLASSES,
+  TEXTAREA_CLASSES,
 } from './field-class-literals';
 
 const FORM_SLOTS = [
@@ -17,6 +20,9 @@ const FORM_SLOTS = [
   'field-description',
   'field-content',
   'field-error',
+  'field-set',
+  'field-legend',
+  'textarea',
 ];
 
 const REPORTED_ATTRIBUTES = [
@@ -24,10 +30,12 @@ const REPORTED_ATTRIBUTES = [
   'name',
   'type',
   'autocomplete',
+  'readonly',
   'for',
   'role',
   'data-slot',
   'data-orientation',
+  'data-variant',
   'aria-describedby',
   'aria-invalid',
   'data-invalid',
@@ -72,6 +80,9 @@ const CLASSES_BY_SLOT: Record<string, string> = {
   'field-description': DESCRIPTION_CLASSES,
   'field-content': CONTENT_CLASSES,
   'field-error': ERROR_CLASSES,
+  'field-set': FIELD_SET_CLASSES,
+  'field-legend': LEGEND_CLASSES,
+  textarea: TEXTAREA_CLASSES,
 };
 
 const TAG_BY_SLOT: Record<string, string> = {
@@ -82,6 +93,9 @@ const TAG_BY_SLOT: Record<string, string> = {
   'field-description': 'p',
   'field-content': 'div',
   'field-error': 'div',
+  'field-set': 'fieldset',
+  'field-legend': 'legend',
+  textarea: 'textarea',
 };
 
 const ROLE_BY_SLOT: Record<string, string> = { field: 'group', 'field-error': 'alert' };

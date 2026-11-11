@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideInfo } from '@ng-icons/lucide';
-import { FIELD_NOTE } from './field-classes';
+
+export const FIELD_NOTE = 'text-foreground text-sm font-normal flex items-start gap-1.5';
 
 export interface FieldNote {
   kind: 'changed' | 'rename';
