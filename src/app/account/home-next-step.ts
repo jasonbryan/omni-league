@@ -25,8 +25,8 @@ const noun = (count: number) => (count === 1 ? 'player' : 'players');
           ><ng-icon name="lucideUserPlus" class="text-xl" aria-hidden="true"
         /></span>
         <div class="min-w-0 flex-1">
-          <p class="font-semibold">{{ step().teamName }} needs {{ morePlayers() }}</p>
-          <p class="mt-0.5 text-sm">
+          <p class="font-semibold wrap-anywhere">{{ step().teamName }} needs {{ morePlayers() }}</p>
+          <p class="mt-0.5 text-sm wrap-anywhere">
             {{ step().leagueName }} needs {{ perTeam() }} per team by {{ deadline() }}.
           </p>
         </div>

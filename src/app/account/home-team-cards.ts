@@ -33,14 +33,16 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
         @for (card of cards(); track card.teamId) {
           <li hlmCard>
             <div hlmCardHeader>
-              <h3 hlmCardTitle>
+              <h3 hlmCardTitle class="min-w-0">
                 <a
                   [routerLink]="card.path"
-                  class="inline-flex items-center rounded-md text-lg font-semibold tracking-tight pointer-coarse:min-h-11 hover:underline"
+                  class="inline-flex items-center rounded-md wrap-anywhere text-lg font-semibold tracking-tight pointer-coarse:min-h-11 hover:underline"
                   >{{ card.teamName }}</a
                 >
               </h3>
-              <p hlmCardDescription>{{ card.leagueName }} &middot; {{ card.seasonName }}</p>
+              <p hlmCardDescription class="min-w-0 wrap-anywhere">
+                {{ card.leagueName }} &middot; {{ card.seasonName }}
+              </p>
               @if (card.badge; as badge) {
                 <div hlmCardAction>
                   <span hlmBadge variant="secondary">
