@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { formatCalendarDate } from '../convex/lib/seasonInput';
-import { expectAccessible } from './support/a11y';
+import { checkReflow, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
@@ -476,5 +476,25 @@ test.describe('/app: keyboard, touch, and live changes', () => {
       'Pair of Aces',
     ]);
     await expect(main(page)).not.toContainText("You're not on a team yet");
+  });
+
+  test('a 60-character team name and first name stay inside the screen at 320px', async ({
+    page,
+  }) => {
+    const unbroken = 'W'.repeat(60);
+    const user = { ...newUser('Long'), name: unbroken };
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: slugOf(SUNDAY),
+      seasonSlug: SUMMER.slug,
+      name: unbroken,
+      captainEmail: user.email,
+    });
+    await openHome(page, `Hi, ${unbroken}`);
+
+    await expect(cardOf(page, unbroken)).toBeVisible();
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
   });
 });
