@@ -60,7 +60,6 @@ const createButton = (page: Page) =>
   form(page).getByRole('button', { name: /^Create invite link/ });
 const pendingRows = (page: Page) => page.locator('#pending-list > li');
 const memberRows = (page: Page) => page.locator('#members-list > li');
-const staffTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Staff' });
 const linkField = (page: Page) => page.locator('#invite-link');
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -475,8 +474,8 @@ test.describe('Staff: revoking', () => {
   });
 });
 
-test.describe('Staff: members and the Overview tile', () => {
-  test('lists every member with role and leagues, and the Overview Staff tile reads 3 and 2 pending invites', async ({
+test.describe('Staff: members and the Overview', () => {
+  test('lists every member with role and leagues, and the Overview counts 3 staff and 2 pending invites', async ({
     page,
   }, testInfo) => {
     // Drafts only, so the Overview still lists "Get set up" (it hides once a league is published).
@@ -506,9 +505,11 @@ test.describe('Staff: members and the Overview tile', () => {
     }
 
     await page.goto(org.base);
-    await expect(staffTile(page).locator('dd').first()).toHaveText('3');
-    await expect(staffTile(page).locator('dd').nth(1)).toHaveText('2 pending invites');
-    await screenshot(page, testInfo, '67-overview-staff-tile');
+    await expect(main(page).getByRole('link', { name: '3 staff' })).toBeVisible();
+    await expect(
+      main(page).getByRole('region', { name: 'Needs your attention' }).getByRole('listitem'),
+    ).toContainText('2 staff invites are pending');
+    await screenshot(page, testInfo, '67-overview-staff-count');
     await expectAccessible(page);
     const step = page.getByRole('region', { name: 'Get set up' });
     await step.getByRole('link', { name: 'Invite staff' }).click();
