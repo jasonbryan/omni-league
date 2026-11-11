@@ -22,6 +22,9 @@ const MOCKUP = pathToFileURL(
 ).href;
 const WIDTHS = [375, 1280] as const;
 const MOCKUP_ORGANIZATIONS = ['Coastal Bend Rec Club', 'Mustang Island Beach Volleyball'];
+const MOCKUP_ADDRESSES = ['coastal-bend-rec-club', 'mustang-island-beach-volleyball'].map((slug) =>
+  addressPrefix('charming-longma-28c00d.netlify.app', slug),
+);
 
 const LOCATIONS = [
   {
@@ -63,16 +66,37 @@ async function mockupText(page: Page, state: string, width: number): Promise<str
   await page.setViewportSize({ width, height: 900 });
   await page.goto(`${MOCKUP}?state=${state}`);
   const text = await page.locator('main#main').first().innerText();
-  return normalize(text, MOCKUP_ORGANIZATIONS);
+  return normalize(text, MOCKUP_ORGANIZATIONS, MOCKUP_ADDRESSES);
 }
 
-function normalize(text: string, organizations: string[]): string {
+// The preview line names the page's own origin and the organization's address, which the test generates.
+const withoutAddress = (line: string, prefixes: string[]): string => {
+  const prefix = prefixes.find((candidate) => line.startsWith(candidate));
+  return prefix === undefined
+    ? line
+    : `ORIGIN/organizations/ORG-ADDRESS/${line.slice(prefix.length)}`;
+};
+
+function addressPrefix(origin: string, slug: string): string {
+  return `${origin}/organizations/${slug}/`;
+}
+
+const appAddressPrefix = (page: Page) => {
+  const url = new URL(page.url());
+  return addressPrefix(url.host, url.pathname.split('/')[3]);
+};
+
+// The app shows it once the availability answer arrives, which the mockup does not wait for.
+const AVAILABLE = 'Available';
+
+function normalize(text: string, organizations: string[], addresses: string[]): string {
   let result = text;
   for (const name of organizations) result = result.replaceAll(name, 'ORG');
   const lines = result
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '');
+    .map((line) => withoutAddress(line, addresses))
+    .filter((line) => line !== '' && line !== AVAILABLE);
   return withoutPublishButtonNames(lines).join('\n');
 }
 
@@ -117,7 +141,7 @@ async function appText(page: Page, organization: string): Promise<string> {
   await hidden.evaluateAll((elements) => elements.forEach((el) => el.setAttribute('hidden', '')));
   const text = await page.getByRole('main').innerText();
   await hidden.evaluateAll((elements) => elements.forEach((el) => el.removeAttribute('hidden')));
-  return normalize(text, [organization]);
+  return normalize(text, [organization], [appAddressPrefix(page)]);
 }
 
 async function fill(page: Page, league: { name: string }) {
