@@ -268,6 +268,64 @@ describe('ownSpecs: changed files', () => {
     }
   });
 
+  describe('with the real import graph', () => {
+    const CHANGED = 'src/app/organizations/admin/attention-text.ts';
+    const IMPORT_CHANGED = "import { text } from '../organizations/admin/attention-text';\n";
+
+    function repositoryChangingOneSourceFile() {
+      const { dir, git, runGit } = repositoryWithOneBranchCommit();
+      const write = (path, text) => {
+        mkdirSync(dirname(join(dir, path)), { recursive: true });
+        writeFileSync(join(dir, path), text);
+      };
+      write(CHANGED, 'export const text = 1;');
+      write('src/app/find/find-page.ts', 'export const page = 1;');
+      write('e2e/find-a-league.spec.ts', 'test();');
+      git('add', '.');
+      git('commit', '-q', '-m', 'files');
+      git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+      write(CHANGED, 'export const text = 2;');
+      git('add', '.');
+      git('commit', '-q', '-m', 'change');
+      const list = () =>
+        ownSpecs({ root: dir, runGit, ciScope: () => 'app', sessionSpecs: () => [] });
+      return { dir, write, list };
+    }
+
+    it('gives the same list when an untracked source file imports a changed file', () => {
+      const { dir, write, list } = repositoryChangingOneSourceFile();
+      try {
+        const before = list();
+        write('src/app/find/untracked.ts', `${IMPORT_CHANGED}export const again = text;`);
+        assert.deepEqual(list(), before);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('gives the same list when an uncommitted edit makes a source file import a changed file', () => {
+      const { dir, write, list } = repositoryChangingOneSourceFile();
+      try {
+        const before = list();
+        write('src/app/find/find-page.ts', `${IMPORT_CHANGED}export const page = text;`);
+        assert.deepEqual(list(), before);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('gives the same list when an untracked spec imports a changed file', () => {
+      const { dir, write, list } = repositoryChangingOneSourceFile();
+      try {
+        const before = list();
+        write('e2e/untracked.spec.ts', "import '../src/app/organizations/admin/attention-text';");
+        assert.deepEqual(list(), before);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('throws when origin/main does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'own-specs-test-'));
     try {
