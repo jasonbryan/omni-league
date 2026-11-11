@@ -29,6 +29,9 @@ export const FULL_BADGE = `${BADGE} border-border text-foreground`;
 
 export const FULL_BADGE_TEXT = 'Full';
 
+export const OPEN_SEASONS_INTRO =
+  'Register a team, or register as a free agent and an organizer places you on one.';
+
 export const BADGE_TEXT: Record<SeasonPhase, string> = {
   registrationOpen: 'Registration open',
   registrationClosed: 'Registration closed',

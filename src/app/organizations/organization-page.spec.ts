@@ -62,6 +62,12 @@ function text(element: Element | null | undefined): string {
   return (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
+function textOutsideHidden(element: Element): string {
+  const copy = element.cloneNode(true) as Element;
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return text(copy);
+}
+
 const head = () => TestBed.inject(DOCUMENT).head;
 const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
@@ -585,9 +591,9 @@ describe('OrganizationPage', () => {
       for (const bar of bars) {
         expect(bar.getAttribute('aria-hidden')).toBe('true');
       }
-      expect(text(host(harness).querySelector('main app-organization-skeleton'))).toBe(
-        'Loading the organization.',
-      );
+      expect(
+        textOutsideHidden(host(harness).querySelector('main app-organization-skeleton')!),
+      ).toBe('Loading the organization.');
     });
 
     it('does not show the skeleton for a missing organization or a failed query', async () => {

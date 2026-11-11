@@ -62,6 +62,7 @@ import {
   closesText,
   FULL_BADGE,
   FULL_BADGE_TEXT,
+  OPEN_SEASONS_INTRO,
   leagueSeasonStatus,
   OPEN_BADGE,
 } from './season-status';
@@ -213,9 +214,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
             </h2>
             @if (openCards(); as cards) {
               @if (cards.length) {
-                <p class="mt-1 text-sm text-muted-foreground">
-                  Register a team, or register as a free agent and an organizer places you on one.
-                </p>
+                <p class="mt-1 text-sm text-muted-foreground">{{ openSeasonsIntro }}</p>
                 <ul role="list" class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
                   @for (card of cards; track card.href) {
                     <li
@@ -513,6 +512,7 @@ export class OrganizationOverview {
   protected readonly openBadge = OPEN_BADGE;
   protected readonly fullBadge = FULL_BADGE;
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
+  protected readonly openSeasonsIntro = OPEN_SEASONS_INTRO;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');

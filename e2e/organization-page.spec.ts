@@ -14,6 +14,7 @@ import {
   PACKED_LEAGUE,
   seedFullSeasonTenant,
 } from './support/full-season';
+import { answerWithClientShell } from './support/client-shell';
 import { organizationHeaderSavedKey } from './support/saved-copies';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
@@ -976,6 +977,93 @@ test.describe('organization page: Registration open', () => {
       `${tenant.path}/leagues/open-league/seasons/sooner-season#registration`,
     );
     await expect(page.locator('#registration')).toBeVisible();
+  });
+
+  const SKELETON_WIDTHS = [
+    { name: 'the default width', width: undefined },
+    { name: 'a touch screen 800px wide and a mouse 600px wide', width: { touch: 800, mouse: 600 } },
+  ];
+  for (const { name, width } of SKELETON_WIDTHS) {
+    test(`browser: the Leagues heading stays where it is as the open seasons arrive at ${name}`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      const touch = testInfo.project.name === 'chromium-mobile';
+      const tenant = await openSeasonsTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
+      // The client shell renders the saved lists at once, so dropping the open seasons' copy and holding their answer leaves only that section loading.
+      await page.evaluate(() => {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+            localStorage.removeItem(key);
+          }
+        }
+      });
+      const held = await holdQueries(page, ['seasons:listOpenForOrganization']);
+      await answerWithClientShell(page, tenant.path);
+      if (width) {
+        await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 900 });
+      }
+      await page.reload();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.locator('#registration-open app-open-seasons-skeleton')).toBeVisible();
+      if (touch && !width) await expectAccessible(page);
+      const headingTop = () =>
+        page
+          .locator('#leagues-heading')
+          .evaluate((heading) => heading.getBoundingClientRect().top + window.scrollY);
+      const before = await headingTop();
+      expect(before).toBeGreaterThan(0);
+
+      held.release();
+      await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
+      expect(await headingTop()).toBe(before);
+    });
+  }
+
+  test('browser: a screen reader hears the open seasons status in the held state and the intro once when they load', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium-desktop',
+      'the accessibility tree is the same on every screen',
+    );
+    const tenant = await openSeasonsTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+          localStorage.removeItem(key);
+        }
+      }
+    });
+    const held = await holdQueries(page, ['seasons:listOpenForOrganization']);
+    await answerWithClientShell(page, tenant.path);
+    await page.reload();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const section = page.locator('#registration-open');
+    await expect(section.locator('app-open-seasons-skeleton')).toBeVisible();
+
+    const intro =
+      'Register a team, or register as a free agent and an organizer places you on one.';
+    const loading = await section.ariaSnapshot();
+    expect(loading).toContain('Loading the open seasons.');
+    expect(loading).not.toContain(intro);
+
+    held.release();
+    await expect(section.locator('> ul > li')).toHaveCount(2);
+    const loaded = await section.ariaSnapshot();
+    expect(loaded.split(intro)).toHaveLength(2);
+    expect(loaded).not.toContain('Loading the open seasons.');
   });
 });
 
