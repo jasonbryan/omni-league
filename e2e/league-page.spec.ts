@@ -603,37 +603,53 @@ test.describe('public league page in the browser', () => {
   });
 
   test.describe('after an in-app navigation', () => {
-    test('shows the skeleton with its status while the data is on its way, then the page with its h1 within 4px of the skeleton’s heading bar, and focus on main', async ({
-      page,
-      consoleGuard,
-    }) => {
-      const { tenant, path } = await seed();
-      const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+    const WIDTHS = [
+      { name: null, width: undefined },
+      {
+        name: 'a touch screen 800px wide and a mouse 600px wide',
+        width: { touch: 800, mouse: 600 },
+      },
+    ];
+    for (const { name, width } of WIDTHS) {
+      const title =
+        'shows the skeleton with its status while the data is on its way, then the page with its h1 within 4px of the skeleton’s heading bar, and focus on main';
+      test(name ? `${title} at ${name}` : title, async ({ page, consoleGuard }, testInfo) => {
+        if (width) {
+          test.skip(
+            !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+            'one Chromium project per pointer',
+          );
+          const touch = testInfo.project.name === 'chromium-mobile';
+          await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 800 });
+        }
+        const { tenant, path } = await seed();
+        const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
+        await page.goto(tenant.path);
+        await hydrated(consoleGuard);
 
-      await page.locator(`main a[href="${path}"]`).click();
-      await expect.poll(() => held.isHolding()).toBe(true);
-      await expect(page).toHaveURL(`${baseURL}${path}`);
+        await page.locator(`main a[href="${path}"]`).click();
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await expect(page).toHaveURL(`${baseURL}${path}`);
 
-      const skeleton = page.getByTestId('league-skeleton');
-      await expect(skeleton).toBeVisible();
-      await expect(skeleton.getByRole('status')).toHaveText('Loading the league.');
-      await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
-      await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
-      await expect(page.locator('main[id="main"]')).toBeFocused();
-      const skeletonScan = await axeScan(page);
-      expect(describeViolations(skeletonScan.violations)).toEqual([]);
-      const bar = await skeleton.locator('span').nth(1).boundingBox();
+        const skeleton = page.getByTestId('league-skeleton');
+        await expect(skeleton).toBeVisible();
+        await expect(skeleton.getByRole('status')).toHaveText('Loading the league.');
+        await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+        await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
+        await expect(page.locator('main[id="main"]')).toBeFocused();
+        const skeletonScan = await axeScan(page);
+        expect(describeViolations(skeletonScan.violations)).toEqual([]);
+        const bar = await skeleton.locator('span').nth(1).boundingBox();
 
-      held.release();
-      const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
-      await expect(h1).toBeVisible();
-      await expect(skeleton).toHaveCount(0);
-      const heading = await h1.boundingBox();
-      expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
-      await expect(page.locator('main[id="main"]')).toBeFocused();
-    });
+        held.release();
+        const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+        await expect(h1).toBeVisible();
+        await expect(skeleton).toHaveCount(0);
+        const heading = await h1.boundingBox();
+        expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+        await expect(page.locator('main[id="main"]')).toBeFocused();
+      });
+    }
   });
 
   test.describe('a draft league', () => {
