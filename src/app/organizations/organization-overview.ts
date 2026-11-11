@@ -40,6 +40,7 @@ import {
   type PublicOrganizationHeader,
   type PublicSport,
 } from './organization-path';
+import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
@@ -286,7 +287,10 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
               }
             } @else {
               <p role="status" class="sr-only">Loading the open seasons.</p>
-              <app-open-seasons-skeleton />
+              <app-open-seasons-skeleton
+                [count]="expectedOpenSeasons()"
+                [noOpenText]="noOpenText()"
+              />
             }
           </section>
         }
@@ -495,6 +499,7 @@ export class OrganizationOverview {
   readonly leaguesBusy = input(false);
   readonly locationsBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
+  readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
   readonly now = input.required<number>();
   readonly canManage = input(false);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);

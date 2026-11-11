@@ -530,6 +530,133 @@ describe('the Registration open section', () => {
     });
   });
 
+  describe('the skeleton while the open seasons of a new view load', () => {
+    const season = (n: number, league: typeof COED_7V7) => ({
+      name: `Season ${n}`,
+      slug: `season-${n}`,
+      startDate: '2027-07-01',
+      endDate: '2027-09-01',
+      registrationDeadline: `2027-05-0${n}`,
+      minimumRosterSize: 7,
+      league,
+    });
+    const SOCCER = [1, 2, 3].map((n) => season(n, COED_7V7));
+    const ALL_SPORTS = [...SOCCER, season(4, SUNDAY_4S)];
+    const NO_SOFTBALL: PublicOpenSeasonRows = [];
+
+    const skeleton = (harness: RouterTestingHarness) =>
+      section(harness)?.querySelector('app-open-seasons-skeleton') ?? null;
+    const skeletonCards = (harness: RouterTestingHarness) =>
+      skeleton(harness)?.querySelectorAll('.rounded-xl').length;
+
+    async function visit(
+      harness: RouterTestingHarness,
+      url: string,
+      open: PublicOpenSeasonRows | undefined,
+    ): Promise<void> {
+      // The copy saved when the view was shown would fill the section at once.
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+          localStorage.removeItem(key);
+        }
+      }
+      await harness.navigateByUrl(url);
+      await settle(harness);
+      const segment = /\/sports\/([^/?]+)/.exec(url)?.[1];
+      const page = withSeasons(open ?? []);
+      const results = segment ? sportQueryResults(page, segment) : queryResults(page);
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      if (open) subscription(OPEN_SEASONS).emit(open);
+      await settle(harness);
+    }
+
+    it('shows two cards on the first view of an organization', async () => {
+      const harness = await open();
+      const results = queryResults(withSeasons(ALL_SPORTS));
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      expect(skeletonCards(harness)).toBe(2);
+    });
+
+    it('shows the no-open line with no card for a sport with no open season', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, undefined);
+      expect(skeletonCards(harness)).toBe(0);
+      expect(text(skeleton(harness))).toBe(
+        'No softball season is open for registration right now. Each league below shows its next season once it is published.',
+      );
+      expect(skeleton(harness)?.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+      expect(text(section(harness)?.querySelector('[role="status"]'))).toBe(
+        'Loading the open seasons.',
+      );
+    });
+
+    it('shows the cards of the sport in All sports on the way to that sport', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('reads the All sports count, not the zero of the sport between', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, NO_SOFTBALL);
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('shows the All sports count again on the way back to All sports', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, ORG, undefined);
+      expect(skeletonCards(harness)).toBe(4);
+    });
+
+    it('shows the count of the view it came from when a filter is chosen', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, `${ORG}/sports/soccer?gender=coed`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('takes a filter outside the sport scope for the view without it', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, `${ORG}/sports/softball`, NO_SOFTBALL);
+      // With several sports a format means nothing on All sports, so the page drops it.
+      await visit(harness, `${ORG}?format=4v4`, undefined);
+      expect(skeletonCards(harness)).toBe(4);
+    });
+
+    it('records nothing for a view whose seasons are still loading', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, undefined);
+      // Only rule 3 answers this view, so a Softball view recorded as empty would give 0.
+      await visit(harness, `${ORG}/sports/soccer?gender=coed`, undefined);
+      expect(skeletonCards(harness)).toBe(ALL_SPORTS.length);
+    });
+
+    it('leaves the cards in place once the seasons arrive', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      subscription(OPEN_SEASONS).emit(SOCCER);
+      await settle(harness);
+      expect(skeleton(harness)).toBeNull();
+      expect(section(harness)?.querySelectorAll(':scope > ul > li')).toHaveLength(3);
+    });
+  });
+
   describe('an organization with no league', () => {
     it('has no Registration open section and no hero button', async () => {
       const empty = { ...GULF_COAST, leagueCount: 0, leagues: [], sports: [], sportCount: 0 };
