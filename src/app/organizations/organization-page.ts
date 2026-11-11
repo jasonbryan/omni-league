@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   linkedSignal,
   type Signal,
@@ -27,6 +28,11 @@ import { ServerErrorView } from '../server-error/server-error-view';
 import { PageLoadStatus } from '../public-layout/page-load-status';
 import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
+import {
+  OpenSeasonsSeen,
+  UNSEEN_OPEN_SEASON_COUNT,
+  type OpenSeasonsView,
+} from './open-seasons-seen';
 import { OrganizationOverview, type ListPaging } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
 import { listPagesPath } from './organization-path';
@@ -88,6 +94,7 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [locationsBusy]="locationsBusy()"
           [savedAt]="savedAt()"
           [openSeasons]="openSeasons()"
+          [expectedOpenSeasons]="expectedOpenSeasons()"
           [now]="now()"
           [canManage]="viewerIsOrgAdmin.value() === true"
           [filters]="filters()"
@@ -181,6 +188,7 @@ export class OrganizationPage {
     this.auth.convexAuthenticated() ? { slug: this.slug() } : skipToken,
   );
   private readonly online = injectOnline();
+  private readonly openSeasonsSeen = inject(OpenSeasonsSeen);
   protected readonly now = injectNow();
 
   private readonly listKey = computed(() => `${this.slug()}/${this.segment()}`);
@@ -256,6 +264,17 @@ export class OrganizationPage {
     return rows && openSeasonsBySoonestDeadline(rows, this.now());
   });
 
+  // The view is the one the query answers: the filters in scope, as it drops the rest.
+  private readonly openSeasonsView = computed((): OpenSeasonsView | undefined => {
+    if (!this.header.value() || this.noLeagueInSport()) return undefined;
+    return { slug: this.slug(), sport: this.sport()?.name, filters: this.filters() };
+  });
+
+  protected readonly expectedOpenSeasons = computed(() => {
+    const view = this.openSeasonsView();
+    return view ? this.openSeasonsSeen.expectedCount(view) : UNSEEN_OPEN_SEASON_COUNT;
+  });
+
   // Online, the hero and chips stay on screen while the lists of another sport load. Offline, a list with no saved copy means the whole page has none.
   protected readonly organization = computed(() => {
     if (this.failed() || this.noLeagueInSport()) return undefined;
@@ -319,6 +338,16 @@ export class OrganizationPage {
   );
 
   constructor() {
+    effect(() => {
+      const view = this.openSeasonsView();
+      const open = view && this.openSeasons();
+      if (view && open) {
+        this.openSeasonsSeen.record(
+          view,
+          open.map((season) => season.league.sportName),
+        );
+      }
+    });
     bindPageMeta(() => {
       const page = this.shownOrganization();
       const leagues = this.leaguePaging();
