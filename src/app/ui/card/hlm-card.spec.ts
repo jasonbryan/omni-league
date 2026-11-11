@@ -12,7 +12,6 @@ import { HlmCardImports } from './index';
         <div hlmCardAction>Action</div>
       </div>
       <div hlmCardContent>Content</div>
-      <div hlmCardFooter>Footer</div>
     </div>
     <div hlmCard></div>
   `,
@@ -32,7 +31,6 @@ describe('HlmCard', () => {
       'card-description',
       'card-action',
       'card-content',
-      'card-footer',
       'card',
     ]);
     const [large, plain] = root.querySelectorAll('[data-slot="card"]');

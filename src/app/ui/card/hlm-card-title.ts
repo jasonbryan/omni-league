@@ -4,7 +4,7 @@ import { Directive } from '@angular/core';
   selector: '[hlmCardTitle]',
   exportAs: 'hlmCardTitle',
   host: {
-    class: 'text-base leading-snug font-medium group-data-[size=sm]/card:text-sm',
+    class: 'text-base leading-snug font-medium',
     'data-slot': 'card-title',
   },
 })
