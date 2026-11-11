@@ -44,9 +44,8 @@ describe('HlmSpinner', () => {
     ]);
   });
 
-  it('keeps the slot, and the inline-start marker that the button padding reads', () => {
+  it('keeps the slot', () => {
     expect(spinner.getAttribute('data-slot')).toBe('spinner');
-    expect(spinner.getAttribute('data-icon')).toBe('inline-start');
   });
 
   it('draws the Lucide loader circle', () => {

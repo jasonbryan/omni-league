@@ -26,7 +26,7 @@ describe('hand-written spinners', () => {
     assert.deepEqual(offenders, []);
   });
 
-  it('leave src/app/ui/spinner as the one place that spins an icon, and only for people who accept motion', () => {
+  it('the helm spinner spins only through motion-safe:animate-spin', () => {
     const spinner = readFileSync(join(uiDir, 'spinner', 'hlm-spinner.ts'), 'utf8');
     assert.match(spinner, /motion-safe:animate-spin/);
     assert.doesNotMatch(spinner.replaceAll('motion-safe:animate-spin', ''), /animate-/);

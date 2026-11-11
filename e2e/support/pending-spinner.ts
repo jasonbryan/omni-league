@@ -16,12 +16,12 @@ interface Measured {
   large: boolean;
 }
 
-const SPINNER = '[data-icon="inline-start"]';
+const SPINNER = 'hlm-spinner[data-icon="inline-start"]';
 
 export async function expectSpinnerAtButtonStart(button: Locator): Promise<Measured> {
   const measured = await button.evaluate(async (element, selector): Promise<Measured> => {
     // `transition-all` on the button animates its padding while the spinner arrives.
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
     const spinner = element.querySelector<HTMLElement>(selector)!;
     // A turning box has a larger bounding box, so each measurement starts from the unturned one.
     for (const animation of spinner.getAnimations()) {
