@@ -3,10 +3,10 @@
 // Local changes, to keep when re-copying from upstream:
 // - `hlmBreadcrumb` has no `role` (a `nav` has one): the page sets the nav's label, which keeps the capital "Breadcrumb"
 //   (upstream's default is "breadcrumb");
-// - `hlmBreadcrumbList` has `role="list"`, which Safari needs on a list with no bullets, and is `flex items-center text-sm
+// - `hlmBreadcrumbList` matches only an `ol`, has `role="list"`, which Safari needs on a list with no bullets, and is `flex items-center text-sm
 //   text-muted-foreground` without `flex-wrap`, `gap-1.5`, or `wrap-break-word`: each trail sets its own wrap and gap, so the
 //   wrapping trails keep the heights their loading skeletons reserve;
-// - `hlmBreadcrumbItem` has no `inline-flex items-center`: each trail keeps its own item display;
+// - `hlmBreadcrumbItem` matches only a `li` and has no `inline-flex items-center`: each trail keeps its own item display;
 // - `hlmBreadcrumbLink` keeps upstream's `hover:text-foreground transition-colors`, which fades the hover colour over 150 ms;
 //   each trail adds its own crumb class;
 // - `hlmBreadcrumbPage` goes on the current `a` and stays a link: it has the `RouterLink` host directive, an `href`, and
