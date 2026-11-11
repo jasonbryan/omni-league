@@ -1067,6 +1067,128 @@ test.describe('organization page: Registration open', () => {
   });
 });
 
+type SportChip = 'All sports' | 'Soccer' | 'Softball';
+
+const HEADING_TOLERANCE_PX = 4;
+const OPEN_SEASONS_QUERY = 'seasons:listOpenForOrganization';
+const OPEN_SOCCER_SEASONS = 3;
+
+async function threeOpenSoccerSeasonsTenant(): Promise<Tenant> {
+  const tenant = await seedTenant({
+    // A longer name wraps the hero title at 1280px only while the hero's button takes its width, which moves Leagues for another reason.
+    name: 'E2E Open Seasons',
+    locations: [
+      { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
+      { name: 'Beta Diamond', address: '2 Beta Road, Corpus Christi, TX 78412' },
+    ],
+    leagues: [
+      { name: 'Open League', sport: 'soccer', locations: ['Alpha Field'] },
+      { name: 'Diamond League', sport: 'softball', locations: ['Beta Diamond'] },
+    ],
+  });
+  await seedSeasons(
+    tenant,
+    'open-league',
+    [1, 2, 3].map((n) => ({
+      name: `Season ${n}`,
+      slug: `season-${n}`,
+      startDate: dateFromToday(30 + n),
+      endDate: dateFromToday(90 + n),
+      registrationDeadline: dateFromToday(5 * n),
+    })),
+  );
+  return tenant;
+}
+
+test.describe('organization page: the open-season skeleton follows the views already seen', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  const chipLink = (page: Page, chip: SportChip) =>
+    page
+      .getByRole('navigation', { name: 'Sports' })
+      .getByRole('link', { name: new RegExp(`^${chip}`) });
+  const headingTop = (page: Page) =>
+    page
+      .locator('#leagues-heading')
+      .evaluate((heading) => heading.getBoundingClientRect().top + window.scrollY);
+  const skeleton = (page: Page) => page.locator('#registration-open app-open-seasons-skeleton');
+  const loadedCards = (page: Page) => page.locator('#registration-open > ul > li');
+
+  async function openChip(page: Page, chip: SportChip): Promise<void> {
+    await chipLink(page, chip).click();
+    await expect(chipLink(page, chip)).toHaveAttribute('aria-current', 'page');
+  }
+
+  async function expectLeaguesStaysAfter(
+    page: Page,
+    consoleGuard: { hydrated: boolean },
+    hops: readonly SportChip[],
+    shown: { cards: number; noOpenText?: string },
+  ): Promise<void> {
+    const tenant = await threeOpenSoccerSeasonsTenant();
+    const held = await holdQueries(page, [OPEN_SEASONS_QUERY], { holdFromStart: false });
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expect(loadedCards(page)).toHaveCount(OPEN_SOCCER_SEASONS);
+    for (const chip of hops.slice(0, -1)) {
+      await openChip(page, chip);
+      await expect(skeleton(page)).toHaveCount(0);
+    }
+    // A saved copy of the view would fill the section at once and leave nothing to hold.
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+          localStorage.removeItem(key);
+        }
+      }
+    });
+    held.holdNextAnswer();
+    await openChip(page, hops[hops.length - 1]);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(skeleton(page)).toBeVisible();
+    await expect(skeleton(page).locator(':scope > div > div')).toHaveCount(shown.cards);
+    if (shown.noOpenText !== undefined) {
+      await expect(skeleton(page)).toHaveText(shown.noOpenText);
+    }
+    const before = await headingTop(page);
+    expect(before).toBeGreaterThan(0);
+
+    held.release();
+    await expect(skeleton(page)).toHaveCount(0);
+    expect(Math.abs((await headingTop(page)) - before)).toBeLessThanOrEqual(HEADING_TOLERANCE_PX);
+  }
+
+  test('browser: from All sports to a sport with no open season, the skeleton is the no-open line and Leagues stays', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(
+      !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+      'one Chromium project per pointer',
+    );
+    await expectLeaguesStaysAfter(page, consoleGuard, ['Softball'], {
+      cards: 0,
+      noOpenText:
+        'No softball season is open for registration right now. Each league below shows its next season once it is published.',
+    });
+  });
+
+  const PATHS: { name: string; hops: SportChip[] }[] = [
+    { name: 'from All sports to Soccer', hops: ['Soccer'] },
+    { name: 'from All sports to Softball and on to Soccer', hops: ['Softball', 'Soccer'] },
+    { name: 'from All sports to Soccer and back to All sports', hops: ['Soccer', 'All sports'] },
+  ];
+  for (const { name, hops } of PATHS) {
+    test(`browser: ${name}, the skeleton has the 3 cards the open soccer seasons fill and Leagues stays`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-mobile', 'the case is measured at 360px touch');
+      await expectLeaguesStaysAfter(page, consoleGuard, hops, { cards: OPEN_SOCCER_SEASONS });
+    });
+  }
+});
+
 test.describe('organization page: a full season with registration open', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
