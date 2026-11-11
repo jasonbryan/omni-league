@@ -5,7 +5,6 @@ import { AdminOverview } from './admin-overview';
 import {
   adminRoutes,
   COASTAL,
-  COASTAL_LOCATIONS,
   GET_ADMIN_CONTEXT,
   LIST_FOR_ADMIN,
   openAdmin,
@@ -15,11 +14,12 @@ import {
 
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
-// The "Get set up" rule and the Leagues tile read the organization's counters, not the admin list, which stops at 200 rows.
+// The "Get set up" rule and the header counts read the organization's counters, not the admin list, which stops at 200 rows.
 const PUBLISHED_COUNT = 'leagues:publishedCount';
 const DRAFT_COUNT = 'leagues:draftCount';
 const STAFF_COUNT = 'memberships:staffCount';
-const PENDING_COUNT = 'invites:pendingCount';
+const ATTENTION = 'organizations:getAttention';
+const OPEN_SEASONS = 'seasons:listOpenForOrganization';
 
 async function open() {
   const opened = await openAdmin(ROUTES, URL);
@@ -30,17 +30,17 @@ async function open() {
 }
 
 describe('AdminOverview', () => {
-  it('shows the organization, the h1 "Overview", and "View public page"', async () => {
+  // A saved copy of an earlier test's answer would fill a section that is still loading.
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it('shows the h1 "Overview" and no count tile', async () => {
     const { page } = await open();
     const main = page.querySelector('main')!;
-    expect(text(main.querySelector('p.text-sm.font-medium'))).toBe('Coastal Bend Rec Club');
     expect(page.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main.querySelector('h1'))).toBe('Overview');
-    const link = main.querySelector<HTMLAnchorElement>(
-      'a[href="/organizations/coastal-bend-rec-club"]',
-    );
-    expect(text(link)).toBe('View public page');
-    expect(link?.getAttribute('data-slot')).toBe('button');
+    expect(main.querySelector('dl')).toBeNull();
+    expect(main.textContent).not.toContain('Locations');
   });
 
   it('sets the title to "Overview | <organization> | Omni League"', async () => {
@@ -48,7 +48,7 @@ describe('AdminOverview', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
-  it('asks the location list, the published-league counter, the draft-league counter, the staff counter, and the pending-invite counter with the organization id', async () => {
+  it('asks the counters, the attention list, and the open seasons, and no pending-invite counter', async () => {
     const { convex, subscription } = await open();
     expectPageAndShellSubscriptions(convex, [
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
@@ -56,207 +56,86 @@ describe('AdminOverview', () => {
       [PUBLISHED_COUNT, { organizationId: COASTAL.organizationId }],
       [DRAFT_COUNT, { organizationId: COASTAL.organizationId }],
       [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
-      [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
+      [ATTENTION, { organizationId: COASTAL.organizationId }],
+      [OPEN_SEASONS, { orgSlug: COASTAL.slug }],
     ]);
-    expect(subscription(LIST_FOR_ADMIN)).toBeDefined();
+    expect(subscription(ATTENTION)).toBeDefined();
+    expect(convex.activeSubscriptions.map((s) => s.name)).not.toContain('invites:pendingCount');
   });
 
-  it('with no locations the Locations tile reads 0 and "None yet"', async () => {
-    const { page, subscription, flush } = await open();
-    subscription(LIST_FOR_ADMIN)!.emit([]);
-    await flush();
-    const tiles = [...page.querySelectorAll('main dl > div')];
-    expect(tiles.map((tile) => text(tile.querySelector('dt')))).toEqual([
-      'Locations',
-      'Leagues',
-      'Staff',
-    ]);
-    const [count, note] = [...tiles[0].querySelectorAll('dd')].map(text);
-    expect([count, note]).toEqual(['0', 'None yet']);
-  });
+  describe('the header', () => {
+    const summary = (page: HTMLElement) => page.querySelector('[data-slot="overview-counts"]');
+    const links = (page: HTMLElement) =>
+      [...summary(page)!.querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]);
 
-  it('with locations the tile reads the count and "All on your public page"', async () => {
-    const { page, subscription, flush } = await open();
-    subscription(LIST_FOR_ADMIN)!.emit(COASTAL_LOCATIONS.slice(0, 2));
-    await flush();
-    const [count, note] = [...page.querySelectorAll('main dl dd')].map(text);
-    expect([count, note]).toEqual(['2', 'All on your public page']);
-  });
+    async function openWithCounts(
+      published: number,
+      drafts: number,
+      locations: number,
+      staff: number,
+    ) {
+      const opened = await open();
+      opened.subscription(PUBLISHED_COUNT)!.emit(published);
+      opened.subscription(DRAFT_COUNT)!.emit(drafts);
+      opened.subscription(LIST_FOR_ADMIN)!.emit(
+        Array.from({ length: locations }, (_, i) => ({
+          locationId: `loc_${i}`,
+          name: `Location ${i}`,
+          address: '1 Main St',
+        })),
+      );
+      opened.subscription(STAFF_COUNT)!.emit(staff);
+      await opened.flush();
+      return opened;
+    }
 
-  describe('the Leagues tile', () => {
-    const tile = (page: HTMLElement) =>
-      [...page.querySelectorAll('main dl > div')][1].querySelectorAll('dd');
-
-    it('with none at all, reads 0 and "None yet"', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(DRAFT_COUNT)!.emit(0);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['0', 'None yet']);
+    it('links the league, location, and staff counts to their pages', async () => {
+      const { page } = await openWithCounts(3, 2, 3, 4);
+      expect(links(page)).toEqual([
+        ['5 leagues', `/app/organizations/${COASTAL.slug}/leagues`],
+        ['3 locations', `/app/organizations/${COASTAL.slug}/locations`],
+        ['4 staff', `/app/organizations/${COASTAL.slug}/staff`],
+      ]);
     });
 
-    it('adds the published counter to the draft counter and splits them: "N published, M drafts"', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(2);
-      subscription(DRAFT_COUNT)!.emit(2);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['4', '2 published, 2 drafts']);
+    it('counts a draft league with the published ones, from the counters', async () => {
+      const { page } = await openWithCounts(450, 320, 1, 1);
+      expect(links(page).map(([label]) => label)).toEqual(['770 leagues', '1 location', '1 staff']);
     });
 
-    it('takes both parts from the counters, past the 200 rows the league list stops at', async () => {
+    it('draws a placeholder of the loaded height until every count has loaded', async () => {
       const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(450);
-      subscription(DRAFT_COUNT)!.emit(320);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['770', '450 published, 320 drafts']);
-    });
-
-    it('asks no league list', async () => {
-      const { convex } = await open();
-      expect(convex.activeSubscriptions.map((s) => s.name)).not.toContain('leagues:listForAdmin');
-    });
-
-    it('uses the singular for one draft, and leaves out a part that is 0', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(DRAFT_COUNT)!.emit(1);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
-      subscription(PUBLISHED_COUNT)!.emit(2);
-      subscription(DRAFT_COUNT)!.emit(0);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['2', '2 published']);
-    });
-
-    it('follows both live as a league is published', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(DRAFT_COUNT)!.emit(1);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
+      expect(summary(page)!.querySelector('a')).toBeNull();
+      expect(summary(page)!.querySelector('[aria-hidden="true"]')).not.toBeNull();
       subscription(PUBLISHED_COUNT)!.emit(1);
       subscription(DRAFT_COUNT)!.emit(0);
+      subscription(STAFF_COUNT)!.emit(2);
       await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
+      expect(summary(page)!.querySelector('a')).toBeNull();
+      subscription(LIST_FOR_ADMIN)!.emit([]);
+      await flush();
+      expect(links(page)).toHaveLength(3);
     });
 
-    it('draws a placeholder until both counters have loaded', async () => {
-      const { page, subscription, flush } = await open();
-      expect(text(tile(page)[0])).toBe('');
-      expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
-      subscription(PUBLISHED_COUNT)!.emit(1);
-      await flush();
-      expect(text(tile(page)[0])).toBe('');
-      subscription(DRAFT_COUNT)!.emit(0);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
-    });
-
-    it('reads "–" with a note when the published counter fails, never the error message', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.fail(new Error('Server Error: secret'));
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
-      expect(page.textContent).not.toContain('secret');
-    });
-
-    it('keeps the published count and says the drafts could not be loaded when the draft counter fails', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(PUBLISHED_COUNT)!.emit(3);
-      subscription(DRAFT_COUNT)!.fail(new Error('Server Error: secret'));
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['3', 'Drafts could not be loaded']);
-      expect(page.textContent).not.toContain('secret');
-    });
-  });
-
-  describe('the Staff tile', () => {
-    const tile = (page: HTMLElement) =>
-      [...page.querySelectorAll('main dl > div')][2].querySelectorAll('dd');
-
-    it('reads the staff counter and "N pending invites"', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(STAFF_COUNT)!.emit(3);
-      subscription(PENDING_COUNT)!.emit(2);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['3', '2 pending invites']);
-    });
-
-    it('reads the counter, which holds past the 200 rows the member list stops at', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(STAFF_COUNT)!.emit(250);
-      subscription(PENDING_COUNT)!.emit(0);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['250', 'No pending invites']);
-    });
-
-    it('reads the pending-invite counter, which holds past the 200 rows the pending list stops at', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(STAFF_COUNT)!.emit(3);
-      subscription(PENDING_COUNT)!.emit(250);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['3', '250 pending invites']);
-    });
-
-    it('asks neither the member list nor the pending list', async () => {
-      const { convex } = await open();
-      const asked = convex.activeSubscriptions.map((s) => s.name);
-      expect(asked).not.toContain('memberships:listForOrganization');
-      expect(asked).not.toContain('invites:listPending');
-      expect(asked).toContain(PENDING_COUNT);
-    });
-
-    it('uses the singular for one pending invite, and "No pending invites" for none', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(STAFF_COUNT)!.emit(1);
-      subscription(PENDING_COUNT)!.emit(1);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', '1 pending invite']);
-      subscription(PENDING_COUNT)!.emit(0);
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['1', 'No pending invites']);
-    });
-
-    it('draws a placeholder while either counter loads', async () => {
-      const { page, subscription, flush } = await open();
-      expect(text(tile(page)[0])).toBe('');
-      expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
-      subscription(STAFF_COUNT)!.emit(1);
-      await flush();
-      expect(text(tile(page)[0])).toBe('');
-    });
-
-    it('shows "–" and a note when the counter fails, never the error message', async () => {
-      const { page, subscription, flush } = await open();
+    it('leaves out a count that could not be loaded, never showing the error message', async () => {
+      const { page, subscription, flush } = await openWithCounts(1, 0, 1, 1);
       subscription(STAFF_COUNT)!.fail(new Error('Server Error: secret'));
       await flush();
-      expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
+      expect(links(page).map(([label]) => label)).toEqual(['1 league', '1 location']);
       expect(page.textContent).not.toContain('secret');
     });
 
-    it('a failing pending-invite counter does not hide the member count', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(STAFF_COUNT)!.emit(2);
-      subscription(PENDING_COUNT)!.fail(new Error('x'));
-      await flush();
-      expect([...tile(page)].map(text)).toEqual(['2', 'Pending invites could not be loaded']);
+    it('has "Create a league" as the one primary action, linking to the create form on Leagues', async () => {
+      const { page } = await open();
+      const main = page.querySelector('main')!;
+      const primary = [...main.querySelectorAll<HTMLAnchorElement>('a[data-slot="button"]')].filter(
+        (a) => a.className.includes('bg-primary'),
+      );
+      expect(primary.map(text)).toEqual(['Create a league']);
+      expect(primary[0].getAttribute('href')).toBe(
+        `/app/organizations/${COASTAL.slug}/leagues#create-league`,
+      );
     });
-  });
-
-  it('draws a placeholder in place of the count while the list loads, and no number', async () => {
-    const { page } = await open();
-    const dd = page.querySelector('main dl dd')!;
-    expect(text(dd)).toBe('');
-    expect(dd.querySelector('[aria-hidden="true"]')).not.toBeNull();
-  });
-
-  it('shows "–" and a note when the list fails, never the error message', async () => {
-    const { page, subscription, flush } = await open();
-    subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error: secret'));
-    await flush();
-    const [count, note] = [...page.querySelectorAll('main dl dd')].map(text);
-    expect([count, note]).toEqual(['–', 'Could not be loaded']);
-    expect(page.textContent).not.toContain('secret');
   });
 
   describe('"Get set up" (state 2)', () => {
@@ -344,6 +223,322 @@ describe('AdminOverview', () => {
       subscription(PUBLISHED_COUNT)!.fail(new Error('x'));
       await flush();
       expect(section(page)).not.toBeNull();
+    });
+  });
+
+  describe('Needs your attention', () => {
+    const NOW = Date.parse('2027-08-10T18:00:00Z');
+    const BASE = `/app/organizations/${COASTAL.slug}`;
+    const NONE = { total: 0, capped: false };
+
+    const draft = (seasonId: string, name: string, leagueName: string, leagueSlug: string) => ({
+      seasonId,
+      name,
+      leagueName,
+      leagueSlug,
+    });
+    const FALL_SUNDAY = draft(
+      's1',
+      'Fall 2027',
+      'Sunday Reverse Coed 4s',
+      'sunday-reverse-coed-4s',
+    );
+    const FALL_COED = draft('s2', 'Fall 2027', 'Coed 7v7 Rec', 'coed-7v7-rec');
+    const OVER_30 = { leagueId: 'l1', name: "Men's Over-30 11v11", slug: 'mens-over-30-11v11' };
+
+    const FOUR_ITEMS = {
+      draftSeasons: { items: [FALL_SUNDAY, FALL_COED], total: 2, capped: false },
+      leaguesWithoutSeason: { items: [OVER_30], total: 1, capped: false },
+      pendingInvites: {
+        soonest: [
+          { email: 'jamie.ortiz@example.test', expiresAt: Date.parse('2027-10-17T18:00:00Z') },
+        ],
+        total: 1,
+        capped: false,
+      },
+    };
+    const EMPTY = {
+      draftSeasons: { items: [], ...NONE },
+      leaguesWithoutSeason: { items: [], ...NONE },
+      pendingInvites: { soonest: [], ...NONE },
+    };
+
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: NOW }));
+    afterEach(() => vi.useRealTimers());
+
+    async function openWith(attention: unknown) {
+      const opened = await open();
+      if (attention !== undefined) opened.subscription(ATTENTION)!.emit(attention);
+      await opened.flush();
+      return opened;
+    }
+
+    const section = (page: HTMLElement) =>
+      page.querySelector<HTMLElement>('section[aria-labelledby="attention-heading"]')!;
+    const items = (page: HTMLElement) => [...section(page).querySelectorAll(':scope > ul > li')];
+
+    it('lists draft seasons, then leagues with no season, then the invites item, each with its action', async () => {
+      const { page } = await openWith(FOUR_ITEMS);
+      expect(items(page).map((li) => [...li.querySelectorAll('p')].map(text))).toEqual([
+        [
+          'Fall 2027 is a draft',
+          "Sunday Reverse Coed 4s · players can't see it until you publish it",
+        ],
+        ['Fall 2027 is a draft', "Coed 7v7 Rec · players can't see it until you publish it"],
+        ["Men's Over-30 11v11 has no season", 'Create one so players can register'],
+        ['1 staff invite is pending', 'jamie.ortiz@example.test · expires Oct 17'],
+      ]);
+      expect(
+        items(page).map((li) => {
+          const a = li.querySelector('a')!;
+          return [text(a), a.getAttribute('href'), a.getAttribute('data-slot')];
+        }),
+      ).toEqual([
+        [
+          'Review Fall 2027, Sunday Reverse Coed 4s',
+          `${BASE}/leagues/sunday-reverse-coed-4s`,
+          'button',
+        ],
+        ['Review Fall 2027, Coed 7v7 Rec', `${BASE}/leagues/coed-7v7-rec`, 'button'],
+        [
+          "Create a season for Men's Over-30 11v11",
+          `${BASE}/leagues/mens-over-30-11v11#create-season`,
+          'button',
+        ],
+        ['Open Staff', `${BASE}/staff`, 'button'],
+      ]);
+    });
+
+    it('names each repeated action by its season and league, so two reviews differ', async () => {
+      const { page } = await openWith(FOUR_ITEMS);
+      const names = [...section(page).querySelectorAll('a')].map(text);
+      expect(new Set(names).size).toBe(names.length);
+      expect(items(page)[0].querySelector('a .sr-only')?.textContent).toBe(
+        ' Fall 2027, Sunday Reverse Coed 4s',
+      );
+    });
+
+    it('has an h2 heading whose count is read as "4 items"', async () => {
+      const { page } = await openWith(FOUR_ITEMS);
+      const heading = section(page).querySelector('h2')!;
+      expect(text(heading)).toBe('Needs your attention');
+      const count = heading.parentElement!.querySelector('[data-slot="attention-count"]')!;
+      expect(text(count.querySelector('[aria-hidden="true"]'))).toBe('4');
+      expect(text(count.querySelector('.sr-only'))).toBe('4 items');
+    });
+
+    it('reads the count as "100+" and "more than 100 items" when a kind passes its cap', async () => {
+      const { page } = await openWith({
+        ...EMPTY,
+        draftSeasons: { items: [FALL_SUNDAY], total: 100, capped: true },
+      });
+      const count = section(page).querySelector('[data-slot="attention-count"]')!;
+      expect(text(count.querySelector('[aria-hidden="true"]'))).toBe('100+');
+      expect(text(count.querySelector('.sr-only'))).toBe('more than 100 items');
+    });
+
+    it('says "and 5 more" after 20 of 25 draft seasons, and "and 80+ more" past the cap', async () => {
+      const twenty = Array.from({ length: 20 }, (_, i) =>
+        draft(`s${i}`, `Season ${i}`, 'League', 'league'),
+      );
+      const { page, subscription, flush } = await openWith({
+        ...EMPTY,
+        draftSeasons: { items: twenty, total: 25, capped: false },
+      });
+      expect(items(page)).toHaveLength(21);
+      expect(text(items(page)[20])).toBe('and 5 more');
+      subscription(ATTENTION)!.emit({
+        ...EMPTY,
+        draftSeasons: { items: twenty, total: 100, capped: true },
+      });
+      await flush();
+      expect(text(items(page)[20])).toBe('and 80+ more');
+    });
+
+    it('puts the "and N more" line after its own kind', async () => {
+      const twenty = Array.from({ length: 20 }, (_, i) => ({
+        leagueId: `l${i}`,
+        name: `League ${i}`,
+        slug: `league-${i}`,
+      }));
+      const { page } = await openWith({
+        ...FOUR_ITEMS,
+        leaguesWithoutSeason: { items: twenty, total: 23, capped: false },
+      });
+      const rows = items(page).map(text);
+      expect(rows[22]).toBe('and 3 more');
+      expect(rows[23]).toContain('1 staff invite is pending');
+    });
+
+    it('lists the invites with "expired" for one past its expiry, and the plural for more than one', async () => {
+      const { page } = await openWith({
+        ...EMPTY,
+        pendingInvites: {
+          soonest: [
+            { email: 'old@example.test', expiresAt: Date.parse('2027-08-01T18:00:00Z') },
+            { email: 'new@example.test', expiresAt: Date.parse('2027-10-17T18:00:00Z') },
+          ],
+          total: 5,
+          capped: false,
+        },
+      });
+      expect(text(items(page)[0].querySelector('p'))).toBe('5 staff invites are pending');
+      expect([...items(page)[0].querySelectorAll('p')].slice(1).map(text)).toEqual([
+        'old@example.test · expired Aug 1',
+        'new@example.test · expires Oct 17',
+      ]);
+    });
+
+    it('says "Nothing needs your attention." with no count when there is nothing to do', async () => {
+      const { page } = await openWith(EMPTY);
+      expect([...section(page).children].map(text)).toEqual([
+        'Needs your attention',
+        'Nothing needs your attention.',
+      ]);
+      expect(section(page).querySelector('[data-slot="attention-count"]')).toBeNull();
+      expect(section(page).querySelector('ul')).toBeNull();
+    });
+
+    it('draws a skeleton with a status for the loading section and no count', async () => {
+      const { page } = await openWith(undefined);
+      expect(text(section(page).querySelector('[role="status"]'))).toBe(
+        'Loading what needs your attention.',
+      );
+      expect(section(page).querySelector('[data-slot="attention-count"]')).toBeNull();
+      expect(text(section(page))).not.toContain('Nothing needs your attention.');
+    });
+
+    it('shows an alert with "Try again" in this section when the list fails, never the error message, and the other section stays', async () => {
+      const { page, subscription, flush } = await openWith(undefined);
+      subscription(OPEN_SEASONS)!.emit([]);
+      subscription(ATTENTION)!.fail(new Error('Server Error: secret'));
+      await flush();
+      const alert = section(page).querySelector('[role="alert"]')!;
+      expect(text(alert)).toContain('Needs your attention could not be loaded.');
+      expect(alert.querySelector('a')?.getAttribute('href')).toBe(BASE);
+      expect(text(alert.querySelector('a'))).toBe('Try again');
+      expect(page.textContent).not.toContain('secret');
+      expect(page.textContent).toContain('No season is open for registration.');
+    });
+
+    it('follows a published league live: the "no season" item goes when its season is created', async () => {
+      const { page, subscription, flush } = await openWith(FOUR_ITEMS);
+      subscription(ATTENTION)!.emit({
+        ...FOUR_ITEMS,
+        leaguesWithoutSeason: { items: [], ...NONE },
+      });
+      await flush();
+      expect(items(page)).toHaveLength(3);
+    });
+  });
+
+  describe('Registration open', () => {
+    // 18:00 UTC is 06:00 the same date at UTC-12.
+    const at = (date: string) => Date.parse(`${date}T18:00:00Z`);
+    const BASE = `/app/organizations/${COASTAL.slug}`;
+    const row = (
+      leagueName: string,
+      leagueSlug: string,
+      name: string,
+      slug: string,
+      deadline: string,
+    ) => ({
+      name,
+      slug,
+      startDate: '2027-06-01',
+      endDate: '2027-08-30',
+      registrationDeadline: deadline,
+      minimumRosterSize: 4,
+      isFull: false,
+      league: { name: leagueName, slug: leagueSlug, sportName: 'Soccer', locationNames: [] },
+    });
+    const SUNDAY = row(
+      'Sunday Reverse Coed 4s',
+      'sunday-reverse-coed-4s',
+      'Summer 2027',
+      'summer-2027',
+      '2027-05-23',
+    );
+    const COED = row('Coed 7v7 Rec', 'coed-7v7-rec', 'Summer 2027', 'summer-2027', '2027-05-19');
+
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: at('2027-05-01') }));
+    afterEach(() => vi.useRealTimers());
+
+    const section = (page: HTMLElement) =>
+      page.querySelector<HTMLElement>('section[aria-labelledby="open-heading"]')!;
+
+    async function openWith(rows: unknown) {
+      const opened = await open();
+      if (rows !== undefined) opened.subscription(OPEN_SEASONS)!.emit(rows);
+      await opened.flush();
+      return opened;
+    }
+
+    it('lists each open season soonest deadline first as "<league> · <season>" with "Closes <date>"', async () => {
+      const { page } = await openWith([SUNDAY, COED]);
+      expect(text(section(page).querySelector('h2'))).toBe('Registration open');
+      const rows = [...section(page).querySelectorAll('li')];
+      expect(rows.map((li) => [...li.querySelectorAll('p')].map(text))).toEqual([
+        ['Coed 7v7 Rec · Summer 2027', 'Closes May 19, 2027'],
+        ['Sunday Reverse Coed 4s · Summer 2027', 'Closes May 23, 2027'],
+      ]);
+      expect(rows.map((li) => li.querySelector('a')!.getAttribute('href'))).toEqual([
+        `${BASE}/leagues/coed-7v7-rec/seasons/summer-2027`,
+        `${BASE}/leagues/sunday-reverse-coed-4s/seasons/summer-2027`,
+      ]);
+    });
+
+    it('leaves out a season whose registration has closed at the viewer time', async () => {
+      vi.setSystemTime(at('2027-05-20'));
+      const { page } = await openWith([SUNDAY, COED]);
+      const rows = [...section(page).querySelectorAll('li')];
+      expect(rows.map((li) => text(li.querySelector('p')))).toEqual([
+        'Sunday Reverse Coed 4s · Summer 2027',
+      ]);
+    });
+
+    it('says "No season is open for registration." when none is', async () => {
+      const { page } = await openWith([]);
+      expect([...section(page).children].map(text)).toEqual([
+        'Registration open',
+        'No season is open for registration.',
+      ]);
+      expect(section(page).querySelector('ul')).toBeNull();
+    });
+
+    it('draws a skeleton with a status while loading, and no empty text', async () => {
+      const { page } = await openWith(undefined);
+      expect(text(section(page).querySelector('[role="status"]'))).toBe(
+        'Loading the seasons open for registration.',
+      );
+      expect(text(section(page))).not.toContain('No season is open');
+    });
+
+    it('shows an alert with "Try again" in this section when the query fails, and the other section stays', async () => {
+      const { page, subscription, flush } = await openWith(undefined);
+      subscription(ATTENTION)!.emit({
+        draftSeasons: { items: [], total: 0, capped: false },
+        leaguesWithoutSeason: { items: [], total: 0, capped: false },
+        pendingInvites: { soonest: [], total: 0, capped: false },
+      });
+      subscription(OPEN_SEASONS)!.fail(new Error('Server Error: secret'));
+      await flush();
+      const alert = section(page).querySelector('[role="alert"]')!;
+      expect(text(alert)).toContain('Registration open could not be loaded.');
+      expect(text(alert.querySelector('a'))).toBe('Try again');
+      expect(page.textContent).not.toContain('secret');
+      expect(page.textContent).toContain('Nothing needs your attention.');
+    });
+
+    it('has an h2 heading, as do Get set up and Needs your attention', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(0);
+      await flush();
+      expect([...page.querySelectorAll('main h2')].map((h) => h.tagName + text(h))).toEqual([
+        'H2Get set up',
+        'H2Needs your attention',
+        'H2Registration open',
+      ]);
     });
   });
 });

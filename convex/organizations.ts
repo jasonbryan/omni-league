@@ -10,6 +10,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server';
+import { attentionValidator, getAttention as readAttention } from './lib/adminAttention';
 import {
   hasOrgAdminRole,
   requireOrgAdmin,
@@ -307,6 +308,15 @@ export const getAdminContext = query({
       ...(organization.cityState !== undefined && { cityState: organization.cityState }),
       ...(await logoUrlField(ctx, organization)),
     };
+  },
+});
+
+export const getAttention = query({
+  args: { organizationId: v.id('organizations') },
+  returns: attentionValidator,
+  handler: async (ctx, { organizationId }) => {
+    await requireOrgAdmin(ctx, organizationId);
+    return await readAttention(ctx, organizationId);
   },
 });
 

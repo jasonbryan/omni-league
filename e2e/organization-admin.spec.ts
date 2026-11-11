@@ -1,12 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
+import { formatCalendarDate } from '../convex/lib/seasonInput';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
-import { seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -19,6 +20,24 @@ const LOCATIONS = [
     address: '2150 Pelican Shoals Dr, Corpus Christi, TX 78418',
   },
 ];
+
+const DAY = 24 * 60 * 60 * 1000;
+
+const ATTENTION_LEAGUES: SeededLeague = [
+  { name: 'Sunday Reverse Coed 4s', sport: 'beachVolleyball', locations: [] },
+  { name: 'Coed 7v7 Rec', sport: 'soccer', locations: [] },
+  { name: "Men's Over-30 11v11", sport: 'soccer', locations: [] },
+];
+
+/** Dated from the test clock, so the season keeps its phase as the test runs. */
+const draftSeason = (name: string, slug: string, deadlineInDays: number) => ({
+  name,
+  slug,
+  startDate: dateFromToday(deadlineInDays + 14),
+  endDate: dateFromToday(deadlineInDays + 70),
+  registrationDeadline: dateFromToday(deadlineInDays),
+  status: 'draft' as const,
+});
 
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -59,9 +78,7 @@ const nameField = (page: Page) => page.locator('#name');
 const addressField = (page: Page) => page.locator('#address');
 const addForm = (page: Page) => page.locator('#add-location form');
 const addButton = (page: Page) => addForm(page).getByRole('button', { name: /^Add location/ });
-const locationTile = (page: Page) =>
-  main(page).locator('dl > div').filter({ hasText: 'Locations' });
-const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
+const countLinks = (page: Page) => main(page).locator('[data-slot="overview-counts"] a');
 const listRows = (page: Page) => page.locator('#locations-list > app-location-row');
 
 async function openMenu(page: Page): Promise<Locator> {
@@ -176,13 +193,19 @@ test.describe('the admin area: entry and navigation', () => {
 });
 
 test.describe('Overview', () => {
-  test('a new organization shows 0 and "None yet" and the Get set up list, which leads to Locations', async ({
+  test('a new organization shows 0 leagues, 0 locations, nothing to attend to, and the Get set up list, which leads to Locations', async ({
     page,
   }, testInfo) => {
-    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    const { base } = await memberOf(page, 'orgAdmin');
     await page.goto(base);
-    await expect(locationTile(page).locator('dd').first()).toHaveText('0');
-    await expect(locationTile(page).locator('dd').nth(1)).toHaveText('None yet');
+    await expect(countLinks(page)).toHaveText(['0 leagues', '0 locations', '1 staff']);
+    await expect(main(page).locator('dl')).toHaveCount(0);
+    await expect(main(page).getByRole('region', { name: 'Needs your attention' })).toContainText(
+      'Nothing needs your attention.',
+    );
+    await expect(main(page).getByRole('region', { name: 'Registration open' })).toContainText(
+      'No season is open for registration.',
+    );
     const setup = page.getByRole('region', { name: 'Get set up' });
     await expect(setup.getByRole('heading', { level: 3 })).toHaveText([
       'Add a location',
@@ -190,28 +213,28 @@ test.describe('Overview', () => {
       'Publish the league',
       'Invite staff (optional)',
     ]);
-    await expect(main(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
-      'href',
-      `/organizations/${tenant.slug}`,
-    );
     await screenshot(page, testInfo, '65-overview-new');
     await expectAccessible(page);
     await setup.getByRole('link', { name: 'Add a location' }).click();
     await expect(page).toHaveURL(`${baseURL}${base}/locations`);
   });
 
-  test('with two locations the tile reads 2 and "All on your public page"', async ({
+  test('the counts in the header link to their pages, and "Create a league" links to the create form', async ({
     page,
-  }, testInfo) => {
+  }) => {
     const { base } = await memberOf(page, 'orgAdmin', LOCATIONS);
     await page.goto(base);
-    await expect(locationTile(page).locator('dd').first()).toHaveText('2');
-    await expect(locationTile(page).locator('dd').nth(1)).toHaveText('All on your public page');
-    await screenshot(page, testInfo, '65-overview');
-    await expectAccessible(page);
+    await expect(countLinks(page)).toHaveText(['0 leagues', '2 locations', '1 staff']);
+    await expect(countLinks(page).nth(0)).toHaveAttribute('href', `${base}/leagues`);
+    await expect(countLinks(page).nth(1)).toHaveAttribute('href', `${base}/locations`);
+    await expect(countLinks(page).nth(2)).toHaveAttribute('href', `${base}/staff`);
+    await expect(main(page).getByRole('link', { name: 'Create a league' }).first()).toHaveAttribute(
+      'href',
+      `${base}/leagues#create-league`,
+    );
   });
 
-  test('the Leagues tile and the sidebar count a published and a draft league from the counters', async ({
+  test('the league count and the sidebar count a published and a draft league, and only the published one needs a season', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin', LOCATIONS, [
@@ -224,19 +247,21 @@ test.describe('Overview', () => {
       },
     ]);
     await page.goto(base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 published, 1 draft');
+    await expect(countLinks(page).first()).toHaveText('2 leagues');
+    const attention = main(page).getByRole('region', { name: 'Needs your attention' });
+    await expect(attention.getByRole('listitem')).toHaveCount(1);
+    await expect(attention).toContainText('Published Tuesday 4s has no season');
     const nav = await adminNav(page, tenant.name);
     await expect(nav.getByRole('link', { name: /^Leagues/ })).toHaveText(/^Leagues2$/);
     if (!isDesktop(page)) {
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog', { name: 'Navigation' })).toHaveCount(0);
     }
-    await screenshot(page, testInfo, '172-overview-leagues-tile');
+    await screenshot(page, testInfo, '172-overview-leagues-count');
     await expectAccessible(page);
   });
 
-  test('the tile follows a location added on the Locations page', async ({ page }) => {
+  test('the count follows a location added on the Locations page', async ({ page }) => {
     const { base } = await memberOf(page, 'orgAdmin');
     await page.goto(`${base}/locations`);
     await nameField(page).fill('Mustang Courts');
@@ -247,7 +272,90 @@ test.describe('Overview', () => {
     const tenantName = (await page.title()).split(' | ')[1];
     const nav = await adminNav(page, tenantName);
     await nav.getByRole('link', { name: 'Overview' }).click();
-    await expect(locationTile(page).locator('dd').first()).toHaveText('1');
+    await expect(countLinks(page).nth(1)).toHaveText('1 location');
+  });
+
+  test('Needs your attention lists two drafts by soonest deadline, a league with no season, and the pending invite, each with its action', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin', [], ATTENTION_LEAGUES);
+    await seedSeasons(tenant, 'sunday-reverse-coed-4s', [
+      draftSeason('Fall 2027', 'fall-2027', 20),
+    ]);
+    await seedSeasons(tenant, 'coed-7v7-rec', [draftSeason('Fall 2027', 'fall-2027', 10)]);
+    await convexRun('testing:addInvite', {
+      organizationSlug: tenant.slug,
+      email: 'jamie.ortiz@example.test',
+      role: 'orgAdmin',
+      expiresAt: Date.now() + 14 * DAY,
+    });
+    await page.goto(base);
+
+    const attention = main(page).getByRole('region', { name: 'Needs your attention' });
+    const items = attention.getByRole('listitem');
+    await expect(items).toHaveCount(4);
+    await expect(items.nth(0)).toContainText('Fall 2027 is a draft');
+    await expect(items.nth(0)).toContainText(
+      "Coed 7v7 Rec · players can't see it until you publish it",
+    );
+    await expect(items.nth(1)).toContainText(
+      "Sunday Reverse Coed 4s · players can't see it until you publish it",
+    );
+    await expect(items.nth(2)).toContainText("Men's Over-30 11v11 has no season");
+    await expect(items.nth(3)).toContainText('1 staff invite is pending');
+    await expect(items.nth(3)).toContainText(
+      /jamie\.ortiz@example\.test · expires [A-Z][a-z]{2} \d{1,2}$/,
+    );
+    await expect(attention.getByRole('link')).toHaveText([
+      'Review Fall 2027, Coed 7v7 Rec',
+      'Review Fall 2027, Sunday Reverse Coed 4s',
+      "Create a season for Men's Over-30 11v11",
+      'Open Staff',
+    ]);
+    await expect(
+      attention.getByRole('heading', { level: 2, name: 'Needs your attention' }),
+    ).toBeVisible();
+    await expect(attention.locator('[data-slot="attention-count"] .sr-only')).toHaveText('4 items');
+    await screenshot(page, testInfo, '254-overview-attention');
+    await expectAccessible(page);
+
+    await attention.getByRole('link', { name: 'Review Fall 2027, Coed 7v7 Rec' }).click();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues/coed-7v7-rec`);
+  });
+
+  test('Create a season opens the create form of the league with no season', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', [], ATTENTION_LEAGUES);
+    await page.goto(base);
+    await main(page).getByRole('link', { name: "Create a season for Men's Over-30 11v11" }).click();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues/men-s-over-30-11v11#create-season`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Create a season' })).toBeInViewport();
+  });
+
+  test('Registration open lists the open seasons, soonest deadline first, with their deadlines', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin', [], ATTENTION_LEAGUES);
+    const open = (name: string, slug: string, days: number) => ({
+      ...draftSeason(name, slug, days),
+      status: 'published' as const,
+    });
+    await seedSeasons(tenant, 'sunday-reverse-coed-4s', [open('Summer 2027', 'summer-2027', 15)]);
+    await seedSeasons(tenant, 'coed-7v7-rec', [open('Summer 2027', 'summer-2027', 5)]);
+    await page.goto(base);
+
+    const section = main(page).getByRole('region', { name: 'Registration open' });
+    await expect(section.getByRole('heading', { level: 2 })).toHaveText('Registration open');
+    const rows = section.getByRole('listitem');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Coed 7v7 Rec · Summer 2027');
+    await expect(rows.nth(0)).toContainText(`Closes ${formatCalendarDate(dateFromToday(5))}`);
+    await expect(rows.nth(1)).toContainText('Sunday Reverse Coed 4s · Summer 2027');
+    await expect(rows.nth(1)).toContainText(`Closes ${formatCalendarDate(dateFromToday(15))}`);
+    await screenshot(page, testInfo, '254-overview-open');
+    await expectAccessible(page);
+
+    await rows.nth(0).getByRole('link').click();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues/coed-7v7-rec/seasons/summer-2027`);
   });
 });
 
