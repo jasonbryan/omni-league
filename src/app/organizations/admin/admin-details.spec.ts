@@ -14,7 +14,9 @@ import {
   text,
 } from './testing/admin-harness';
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
 const URL = `/app/organizations/${COASTAL.slug}/details`;
@@ -120,6 +122,57 @@ describe('AdminDetails', () => {
     it('keeps a focused control above the sticky footer (WCAG 2.4.11)', async () => {
       await open();
       expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const shapes = (invalid: boolean) => [
+      shapeOf('field-group', {}, STICKY_FOOTER_CLEARANCE),
+      fieldShape(),
+      shapeOf('field-label', { for: 'name' }),
+      shapeOf(
+        'input',
+        { id: 'name', type: 'text', autocomplete: 'off', readonly: '' },
+        'read-only:bg-muted/50',
+      ),
+      fieldShape(invalid),
+      shapeOf('field-label', { for: 'cityState' }),
+      inputShape(
+        'cityState',
+        {
+          type: 'text',
+          autocomplete: 'off',
+          'aria-describedby': invalid
+            ? 'cityState-description cityState-error'
+            : 'cityState-description',
+        },
+        invalid,
+      ),
+      shapeOf('field-description', { id: 'cityState-description' }),
+      ...(invalid ? [shapeOf('field-error', { id: 'cityState-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open('Corpus Christi, TX');
+      expect(formShapes(form())).toEqual(shapes(false));
+    });
+
+    it('marks City, state invalid and ties its error to the input once it is left', async () => {
+      await open('Corpus Christi, TX');
+      await type('cityState', 'X');
+      await leave('cityState');
+      expect(formShapes(form())).toEqual(shapes(true));
+    });
+
+    it('marks City, state invalid when the server refuses it', async () => {
+      await open('Corpus Christi, TX');
+      await type('cityState', 'Austin, TX');
+      await press(save());
+      o.convex.calls[0]?.reject(
+        new ConvexError({ field: 'cityState', code: 'cityStateInvalid', message: 'No.' }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes(true));
     });
   });
 

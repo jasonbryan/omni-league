@@ -5,10 +5,13 @@ import {
   DESCRIPTION_CLASSES,
   ERROR_CLASSES,
   FIELD_HORIZONTAL_CLASSES,
+  FIELD_SET_CLASSES,
   FIELD_VERTICAL_CLASSES,
   GROUP_CLASSES,
   INPUT_CLASSES,
   LABEL_CLASSES,
+  LEGEND_CLASSES,
+  TEXTAREA_CLASSES,
 } from './field-class-literals';
 
 const PAGES = {
@@ -71,5 +74,121 @@ describe('sign-up-page.ts', () => {
   it('draws the 18+ field horizontally', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/sign-up/sign-up-page.ts'), 'utf8');
     expect(source).toMatch(/<div\b[^>]*\bhlmField\b[^>]*\borientation="horizontal"/);
+  });
+});
+
+interface Parts {
+  inputs?: number;
+  nativeInputs?: number;
+  fields?: number;
+  labels?: number;
+  descriptions?: number;
+  errors?: number;
+  contents?: number;
+  fieldSets?: number;
+  legends?: number;
+  textareas?: number;
+  horizontal?: number;
+}
+
+const ADMIN_FORMS: Record<string, Parts> = {
+  'src/app/organizations/admin/admin-details.ts': {
+    inputs: 2,
+    fields: 2,
+    labels: 2,
+    descriptions: 1,
+    errors: 1,
+  },
+  'src/app/organizations/admin/location-fields.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+  },
+  'src/app/organizations/admin/staff-invite-panel.ts': {
+    inputs: 1,
+    nativeInputs: 2,
+    fields: 5,
+    labels: 5,
+    descriptions: 5,
+    errors: 2,
+    contents: 3,
+    fieldSets: 2,
+    legends: 2,
+    textareas: 1,
+    horizontal: 3,
+  },
+  'src/app/organizations/admin/admin-logo.ts': { nativeInputs: 1, descriptions: 1, errors: 1 },
+};
+
+const FIELD_CONSTANTS = [
+  'FIELD',
+  'FIELD_HORIZONTAL',
+  'FIELD_GROUP',
+  'LABEL',
+  'INPUT',
+  'DESCRIPTION',
+  'FIELD_SET',
+  'LEGEND',
+  'FIELD_ERROR',
+  'FIELD_CONTENT',
+  'FIELD_NOTE',
+];
+
+describe.each(Object.entries(ADMIN_FORMS))('%s', (path, expected) => {
+  const source = readFileSync(join(process.cwd(), path), 'utf8');
+  const want = {
+    inputs: 0,
+    nativeInputs: 0,
+    fields: 0,
+    labels: 0,
+    descriptions: 0,
+    errors: 0,
+    contents: 0,
+    fieldSets: 0,
+    legends: 0,
+    textareas: 0,
+    horizontal: 0,
+    ...expected,
+  };
+
+  it('imports none of the field class constants', () => {
+    const imported = [...source.matchAll(/import \{([^}]*)\} from '\.\/field-classes'/g)].flatMap(
+      (match) => match[1].split(',').map((name) => name.trim()),
+    );
+    expect(imported.filter((name) => FIELD_CONSTANTS.includes(name))).toEqual([]);
+  });
+
+  it.each([
+    ['field set', FIELD_SET_CLASSES],
+    ['legend', LEGEND_CLASSES],
+    ['textarea', TEXTAREA_CLASSES],
+    ['label', LABEL_CLASSES],
+    ['input', INPUT_CLASSES],
+    ['description', DESCRIPTION_CLASSES],
+    ['error', ERROR_CLASSES],
+  ])('has no %s class string written inline', (_, classes) => {
+    expect(source).not.toContain(classes);
+  });
+
+  it('draws each part with its helm directive, and writes no slot or role of its own', () => {
+    expect(count(source, /<input\b/g)).toBe(want.inputs + want.nativeInputs);
+    expect(count(source, /<input\b[^>]*\bhlmInput\b/g)).toBe(want.inputs);
+    expect(count(source, /<label\b[^>]*\bhlmFieldLabel\b/g)).toBe(want.labels);
+    expect(count(source, /<div\b[^>]*\bhlmField\b(?!\w)/g)).toBe(want.fields);
+    expect(count(source, /\bhlmFieldContent\b/g)).toBe(want.contents);
+    expect(count(source, /\bhlmFieldDescription\b/g)).toBe(want.descriptions);
+    expect(count(source, /\bhlmFieldError\b/g)).toBe(want.errors);
+    expect(count(source, /<fieldset\b[^>]*\bhlmFieldSet\b/g)).toBe(want.fieldSets);
+    expect(count(source, /<legend\b[^>]*\bhlmFieldLegend\b/g)).toBe(want.legends);
+    expect(count(source, /<textarea\b[^>]*\bhlmTextarea\b/g)).toBe(want.textareas);
+    expect(count(source, /\borientation="horizontal"/g)).toBe(want.horizontal);
+    expect(
+      count(
+        source,
+        /data-slot="(?:field-group|field|field-label|input|field-description|field-content|field-error|field-set|field-legend|textarea)"/g,
+      ),
+    ).toBe(0);
   });
 });

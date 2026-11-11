@@ -6,16 +6,18 @@ import {
   DESCRIPTION_CLASSES,
   ERROR_CLASSES,
   FIELD_HORIZONTAL_CLASSES,
+  FIELD_SET_CLASSES,
   FIELD_VERTICAL_CLASSES,
   GROUP_CLASSES,
   INPUT_CLASSES,
   LABEL_CLASSES,
+  LEGEND_CLASSES,
 } from '../testing/field-class-literals';
 import { HlmInput, HlmInputImports } from '../input';
-import { HlmField, HlmFieldImports } from '.';
+import { HlmField, HlmFieldImports, HlmFieldLegend, HlmFieldSet, HlmFieldSetImports } from '.';
 
 @Component({
-  imports: [HlmFieldImports, HlmInputImports],
+  imports: [HlmFieldImports, HlmFieldSetImports, HlmInputImports],
   template: `
     <div hlmFieldGroup class="mt-5">
       <div hlmField>
@@ -24,6 +26,10 @@ import { HlmField, HlmFieldImports } from '.';
         <p hlmFieldDescription id="name-description">Up to 60 characters.</p>
         <div hlmFieldError id="name-error">Enter a name.</div>
       </div>
+      <fieldset hlmFieldSet id="role" class="mt-2">
+        <legend hlmFieldLegend variant="label" id="role-label">Role</legend>
+        <legend hlmFieldLegend id="role-default">Default</legend>
+      </fieldset>
       <div hlmField orientation="horizontal" id="agree-field">
         <div hlmFieldContent class="mt-1">
           <label hlmFieldLabel for="agree">I agree</label>
@@ -58,8 +64,17 @@ describe('the helm input and field directives', () => {
     ['field-description', DESCRIPTION_CLASSES, []],
     ['field-error', ERROR_CLASSES, []],
     ['field-content', CONTENT_CLASSES, ['mt-1']],
+    ['field-set', FIELD_SET_CLASSES, ['mt-2']],
   ])('%s carries its own classes, plus the template’s own', (name, classes, own) => {
     expect(tokens(slot(name).className)).toEqual(tokens(`${classes} ${own.join(' ')}`));
+  });
+
+  it('draws the legend with its own classes and the variant as data-variant', () => {
+    const labelled = fieldById('role-label');
+    expect(labelled.getAttribute('data-slot')).toBe('field-legend');
+    expect(labelled.getAttribute('data-variant')).toBe('label');
+    expect(tokens(labelled.className)).toEqual(tokens(LEGEND_CLASSES));
+    expect(fieldById('role-default').getAttribute('data-variant')).toBe('legend');
   });
 
   it('is vertical unless the template says otherwise', () => {
@@ -91,5 +106,7 @@ describe('the helm input and field directives', () => {
         .filter((name) => name.startsWith('Brn'));
     expect(brainTokens(fixture.debugElement.query(By.directive(HlmInput)))).toEqual([]);
     expect(brainTokens(fixture.debugElement.query(By.directive(HlmField)))).toEqual([]);
+    expect(brainTokens(fixture.debugElement.query(By.directive(HlmFieldSet)))).toEqual([]);
+    expect(brainTokens(fixture.debugElement.query(By.directive(HlmFieldLegend)))).toEqual([]);
   });
 });

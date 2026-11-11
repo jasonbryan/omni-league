@@ -8,6 +8,7 @@ import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { adminRoutes, COASTAL, GET_ADMIN_CONTEXT, openAdmin, text } from './testing/admin-harness';
+import { formShapes, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
@@ -113,6 +114,17 @@ describe('AdminDetails: the Logo section', () => {
       expect(fileInput().classList).toContain('opacity-0');
       expect(fileInput().classList).toContain('inset-0');
       expect(fileInput().tabIndex).not.toBe(-1);
+    });
+
+    it('draws the hint, and the error once a file is refused, with the helm description and error', async () => {
+      expect(formShapes(section())).toEqual([
+        shapeOf('field-description', { id: 'logo-hint' }, 'mt-3'),
+      ]);
+      await choose(file('image/svg+xml', 1024, 'logo.svg'));
+      expect(formShapes(section())).toEqual([
+        shapeOf('field-description', { id: 'logo-hint' }, 'mt-3'),
+        shapeOf('field-error', { id: 'logo-error' }, 'mt-2'),
+      ]);
     });
 
     it('sends nothing for a file of the wrong type, and shows the message under the field', async () => {

@@ -24,10 +24,11 @@ import { AdminLogo } from './admin-logo';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './field-classes';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
 import { HlmSpinner } from '../../ui/spinner';
 
 type Notice =
@@ -59,6 +60,8 @@ function cityStateRefusal(failure: unknown): string | null {
     AdminLogo,
     AdminOfflineAlert,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     NgIcon,
     NgTemplateOutlet,
     StickyFooter,
@@ -156,35 +159,30 @@ function cityStateRefusal(failure: unknown): string | null {
               }
             }
           }
-          <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
-            <div role="group" data-slot="field" data-orientation="vertical" [class]="fieldClass">
-              <label for="name" data-slot="field-label" [class]="labelClass">Name</label>
+          <div hlmFieldGroup [class]="clearanceClass">
+            <div hlmField>
+              <label hlmFieldLabel for="name">Name</label>
               <input
+                hlmInput
                 id="name"
                 type="text"
-                data-slot="input"
                 readonly
                 autocomplete="off"
                 [value]="organization.name"
-                [class]="inputClass + ' read-only:bg-muted/50'"
+                class="read-only:bg-muted/50"
               />
             </div>
             <div
-              role="group"
-              data-slot="field"
-              data-orientation="vertical"
+              hlmField
               [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
               [attr.data-invalid]="error() ? 'true' : null"
-              [class]="fieldClass"
             >
-              <label for="cityState" data-slot="field-label" [class]="labelClass"
-                >City, state</label
-              >
+              <label hlmFieldLabel for="cityState">City, state</label>
               <input
+                hlmInput
                 #cityStateInput
                 id="cityState"
                 type="text"
-                data-slot="input"
                 autocomplete="off"
                 [formField]="fields.cityState"
                 (blur)="shown.left()"
@@ -195,17 +193,10 @@ function cityStateRefusal(failure: unknown): string | null {
                 [attr.aria-invalid]="error() ? 'true' : null"
                 [attr.data-invalid]="error() ? 'true' : null"
                 [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
-                [class]="inputClass"
               />
-              <p
-                data-slot="field-description"
-                id="cityState-description"
-                [class]="descriptionClass"
-              >
-                {{ hint }}
-              </p>
+              <p hlmFieldDescription id="cityState-description">{{ hint }}</p>
               @if (error(); as error) {
-                <div role="alert" data-slot="field-error" id="cityState-error" [class]="errorClass">
+                <div hlmFieldError id="cityState-error">
                   <ng-icon
                     name="lucideCircleAlert"
                     class="mt-0.5 shrink-0 text-base"
@@ -271,13 +262,7 @@ export class AdminDetails {
   protected readonly organization = this.context.organization;
   protected readonly online = injectOnline();
   protected readonly hint = CITY_STATE_HINT;
-  protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly saveClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
 

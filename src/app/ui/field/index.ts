@@ -1,5 +1,5 @@
 // Vendored from spartan helm v1.9.0 (`libs/helm/field`: field, field content, field group, field label, field description, field
-// error), with the Nova style's classes (`libs/registry/src/styles/style-nova.css`) inlined in place of its `spartan-field-*` names.
+// error, field set, field legend), with the Nova style's classes (`libs/registry/src/styles/style-nova.css`) inlined in place of its `spartan-field-*` names.
 // Local changes, to keep when re-copying from upstream:
 // - no `BrnField`, `BrnLabel`, or `BrnFieldA11yService`: the page sets each element's `id`, the control's `aria-describedby`, and
 //   the field's `data-matches-spartan-invalid`, for the reason given in `src/app/ui/input`;
@@ -10,7 +10,10 @@
 // - the field error is a directive with `role="alert"` that the page renders only while the error shows, in place of helm's
 //   component that decides that from the form control, and it adds `flex items-start gap-1.5` for the icon beside its text;
 // - static classes, so a chunk that uses them carries no class-merging code: the field picks one of two strings by orientation.
-// - attribute selectors only (no `hlm-field*` element selectors) and no `exportAs`; the field label matches `label` elements only.
+// - the field set and field legend are in `hlm-field-set.ts`, as upstream has them, and `HlmFieldImports` leaves them out: a page
+//   that draws no fieldset imports `HlmFieldSetImports` as well or not at all, so the initial chunk carries neither directive;
+// - attribute selectors only (no `hlm-field*` element selectors) and no `exportAs`; the field label and field legend match `label`
+//   and `legend` elements only, and the field set matches `fieldset` elements only.
 import {
   HlmField,
   HlmFieldContent,
@@ -19,8 +22,10 @@ import {
   HlmFieldGroup,
   HlmFieldLabel,
 } from './hlm-field';
+import { HlmFieldLegend, HlmFieldSet } from './hlm-field-set';
 
 export * from './hlm-field';
+export * from './hlm-field-set';
 
 export const HlmFieldImports = [
   HlmField,
@@ -30,3 +35,5 @@ export const HlmFieldImports = [
   HlmFieldGroup,
   HlmFieldLabel,
 ] as const;
+
+export const HlmFieldSetImports = [HlmFieldSet, HlmFieldLegend] as const;

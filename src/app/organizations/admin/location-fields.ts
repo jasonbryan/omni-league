@@ -10,36 +10,29 @@ import {
 import { FormField, type FieldTree } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert } from '@ng-icons/lucide';
-import { DESCRIPTION, FIELD, FIELD_GROUP, INPUT, LABEL } from './field-classes';
+import { HlmFieldGroup, HlmFieldImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
 import type { LocationField, LocationModel } from './location-form';
 
 @Component({
   selector: 'app-location-fields',
-  imports: [FormField, NgIcon],
+  imports: [FormField, HlmFieldImports, HlmInputImports, NgIcon],
   providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    'data-slot': 'field-group',
-    class: FIELD_GROUP,
-  },
+  hostDirectives: [HlmFieldGroup],
   template: `
     @for (field of list; track field.key) {
       <div
-        role="group"
-        data-slot="field"
-        data-orientation="vertical"
+        hlmField
         [attr.data-matches-spartan-invalid]="errors()[field.key]() ? 'true' : null"
         [attr.data-invalid]="errors()[field.key]() ? 'true' : null"
-        [class]="fieldClass"
       >
-        <label [attr.for]="id(field.key)" data-slot="field-label" [class]="labelClass">{{
-          field.label
-        }}</label>
+        <label hlmFieldLabel [attr.for]="id(field.key)">{{ field.label }}</label>
         <input
+          hlmInput
           #input
           [id]="id(field.key)"
           type="text"
-          data-slot="input"
           autocomplete="off"
           [formField]="fields()[field.key]"
           (blur)="fieldLeft.emit(field.key)"
@@ -47,22 +40,12 @@ import type { LocationField, LocationModel } from './location-form';
           [attr.aria-invalid]="errors()[field.key]() ? 'true' : null"
           [attr.data-invalid]="errors()[field.key]() ? 'true' : null"
           [attr.data-matches-spartan-invalid]="errors()[field.key]() ? 'true' : null"
-          [class]="inputClass"
         />
-        <p
-          data-slot="field-description"
-          [id]="id(field.key) + '-description'"
-          [class]="descriptionClass"
-        >
+        <p hlmFieldDescription [id]="id(field.key) + '-description'">
           {{ descriptions()[field.key] }}
         </p>
         @if (errors()[field.key](); as error) {
-          <div
-            role="alert"
-            data-slot="field-error"
-            [id]="id(field.key) + '-error'"
-            class="text-destructive text-sm font-normal flex items-start gap-1.5"
-          >
+          <div hlmFieldError [id]="id(field.key) + '-error'">
             <ng-icon
               name="lucideCircleAlert"
               class="mt-0.5 shrink-0 text-base"
@@ -86,10 +69,6 @@ export class LocationFields {
     { key: 'name', label: 'Name' },
     { key: 'address', label: 'Address' },
   ];
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
 
   private readonly inputs = viewChildren<ElementRef<HTMLInputElement>>('input');
 
