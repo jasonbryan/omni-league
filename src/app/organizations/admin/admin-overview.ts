@@ -101,6 +101,7 @@ const COUNT_LINK =
                   </p>
                   <a
                     [routerLink]="leaguesPath()"
+                    fragment="create-league"
                     class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                     >Create a league<ng-icon
                       name="lucideArrowRight"

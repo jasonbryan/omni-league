@@ -21,6 +21,21 @@ export function settleAfterFocusScroll(page: Page): Promise<void> {
   });
 }
 
+export async function expectOnScreen(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  await settleAfterFocusScroll(page);
+  const place = await target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      inViewport:
+        rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth,
+      unobscured: !!hit && element.contains(hit),
+    };
+  });
+  expect(place).toEqual({ inViewport: true, unobscured: true });
+}
+
 export async function focusedPlace(page: Page): Promise<FocusedPlace> {
   await settleAfterFocusScroll(page);
   return page.evaluate(() => {
