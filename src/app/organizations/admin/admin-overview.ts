@@ -173,7 +173,7 @@ export class AdminOverview {
   protected readonly leaguesPath = computed(() => adminPath(this.context.slug(), 'leagues'));
   protected readonly staffPath = computed(() => adminPath(this.context.slug(), 'staff'));
 
-  /** Null until every count has answered or failed; a count that failed is left out rather than shown as 0. */
+  /** A failed count is left out, because a 0 in its place would be false. */
   protected readonly counts = computed(() => {
     const leagueCounts = [this.published, this.drafts];
     const pending = [...leagueCounts, this.locations, this.staff].some(

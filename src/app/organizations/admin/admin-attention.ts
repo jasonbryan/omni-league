@@ -10,6 +10,7 @@ import { AdminContext } from './admin-context';
 import { adminPath } from './admin-path';
 import {
   attentionCount,
+  CHECKED_LEAGUES_TEXT,
   inviteExpiryText,
   invitesPendingText,
   moreItemsText,
@@ -161,7 +162,10 @@ export class AdminAttention {
 
   protected readonly moreLeagues = computed(() => {
     const leagues = this.attention()?.leaguesWithoutSeason;
-    return leagues ? moreItemsText(leagues, leagues.items.length) : null;
+    if (!leagues) return null;
+    return (
+      moreItemsText(leagues, leagues.items.length) ?? (leagues.capped ? CHECKED_LEAGUES_TEXT : null)
+    );
   });
 
   protected readonly invitesText = computed(() => {

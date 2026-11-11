@@ -2,7 +2,6 @@ import { v } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 
-/** Rows each kind reads; a kind that finds more reports `capped` and the app shows its total as "100+". */
 export const ATTENTION_READ_LIMIT = 100;
 export const ATTENTION_ITEM_LIMIT = 20;
 export const ATTENTION_INVITE_LINES = 3;

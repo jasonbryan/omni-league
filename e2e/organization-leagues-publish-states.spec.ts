@@ -286,7 +286,7 @@ test('two admins publish the same league at once: it is counted once', async ({
 });
 
 for (const width of [375, 1280]) {
-  test(`keyboard-only publish at ${width}: the result has a visible focus ring, and the Overview moves`, async ({
+  test(`keyboard-only publish at ${width}: the result has a visible focus ring, and the Overview still counts every league`, async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'the width is set here');

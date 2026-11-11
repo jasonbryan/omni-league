@@ -1,5 +1,6 @@
 import {
   attentionCount,
+  CHECKED_LEAGUES_TEXT,
   inviteExpiryText,
   invitesPendingText,
   moreItemsText,
@@ -36,15 +37,28 @@ describe('attentionCount', () => {
     expect(attentionCount(counts())).toBeNull();
   });
 
-  it('reads "100+" and "more than 100 items" when a kind passes its read cap', () => {
+  it('reads "100+" and "more than 100 items" when the draft seasons pass their read cap', () => {
     expect(attentionCount(counts({ total: 100, capped: true }))).toEqual({
       shown: '100+',
       spoken: 'more than 100 items',
     });
+  });
+
+  it('reads "n+" and "n or more items" when only the leagues pass their read cap, because the leagues past it are never checked and the count can be exactly n', () => {
+    expect(attentionCount(counts(none, { total: 99, capped: true }))).toEqual({
+      shown: '99+',
+      spoken: '99 or more items',
+    });
     expect(attentionCount(counts(none, { total: 100, capped: true }))).toEqual({
       shown: '100+',
-      spoken: 'more than 100 items',
+      spoken: '100 or more items',
     });
+  });
+
+  it('reads "more than n items" when the draft seasons are capped, whatever the leagues', () => {
+    expect(
+      attentionCount(counts({ total: 100, capped: true }, { total: 5, capped: true })),
+    ).toEqual({ shown: '105+', spoken: 'more than 105 items' });
   });
 
   it('adds the other items to a capped total', () => {
@@ -74,8 +88,12 @@ describe('moreItemsText', () => {
     expect(moreItemsText({ total: 100, capped: true }, 20)).toBe('and 80+ more');
   });
 
-  it('says "and more" when a capped kind shows as many as its total', () => {
-    expect(moreItemsText({ total: 20, capped: true }, 20)).toBe('and more');
+  it('is null when a capped kind shows as many as it found', () => {
+    expect(moreItemsText({ total: 20, capped: true }, 20)).toBeNull();
+  });
+
+  it('names the leagues check limit for the line that stands in when nothing more is counted', () => {
+    expect(CHECKED_LEAGUES_TEXT).toBe('Only the first 100 published leagues are checked.');
   });
 });
 

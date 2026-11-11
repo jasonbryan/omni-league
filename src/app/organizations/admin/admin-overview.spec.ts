@@ -370,6 +370,22 @@ describe('AdminOverview', () => {
       expect(rows[23]).toContain('1 staff invite is pending');
     });
 
+    it('says only the first 100 published leagues are checked when the leagues are capped and every found one is shown', async () => {
+      const found = Array.from({ length: 5 }, (_, i) => ({
+        leagueId: `l${i}`,
+        name: `League ${i}`,
+        slug: `league-${i}`,
+      }));
+      const { page } = await openWith({
+        ...EMPTY,
+        leaguesWithoutSeason: { items: found, total: 5, capped: true },
+      });
+      expect(text(items(page)[5])).toBe('Only the first 100 published leagues are checked.');
+      const count = section(page).querySelector('[data-slot="attention-count"]')!;
+      expect(text(count.querySelector('[aria-hidden="true"]'))).toBe('5+');
+      expect(text(count.querySelector('.sr-only'))).toBe('5 or more items');
+    });
+
     it('lists the invites with "expired" for one past its expiry, and the plural for more than one', async () => {
       const { page } = await openWith({
         ...EMPTY,

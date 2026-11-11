@@ -18,16 +18,21 @@ export function attentionCount(
     attention.leaguesWithoutSeason.total +
     (attention.pendingInvites.total > 0 ? 1 : 0);
   if (total === 0) return null;
-  if (attention.draftSeasons.capped || attention.leaguesWithoutSeason.capped) {
+  // The leagues past the first 100 are never checked, so a capped league count can be exact; a capped draft count is at least one more.
+  if (attention.draftSeasons.capped) {
     return { shown: `${total}+`, spoken: `more than ${total} items` };
+  }
+  if (attention.leaguesWithoutSeason.capped) {
+    return { shown: `${total}+`, spoken: `${total} or more items` };
   }
   return { shown: String(total), spoken: `${total} ${total === 1 ? 'item' : 'items'}` };
 }
 
+export const CHECKED_LEAGUES_TEXT = 'Only the first 100 published leagues are checked.';
+
 export function moreItemsText({ total, capped }: AttentionTotal, shown: number): string | null {
   const more = total - shown;
-  if (more > 0) return `and ${more}${capped ? '+' : ''} more`;
-  return capped ? 'and more' : null;
+  return more > 0 ? `and ${more}${capped ? '+' : ''} more` : null;
 }
 
 export function invitesPendingText({ total, capped }: AttentionTotal): string {
