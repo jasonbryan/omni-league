@@ -14,13 +14,7 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCircleAlert,
-  lucideEye,
-  lucideEyeOff,
-  lucideLoaderCircle,
-  lucideWifiOff,
-} from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff } from '@ng-icons/lucide';
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
@@ -32,6 +26,7 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
+import { HlmSpinner } from '../ui/spinner';
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -72,6 +67,7 @@ type FormAlert = { title: string; description: string } | 'offline';
 @Component({
   selector: 'app-sign-in-page',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     FormField,
     HlmFieldImports,
@@ -80,9 +76,7 @@ type FormAlert = { title: string; description: string } | 'offline';
     RouterLink,
     PublicLayout,
   ],
-  providers: [
-    provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle, lucideWifiOff }),
-  ],
+  providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -234,12 +228,7 @@ type FormAlert = { title: string; description: string } | 'offline';
               [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
             >
               @if (submitting()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Signing in…
+                <hlm-spinner data-icon="inline-start" />Signing in…
               } @else {
                 Sign in
               }

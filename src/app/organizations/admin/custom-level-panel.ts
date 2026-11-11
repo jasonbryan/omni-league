@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { ConvexError } from 'convex/values';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   checkCustomLevelName,
@@ -37,6 +37,7 @@ import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface AddedCustomLevel {
   customLevelId: Id<'customLevels'>;
@@ -77,8 +78,8 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
 /** Sits inside the create form's `<form>`, so its buttons are `type="button"`. */
 @Component({
   selector: 'app-custom-level-panel',
-  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, NgIcon],
-  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
+  imports: [HlmSpinner, MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, NgIcon],
+  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -272,12 +273,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             (click)="add()"
           >
             @if (submitting()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Adding…
+              <hlm-spinner data-icon="inline-start" />Adding…
             } @else {
               Add level
             }

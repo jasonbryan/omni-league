@@ -2,6 +2,7 @@ import { ConvexError } from 'convex/values';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { TeamPage } from './team-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const GET = 'teams:getForMember';
 const ADD_MINOR = 'rosterEntries:addMinor';
@@ -152,6 +153,10 @@ describe('TeamPage: minors', () => {
       expect(calls()).toEqual([
         [RENAME_MINOR, { rosterEntryId: 're_4', minorName: 'Theodore Bell' }],
       ]);
+      const pending = button(rows()[3], 'Saving')!;
+      expect(text(pending)).toBe('Saving…');
+      expect(pending.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve({ minorName: 'Theodore Bell' });
       await o.flush();
       const status = main().querySelector<HTMLElement>(
@@ -201,6 +206,10 @@ describe('TeamPage: minors', () => {
       submit().click();
       await o.flush();
       expect(calls()).toEqual([[ADD_MINOR, { teamId: 'team_sharks', minorName: 'Nora Bell' }]]);
+      const pending = button(addPanel()!, 'Adding')!;
+      expect(text(pending)).toBe('Adding…');
+      expect(pending.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve({ rosterEntryId: 're_5', minorName: 'Nora Bell' });
       await o.flush();
       const status = addPanel()!.querySelector<HTMLElement>('[data-slot="alert"]');

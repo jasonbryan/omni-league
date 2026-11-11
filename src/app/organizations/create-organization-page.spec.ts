@@ -12,6 +12,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { CreateOrganizationPage } from './create-organization-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -382,6 +383,7 @@ describe('CreateOrganizationPage', () => {
       expect(submitButton().textContent?.trim()).toBe('Creating organization…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(status()?.textContent?.trim()).toBe('Creating the organization.');
       expect(status()?.getAttribute('role')).toBe('status');
       await submit();

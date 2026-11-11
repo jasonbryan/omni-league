@@ -17,6 +17,7 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'locations', component: AdminLocations }]);
 const URL = `/app/organizations/${COASTAL.slug}/locations`;
@@ -366,6 +367,7 @@ describe('AdminLocations', () => {
       expect(text(addSubmit())).toBe('Adding location…');
       expect(addSubmit().getAttribute('aria-disabled')).toBe('true');
       expect(addSubmit().disabled).toBe(false);
+      expectPendingSpinner(addSubmit());
       expect(text(addStatus())).toBe('Adding the location.');
       expect(input('name').value).toBe('  Redfish Flats Fields ');
       await submitAdd();
@@ -657,6 +659,7 @@ describe('AdminLocations', () => {
       ]);
       expect(text(editSave())).toBe('Saving…');
       expect(editSave().getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(editSave());
       expect(text(editForm().querySelector('p[role="status"].sr-only'))).toBe(
         'Saving the location.',
       );

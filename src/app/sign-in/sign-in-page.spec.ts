@@ -11,6 +11,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignInPage } from './sign-in-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -371,6 +372,7 @@ describe('SignInPage', () => {
       expect(submitButton().textContent?.trim()).toBe('Signing in…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(page.querySelector('form > p[role="status"]')?.textContent?.trim()).toBe(
         'Signing in.',
       );

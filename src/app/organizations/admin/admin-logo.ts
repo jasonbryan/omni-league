@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideImageOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideImageOff } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { checkLogoPick, LOGO_HINT, LOGO_MIME_TYPES } from '../../../../convex/lib/logoFile';
@@ -22,6 +22,7 @@ import {
   injectOnline,
 } from '../../core/data/convex';
 import { OrganizationMark } from '../organization-mark';
+import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminContext } from './admin-context';
 import { AdminOfflineAlert } from './admin-offline-alert';
@@ -75,8 +76,8 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
  */
 @Component({
   selector: 'app-admin-logo',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, OrganizationMark, RemoveLogoDialog],
-  providers: [provideIcons({ lucideCircleAlert, lucideImageOff, lucideLoaderCircle })],
+  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon, OrganizationMark, RemoveLogoDialog],
+  providers: [provideIcons({ lucideCircleAlert, lucideImageOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -158,12 +159,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
                   aria-hidden="true"
                 >
                   @if (uploading()) {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Uploading…
+                    <hlm-spinner data-icon="inline-start" />Uploading…
                   } @else if (organization.logoUrl) {
                     Replace
                   } @else {

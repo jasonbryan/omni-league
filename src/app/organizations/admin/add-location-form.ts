@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import { lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
@@ -19,11 +19,19 @@ import { PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmSpinner } from '../../ui/spinner';
 
 @Component({
   selector: 'app-add-location-form',
-  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
-  providers: [provideIcons({ lucideLoaderCircle, lucidePlus })],
+  imports: [
+    HlmSpinner,
+    MousePressKeepsFocus,
+    AdminAlert,
+    AdminOfflineAlert,
+    LocationFields,
+    NgIcon,
+  ],
+  providers: [provideIcons({ lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -76,12 +84,7 @@ import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
         [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
       >
         @if (form.submitting()) {
-          <ng-icon
-            name="lucideLoaderCircle"
-            class="motion-safe:animate-spin"
-            data-icon="inline-start"
-            aria-hidden="true"
-          />Adding location…
+          <hlm-spinner data-icon="inline-start" />Adding location…
         } @else {
           <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Add location
         }
