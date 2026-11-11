@@ -641,8 +641,9 @@ describe('the Registration open section', () => {
       const harness = await open();
       await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
       await visit(harness, `${ORG}/sports/softball`, undefined);
-      await visit(harness, `${ORG}/sports/soccer`, undefined);
-      expect(skeletonCards(harness)).toBe(3);
+      // Only rule 3 answers this view, so a Softball view recorded as empty would give 0.
+      await visit(harness, `${ORG}/sports/soccer?gender=coed`, undefined);
+      expect(skeletonCards(harness)).toBe(ALL_SPORTS.length);
     });
 
     it('leaves the cards in place once the seasons arrive', async () => {

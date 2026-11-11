@@ -21,7 +21,7 @@ const viewKey = ({ slug, sport, filters }: OpenSeasonsView): string =>
     filters.ageGroup,
   ]);
 
-/** Kept in memory, never saved: a saved copy would outlive the seasons it counts, and a server render, which shows no skeleton, would share it between visitors. */
+/** Kept in memory, never saved, because a saved copy would outlive the seasons it counts. Only the browser records, because a server render shows no skeleton. */
 @Injectable({ providedIn: 'root' })
 export class OpenSeasonsSeen {
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));

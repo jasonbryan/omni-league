@@ -105,7 +105,7 @@ describe('OpenSeasonsSeen', () => {
       expect(seen.expectedCount(view('Soccer'))).toBe(1);
     });
 
-    it('gives way to the view own count', () => {
+    it("gives way to the view's own count", () => {
       const seen = store();
       seen.record(view(), ALL_SPORTS_OPEN);
       seen.record(view('Soccer'), ['Soccer']);

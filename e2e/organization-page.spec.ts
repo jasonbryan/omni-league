@@ -1146,7 +1146,7 @@ test.describe('organization page: the open-season skeleton follows the views alr
     await openChip(page, hops[hops.length - 1]);
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(skeleton(page)).toBeVisible();
-    await expect(skeleton(page).locator('.rounded-xl')).toHaveCount(shown.cards);
+    await expect(skeleton(page).locator(':scope > div > div')).toHaveCount(shown.cards);
     if (shown.noOpenText !== undefined) {
       await expect(skeleton(page)).toHaveText(shown.noOpenText);
     }
