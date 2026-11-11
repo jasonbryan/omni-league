@@ -99,18 +99,16 @@ async function adminNav(page: Page, organizationName: string): Promise<Locator> 
 }
 
 test.describe('the admin area: entry and navigation', () => {
-  test('an org admin reaches Locations from /app through Manage and the navigation', async ({
+  test('an org admin reaches Locations from /app through the sidebar and the navigation', async ({
     page,
   }) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    const row = page
-      .getByRole('region', { name: 'Your organizations' })
-      .getByRole('listitem')
-      .filter({
-        hasText: tenant.name,
-      });
-    await row.getByRole('link', { name: `Manage ${tenant.name}` }).click();
+    const account = isDesktop(page) ? page : await openMenu(page);
+    await account
+      .getByRole('navigation', { name: 'Your account' })
+      .getByRole('link', { name: tenant.name })
+      .click();
     await expect(page).toHaveURL(`${baseURL}${base}`);
     await expect(page).toHaveTitle(`Overview | ${tenant.name} | Omni League`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();

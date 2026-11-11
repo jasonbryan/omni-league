@@ -95,7 +95,7 @@ export const ROUTE_SPECS = {
   'teams/join': TEAM_JOIN,
   'teams/join/': TEAM_JOIN,
   app: ['auth-session'],
-  'app/': ['after-sign-in', 'auth-session', 'app-leagues', 'app-teams'],
+  'app/': ['after-sign-in', 'auth-session', 'app-home'],
   'app/account': ['account-settings', 'after-sign-in'],
   'app/notifications': ['notifications', 'after-sign-in'],
   'app/organizations/new': ['create-organization', 'after-sign-in'],
@@ -485,16 +485,6 @@ export const AREAS = [
     specs: ['league-management-mockup'],
   },
   {
-    name: 'app leagues mockup',
-    test: (file) => file === 'design/mockups/141-app-leagues.html',
-    specs: ['app-leagues'],
-  },
-  {
-    name: 'app teams mockup',
-    test: (file) => file === 'design/mockups/130-app-teams.html',
-    specs: ['app-teams'],
-  },
-  {
     // chip-classes.spec.ts and the harness's a11y-helper.spec.ts take the kit CSS from this mockup's inlined block.
     name: 'chip mockup',
     test: (file) => file === 'design/mockups/300-public-site-league-form.html',
@@ -619,7 +609,7 @@ export const AREAS = [
       ...TEAM_INVITES,
       ...TEAM_JOIN,
       'season-page',
-      'app-teams',
+      'app-home',
       'waitlist',
     ],
   },
@@ -670,7 +660,7 @@ export const AREAS = [
   {
     name: 'account page',
     test: inDir('src/app/account/'),
-    specs: [SESSION, 'app-teams'],
+    specs: [SESSION, 'app-home'],
   },
   {
     // The account link shows on every public page for a signed-in visitor, and the specs that sign a user in read it.
@@ -883,7 +873,7 @@ export const AREAS = [
       ...TEAM_INVITES,
       ...TEAM_JOIN,
       'season-page',
-      'app-teams',
+      'app-home',
       'waitlist',
     ],
   },

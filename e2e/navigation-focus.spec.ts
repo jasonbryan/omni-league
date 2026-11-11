@@ -3,6 +3,7 @@ import { axeScan, checkReflow, describeViolations, tabKey } from './support/a11y
 import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
+import { homeHeading } from './support/home';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
@@ -31,6 +32,14 @@ async function adminNav(page: Page, organizationName: string): Promise<Locator> 
   const dialog = page.getByRole('dialog', { name: 'Navigation' });
   await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
   return dialog.getByRole('navigation', { name: `${organizationName} admin` });
+}
+
+async function accountNav(page: Page): Promise<Locator> {
+  if (isDesktop(page)) return page.getByRole('navigation', { name: 'Your account' });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Navigation' });
+  await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+  return dialog.getByRole('navigation', { name: 'Your account' });
 }
 
 async function signUpAsAdminOfNewOrganization(page: Page) {
@@ -71,11 +80,12 @@ test.describe('focus moves to the page after navigation', () => {
     await expect(mainElement(page)).toBeFocused();
   });
 
-  test('from Your organizations to the admin Overview', async ({ page }) => {
+  test('from the sidebar’s Your organizations to the admin Overview', async ({ page }) => {
     const { tenant, base } = await signUpAsAdminOfNewOrganization(page);
-    await page
-      .getByRole('region', { name: 'Your organizations' })
-      .getByRole('link', { name: `Manage ${tenant.name}` })
+    const nav = await accountNav(page);
+    await nav
+      .getByRole('list', { name: 'Your organizations' })
+      .getByRole('link', { name: tenant.name })
       .click();
     await expect(page).toHaveURL(`${baseURL}${base}`);
     await expect(
@@ -150,7 +160,7 @@ test.describe('Back skips a finished form', () => {
       await expect(page).toHaveURL(`${baseURL}/app/organizations/${slug}`, { timeout: 20_000 });
       await page.goBack();
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('region', { name: 'Your organizations' })).toBeVisible();
+      await expect(homeHeading(page)).toBeVisible();
     },
   );
 });

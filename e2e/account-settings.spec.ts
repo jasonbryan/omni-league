@@ -9,6 +9,7 @@ import { screenshot } from './support/screenshot';
 import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { homeHeading } from './support/home';
 
 const LOCAL_ONLY = 'seeds a tenant or a user on the local Convex backend';
 const ACCOUNT_PATH = '/app/account';
@@ -137,7 +138,7 @@ test.describe('account settings', () => {
     await signUp(page, newUser('Home'));
     await expect(page).toHaveURL(`${baseURL}/app`);
     await expect(page).toHaveTitle('Home | Omni League');
-    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
   });
 
