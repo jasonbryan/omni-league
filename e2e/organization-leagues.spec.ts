@@ -537,6 +537,34 @@ test.describe('Leagues: landing on #create-league', () => {
     });
   });
 
+  test.describe('with the locations held', () => {
+    for (const [gesture, act] of [
+      ['Page Down', (page: Page) => page.keyboard.press('PageDown')],
+      ['the mouse wheel', (page: Page) => page.mouse.wheel(0, 200)],
+    ] as const) {
+      test(`${gesture} cancels the landing`, async ({ page }) => {
+        const { base } = await memberOf(page, 'orgAdmin', {
+          locations: LOCATIONS,
+          leagues: LEAGUES,
+        });
+        const held = await holdQueries(page, ['locations:listForAdmin']);
+        await page.goto(`${base}/leagues#create-league`);
+        await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await act(page);
+        const focused = await page.evaluateHandle(() => document.activeElement);
+        const before = await settledScrollY(page);
+        held.release();
+        await expect(form(page)).toBeVisible();
+        await expect(name(page)).not.toBeFocused();
+        expect(await page.evaluate((element) => document.activeElement === element, focused)).toBe(
+          true,
+        );
+        expect(await scrollY(page)).toBe(before);
+      });
+    }
+  });
+
   test.describe('with the locations held, on a phone', () => {
     test.beforeEach(({ page }) => {
       test.skip(!isPhone(page), 'a tap on the header title needs the touch layout');
