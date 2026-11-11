@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -334,6 +343,249 @@ describe('ownSpecs: changed files', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('ownSpecs: the copy of HEAD', () => {
+  const COPY_PREFIX = 'own-specs-head-';
+
+  function committedProject({ base, branch }) {
+    const dir = mkdtempSync(join(tmpdir(), 'own-specs-head-test-'));
+    const git = (...args) =>
+      execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
+        encoding: 'utf8',
+      });
+    const write = (path, text) => {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    };
+    git('init', '-q', '-b', 'main');
+    for (const [path, text] of Object.entries(base)) write(path, text);
+    git('add', '.');
+    git('commit', '-q', '-m', 'base');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('checkout', '-q', '-b', 'branch');
+    for (const [path, text] of Object.entries(branch)) {
+      if (text === null) rmSync(join(dir, path));
+      else write(path, text);
+    }
+    git('add', '.');
+    git('commit', '-q', '-m', 'branch');
+    return { dir, write };
+  }
+
+  // os.tmpdir() reads TMPDIR on each call, so a private one shows the copies this call makes.
+  function withPrivateTmpdir(task) {
+    const scratch = mkdtempSync(join(tmpdir(), 'own-specs-scratch-'));
+    const copies = () => readdirSync(scratch).filter((name) => name.startsWith(COPY_PREFIX));
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = scratch;
+    try {
+      return task(copies);
+    } finally {
+      process.env.TMPDIR = saved;
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+
+  const screenChange = {
+    base: { 'src/app/head-copy.ts': 'a', 'e2e/smoke.spec.ts': 'test();' },
+    branch: { 'src/app/head-copy.ts': 'b' },
+  };
+  const options = (dir, more = {}) => ({
+    root: dir,
+    ciScope: () => 'app',
+    buildGraph: () => ({}),
+    ...more,
+  });
+
+  it('removes the copy after a call that returns, and makes one during it', () => {
+    const { dir } = committedProject(screenChange);
+    try {
+      withPrivateTmpdir((copies) => {
+        const during = [];
+        ownSpecs(
+          options(dir, {
+            select: () => {
+              during.push(copies().length);
+              return { scope: 'affected', specs: [] };
+            },
+          }),
+        );
+        assert.deepEqual(during, [1]);
+        assert.deepEqual(copies(), []);
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the copy after a call that throws', () => {
+    const { dir } = committedProject(screenChange);
+    try {
+      withPrivateTmpdir((copies) => {
+        const select = () => {
+          assert.equal(copies().length, 1);
+          throw new Error('select failed');
+        };
+        assert.throws(() => ownSpecs(options(dir, { select })), /select failed/);
+        assert.deepEqual(copies(), []);
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a changed spec that the working tree deleted but HEAD has', () => {
+    const { dir } = committedProject({
+      base: { 'e2e/smoke.spec.ts': 'test();' },
+      branch: { 'e2e/kept.spec.ts': 'test();' },
+    });
+    try {
+      rmSync(join(dir, 'e2e', 'kept.spec.ts'));
+      assert.deepEqual(ownSpecs(options(dir)), ['e2e/kept.spec.ts']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('drops a changed spec that HEAD deleted but the working tree has again', () => {
+    const { dir, write } = committedProject({
+      base: { 'e2e/smoke.spec.ts': 'test();', 'e2e/removed.spec.ts': 'test();' },
+      branch: { 'e2e/removed.spec.ts': null },
+    });
+    try {
+      write('e2e/removed.spec.ts', 'test();');
+      assert.deepEqual(ownSpecs(options(dir, { ciScope: () => 'docs' })), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe('the ci scope', () => {
+    const referencing = (...scripts) =>
+      JSON.stringify({ scripts: { run: scripts.map((name) => `node scripts/${name}`).join(' ') } });
+    const fixture = (inHead) => ({
+      base: {
+        'package.json': referencing(...inHead),
+        'netlify.toml': '',
+        'angular.json': '',
+        'playwright.config.ts': '',
+        'e2e/smoke.spec.ts': 'test();',
+        'scripts/tracked.mjs': 'a',
+        'scripts/other.mjs': 'a',
+      },
+      branch: { 'scripts/tracked.mjs': 'b' },
+    });
+    const scopeOptions = (dir) => ({ root: dir });
+
+    it('reads the scripts HEAD references, not the working tree edit', () => {
+      const { dir, write } = committedProject(fixture(['tracked.mjs', 'other.mjs']));
+      try {
+        write('package.json', referencing('other.mjs'));
+        assert.deepEqual(ownSpecs(scopeOptions(dir)), [SMOKE]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('ignores a script only the working tree references', () => {
+      const { dir, write } = committedProject(fixture(['other.mjs']));
+      try {
+        write('package.json', referencing('tracked.mjs', 'other.mjs'));
+        assert.deepEqual(ownSpecs(scopeOptions(dir)), []);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('the session specs', () => {
+    const signsIn = "import { session } from './support/session';";
+    const fixture = {
+      base: {
+        'src/app/head-copy.ts': 'a',
+        'e2e/support/session.ts': 'export const session = 1;',
+        'e2e/head-signs-in.spec.ts': signsIn,
+        'e2e/harness/quiet.spec.ts': 'test();',
+      },
+      branch: { 'src/app/head-copy.ts': 'b' },
+    };
+
+    it('derives them from the specs in HEAD', () => {
+      const { dir, write } = committedProject(fixture);
+      try {
+        write('e2e/head-signs-in.spec.ts', 'test();');
+        write('e2e/working-tree-signs-in.spec.ts', signsIn);
+        let seen;
+        ownSpecs({
+          root: dir,
+          ciScope: () => 'app',
+          buildGraph: () => ({}),
+          select: (_files, context) => {
+            seen = context.sessionSpecs();
+            return { scope: 'affected', specs: [] };
+          },
+        });
+        assert.deepEqual(seen, ['e2e/head-signs-in.spec.ts']);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('a copy that cannot be made', () => {
+    it('throws inside a repository whose HEAD has no commit', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'own-specs-head-test-'));
+      try {
+        execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main'], { stdio: 'pipe' });
+        withPrivateTmpdir((copies) => {
+          assert.throws(
+            () => ownSpecs(options(dir, { runGit: gitReturning(['src/app/head-copy.ts']) })),
+            /git archive/,
+          );
+          assert.deepEqual(copies(), []);
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('throws inside a repository when tar is missing, and leaves no copy', () => {
+      const { dir } = committedProject(screenChange);
+      const bin = mkdtempSync(join(tmpdir(), 'own-specs-bin-'));
+      const savedPath = process.env.PATH;
+      try {
+        symlinkSync(execFileSync('which', ['git'], { encoding: 'utf8' }).trim(), join(bin, 'git'));
+        withPrivateTmpdir((copies) => {
+          process.env.PATH = bin;
+          try {
+            assert.throws(() => ownSpecs(options(dir, { select: selectingFor([]) })), /tar failed/);
+          } finally {
+            process.env.PATH = savedPath;
+          }
+          assert.deepEqual(copies(), []);
+        });
+      } finally {
+        process.env.PATH = savedPath;
+        rmSync(dir, { recursive: true, force: true });
+        rmSync(bin, { recursive: true, force: true });
+      }
+    });
+
+    it('reads the working tree outside a repository', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'own-specs-head-test-'));
+      try {
+        mkdirSync(join(dir, 'e2e'));
+        writeFileSync(join(dir, 'e2e', 'plain.spec.ts'), 'test();');
+        const list = ownSpecs(
+          options(dir, { runGit: gitReturning(['e2e/plain.spec.ts']), ciScope: () => 'docs' }),
+        );
+        assert.deepEqual(list, ['e2e/plain.spec.ts']);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 });
 

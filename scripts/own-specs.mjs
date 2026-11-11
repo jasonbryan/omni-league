@@ -29,17 +29,24 @@ function git(root, args) {
 
 // The PR's list belongs to its head SHA, so every file the script reads comes from a copy of HEAD.
 function headSnapshot(root) {
+  const insideRepository =
+    spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' })
+      .status === 0;
+  if (!insideRepository) return { dir: root, cleanup: () => {} };
   const dir = mkdtempSync(join(tmpdir(), 'own-specs-head-'));
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
+  const fail = (command, result) => {
+    cleanup();
+    const reason = String(result.stderr ?? '').trim() || result.error;
+    throw new Error(`${command} failed while copying HEAD: ${reason}`);
+  };
   const archive = spawnSync('git', ['-C', root, 'archive', '--format=tar', 'HEAD'], {
     maxBuffer: ARCHIVE_MAX_BYTES,
   });
-  const extracted =
-    archive.status === 0 &&
-    spawnSync('tar', ['-x', '-C', dir], { input: archive.stdout }).status === 0;
-  if (extracted) return { dir, cleanup };
-  cleanup();
-  return { dir: root, cleanup: () => {} };
+  if (archive.status !== 0) fail('git archive', archive);
+  const extract = spawnSync('tar', ['-x', '-C', dir], { input: archive.stdout });
+  if (extract.status !== 0) fail('tar', extract);
+  return { dir, cleanup };
 }
 
 function defaultCiScope(root, files) {
