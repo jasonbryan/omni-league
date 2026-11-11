@@ -1,3 +1,4 @@
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { formatCalendarDate } from '../convex/lib/seasonInput';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -639,7 +640,7 @@ test.describe('public league page in the browser', () => {
         await expect(page.locator('main[id="main"]')).toBeFocused();
         const skeletonScan = await axeScan(page);
         expect(describeViolations(skeletonScan.violations)).toEqual([]);
-        const bar = await skeleton.locator('span').nth(1).boundingBox();
+        const bar = await skeleton.getByTestId('skeleton-heading').boundingBox();
 
         held.release();
         const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
@@ -650,6 +651,104 @@ test.describe('public league page in the browser', () => {
         await expect(page.locator('main[id="main"]')).toBeFocused();
       });
     }
+  });
+
+  test.describe('after an in-app navigation, with the names the link carried', () => {
+    const MOUSE_AND_TOUCH_360 = { touch: 360, mouse: 360 };
+    const LONG_ORGANIZATION = 'Port Aransas Beach Volleyball Club';
+
+    async function seedWrapping(name: string): Promise<SeededLeague> {
+      const tenant = await seedTenant({
+        name,
+        locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+        leagues: [
+          {
+            name: LEAGUE,
+            sport: 'beachVolleyball',
+            locations: ['Alpha Field'],
+            division: DIVISION,
+          },
+        ],
+      });
+      return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}` };
+    }
+
+    const nextLine = (heading: Locator) => heading.locator('xpath=following-sibling::*[1]');
+
+    async function openHeld(
+      page: Page,
+      consoleGuard: { hydrated: boolean },
+      { tenant, path }: SeededLeague,
+    ) {
+      const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await page.locator(`main a[href="${path}"]`).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      const skeleton = page.getByTestId('league-skeleton');
+      await expect(skeleton).toBeVisible();
+      return { held, skeleton };
+    }
+
+    async function at360(page: Page, testInfo: TestInfo): Promise<void> {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      const touch = testInfo.project.name === 'chromium-mobile';
+      await page.setViewportSize({
+        width: touch ? MOUSE_AND_TOUCH_360.touch : MOUSE_AND_TOUCH_360.mouse,
+        height: 800,
+      });
+    }
+
+    test('the line under a heading that wraps lands within 4px of the skeleton’s, with a touch screen or a mouse at 360px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      await at360(page, testInfo);
+      const { held, skeleton } = await openHeld(
+        page,
+        consoleGuard,
+        await seedWrapping('E2E League Page'),
+      );
+      const bar = await nextLine(skeleton.getByTestId('skeleton-heading')).boundingBox();
+
+      held.release();
+      const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+      await expect(h1).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      const heading = await h1.boundingBox();
+      expect(heading?.height, 'the heading wraps to two lines at 360px').toBeGreaterThan(50);
+      const line = await nextLine(h1).boundingBox();
+      expect(Math.abs((line?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    });
+
+    test('the h1 lands within 4px of the skeleton’s heading when a long organization name wraps the breadcrumb, with a mouse at 360px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'a mouse wraps the breadcrumb to a line of 20px',
+      );
+      await at360(page, testInfo);
+      const { held, skeleton } = await openHeld(
+        page,
+        consoleGuard,
+        await seedWrapping(LONG_ORGANIZATION),
+      );
+      const crumbs = await skeleton.getByTestId('skeleton-breadcrumb').boundingBox();
+      const bar = await skeleton.getByTestId('skeleton-heading').boundingBox();
+      expect(crumbs?.height, 'the breadcrumb wraps to two lines at 360px').toBeGreaterThan(30);
+
+      held.release();
+      const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+      await expect(h1).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      const heading = await h1.boundingBox();
+      expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    });
   });
 
   test.describe('a draft league', () => {

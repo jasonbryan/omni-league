@@ -29,10 +29,8 @@ import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { FULL_BADGE, FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
+import { CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-crumbs';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
-
-const CRUMB_LINK =
-  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -56,7 +54,7 @@ function plural(count: number, noun: string): string {
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
       <nav aria-label="Breadcrumb">
-        <ol role="list" class="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
+        <ol role="list" class="${CRUMB_LIST}">
           <li>
             <a [routerLink]="organizationHref()" class="${CRUMB_LINK}">{{
               view().league.organization.name
@@ -77,7 +75,7 @@ function plural(count: number, noun: string): string {
           </li>
         </ol>
       </nav>
-      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-balance md:mt-6 md:text-5xl">
+      <h1 class="${LEAGUE_HEADING}">
         {{ view().league.name }}
       </h1>
       @if (view().league.divisionLabel; as divisionLabel) {

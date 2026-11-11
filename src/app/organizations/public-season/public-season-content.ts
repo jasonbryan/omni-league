@@ -37,6 +37,7 @@ import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
+import { publicPageNames } from '../public-league/public-page-names';
 import {
   registrationCard,
   teamCard,
@@ -103,7 +104,9 @@ const FACT_ICON =
             <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
           </li>
           <li>
-            <a [routerLink]="leagueHref()" [class]="crumbLink">{{ season().league.name }}</a>
+            <a [routerLink]="leagueHref()" [state]="leagueNames()" [class]="crumbLink">{{
+              season().league.name
+            }}</a>
           </li>
           <li aria-hidden="true">
             <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
@@ -501,6 +504,9 @@ export class PublicSeasonContent {
   );
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.season().organization.slug, this.season().league.slug),
+  );
+  protected readonly leagueNames = computed(() =>
+    publicPageNames({ organization: this.season().organization, league: this.season().league }),
   );
   protected readonly seasonHref = computed(() =>
     publicSeasonPath(

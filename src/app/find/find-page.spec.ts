@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { Title } from '@angular/platform-browser';
-import { provideRouter, Router } from '@angular/router';
+import { By, Title } from '@angular/platform-browser';
+import { provideRouter, Router, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import {
@@ -161,6 +161,37 @@ describe('FindPage results', () => {
       'Sunday Reverse Coed 4s',
       'Thursday Night Coed 2s',
       'Saturday Coed 6s',
+    ]);
+  });
+
+  it('gives each row’s link the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {
+    const links = harness.fixture.debugElement.queryAll(By.css('ul > li h3 a'));
+
+    expect(links.map((link) => link.injector.get(RouterLink).state)).toEqual([
+      {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: {
+          slug: 'sunday-reverse-coed-4s',
+          name: 'Sunday Reverse Coed 4s',
+          sportName: 'Beach volleyball',
+        },
+      },
+      {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: {
+          slug: 'thursday-night-coed-2s',
+          name: 'Thursday Night Coed 2s',
+          sportName: 'Beach volleyball',
+        },
+      },
+      {
+        organization: { slug: 'lakeshore-sand-league', name: 'Lakeshore Sand League' },
+        league: {
+          slug: 'saturday-coed-6s',
+          name: 'Saturday Coed 6s',
+          sportName: 'Beach volleyball',
+        },
+      },
     ]);
   });
 

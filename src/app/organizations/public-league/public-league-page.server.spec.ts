@@ -228,6 +228,17 @@ describe('PublicLeaguePage server render', () => {
     expect([...(row?.children ?? [])].map(text)).toEqual(['Full', 'waitlist open']);
   });
 
+  it('renders the loaded page with no skeleton and no navigation state, since a server request carries none', async () => {
+    const { body } = await render(LEAGUE_PATH, sunday);
+
+    expect(body.querySelector('[data-testid="league-skeleton"]')).toBeNull();
+    expect(text(body.querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
+    expect([...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map(text)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Beach volleyball',
+    ]);
+  });
+
   it('writes one description tag that matches og:description', async () => {
     const { head } = await render(LEAGUE_PATH, sunday);
     const description = meta(head, 'og:description');
