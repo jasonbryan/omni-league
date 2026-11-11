@@ -71,7 +71,6 @@ export class PublicLeaguePage {
   );
   private readonly arrivedState = inject(Router).currentNavigation()?.extras.state;
 
-  /** Names the link carried, used only for the route it was made for: a stale entry shows the bars. */
   protected readonly names = computed(() =>
     readPublicPageNames(this.arrivedState, {
       orgSlug: this.orgSlug(),

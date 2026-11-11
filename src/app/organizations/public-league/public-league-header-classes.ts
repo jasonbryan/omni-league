@@ -1,4 +1,5 @@
-/** The breadcrumb and heading classes of the loaded league page, which its skeleton repeats so a wrapped name takes the same height. */
+// The loaded league page and its skeleton share these, so a wrapped name takes the same height in both.
+
 export const CRUMB_LIST = 'flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground';
 
 export const CRUMB_BOX = 'inline-flex items-center rounded-md font-medium pointer-coarse:min-h-11';

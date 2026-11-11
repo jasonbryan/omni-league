@@ -5,8 +5,8 @@ import { PublicLeagueSkeleton } from './public-league/public-league-skeleton';
 import type { PublicPageNames } from './public-league/public-page-names';
 import { PublicSeasonSkeleton } from './public-season/public-season-skeleton';
 
-const rowCount = (root: Element) =>
-  root.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]').length;
+const ROWS = '[data-testid="skeleton-breadcrumb-row"]';
+const rowCount = (root: Element) => root.querySelectorAll(ROWS).length;
 
 describe('page skeletons', () => {
   it.each<[string, Type<unknown>]>([
@@ -30,7 +30,6 @@ describe('page skeletons', () => {
   });
 
   describe('breadcrumb rows', () => {
-    const ROWS = '[data-testid="skeleton-breadcrumb-row"]';
     const rowsOf = (skeleton: Type<unknown>) => {
       const fixture = TestBed.createComponent(skeleton);
       fixture.detectChanges();

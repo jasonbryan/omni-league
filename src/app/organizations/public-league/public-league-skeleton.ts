@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight } from '@ng-icons/lucide';
-import { CRUMB_BOX, CRUMB_LIST, LEAGUE_HEADING } from './public-league-crumbs';
+import { CRUMB_BOX, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import type { PublicPageNames } from './public-page-names';
 
 const FILL = 'block bg-muted motion-safe:animate-pulse';

@@ -64,7 +64,7 @@ describe('readPublicPageNames', () => {
     ['the organization', (n) => ({ ...n, organization: 'Gulf Coast' })],
     ['the league', (n) => ({ ...n, league: undefined })],
     ['an empty league name', (n) => ({ ...n, league: { ...n.league, name: '' } })],
-  ])('returns nothing when %s is not a string', (_, break_) => {
+  ])('returns nothing when %s is missing, empty, or not a string', (_, break_) => {
     expect(readPublicPageNames(break_(NAMES), ROUTE)).toBeUndefined();
   });
 });

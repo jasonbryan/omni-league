@@ -29,7 +29,7 @@ import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { FULL_BADGE, FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
-import { CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-crumbs';
+import { CRUMB_BOX, CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 function plural(count: number, noun: string): string {
@@ -68,9 +68,7 @@ function plural(count: number, noun: string): string {
             @if (sportHref(); as sportHref) {
               <a [routerLink]="sportHref" class="${CRUMB_LINK}">{{ view().league.sportName }}</a>
             } @else {
-              <span class="inline-flex items-center font-medium pointer-coarse:min-h-11">{{
-                view().league.sportName
-              }}</span>
+              <span class="${CRUMB_BOX}">{{ view().league.sportName }}</span>
             }
           </li>
         </ol>
