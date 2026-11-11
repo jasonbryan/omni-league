@@ -30,7 +30,7 @@ const PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed
 
 let client: FakeConvexClient;
 
-async function open(url = PATH): Promise<RouterTestingHarness> {
+async function open(url = PATH, state?: Record<string, unknown>): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
@@ -41,7 +41,8 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
       { provide: CONVEX_CLIENT, useValue: client },
     ],
   });
-  const harness = await RouterTestingHarness.create(url);
+  const harness = await RouterTestingHarness.create(state === undefined ? url : undefined);
+  if (state !== undefined) await TestBed.inject(Router).navigateByUrl(url, { state });
   TestBed.tick();
   return harness;
 }
@@ -154,6 +155,88 @@ describe('PublicLeaguePage queries', () => {
     );
     expect(badges.length).toBeGreaterThan(0);
     expect(allRadiusClasses(badges)).toEqual(Array.from(badges, () => ['rounded-full']));
+  });
+});
+
+describe('PublicLeaguePage skeleton names', () => {
+  const NAMES = {
+    organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+    league: {
+      slug: 'sunday-reverse-coed-4s',
+      name: 'Sunday Reverse Coed 4s',
+      sportName: 'Beach volleyball',
+    },
+  };
+  const SKELETON = '[data-testid="league-skeleton"]';
+
+  async function loading(state?: Record<string, unknown>): Promise<HTMLElement> {
+    const harness = await open(PATH, state);
+    await settle(harness);
+    return host(harness).querySelector<HTMLElement>(SKELETON)!;
+  }
+
+  it('shows the names the navigation carried, in place of the bars, while the data is on its way', async () => {
+    const skeleton = await loading(NAMES);
+
+    expect(
+      [...skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb"] li > span')].map(text),
+    ).toEqual(['Gulf Coast Sport & Social', 'Beach volleyball']);
+    expect(text(skeleton.querySelector('[data-testid="skeleton-heading"]'))).toBe(
+      'Sunday Reverse Coed 4s',
+    );
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).toBeNull();
+  });
+
+  it.each([
+    ['another league’s slug', { ...NAMES, league: { ...NAMES.league, slug: 'saturday-coed-6s' } }],
+    [
+      'another organization’s slug',
+      { ...NAMES, organization: { ...NAMES.organization, slug: 'lakeshore-sand-league' } },
+    ],
+    ['a field that is not text', { ...NAMES, league: { ...NAMES.league, name: 4 } }],
+    ['the team page’s state', { registered: true }],
+  ])('shows the bars for %s', async (_, state) => {
+    const skeleton = await loading(state);
+
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')).toBeNull();
+    expect(text(skeleton.querySelector('[data-testid="skeleton-heading"]'))).toBe('');
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).not.toBeNull();
+  });
+
+  it('shows the bars when the navigation carried no state', async () => {
+    const skeleton = await loading();
+
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')).toBeNull();
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).not.toBeNull();
+  });
+
+  it('sets its breadcrumb and heading with the classes of the loaded ones, so both take the same height', async () => {
+    const harness = await open(PATH, NAMES);
+    await settle(harness);
+    const skeleton = host(harness).querySelector<HTMLElement>(SKELETON)!;
+    const placeholders = {
+      list: skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')?.className,
+      heading: skeleton.querySelector('[data-testid="skeleton-heading"]')?.className,
+      crumbs: [...skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb"] li > span')].map(
+        (span) => span.className,
+      ),
+    };
+
+    emit();
+    await settle(harness);
+    const loaded = {
+      list: host(harness).querySelector('nav[aria-label="Breadcrumb"] ol')?.className,
+      heading: host(harness).querySelector('main h1')?.className,
+      crumbs: [...host(harness).querySelectorAll('nav[aria-label="Breadcrumb"] li > a')].map(
+        (link) => link.className,
+      ),
+    };
+
+    expect(placeholders.list).toBe(loaded.list);
+    expect(placeholders.heading).toBe(loaded.heading);
+    for (const [i, className] of placeholders.crumbs.entries()) {
+      expect(loaded.crumbs[i]).toContain(className);
+    }
   });
 });
 

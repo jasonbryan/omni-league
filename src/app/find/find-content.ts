@@ -33,6 +33,7 @@ import { noMatchSentence, removalSuggestions } from '../organizations/no-match-s
 import { OrganizationMark } from '../organizations/organization-mark';
 import { PageControl } from '../organizations/page-control';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
+import { publicPageNames } from '../organizations/public-league/public-page-names';
 import { leagueSeasonStatus } from '../organizations/season-status';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, findQuery, type FindResultRow } from './find-path';
@@ -177,7 +178,9 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                         />
                         <div class="min-w-0 flex-1">
                           <h3 class="font-medium">
-                            <a [routerLink]="row.href" [class]="linkClasses">{{ row.name }}</a>
+                            <a [routerLink]="row.href" [state]="row.names" [class]="linkClasses">{{
+                              row.name
+                            }}</a>
                           </h3>
                           @if (row.divisionLabel) {
                             <p class="mt-0.5 text-sm font-medium">{{ row.divisionLabel }}</p>
@@ -422,6 +425,7 @@ export class FindContent {
   protected readonly rows = computed(() =>
     (this.results()?.rows ?? []).map((league) => ({
       href: publicLeaguePath(league.organization.slug, league.slug),
+      names: publicPageNames({ organization: league.organization, league }),
       name: league.name,
       organizationName: league.organization.name,
       logoUrl: league.organization.logoUrl,

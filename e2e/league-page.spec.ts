@@ -1,4 +1,6 @@
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { formatCalendarDate } from '../convex/lib/seasonInput';
+import { slugify } from '../convex/lib/slugs';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -20,6 +22,7 @@ import {
   numberedSeasons,
   seedSeasons,
   seedTenant,
+  SPORT_NAMES,
   type SeasonSeed,
   type Tenant,
 } from './support/tenant';
@@ -610,46 +613,158 @@ test.describe('public league page in the browser', () => {
         width: { touch: 800, mouse: 600 },
       },
     ];
-    for (const { name, width } of WIDTHS) {
-      const title =
-        'shows the skeleton with its status while the data is on its way, then the page with its h1 within 4px of the skeleton’s heading bar, and focus on main';
-      test(name ? `${title} at ${name}` : title, async ({ page, consoleGuard }, testInfo) => {
-        if (width) {
-          test.skip(
-            !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
-            'one Chromium project per pointer',
-          );
-          const touch = testInfo.project.name === 'chromium-mobile';
-          await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 800 });
-        }
-        const { tenant, path } = await seed();
-        const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
-        await page.goto(tenant.path);
-        await hydrated(consoleGuard);
+    const ARRIVALS = [
+      {
+        via: 'the names a link carried',
+        target: 'the skeleton’s heading',
+        open: (page: Page, path: string) => page.locator(`main a[href="${path}"]`).click(),
+      },
+      {
+        // A history entry with no state, as the links that carry none (the team page, the admin Leagues list) arrive.
+        via: 'no state',
+        target: 'the skeleton’s heading bar',
+        open: (page: Page, path: string) =>
+          page.evaluate((to) => {
+            history.pushState(null, '', to);
+            dispatchEvent(new PopStateEvent('popstate', { state: null }));
+          }, path),
+      },
+    ];
+    for (const arrival of ARRIVALS) {
+      for (const { name, width } of WIDTHS) {
+        const title = `with ${arrival.via}, shows the skeleton with its status while the data is on its way, then the page with its h1 within 4px of ${arrival.target}, and focus on main`;
+        test(name ? `${title} at ${name}` : title, async ({ page, consoleGuard }, testInfo) => {
+          if (width) {
+            test.skip(
+              !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+              'one Chromium project per pointer',
+            );
+            const touch = testInfo.project.name === 'chromium-mobile';
+            await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 800 });
+          }
+          const { tenant, path } = await seed();
+          const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
+          await page.goto(tenant.path);
+          await hydrated(consoleGuard);
 
-        await page.locator(`main a[href="${path}"]`).click();
-        await expect.poll(() => held.isHolding()).toBe(true);
-        await expect(page).toHaveURL(`${baseURL}${path}`);
+          await arrival.open(page, path);
+          await expect.poll(() => held.isHolding()).toBe(true);
+          await expect(page).toHaveURL(`${baseURL}${path}`);
 
-        const skeleton = page.getByTestId('league-skeleton');
-        await expect(skeleton).toBeVisible();
-        await expect(skeleton.getByRole('status')).toHaveText('Loading the league.');
-        await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
-        await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
-        await expect(page.locator('main[id="main"]')).toBeFocused();
-        const skeletonScan = await axeScan(page);
-        expect(describeViolations(skeletonScan.violations)).toEqual([]);
-        const bar = await skeleton.locator('span').nth(1).boundingBox();
+          const skeleton = page.getByTestId('league-skeleton');
+          await expect(skeleton).toBeVisible();
+          await expect(skeleton.getByRole('status')).toHaveText('Loading the league.');
+          await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+          await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
+          await expect(page.locator('main[id="main"]')).toBeFocused();
+          const skeletonScan = await axeScan(page);
+          expect(describeViolations(skeletonScan.violations)).toEqual([]);
+          const bar = await skeleton.getByTestId('skeleton-heading').boundingBox();
 
-        held.release();
-        const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
-        await expect(h1).toBeVisible();
-        await expect(skeleton).toHaveCount(0);
-        const heading = await h1.boundingBox();
-        expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
-        await expect(page.locator('main[id="main"]')).toBeFocused();
-      });
+          held.release();
+          const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+          await expect(h1).toBeVisible();
+          await expect(skeleton).toHaveCount(0);
+          const heading = await h1.boundingBox();
+          expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+          await expect(page.locator('main[id="main"]')).toBeFocused();
+        });
+      }
     }
+  });
+
+  test.describe('after an in-app navigation, with the names the link carried', () => {
+    const WIDTH = 360;
+    const LONG_ORGANIZATION = 'Port Aransas Beach Volleyball Club';
+
+    async function seedWrapping(name: string): Promise<SeededLeague> {
+      const tenant = await seedTenant({
+        name,
+        locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+        leagues: [
+          {
+            name: LEAGUE,
+            sport: 'beachVolleyball',
+            locations: ['Alpha Field'],
+            division: DIVISION,
+          },
+        ],
+      });
+      return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}` };
+    }
+
+    const nextLine = (heading: Locator) => heading.locator('xpath=following-sibling::*[1]');
+
+    async function openHeld(
+      page: Page,
+      consoleGuard: { hydrated: boolean },
+      { tenant, path }: SeededLeague,
+    ) {
+      const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await page.locator(`main a[href="${path}"]`).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      const skeleton = page.getByTestId('league-skeleton');
+      await expect(skeleton).toBeVisible();
+      return { held, skeleton };
+    }
+
+    async function at360(page: Page, testInfo: TestInfo): Promise<void> {
+      test.skip(
+        !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+        'one Chromium project per pointer',
+      );
+      await page.setViewportSize({ width: WIDTH, height: 800 });
+    }
+
+    test('the line under a heading that wraps lands within 4px of the skeleton’s, with a touch screen or a mouse at 360px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      await at360(page, testInfo);
+      const { held, skeleton } = await openHeld(
+        page,
+        consoleGuard,
+        await seedWrapping('E2E League Page'),
+      );
+      const bar = await nextLine(skeleton.getByTestId('skeleton-heading')).boundingBox();
+
+      held.release();
+      const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+      await expect(h1).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      const heading = await h1.boundingBox();
+      expect(heading?.height, 'the heading wraps to two lines at 360px').toBeGreaterThan(50);
+      const line = await nextLine(h1).boundingBox();
+      expect(Math.abs((line?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    });
+
+    test('the h1 lands within 4px of the skeleton’s heading when a long organization name wraps the breadcrumb, with a mouse at 360px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'a mouse wraps the breadcrumb to a line of 20px',
+      );
+      await at360(page, testInfo);
+      const { held, skeleton } = await openHeld(
+        page,
+        consoleGuard,
+        await seedWrapping(LONG_ORGANIZATION),
+      );
+      const crumbs = await skeleton.getByTestId('skeleton-breadcrumb').boundingBox();
+      const bar = await skeleton.getByTestId('skeleton-heading').boundingBox();
+      expect(crumbs?.height, 'the breadcrumb wraps to two lines at 360px').toBeGreaterThan(30);
+
+      held.release();
+      const h1 = page.getByRole('heading', { level: 1, name: LEAGUE });
+      await expect(h1).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      const heading = await h1.boundingBox();
+      expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    });
   });
 
   test.describe('a draft league', () => {
@@ -862,5 +977,171 @@ test.describe('public league page: Men and Women divisions', () => {
       await expectAccessible(page);
       await screenshot(page, testInfo, `545-league-page-${name}`);
     }
+  });
+});
+
+const NAMED_LEAGUE =
+  'Sunday Night Reverse Coed Fours Beach Volleyball Championship Ladder With Playoffs';
+const NAMED_LEAGUE_SLUG = slugify(NAMED_LEAGUE);
+const NAMED_ORGANIZATION = 'Port Aransas Beach Volleyball Club';
+const NAMED_SEASON: SeasonSeed = {
+  name: 'Summer Open',
+  slug: 'summer-open',
+  startDate: dateFromToday(30),
+  endDate: dateFromToday(100),
+  registrationDeadline: dateFromToday(10),
+};
+const NAMED_SPORT = SPORT_NAMES.beachVolleyball;
+const NAMED_TOLERANCE = 4;
+
+const NAMED_PROJECTS = ['chromium-mobile', 'chromium-desktop'];
+
+async function seedNamed(): Promise<{ tenant: Tenant; path: string; id: string }> {
+  const tenant = await seedTenant({
+    name: NAMED_ORGANIZATION,
+    locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    leagues: [
+      {
+        name: NAMED_LEAGUE,
+        sport: 'beachVolleyball',
+        locations: ['Alpha Field'],
+        division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+      },
+    ],
+  });
+  await seedSeasons(tenant, NAMED_LEAGUE_SLUG, [NAMED_SEASON]);
+  return {
+    tenant,
+    path: `${tenant.path}/leagues/${NAMED_LEAGUE_SLUG}`,
+    id: tenant.slug.replace(/^e2e-/, ''),
+  };
+}
+
+const lineUnder = (heading: Locator) => heading.locator('xpath=following-sibling::*[1]');
+
+interface Placement {
+  crumbs: { y: number; height: number };
+  heading: { y: number; height: number };
+  line: { y: number };
+}
+
+async function placement(crumbs: Locator, heading: Locator): Promise<Placement> {
+  const [crumbBox, headingBox, lineBox] = await Promise.all([
+    crumbs.boundingBox(),
+    heading.boundingBox(),
+    lineUnder(heading).boundingBox(),
+  ]);
+  if (!crumbBox || !headingBox || !lineBox) throw new Error('the page has no box to measure');
+  return { crumbs: crumbBox, heading: headingBox, line: lineBox };
+}
+
+function expectSamePlace(loaded: Placement, skeleton: Placement): void {
+  expect(
+    Math.abs(loaded.crumbs.height - skeleton.crumbs.height),
+    'breadcrumb height',
+  ).toBeLessThanOrEqual(NAMED_TOLERANCE);
+  expect(Math.abs(loaded.heading.y - skeleton.heading.y), 'heading top').toBeLessThanOrEqual(
+    NAMED_TOLERANCE,
+  );
+  expect(
+    Math.abs(loaded.heading.height - skeleton.heading.height),
+    'heading height',
+  ).toBeLessThanOrEqual(NAMED_TOLERANCE);
+  expect(Math.abs(loaded.line.y - skeleton.line.y), 'line under the heading').toBeLessThanOrEqual(
+    NAMED_TOLERANCE,
+  );
+}
+
+async function followAndMeasure(
+  page: Page,
+  tenant: Tenant,
+  open: () => Promise<void>,
+): Promise<void> {
+  const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
+  await open();
+  await expect.poll(() => held.isHolding()).toBe(true);
+  const skeleton = page.getByTestId('league-skeleton');
+  await expect(skeleton).toBeVisible();
+
+  const main = page.locator('main');
+  await expect(main.getByRole('heading')).toHaveCount(0);
+  await expect(main.getByRole('link')).toHaveCount(0);
+  const heard = await skeleton.ariaSnapshot();
+  expect(heard, 'a screen reader hears only the status').toContain('Loading the league.');
+  expect(heard).not.toContain(NAMED_LEAGUE);
+  expect(heard).not.toContain(tenant.name);
+  expect(heard).not.toContain(NAMED_SPORT);
+  const crumbText = await skeleton.getByTestId('skeleton-breadcrumb').innerText();
+  expect(crumbText).toContain(tenant.name);
+  expect(crumbText).toContain(NAMED_SPORT);
+  await expect(skeleton.getByTestId('skeleton-heading')).toHaveText(NAMED_LEAGUE);
+  expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  const before = await placement(
+    skeleton.getByTestId('skeleton-breadcrumb'),
+    skeleton.getByTestId('skeleton-heading'),
+  );
+
+  held.release();
+  const h1 = page.getByRole('heading', { level: 1, name: NAMED_LEAGUE });
+  await expect(h1).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+  const after = await placement(
+    page.getByRole('navigation', { name: 'Breadcrumb' }).locator('ol'),
+    h1,
+  );
+  expectSamePlace(after, before);
+}
+
+const ORGANIZATION_PAGE_WIDTHS = [
+  { width: 360, projects: ['chromium-mobile', 'chromium-desktop'] },
+  { width: 800, projects: ['chromium-mobile'] },
+  { width: 600, projects: ['chromium-desktop'] },
+  { width: 1280, projects: ['chromium-desktop'] },
+];
+
+test.describe('public league page: the names a link carried in the skeleton, long names from each link', () => {
+  for (const { width, projects } of ORGANIZATION_PAGE_WIDTHS) {
+    test(`from the organization page at ${width}px, long names keep the breadcrumb, the heading, and the line under it where they were`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!projects.includes(testInfo.project.name), 'one Chromium project per pointer');
+      const { tenant, path } = await seedNamed();
+      await page.setViewportSize({ width, height: 800 });
+      await followAndMeasure(page, tenant, async () => {
+        await page.goto(tenant.path);
+        await hydrated(consoleGuard);
+        await page.locator(`main a[href="${path}"]`).click();
+      });
+    });
+  }
+
+  test('from a Find a league result, the names are in the skeleton and nothing moves', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!NAMED_PROJECTS.includes(testInfo.project.name), 'one Chromium project per pointer');
+    const { tenant, path, id } = await seedNamed();
+    await followAndMeasure(page, tenant, async () => {
+      await page.goto(`/leagues?q=${id}`);
+      await hydrated(consoleGuard);
+      await page.locator(`main a[href="${path}"]`).click();
+    });
+  });
+
+  test('from the league breadcrumb on the season page, the names are in the skeleton and nothing moves', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!NAMED_PROJECTS.includes(testInfo.project.name), 'one Chromium project per pointer');
+    const { tenant, path } = await seedNamed();
+    await followAndMeasure(page, tenant, async () => {
+      await page.goto(`${path}/seasons/${NAMED_SEASON.slug}`);
+      await hydrated(consoleGuard);
+      await page
+        .getByRole('navigation', { name: 'Breadcrumb' })
+        .getByRole('link', { name: NAMED_LEAGUE })
+        .click();
+    });
   });
 });

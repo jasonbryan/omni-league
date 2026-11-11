@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { Title } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { By, Title } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../../core/data/convex';
 import {
@@ -192,6 +192,21 @@ describe('PublicSeasonPage populated', () => {
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+  });
+
+  it('gives the league breadcrumb the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {
+    const link = harness.fixture.debugElement.query(
+      By.css(`nav[aria-label="Breadcrumb"] a[href="${LEAGUE_PATH}"]`),
+    );
+
+    expect(link.injector.get(RouterLink).state).toEqual({
+      organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+      league: {
+        slug: 'sunday-reverse-coed-4s',
+        name: 'Sunday Reverse Coed 4s',
+        sportName: 'Beach volleyball',
+      },
+    });
   });
 
   it('shows the sport badge above the h1, which names the league and the season together', () => {

@@ -369,9 +369,9 @@ const BOYS_ROOKIES = '00 Boys Rookies';
 const WOMEN_ELEVEN = '00 Women Eleven';
 const GIRLS_SANDS = '00 Girls Sands';
 
-/** Each test that reads its rows takes its own age group, so another test's leagues never crowd the first page. */
+/** A test that reads live rows takes an age group no other test seeds (u10 is shared by the raw-HTML tests and `seedDivisions`), so another test's leagues never crowd or re-sort its list. */
 async function seedYouth(
-  ageGroup: 'u10' | 'over30' | 'over35' | 'over40' = 'u10',
+  ageGroup: 'u10' | 'over30' | 'over35' | 'over40' | 'over50' = 'u10',
 ): Promise<Tenant> {
   return seedTenant({
     name: 'Front Range Youth',
@@ -1111,8 +1111,8 @@ test.describe('find a league: sport chips and division filters, in the browser',
     page,
     consoleGuard,
   }, testInfo) => {
-    await seedYouth();
-    await page.goto('/leagues?sport=soccer&age=u10&gender=girls');
+    await seedYouth('over50');
+    await page.goto('/leagues?sport=soccer&age=over50&gender=womens');
     await hydrated(consoleGuard);
     await expect(rowNames(page).first()).toBeVisible();
     await expectAccessible(page);

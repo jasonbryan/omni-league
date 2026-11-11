@@ -59,6 +59,7 @@ import {
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
+import { publicPageNames } from './public-league/public-page-names';
 import {
   closesText,
   FULL_BADGE,
@@ -374,6 +375,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           <h3 class="font-medium">
                             <a
                               [routerLink]="league.href"
+                              [state]="league.names"
                               class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
                               >{{ league.name }}</a
                             >
@@ -659,6 +661,7 @@ export class OrganizationOverview {
         id: rowId('league', this.leaguePaging(), i),
         name: league.name,
         href: publicLeaguePath(this.page().slug, league.slug),
+        names: publicPageNames({ organization: this.page(), league }),
         divisionLabel: league.divisionLabel,
         where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
         status,
