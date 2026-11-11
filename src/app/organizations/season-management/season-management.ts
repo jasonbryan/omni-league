@@ -14,7 +14,6 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
   lucideCalendarDays,
-  lucideChevronRight,
   lucideCircleCheck,
   lucideCircleDashed,
   lucideListOrdered,
@@ -28,6 +27,7 @@ import {
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { sportName } from '../../../../convex/lib/sports';
 import { teamPath } from '../../teams/team-paths';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { AdminAlert } from '../admin/admin-alert';
 import type { AlertText } from '../admin/alert-text';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
@@ -40,7 +40,7 @@ import {
 import { formatDay } from '../admin/format-day';
 import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { CAP_NOTE } from '../admin/note-classes';
-import { CURRENT_CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
+import { CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
 import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-agent-dialog';
@@ -84,6 +84,7 @@ function localDay(ms: number): string {
   selector: 'app-season-management',
   imports: [
     AdminAlert,
+    HlmBreadcrumbImports,
     NgIcon,
     PlaceFreeAgentDialog,
     RouterLink,
@@ -94,7 +95,6 @@ function localDay(ms: number): string {
     provideIcons({
       lucideCalendarClock,
       lucideCalendarDays,
-      lucideChevronRight,
       lucideCircleCheck,
       lucideCircleDashed,
       lucideListOrdered,
@@ -114,25 +114,16 @@ function localDay(ms: number): string {
   template: `
     @if (league(); as league) {
       @if (season(); as season) {
-        <nav aria-label="Breadcrumb">
-          <ol
-            role="list"
-            class="flex flex-nowrap items-center gap-x-1.5 text-sm whitespace-nowrap text-muted-foreground"
-          >
-            <li [class]="nameCrumb">
-              <a [routerLink]="leagueHref()" [class]="leagueCrumbLink"
+        <nav hlmBreadcrumb aria-label="Breadcrumb">
+          <ol hlmBreadcrumbList class="flex-nowrap gap-x-1.5 whitespace-nowrap">
+            <li hlmBreadcrumbItem [class]="nameCrumb">
+              <a hlmBreadcrumbLink [link]="leagueHref()" [class]="leagueCrumbLink"
                 ><span class="truncate">{{ league.name }}</span></a
               >
             </li>
-            <li aria-hidden="true" class="shrink-0">
-              <ng-icon
-                name="lucideChevronRight"
-                class="translate-y-0.5 text-sm"
-                aria-hidden="true"
-              />
-            </li>
-            <li class="flex min-w-16 shrink-100">
-              <a [routerLink]="seasonHref()" aria-current="page" [class]="currentCrumbLink"
+            <li hlmBreadcrumbSeparator class="shrink-0"></li>
+            <li hlmBreadcrumbItem class="flex min-w-16 shrink-100">
+              <a hlmBreadcrumbPage [link]="seasonHref()" [class]="crumbLink"
                 ><span class="truncate">{{ season.name }}</span></a
               >
             </li>
@@ -433,7 +424,7 @@ export class SeasonManagement {
   });
 
   protected readonly leagueCrumbLink = LEAGUE_CRUMB_LINK;
-  protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
+  protected readonly crumbLink = CRUMB_LINK;
   protected readonly nameCrumb = NAME_CRUMB;
   protected readonly defaultBadge = BADGE_DEFAULT;
   protected readonly outlineBadge = BADGE_OUTLINE;

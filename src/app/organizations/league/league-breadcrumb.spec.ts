@@ -1,4 +1,5 @@
 import { openAdmin, text } from '../admin/testing/admin-harness';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import {
   COED,
   COED_AS_ORGANIZER,
@@ -43,6 +44,22 @@ describe('LeagueManagement: the breadcrumb', () => {
         href: `/app/organizations/${GULF.slug}/leagues/${COED.slug}`,
         current: 'page',
       },
+    ]);
+  });
+
+  it('renders helm breadcrumb, ending with the current page as a link', async () => {
+    await open(COED);
+    expect(slotsOf(nav())).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
     ]);
   });
 

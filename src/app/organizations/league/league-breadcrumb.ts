@@ -1,15 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronRight } from '@ng-icons/lucide';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { adminPath } from '../admin/admin-path';
 import type { OrganizerLeague } from './league-context';
 import { leaguePath } from './league-path';
 
 export const CRUMB_LINK =
-  'inline-flex max-w-full items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
+  'inline-flex max-w-full items-center rounded-md font-medium hover:underline pointer-coarse:min-h-11';
 export const LEAGUE_CRUMB_LINK = `${CRUMB_LINK} underline underline-offset-4`;
-export const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 
 export const NAME_CRUMB = 'flex min-w-11';
 const FIXED_LABEL_CRUMB = 'flex shrink-0';
@@ -27,37 +24,25 @@ interface Crumb {
  */
 @Component({
   selector: 'app-league-breadcrumb',
-  imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideChevronRight })],
+  imports: [HlmBreadcrumbImports],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <nav aria-label="Breadcrumb">
-      <ol
-        role="list"
-        class="flex flex-nowrap items-center gap-x-1.5 text-sm whitespace-nowrap text-muted-foreground"
-      >
+    <nav hlmBreadcrumb aria-label="Breadcrumb">
+      <ol hlmBreadcrumbList class="flex-nowrap gap-x-1.5 whitespace-nowrap">
         @for (crumb of crumbs(); track crumb.path) {
           @if (!$first) {
-            <li aria-hidden="true" class="shrink-0">
-              <ng-icon
-                name="lucideChevronRight"
-                class="translate-y-0.5 text-sm"
-                aria-hidden="true"
-              />
-            </li>
+            <li hlmBreadcrumbSeparator class="shrink-0"></li>
           }
-          <li [class]="crumb.fixedLabel ? fixedLabelCrumb : nameCrumb">
-            <a [routerLink]="crumb.path" [class]="crumbLink"
+          <li hlmBreadcrumbItem [class]="crumb.fixedLabel ? fixedLabelCrumb : nameCrumb">
+            <a hlmBreadcrumbLink [link]="crumb.path" [class]="crumbLink"
               ><span class="truncate">{{ crumb.label }}</span></a
             >
           </li>
         }
-        <li aria-hidden="true" class="shrink-0">
-          <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
-        </li>
-        <li class="flex min-w-16 shrink-100">
-          <a [routerLink]="currentPath()" aria-current="page" [class]="currentCrumbLink"
+        <li hlmBreadcrumbSeparator class="shrink-0"></li>
+        <li hlmBreadcrumbItem class="flex min-w-16 shrink-100">
+          <a hlmBreadcrumbPage [link]="currentPath()" [class]="crumbLink"
             ><span class="truncate">{{ league().name }}</span></a
           >
         </li>
@@ -69,7 +54,6 @@ export class LeagueBreadcrumb {
   readonly league = input.required<OrganizerLeague>();
 
   protected readonly crumbLink = CRUMB_LINK;
-  protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly nameCrumb = NAME_CRUMB;
   protected readonly fixedLabelCrumb = FIXED_LABEL_CRUMB;
 

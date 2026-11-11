@@ -20,6 +20,7 @@ import {
 } from '../../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import {
   at,
   leagueQueryResults,
@@ -180,6 +181,14 @@ describe('PublicLeaguePage server render', () => {
       'Spring 2026',
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
+    expect(slotsOf(body.querySelector('nav[aria-label="Seasons pages"]'))).toEqual(
+      expect.arrayContaining([
+        'pagination',
+        'pagination-content',
+        'pagination-item',
+        'pagination-link',
+      ]),
+    );
     expect(text(body.querySelector('main section#registration-open h3'))).toBe('Summer 2027');
     expect(text(body.querySelector('main section#registration-open a[data-slot="button"]'))).toBe(
       'Register for Summer 2027',
@@ -236,6 +245,15 @@ describe('PublicLeaguePage server render', () => {
     expect([...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map(text)).toEqual([
       'Gulf Coast Sport & Social',
       'Beach volleyball',
+    ]);
+    expect(slotsOf(body.querySelector('main nav[aria-label="Breadcrumb"]'))).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
     ]);
   });
 

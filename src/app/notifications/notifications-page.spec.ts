@@ -14,6 +14,7 @@ import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { slotsOf } from '../ui/testing/helm-slots';
 
 const VAPID_KEY = 'BPublicKeyFromGetConfig';
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
@@ -220,6 +221,15 @@ describe('NotificationsPage', () => {
     ).toEqual([
       ['Home', '/app', null],
       ['Notifications', '/app/notifications', 'page'],
+    ]);
+    expect(slotsOf(page.querySelector('nav[aria-label="Breadcrumb"]'))).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
     ]);
     expect(text(page)).toContain(
       'This setting is for this device only. Turn notifications on in each browser or installed app where you want them. Signing out turns them off here.',

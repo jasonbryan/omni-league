@@ -13,13 +13,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
 import { SwPush } from '@angular/service-worker';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBell,
   lucideBellOff,
-  lucideChevronRight,
   lucideShare,
   lucideSmartphone,
   lucideSquarePlus,
@@ -46,6 +44,7 @@ import {
 } from '../organizations/admin/field-classes';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmBreadcrumbImports } from '../ui/breadcrumb';
 import { HlmSpinner } from '../ui/spinner';
 import { PUSH_DEVICE } from './push-device';
 import { TestNotification } from './test-notification';
@@ -62,20 +61,26 @@ interface RegistrationRead {
 type Alert = { kind: 'offline' | 'failed'; change: Change } | null;
 
 const CRUMB_LINK =
-  'inline-flex items-center font-medium underline underline-offset-4 hover:text-foreground pointer-coarse:min-h-11';
-const CURRENT_CRUMB_LINK =
-  'inline-flex items-center font-medium text-foreground pointer-coarse:min-h-11';
+  'inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11';
+const CURRENT_CRUMB_LINK = 'inline-flex items-center pointer-coarse:min-h-11';
 const STEP_NUMBER =
   'flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground';
 
 @Component({
   selector: 'app-notifications-page',
-  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon, RouterLink, Shell, TestNotification],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    HlmBreadcrumbImports,
+    HlmSpinner,
+    NgIcon,
+    Shell,
+    TestNotification,
+  ],
   providers: [
     provideIcons({
       lucideBell,
       lucideBellOff,
-      lucideChevronRight,
       lucideShare,
       lucideSmartphone,
       lucideSquarePlus,
@@ -85,18 +90,14 @@ const STEP_NUMBER =
   template: `
     <app-shell>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
-        <nav aria-label="Breadcrumb">
-          <ol role="list" class="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-            <li><a routerLink="/app" [class]="crumbLink">Home</a></li>
-            <li aria-hidden="true">
-              <ng-icon
-                name="lucideChevronRight"
-                class="translate-y-0.5 text-sm"
-                aria-hidden="true"
-              />
+        <nav hlmBreadcrumb aria-label="Breadcrumb">
+          <ol hlmBreadcrumbList class="flex-wrap gap-1.5">
+            <li hlmBreadcrumbItem>
+              <a hlmBreadcrumbLink link="/app" [class]="crumbLink">Home</a>
             </li>
-            <li>
-              <a routerLink="/app/notifications" aria-current="page" [class]="currentCrumbLink"
+            <li hlmBreadcrumbSeparator></li>
+            <li hlmBreadcrumbItem>
+              <a hlmBreadcrumbPage link="/app/notifications" [class]="currentCrumbLink"
                 >Notifications</a
               >
             </li>

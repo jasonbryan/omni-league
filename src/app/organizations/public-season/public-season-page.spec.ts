@@ -11,6 +11,7 @@ import {
 import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import { PublicSeasonPage } from './public-season-page';
 import {
   NO_TEAMS,
@@ -192,6 +193,22 @@ describe('PublicSeasonPage populated', () => {
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+  });
+
+  it('renders helm breadcrumb, ending with the season as a link to the current page', () => {
+    const nav = host(harness).querySelector('main nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(nav)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
+    ]);
   });
 
   it('gives the league breadcrumb the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {

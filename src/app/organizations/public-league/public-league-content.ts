@@ -23,6 +23,7 @@ import {
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
@@ -38,7 +39,7 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-public-league-content',
-  imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -53,20 +54,20 @@ function plural(count: number, noun: string): string {
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
-      <nav aria-label="Breadcrumb">
-        <ol role="list" class="${CRUMB_LIST}">
-          <li>
-            <a [routerLink]="organizationHref()" class="${CRUMB_LINK}">{{
+      <nav hlmBreadcrumb aria-label="Breadcrumb">
+        <ol hlmBreadcrumbList class="${CRUMB_LIST}">
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbLink [link]="organizationHref()" class="${CRUMB_LINK}">{{
               view().league.organization.name
             }}</a>
           </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
-          </li>
-          <li>
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
             <!-- A sport the organization no longer lists has no view to link to. -->
             @if (sportHref(); as sportHref) {
-              <a [routerLink]="sportHref" class="${CRUMB_LINK}">{{ view().league.sportName }}</a>
+              <a hlmBreadcrumbLink [link]="sportHref" class="${CRUMB_LINK}">{{
+                view().league.sportName
+              }}</a>
             } @else {
               <span class="${CRUMB_BOX}">{{ view().league.sportName }}</span>
             }

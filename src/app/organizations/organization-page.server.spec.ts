@@ -20,6 +20,7 @@ import {
 } from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
+import { slotsOf } from '../ui/testing/helm-slots';
 import {
   GULF_COAST,
   PAGED,
@@ -695,6 +696,16 @@ describe('numbered pages on the server', () => {
     const leagues = body.querySelector('nav[aria-label="Leagues pages"]');
     expect(text(leagues?.querySelector('p'))).toBe('11–15 of 26 leagues');
     expect(text(leagues?.querySelector('[aria-current="page"]'))).toBe('Page 3');
+    expect(leagues?.querySelector('[aria-current="page"]')?.getAttribute('data-slot')).toBe(
+      'pagination-link',
+    );
+    expect(slotsOf(leagues).slice(0, 4)).toEqual([
+      'pagination',
+      'pagination-content',
+      'pagination-item',
+      'pagination-link',
+    ]);
+    expect(slotsOf(body.querySelector('nav[aria-label="Locations pages"]'))[0]).toBe('pagination');
     const target = (a: Element | null | undefined) => {
       const url = new URL(a?.getAttribute('href') ?? '', ORIGIN);
       return `${url.pathname}${url.search}${url.hash}`;
