@@ -742,6 +742,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/shell/follow-link.ts': SHEET,
     'src/app/shell/sheet-links.ts': SHEET,
     'src/app/shell/update-prompt.ts': MAIN_SERVER,
+    'src/app/ui/card/card-classes.ts': MAIN_SERVER,
     'src/app/ui/button/hlm-button.token.ts': SHEET,
     'src/app/ui/button/hlm-button.ts': SHEET,
     'src/app/ui/button/index.ts': SHEET,
