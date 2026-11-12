@@ -20,9 +20,10 @@ import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { injectContinueToReturnTo } from '../core/auth/continue-to-return-to';
-import { returnToOrApp } from '../core/auth/return-to';
+import { AFTER_AUTH_DEFAULT, returnToOrApp } from '../core/auth/return-to';
 import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
+import { HomeShape } from '../account/home-shape';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
@@ -371,6 +372,7 @@ export class SignUpPage {
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
   private readonly continueToReturnTo = injectContinueToReturnTo();
+  private readonly homeShape = inject(HomeShape);
 
   protected readonly signInReturnTo = returnToOrApp(this.returnTo);
 
@@ -481,6 +483,8 @@ export class SignUpPage {
     this.submitting.set(false);
     if (this.continueToReturnTo.underway()) return;
     if (result.ok) {
+      // A sign-up that goes on to a registration page leaves an account that is no longer new when it opens the home.
+      if (returnToOrApp(this.returnTo) === AFTER_AUTH_DEFAULT) this.homeShape.record('new');
       await this.continueToReturnTo.go();
       return;
     }

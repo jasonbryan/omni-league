@@ -1,4 +1,4 @@
-const AFTER_AUTH_DEFAULT = '/app';
+export const AFTER_AUTH_DEFAULT = '/app';
 
 const PLACEHOLDER_ORIGIN = 'https://return-to.invalid';
 
