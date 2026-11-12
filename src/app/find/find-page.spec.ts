@@ -20,7 +20,7 @@ import {
   SATURDAY_6S_ROW,
   SUNDAY_4S_ROW,
 } from './testing/find-data';
-import { FULL_BADGE } from '../organizations/season-status';
+import { expectBadge } from '../ui/testing/badge';
 
 const QUERY = 'search:leagues';
 
@@ -205,6 +205,7 @@ describe('FindPage results', () => {
     expect(text(sunday)).toContain('Coed · 4v4 · BB');
     expect(text(sunday)).toContain('Gulf Coast Sport & Social · North Beach Sand Courts');
     expect(text(sunday.querySelector('[data-slot="badge"]'))).toBe('Registration open');
+    expectBadge(sunday.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
     expect(text(sunday)).toContain('Summer 2027 · closes May 23');
 
     expect(text(saturday)).toContain(
@@ -224,7 +225,7 @@ describe('FindPage results', () => {
     const row = results(harness)!.querySelector('ul > li')!;
     const badge = row.querySelector('[data-slot="badge"]');
     expect(text(badge)).toBe('Full');
-    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(badge, 'outline', 'fit');
     expect(text(row)).toContain('Summer 2027 · waitlist open');
     expect(text(row)).not.toContain('closes');
   });

@@ -1,20 +1,14 @@
 import { seasonPhase } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
-import {
-  BADGE_TEXT,
-  FULL_BADGE,
-  FULL_BADGE_TEXT,
-  isOpenAndFull,
-  MUTED_BADGE,
-  OPEN_BADGE,
-} from '../season-status';
+import { BADGE_TEXT, FULL_BADGE_TEXT, isOpenAndFull } from '../season-status';
+import type { HlmBadgeVariant } from '../../ui/badge';
 import type { PublicLeagueHeader } from './public-league-path';
 
 export type LeaguePageSeason = NonNullable<PublicLeagueHeader['seasons']>[number];
 
 export interface SeasonStatus {
   badge: string;
-  badgeClass: string;
+  badgeVariant: HlmBadgeVariant;
   note: string | undefined;
 }
 
@@ -32,11 +26,11 @@ export function seasonStatus(
   if (registrationDeadline === undefined) return undefined;
   const phase = seasonPhase({ startDate, endDate, registrationDeadline }, nowMs);
   if (isOpenAndFull(phase, season)) {
-    return { badge: FULL_BADGE_TEXT, badgeClass: FULL_BADGE, note: 'waitlist open' };
+    return { badge: FULL_BADGE_TEXT, badgeVariant: 'outline', note: 'waitlist open' };
   }
   return {
     badge: BADGE_TEXT[phase],
-    badgeClass: phase === 'registrationOpen' ? OPEN_BADGE : MUTED_BADGE,
+    badgeVariant: phase === 'registrationOpen' ? 'secondary' : 'muted',
     note:
       phase === 'registrationOpen'
         ? `closes ${formatCalendarDate(registrationDeadline)}`

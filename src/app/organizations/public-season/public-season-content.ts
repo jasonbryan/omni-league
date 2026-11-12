@@ -26,6 +26,7 @@ import {
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBadge, type HlmBadgeVariant } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import {
   BUTTON_BASE,
@@ -44,7 +45,7 @@ import {
   type RegistrationCard,
   type ViewerTeam,
 } from './public-season-registration';
-import { BADGE_TEXT, FULL_BADGE, FULL_BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
+import { BADGE_TEXT, FULL_BADGE_TEXT } from '../season-status';
 import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
@@ -63,10 +64,10 @@ const RESERVED_HEIGHT = {
   full: 'min-h-66 sm:min-h-58',
   closed: 'min-h-47 md:min-h-49',
 } as const;
-const PHASE_BADGES: Record<RegistrationCard['kind'], string> = {
-  open: OPEN_BADGE,
-  full: FULL_BADGE,
-  closed: MUTED_BADGE,
+const PHASE_BADGES: Record<RegistrationCard['kind'], HlmBadgeVariant> = {
+  open: 'secondary',
+  full: 'outline',
+  closed: 'muted',
 };
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -74,7 +75,7 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
-  imports: [HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -115,9 +116,11 @@ const FACT_ICON =
         </ol>
       </nav>
       <div class="mt-4 flex flex-wrap items-center gap-2 md:mt-6">
-        <span data-slot="badge" [class]="openBadge">{{ season().league.sportName }}</span>
+        <span hlmBadge variant="secondary" size="fit">{{ season().league.sportName }}</span>
         @if (card(); as card) {
-          <span data-testid="season-phase" [class]="phaseBadge()">{{ phaseLabel(card) }}</span>
+          <span data-testid="season-phase" hlmBadge size="fit" [variant]="phaseBadge()">{{
+            phaseLabel(card)
+          }}</span>
         }
       </div>
       <h1 class="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-5xl">
@@ -224,7 +227,7 @@ const FACT_ICON =
                 @if (team(); as team) {
                   <div class="col-start-1 row-start-1">
                     <p>
-                      <span [class]="openBadge"
+                      <span hlmBadge variant="secondary" size="fit"
                         ><ng-icon
                           name="lucideCheck"
                           data-icon="inline-start"
@@ -419,7 +422,6 @@ export class PublicSeasonContent {
   /** Set only after hydration, for a signed-in viewer on a team in this season. */
   readonly viewerTeam = input<ViewerTeam | undefined>(undefined);
 
-  protected readonly openBadge = OPEN_BADGE;
   protected readonly phaseLabel = (card: RegistrationCard) =>
     card.kind === 'full' ? FULL_BADGE_TEXT : BADGE_TEXT[card.phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;

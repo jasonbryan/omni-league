@@ -158,6 +158,33 @@ const ADMIN_FORMS: Record<string, Parts> = {
     horizontal: 3,
   },
   'src/app/organizations/admin/admin-logo.ts': { nativeInputs: 1, descriptions: 1, errors: 1 },
+  'src/app/organizations/league/season-create-form.ts': {
+    inputs: 5,
+    fields: 5,
+    labels: 5,
+    descriptions: 6,
+    errors: 5,
+    fieldSets: 1,
+    legends: 1,
+  },
+  'src/app/organizations/season-management/limit-edit-form.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+  },
+  'src/app/organizations/season-management/place-free-agent-dialog.ts': {
+    nativeInputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+    contents: 1,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 1,
+  },
 };
 
 const FIELD_CONSTANTS = [

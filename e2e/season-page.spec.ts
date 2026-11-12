@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { expectBadges, PUBLIC_BADGE_HEIGHT } from './support/badges';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -545,6 +546,7 @@ test.describe('public season page in the browser', () => {
     await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`);
     await expect(page.getByRole('heading', { level: 1, name: 'Fall Open' })).toBeVisible();
     await hydrated(consoleGuard);
+    await expectBadges(page.locator('main [data-slot="badge"]'), PUBLIC_BADGE_HEIGHT);
     await expectAccessible(page);
   });
 
@@ -964,6 +966,9 @@ test.describe('public season page: signed in and on a team', () => {
 
     held.release();
     await expect(card).toContainText("You're registered");
+    await expectBadges(card.locator('[data-slot="badge"]'), PUBLIC_BADGE_HEIGHT);
+    const registered = card.locator('[data-slot="badge"]', { hasText: 're registered' });
+    await expect(registered).toHaveCSS('padding-inline-start', '6px');
     await expect(card).toContainText('Sand Sharks');
     await expect(card).toContainText('Captain · 3 of the 4 players needed');
     const closes = formatDate(OPEN_SEASON.registrationDeadline ?? '');

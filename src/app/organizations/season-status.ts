@@ -5,6 +5,7 @@ import {
   type SeasonPhase,
 } from '../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../convex/lib/seasonInput';
+import type { HlmBadgeVariant } from '../ui/badge';
 import type { PublicOpenSeasonRows } from './organization-path';
 
 export interface LeagueRowSeason extends SeasonDates {
@@ -15,17 +16,11 @@ export interface LeagueRowSeason extends SeasonDates {
 
 export interface SeasonStatusLine {
   badge: string | null;
-  badgeClass: string | null;
+  badgeVariant: HlmBadgeVariant | null;
   registrationOpen: boolean;
   text: string;
   season: { name: string; slug: string } | null;
 }
-
-const BADGE =
-  'inline-flex w-fit shrink-0 items-center gap-1 rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap';
-export const OPEN_BADGE = `${BADGE} border-transparent bg-secondary text-secondary-foreground`;
-export const MUTED_BADGE = `${BADGE} border-transparent bg-muted text-muted-foreground`;
-export const FULL_BADGE = `${BADGE} border-border text-foreground`;
 
 export const FULL_BADGE_TEXT = 'Full';
 
@@ -89,7 +84,7 @@ export function leagueSeasonStatus(
   if (next === undefined) {
     return {
       badge: null,
-      badgeClass: null,
+      badgeVariant: null,
       registrationOpen: false,
       text: 'No upcoming season',
       season: null,
@@ -99,12 +94,18 @@ export function leagueSeasonStatus(
   const season = { name: next.name, slug: next.slug };
   if (isOpenAndFull(phase, next)) {
     const text = `${next.name} · waitlist open`;
-    return { badge: FULL_BADGE_TEXT, badgeClass: FULL_BADGE, registrationOpen: true, text, season };
+    return {
+      badge: FULL_BADGE_TEXT,
+      badgeVariant: 'outline',
+      registrationOpen: true,
+      text,
+      season,
+    };
   }
   const registrationOpen = phase === 'registrationOpen';
   return {
     badge: BADGE_TEXT[phase],
-    badgeClass: registrationOpen ? OPEN_BADGE : MUTED_BADGE,
+    badgeVariant: registrationOpen ? 'secondary' : 'muted',
     registrationOpen,
     text: registrationOpen
       ? `${next.name} · closes ${closesText(next.registrationDeadline)}`

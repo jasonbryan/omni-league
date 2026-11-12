@@ -10,6 +10,7 @@ import {
   type FakeSubscription,
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../../shell/testing/test-pages';
+import { expectBadge } from '../../ui/testing/badge';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
@@ -164,6 +165,16 @@ describe("PublicSeasonPage the viewer's team", () => {
       "Registration You're registered Sand Sharks Captain · 3 of the 4 players needed Open your team Invite one more player before May 23, 2027 to reach the minimum.",
     );
     expect(links(harness)).toEqual([['Open your team', '/app/teams/team_sharks']]);
+  });
+
+  it('draws the registered badge as the secondary badge with a 6px-start check icon', async () => {
+    const harness = await showTeam(SHARKS);
+    const badge = [...card(harness)!.querySelectorAll('[data-slot="badge"]')].find((b) =>
+      b.textContent?.includes('registered'),
+    );
+    expectBadge(badge, 'secondary', 'fit');
+    expect(badge?.classList).toContain('has-data-[icon=inline-start]:ps-1.5');
+    expect(badge?.querySelector('ng-icon')?.getAttribute('data-icon')).toBe('inline-start');
   });
 
   it('shows a player on a team that meets the minimum the roster and no invite line', async () => {

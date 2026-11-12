@@ -36,12 +36,7 @@ import {
 import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
-import {
-  BADGE_DEFAULT,
-  BADGE_DESTRUCTIVE,
-  BADGE_OUTLINE,
-  BADGE_SECONDARY,
-} from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmBreadcrumbImports } from '../ui/breadcrumb';
@@ -71,6 +66,7 @@ const STEP_NUMBER =
   imports: [
     AdminAlert,
     AdminOfflineAlert,
+    HlmBadge,
     HlmBreadcrumbImports,
     HlmSpinner,
     NgIcon,
@@ -124,12 +120,12 @@ const STEP_NUMBER =
                 ></span>
               }
               @case ('on') {
-                <span data-slot="badge" [class]="badgeOn"
+                <span hlmBadge variant="default"
                   ><ng-icon name="lucideBell" data-icon="inline-start" aria-hidden="true" />On</span
                 >
               }
               @case ('blocked') {
-                <span data-slot="badge" [class]="badgeBlocked"
+                <span hlmBadge variant="destructive"
                   ><ng-icon
                     name="lucideBellOff"
                     data-icon="inline-start"
@@ -138,10 +134,10 @@ const STEP_NUMBER =
                 >
               }
               @case ('not-available') {
-                <span data-slot="badge" [class]="badgeSecondary">Not available</span>
+                <span hlmBadge variant="secondary">Not available</span>
               }
               @case ('install-first') {
-                <span data-slot="badge" [class]="badgeSecondary"
+                <span hlmBadge variant="secondary"
                   ><ng-icon
                     name="lucideSmartphone"
                     data-icon="inline-start"
@@ -150,7 +146,7 @@ const STEP_NUMBER =
                 >
               }
               @default {
-                <span data-slot="badge" [class]="badgeOff"
+                <span hlmBadge variant="outline-muted"
                   ><ng-icon
                     name="lucideBellOff"
                     data-icon="inline-start"
@@ -466,10 +462,6 @@ export class NotificationsPage {
   protected readonly stepNumber = STEP_NUMBER;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly badgeOn = BADGE_DEFAULT;
-  protected readonly badgeOff = `${BADGE_OUTLINE} bg-muted`;
-  protected readonly badgeBlocked = BADGE_DESTRUCTIVE;
-  protected readonly badgeSecondary = BADGE_SECONDARY;
 
   protected refusedDescription(change: Change): string {
     return `Notifications are still ${change === 'on' ? 'off' : 'on'}. Try again when you're connected.`;

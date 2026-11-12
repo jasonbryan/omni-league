@@ -23,6 +23,7 @@ import {
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
 import { ERROR_CLASSES } from '../../ui/testing/field-class-literals';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
+import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
@@ -182,6 +183,9 @@ describe('AdminLeagues', () => {
         ['outline', 'Draft'],
         ['secondary', 'Beach volleyball'],
       ]);
+      for (const badge of page.querySelectorAll('[data-slot="badge"]')) {
+        expectBadgeSize(badge, 'default');
+      }
       expect(text(items()[0].querySelector('p'))).toBe('Location: Redfish Flats Fields');
       expect(text(items()[2].querySelector('p'))).toBe(
         'Locations: Tern Point Softball Complex, Redfish Flats Fields',
