@@ -261,7 +261,7 @@ const DATA = {
   locations: 25,
   customLevels: 1,
   leagues: 46,
-  seasons: 7,
+  seasons: 8,
   tournaments: 2,
 };
 const NO_BACKFILL = {
@@ -290,7 +290,7 @@ describe('seed:demo accounts: a new deployment', () => {
         invites: 1,
         teams: 6,
         teamInvites: 2,
-        freeAgents: 5,
+        freeAgents: 6,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -780,7 +780,7 @@ describe('seed:demo accounts: the demo free agents', () => {
   }
 
   test(
-    'three fictional free agents wait in sunday-reverse-coed-4s / summer-2027, one is placed there, and player@ waits in coed-7v7-rec / summer-2027, once',
+    'three fictional free agents wait in sunday-reverse-coed-4s / summer-2027, one is placed there, and player@ waits in coed-7v7-rec / summer-2027 and in its ended past-season, once',
     async () => {
       const t = setup();
       await run(t);
@@ -788,6 +788,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         [`lena.ortiz@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
         [PLACED_FREE_AGENT, 'sunday-reverse-coed-4s/summer-2027', 'placed'],
         [EMAILS.player, 'coed-7v7-rec/summer-2027', 'waiting'],
+        [EMAILS.player, 'coed-7v7-rec/past-season', 'waiting'],
         [`sam.okoye@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
         [`theo.grant@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
       ];
@@ -799,6 +800,8 @@ describe('seed:demo accounts: the demo free agents', () => {
         seasonSlug: 'summer-2027',
       });
       expect(registration).toMatchObject({ team: null, freeAgent: { status: 'waiting' } });
+      const mine = await player.query(api.freeAgents.listMine, {});
+      expect(mine.map((row) => row.seasonName).sort()).toEqual(['Past season', 'Summer 2027']);
       for (const email of [...FICTIONAL_FREE_AGENTS, PLACED_FREE_AGENT]) {
         expect((await signIn(t, email)).status).toBe(401);
       }

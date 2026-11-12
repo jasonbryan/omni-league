@@ -577,7 +577,7 @@ interface RunSeason {
   endDaysFromRun: number;
 }
 
-// Dated from the run, so each new deployment shows one season in progress and one past its deadline. Insert-only like the rest, so a
+// Dated from the run, so each new deployment shows one season in progress, one past its deadline and one ended. Insert-only like the rest, so a
 // preview reused across pushes keeps the dates of its first run.
 export const DEMO_RUN_SEASONS: readonly RunSeason[] = [
   {
@@ -599,6 +599,16 @@ export const DEMO_RUN_SEASONS: readonly RunSeason[] = [
     deadlineDaysFromRun: -2,
     startDaysFromRun: 5,
     endDaysFromRun: 89,
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'coed-7v7-rec',
+    name: 'Past season',
+    slug: 'past-season',
+    playersPerSide: 7,
+    deadlineDaysFromRun: -70,
+    startDaysFromRun: -63,
+    endDaysFromRun: -7,
   },
 ];
 
@@ -970,6 +980,14 @@ export const DEMO_FREE_AGENTS: readonly {
       orgSlug: 'gulf-coast-sport-social',
       leagueSlug: 'coed-7v7-rec',
       seasonSlug: 'summer-2027',
+    },
+  },
+  {
+    email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+    season: {
+      orgSlug: 'gulf-coast-sport-social',
+      leagueSlug: 'coed-7v7-rec',
+      seasonSlug: 'past-season',
     },
   },
 ];

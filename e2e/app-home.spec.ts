@@ -413,6 +413,62 @@ test.describe('/app: a free agent waiting to be placed', () => {
   });
 });
 
+test.describe('/app: a free agent whose season has ended', () => {
+  const ENDED = {
+    name: 'Past season',
+    slug: 'past-season',
+    startDate: dateFromToday(-63),
+    endDate: dateFromToday(-7),
+    registrationDeadline: dateFromToday(-70),
+  };
+
+  async function waitInEndedSeason(tenant: Tenant, user: TestUser) {
+    await seedSeasons(tenant, slugOf(SUNDAY), [ENDED]);
+    await convexRun('testing:seedFreeAgent', {
+      organizationSlug: tenant.slug,
+      leagueSlug: slugOf(SUNDAY),
+      seasonSlug: ENDED.slug,
+      email: user.email,
+    });
+  }
+
+  test('lists only the current registration', async ({ page }) => {
+    const user = tasha();
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    const captain = await seedUser(newUser('Captain'));
+    await addToTeam(await seedTeam(tenant, THURSDAY, 'Pair of Aces', captain), user);
+    await waitInEndedSeason(tenant, user);
+    await waitInSeason(tenant, SUNDAY, user);
+    await openHome(page, 'Hi, Tasha');
+
+    const cards = freeAgent(page).getByRole('listitem');
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toContainText(`${SUNDAY} · ${SUMMER.name}`);
+    await expect(main(page)).not.toContainText(ENDED.name);
+  });
+
+  test('shows the new-user state to a user with no team whose only registration has ended', async ({
+    page,
+  }) => {
+    const user = tasha();
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    await waitInEndedSeason(tenant, user);
+    await openHome(page, 'Hi, Tasha');
+
+    await expect(
+      main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
+    ).toBeVisible();
+    await expect(main(page).getByRole('link', { name: 'Find a league' })).toHaveAttribute(
+      'href',
+      '/leagues',
+    );
+    await expect(freeAgent(page)).toHaveCount(0);
+    await expect(main(page)).not.toContainText(ENDED.name);
+  });
+});
+
 const skeleton = {
   heading: (page: Page) => page.locator('[data-slot="home-skeleton-heading"]'),
   card: (page: Page) => page.locator('[data-slot="home-skeleton-card"]').first(),
