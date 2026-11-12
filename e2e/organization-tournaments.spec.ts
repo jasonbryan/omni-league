@@ -607,14 +607,17 @@ test.describe('an assigned league organizer', () => {
       'aria-current',
       'page',
     );
-    const nav = page.getByRole('navigation', { name: `${tenant.name} tournaments` });
-    const mine = nav.getByRole('list', { name: 'Your tournaments' });
-    await expect(mine.getByRole('link')).toHaveCount(1);
-    await expect(mine.getByRole('link', { name: 'Winter Doubles Classic' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    await expect(nav.getByRole('link', { name: 'Staff' })).toHaveCount(0);
+    // The sidebar is the phone sheet's content below 1024px, so it is read hidden.
+    const nav = page.getByRole('navigation', {
+      name: `${tenant.name} tournaments`,
+      includeHidden: true,
+    });
+    const mine = nav.getByRole('list', { name: 'Your tournaments', includeHidden: true });
+    await expect(mine.getByRole('link', { includeHidden: true })).toHaveCount(1);
+    await expect(
+      mine.getByRole('link', { name: 'Winter Doubles Classic', includeHidden: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'Staff', includeHidden: true })).toHaveCount(0);
     await screenshot(page, testInfo, 'tournament-organizer');
     await expectAccessible(page);
 
@@ -632,7 +635,7 @@ test.describe('an assigned league organizer', () => {
     ).toBeVisible();
     await page.goto('/app');
     await expect(
-      page.getByRole('navigation').getByRole('link', { name: tenant.name }).first(),
+      page.getByRole('link', { name: tenant.name, includeHidden: true }).first(),
     ).toHaveAttribute('href', managePath);
   });
 });

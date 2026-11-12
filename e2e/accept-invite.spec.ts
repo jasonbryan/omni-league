@@ -197,9 +197,13 @@ test.describe('Accept invite: a visitor with no account', () => {
     await expect(
       main(page).getByText('You’re invited to run a tournament as a league organizer.'),
     ).toBeVisible();
-    await expect(main(page).locator('dl')).toContainText('Tournament');
+    await expect(main(page).locator('dl dt')).toHaveText([
+      'Organization',
+      'Role',
+      'Tournament',
+      'Expires',
+    ]);
     await expect(main(page).locator('dl')).toContainText('Gulf Coast Beach Open');
-    await expect(main(page).locator('dl')).not.toContainText('League');
     await screenshot(page, testInfo, 'tournament-invite-signed-out');
     await expectAccessible(page);
 

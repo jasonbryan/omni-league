@@ -340,8 +340,10 @@ test.describe('Staff: tournaments', () => {
     page,
   }, testInfo) => {
     await openStaffWithTournaments(page);
-    const groups = form(page).locator('fieldset[data-slot="field-set"]');
-    await expect(groups.locator('legend')).toHaveText(['Leagues', 'Tournaments']);
+    await expect(form(page).locator('fieldset#leagues > legend')).toHaveText('Leagues');
+    await expect(form(page).locator('fieldset#leagues + fieldset#tournaments > legend')).toHaveText(
+      'Tournaments',
+    );
     const tournaments = page.getByRole('group', { name: 'Tournaments' });
     await expect(tournaments.getByRole('checkbox')).toHaveCount(2);
     await expect(tournaments.getByRole('checkbox').first()).toHaveAccessibleName(
