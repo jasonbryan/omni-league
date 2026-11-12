@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { Title } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { By, Title } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../../core/data/convex';
 import {
@@ -11,6 +11,7 @@ import {
 import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { slotsOf } from '../../ui/testing/helm-slots';
 import { PublicSeasonPage } from './public-season-page';
 import {
   NO_TEAMS,
@@ -20,7 +21,7 @@ import {
   teamsPage,
   without,
 } from './testing/season-data';
-import { FULL_BADGE } from '../season-status';
+import { expectBadge } from '../../ui/testing/badge';
 
 const SEASON = 'seasons:getPublicPage';
 const TEAMS = 'teams:listPublic';
@@ -194,11 +195,42 @@ describe('PublicSeasonPage populated', () => {
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
   });
 
+  it('renders helm breadcrumb, ending with the season as a link to the current page', () => {
+    const nav = host(harness).querySelector('main nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(nav)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
+    ]);
+  });
+
+  it('gives the league breadcrumb the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {
+    const link = harness.fixture.debugElement.query(
+      By.css(`nav[aria-label="Breadcrumb"] a[href="${LEAGUE_PATH}"]`),
+    );
+
+    expect(link.injector.get(RouterLink).state).toEqual({
+      organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+      league: {
+        slug: 'sunday-reverse-coed-4s',
+        name: 'Sunday Reverse Coed 4s',
+        sportName: 'Beach volleyball',
+      },
+    });
+  });
+
   it('shows the sport badge above the h1, which names the league and the season together', () => {
     const h1 = host(harness).querySelector('main h1');
-    expect(text(h1?.previousElementSibling?.querySelector('[data-slot="badge"]'))).toBe(
-      'Beach volleyball',
-    );
+    const badge = h1?.previousElementSibling?.querySelector('[data-slot="badge"]');
+    expect(text(badge)).toBe('Beach volleyball');
+    expectBadge(badge, 'secondary', 'fit');
     expect(text(h1)).toBe('Sunday Reverse Coed 4s · Summer 2027');
   });
 
@@ -413,11 +445,11 @@ describe('PublicSeasonPage registration card', () => {
     });
 
   it.each([
-    ['2027-05-01', 'Registration open'],
-    ['2027-05-30', 'Registration closed'],
-    ['2027-07-01', 'In progress'],
-    ['2027-09-15', 'Ended'],
-  ])('on %s the badge beside the heading reads %s', async (date, label) => {
+    ['2027-05-01', 'Registration open', 'secondary'],
+    ['2027-05-30', 'Registration closed', 'muted'],
+    ['2027-07-01', 'In progress', 'muted'],
+    ['2027-09-15', 'Ended', 'muted'],
+  ] as const)('on %s the badge beside the heading reads %s', async (date, label, variant) => {
     vi.setSystemTime(at(date));
     const harness = await open();
     emit();
@@ -425,6 +457,7 @@ describe('PublicSeasonPage registration card', () => {
     const row = host(harness).querySelector('main h1')?.previousElementSibling;
     expect([...(row?.children ?? [])].map(text)).toEqual(['Beach volleyball', label]);
     expect(text(row?.querySelector('[data-testid="season-phase"]'))).toBe(label);
+    expectBadge(row?.querySelector('[data-testid="season-phase"]'), variant, 'fit');
   });
 
   it('shows no phase badge for a saved copy made before the deadline was stored', async () => {
@@ -475,7 +508,7 @@ describe('PublicSeasonPage registration card', () => {
     ]);
     const phase = host(harness).querySelector('[data-testid="season-phase"]');
     expect(text(phase)).toBe('Full');
-    expect(phase?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(phase, 'outline', 'fit');
   });
 
   it('shows the closed card, not the full one, once a full season’s registration closes', async () => {

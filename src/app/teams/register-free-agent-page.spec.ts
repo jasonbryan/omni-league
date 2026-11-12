@@ -8,6 +8,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { RegisterFreeAgentPage } from './register-free-agent-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -223,6 +224,7 @@ describe('RegisterFreeAgentPage', () => {
       const button = page.querySelector('button[type="submit"]');
       expect(text(button)).toBe('Registering…');
       expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
       expect(text(page.querySelector('form > p[role="status"]'))).toBe(
         'Registering you as a free agent.',
       );

@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideImageOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideImageOff } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { checkLogoPick, LOGO_HINT, LOGO_MIME_TYPES } from '../../../../convex/lib/logoFile';
@@ -22,12 +22,13 @@ import {
   injectOnline,
 } from '../../core/data/convex';
 import { OrganizationMark } from '../organization-mark';
+import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminContext } from './admin-context';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { DESCRIPTION, FIELD_ERROR } from './field-classes';
+import { HlmFieldDescription, HlmFieldError } from '../../ui/field';
 import { RemoveLogoDialog, type RemoveOutcome } from './remove-logo-dialog';
 
 type LogoAlert = 'failed' | 'offline';
@@ -75,8 +76,17 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
  */
 @Component({
   selector: 'app-admin-logo',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, OrganizationMark, RemoveLogoDialog],
-  providers: [provideIcons({ lucideCircleAlert, lucideImageOff, lucideLoaderCircle })],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    HlmFieldDescription,
+    HlmFieldError,
+    HlmSpinner,
+    NgIcon,
+    OrganizationMark,
+    RemoveLogoDialog,
+  ],
+  providers: [provideIcons({ lucideCircleAlert, lucideImageOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -158,12 +168,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
                   aria-hidden="true"
                 >
                   @if (uploading()) {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Uploading…
+                    <hlm-spinner data-icon="inline-start" />Uploading…
                   } @else if (organization.logoUrl) {
                     Replace
                   } @else {
@@ -186,16 +191,9 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
               }
             </div>
           </div>
-          <p id="logo-hint" data-slot="field-description" [class]="hintClass + ' mt-3'">
-            {{ hint }}
-          </p>
+          <p hlmFieldDescription id="logo-hint" class="mt-3">{{ hint }}</p>
           @if (error(); as error) {
-            <div
-              role="alert"
-              data-slot="field-error"
-              id="logo-error"
-              [class]="errorClass + ' mt-2'"
-            >
+            <div hlmFieldError id="logo-error" class="mt-2">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -222,8 +220,6 @@ export class AdminLogo {
   protected readonly alerts = LOGO_ALERTS;
   protected readonly accept = ACCEPT;
   protected readonly hint = LOGO_HINT;
-  protected readonly hintClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly removeClass = OUTLINE_BUTTON;
 
   protected readonly uploading = signal(false);

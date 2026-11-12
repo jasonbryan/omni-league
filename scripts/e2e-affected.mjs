@@ -1054,20 +1054,21 @@ function traceImporters(file, graph, selected, context, visiting, seen) {
 
 /**
  * @param {string[] | undefined} files
- * @param {{ event?: string, base?: string } & SelectContext} [context]
+ * @param {{ event?: string, base?: string, graph?: ImportGraph } & SelectContext} [context]
  * @returns {{ scope: 'full' } | { scope: 'affected', specs: string[] }}
  */
-export function selectSpecs(files, { event, base, root, sessionSpecs, warn } = {}) {
+export function selectSpecs(files, { event, base, root, sessionSpecs, warn, graph: given } = {}) {
   const full = { scope: /** @type {const} */ ('full') };
   if (event !== 'pull_request' || base === 'production') return full;
   if (!Array.isArray(files) || files.length === 0) return full;
   /** @type {ImportGraph | undefined} */
-  let graph;
+  let graph = given;
   const context = {
     root,
     sessionSpecs,
     widened: new Set(),
     graph: () => {
+      if (graph) return graph;
       if (root === undefined) throw new FullSuite('no repo root to read the import graph from');
       try {
         graph ??= buildImportGraph(root);

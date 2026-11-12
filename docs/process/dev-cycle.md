@@ -108,7 +108,7 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - A production build over the 500 kB `initial` budget (`bundle initial exceeded maximum budget`) stops the work the same way: the implementer reports the `Initial total` and the inputs that add the bytes (`--stats-json`), and the orchestrator moves the issue to `status:blocked` with `Needs owner: the initial bundle would be <n> kB, over the 500 kB budget. Trim or raise?`. From 490 to 500 kB the build warns and passes, and the PR body states the `Initial total` and the kB the PR adds.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result in the PR Evidence block, or the empty list when the PR has no own specs. The result is for the head SHA pushed last, including after a review fix: a push after the run means the run is repeated or the evidence is marked stale.
+- Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e:own`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result in the PR Evidence block, or the empty list when the PR has no own specs. The result is for the head SHA pushed last, including after a review fix: a push after the run means the run is repeated or the evidence is marked stale.
 - Before opening or updating the PR, re-read every added or changed comment against [AGENTS.md, Code comments](../../AGENTS.md#code-comments) and fix what-comments. The PR Evidence block says `Comments re-read against AGENTS.md`.
 - A new route, or a new source directory under `src/app/` whose files would run the full suite, still adds its rule in `scripts/e2e-affected.mjs` in the same PR, and `npm run test:scripts` fails until it does ([CI, Affected e2e specs](ci.md#affected-e2e-specs-and-the-nightly-run)). `npm run e2e:affected` is an on-demand tool, not the per-PR run.
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
@@ -122,21 +122,22 @@ The serial run (`npm run test:serial`) runs the Angular specs in one worker, as 
 
 #### Own e2e specs
 
-The implementer and the tester run only the PR's own specs, with `npm run e2e -- <files>`, which takes the machine lock ([Local processes](#local-processes)), pushes the local backend, and builds first. A bare `npx playwright test` skips all three, so it is not the per-PR run. The changed files are `git diff --no-renames --name-only origin/main...HEAD`. The own specs are:
+The implementer and the tester run only the PR's own specs, with `npm run e2e:own -- [specs the issue names]` (`scripts/own-specs.mjs`). It works out the list below from the head SHA, then runs it through `npm run e2e`, which takes the machine lock ([Local processes](#local-processes)), pushes the local backend, and builds first. `npm run e2e:own -- --list` prints the list, one spec per line, without running it or building. A bare `npx playwright test` skips the lock, the push, and the build, so it is not the per-PR run. The changed files are `git diff --no-renames --name-only origin/main...HEAD`: the script reads exactly that and reads every other file (the import graph, the `e2e/` texts, the ci scope) from a copy of `HEAD`, so an uncommitted or untracked file does not change the list, which belongs to the head SHA. If that copy cannot be made, the script fails instead of reading the working tree. The own specs are:
 
 - every `e2e/**/*.spec.ts` the PR adds or changes: `git diff --no-renames --name-only --diff-filter=d origin/main...HEAD -- 'e2e/*.spec.ts' 'e2e/**/*.spec.ts'`;
 - every spec that imports a changed non-spec file (any path, deleted files included), directly or through other files under `e2e/`. For each file in the set, run `git grep -lE "[/']<stem>(\.[a-z]+)?'" -- 'e2e/'`, where `<stem>` is the file name without its extension. The `[/']` finds an import path (`'./support/fixtures'`) and a quoted file name (`join(…, '125-126-seasons.html')`), so a mockup-only PR runs its mockup spec. Add every non-spec file found to the set and repeat until no new file turns up, then take every spec found. For example, `e2e/support/console-guard.ts` finds `e2e/support/fixtures.ts`, which finds every spec that imports it. A stem that also matches an unrelated file only adds specs, which is safe;
-- every spec that the issue's Test plan or an acceptance criterion names;
+- the screen specs of the changed `src/` and `design/` files: for each such file, the specs `npm run e2e:affected` selects for that file alone, minus the always set (smoke, convex-backend, and `e2e/harness/`). A file whose selection is the full suite adds nothing, because the batch run covers it. When the union holds more than `SCREEN_SPEC_CAP` (20, a constant in `scripts/own-specs.mjs`) specs, only its `*-mockup.spec.ts` specs are added. A `convex/` file adds nothing here: its rules select most of the suite, and `npm run test:convex` covers it;
+- every spec that the issue's Test plan or an acceptance criterion names (pass them to `npm run e2e:own`);
 - `e2e/smoke.spec.ts`, when the list above is empty and the PR's ci scope is `app`: `git diff --no-renames --name-only origin/main...HEAD | GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main node scripts/ci-scope.mjs` prints `scope=app`.
 
-If the list is still empty, the PR runs no e2e. A Dependabot PR has no linked issue; its test path is in [Low-risk PRs](#low-risk-prs).
+If the list is still empty, the PR runs no e2e, and `npm run e2e:own` starts no build and exits 0. A Dependabot PR has no linked issue; its test path is in [Low-risk PRs](#low-risk-prs).
 
 ### 5. Test
 
 A [low-risk PR](#low-risk-prs) skips this phase. On every other PR, the tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The checks run, including the serial unit tests and the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`. An npm Dependabot PR that is not low-risk runs the full `npm run e2e` instead ([Low-risk PRs](#low-risk-prs)).
+- The checks run, including the serial unit tests and the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e:own`. An npm Dependabot PR that is not low-risk runs the full `npm run e2e` instead ([Low-risk PRs](#low-risk-prs)).
 - UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - The demo data shows the feature:
@@ -287,7 +288,7 @@ Sessions share one machine, and default ports (`ng serve` 4200, Convex local bac
 
 It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
 
-Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`, and the orchestrator's [batch run](#batch-run)) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
+Local e2e runs (`npm run e2e`, `e2e:own`, `e2e:affected`, `e2e:screenshots`, and the orchestrator's [batch run](#batch-run)) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
 
 ## Escalation
 

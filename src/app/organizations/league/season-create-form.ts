@@ -13,13 +13,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideGlobe,
-  lucideLoaderCircle,
-  lucidePlus,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucideGlobe, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
@@ -34,19 +28,12 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { CREATED_STATUS, CREATED_TITLE } from '../admin/footer-status';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  FIELD_SET,
-  INPUT,
-  LABEL,
-  LEGEND,
-} from '../admin/field-classes';
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 
 const NOT_SET = 'Not set yet';
 
@@ -97,19 +84,21 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 @Component({
   selector: 'app-season-create-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmFieldImports,
+    HlmFieldSetImports,
+    HlmInputImports,
     NgIcon,
     StickyFooter,
     StickyFooterFocus,
     WebAddressPreview,
     WebAddressStatus,
   ],
-  providers: [
-    provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucideLoaderCircle, lucidePlus }),
-  ],
+  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -143,20 +132,17 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         A season is one run of {{ leagueName() }}, with its own dates, registration, teams, and
         schedule. It starts as a draft, which only your staff see.
       </p>
-      <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
+      <div hlmFieldGroup [class]="clearanceClass">
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="form.errors.name() ? 'true' : null"
           [attr.data-invalid]="form.errors.name() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="name" data-slot="field-label" [class]="labelClass">Name</label>
+          <label hlmFieldLabel for="name">Name</label>
           <input
+            hlmInput
             id="name"
             type="text"
-            data-slot="input"
             autocomplete="off"
             [formField]="form.fields.name"
             (blur)="form.left('name')"
@@ -165,13 +151,12 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [attr.aria-invalid]="form.errors.name() ? 'true' : null"
             [attr.data-invalid]="form.errors.name() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.name() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="name-description" [class]="descriptionClass">
+          <p hlmFieldDescription id="name-description">
             Up to 100 characters, for example Fall 2027. Players see it with the league’s name.
           </p>
           @if (form.errors.name(); as error) {
-            <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
+            <div hlmFieldError id="name-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -182,18 +167,15 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           }
         </div>
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           [attr.data-invalid]="form.errors.slug() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="slug" data-slot="field-label" [class]="labelClass">Web address</label>
+          <label hlmFieldLabel for="slug">Web address</label>
           <input
+            hlmInput
             id="slug"
             type="text"
-            data-slot="input"
             autocomplete="off"
             spellcheck="false"
             autocapitalize="none"
@@ -204,9 +186,8 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="slug-description" [class]="descriptionClass">
+          <p hlmFieldDescription id="slug-description">
             3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
             {{ leagueName() }}. Its public page will be at
             <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
@@ -216,7 +197,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [reserveRoom]="form.slugStatusReservesRoom()"
           />
           @if (form.errors.slug(); as error) {
-            <div role="alert" data-slot="field-error" id="slug-error" [class]="errorClass">
+            <div hlmFieldError id="slug-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -241,24 +222,16 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         <div class="grid gap-6 sm:max-lg:grid-cols-2">
           @for (date of dateFields; track date.field) {
             <div
-              role="group"
-              data-slot="field"
-              data-orientation="vertical"
+              hlmField
               [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
               [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
-              [class]="
-                date.field === 'registrationDeadline'
-                  ? fieldClass + ' sm:max-lg:col-span-2'
-                  : fieldClass
-              "
+              [class]="date.field === 'registrationDeadline' ? 'sm:max-lg:col-span-2' : ''"
             >
-              <label [for]="date.id" data-slot="field-label" [class]="labelClass">{{
-                date.label
-              }}</label>
+              <label hlmFieldLabel [for]="date.id">{{ date.label }}</label>
               <input
+                hlmInput
                 [id]="date.id"
                 type="date"
-                data-slot="input"
                 autocomplete="off"
                 [formField]="form.fields[date.field]"
                 (blur)="form.left(date.field)"
@@ -272,24 +245,14 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
                 [attr.aria-invalid]="form.errors[date.field]() ? 'true' : null"
                 [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
                 [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
-                [class]="inputClass"
               />
               @if (date.description) {
-                <p
-                  data-slot="field-description"
-                  [id]="date.id + '-description'"
-                  [class]="descriptionClass"
-                >
+                <p hlmFieldDescription [id]="date.id + '-description'">
                   {{ date.description }}
                 </p>
               }
               @if (form.errors[date.field](); as error) {
-                <div
-                  role="alert"
-                  data-slot="field-error"
-                  [id]="date.id + '-error'"
-                  [class]="errorClass"
-                >
+                <div hlmFieldError [id]="date.id + '-error'">
                   <ng-icon
                     name="lucideCircleAlert"
                     class="mt-0.5 shrink-0 text-base"
@@ -327,34 +290,20 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             >. Seasons already published keep theirs.
           </p>
         </section>
-        <fieldset
-          id="limits"
-          data-slot="field-set"
-          aria-describedby="limits-description"
-          [class]="fieldSetClass"
-        >
-          <legend data-slot="field-legend" data-variant="label" [class]="legendClass">
-            Limits
-          </legend>
-          <p data-slot="field-description" id="limits-description" [class]="descriptionClass">
-            Optional. Leave a limit blank for none.
-          </p>
+        <fieldset hlmFieldSet id="limits" aria-describedby="limits-description">
+          <legend hlmFieldLegend variant="label">Limits</legend>
+          <p hlmFieldDescription id="limits-description">Optional. Leave a limit blank for none.</p>
           <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
+            hlmField
             [attr.data-matches-spartan-invalid]="form.errors.maxTeams() ? 'true' : null"
             [attr.data-invalid]="form.errors.maxTeams() ? 'true' : null"
-            [class]="fieldClass"
           >
-            <label for="maximum-teams" data-slot="field-label" [class]="labelClass"
-              >Maximum teams</label
-            >
+            <label hlmFieldLabel for="maximum-teams">Maximum teams</label>
             <input
+              hlmInput
               id="maximum-teams"
               type="text"
               inputmode="numeric"
-              data-slot="input"
               autocomplete="off"
               [formField]="form.fields.maxTeams"
               (blur)="form.left('maxTeams')"
@@ -364,22 +313,12 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               [attr.aria-invalid]="form.errors.maxTeams() ? 'true' : null"
               [attr.data-invalid]="form.errors.maxTeams() ? 'true' : null"
               [attr.data-matches-spartan-invalid]="form.errors.maxTeams() ? 'true' : null"
-              [class]="inputClass"
             />
-            <p
-              data-slot="field-description"
-              id="maximum-teams-description"
-              [class]="descriptionClass"
-            >
+            <p hlmFieldDescription id="maximum-teams-description">
               2 to 200. When it’s reached, the season is full.
             </p>
             @if (form.errors.maxTeams(); as error) {
-              <div
-                role="alert"
-                data-slot="field-error"
-                id="maximum-teams-error"
-                [class]="errorClass"
-              >
+              <div hlmFieldError id="maximum-teams-error">
                 <ng-icon
                   name="lucideCircleAlert"
                   class="mt-0.5 shrink-0 text-base"
@@ -390,21 +329,16 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             }
           </div>
           <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
+            hlmField
             [attr.data-matches-spartan-invalid]="form.errors.maxRosterSize() ? 'true' : null"
             [attr.data-invalid]="form.errors.maxRosterSize() ? 'true' : null"
-            [class]="fieldClass"
           >
-            <label for="maximum-roster-size" data-slot="field-label" [class]="labelClass"
-              >Maximum roster size</label
-            >
+            <label hlmFieldLabel for="maximum-roster-size">Maximum roster size</label>
             <input
+              hlmInput
               id="maximum-roster-size"
               type="text"
               inputmode="numeric"
-              data-slot="input"
               autocomplete="off"
               [formField]="form.fields.maxRosterSize"
               (blur)="form.left('maxRosterSize')"
@@ -418,22 +352,12 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               [attr.aria-invalid]="form.errors.maxRosterSize() ? 'true' : null"
               [attr.data-invalid]="form.errors.maxRosterSize() ? 'true' : null"
               [attr.data-matches-spartan-invalid]="form.errors.maxRosterSize() ? 'true' : null"
-              [class]="inputClass"
             />
-            <p
-              data-slot="field-description"
-              id="maximum-roster-size-description"
-              [class]="descriptionClass"
-            >
+            <p hlmFieldDescription id="maximum-roster-size-description">
               From the minimum roster size to 99. A full team takes no more players.
             </p>
             @if (form.errors.maxRosterSize(); as error) {
-              <div
-                role="alert"
-                data-slot="field-error"
-                id="maximum-roster-size-error"
-                [class]="errorClass"
-              >
+              <div hlmFieldError id="maximum-roster-size-error">
                 <ng-icon
                   name="lucideCircleAlert"
                   class="mt-0.5 shrink-0 text-base"
@@ -503,12 +427,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Creating season…
+            <hlm-spinner data-icon="inline-start" />Creating season…
           } @else {
             <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
             season
@@ -571,15 +490,7 @@ export class SeasonCreateForm {
 
   protected readonly divisionMissing = computed(() => !this.division());
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;

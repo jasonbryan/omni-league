@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { FormField, form } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle, lucideUndo2 } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideUndo2 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { checkCityState, CITY_STATE_HINT } from '../../../../convex/lib/organizationInput';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
@@ -24,10 +24,12 @@ import { AdminLogo } from './admin-logo';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './field-classes';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 
 type Notice =
   | { kind: 'saved'; previous: string | null }
@@ -52,17 +54,20 @@ function cityStateRefusal(failure: unknown): string | null {
 @Component({
   selector: 'app-admin-details',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminLogo,
     AdminOfflineAlert,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     NgIcon,
     NgTemplateOutlet,
     StickyFooter,
     StickyFooterFocus,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucideUndo2 })],
+  providers: [provideIcons({ lucideCircleAlert, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
@@ -154,35 +159,30 @@ function cityStateRefusal(failure: unknown): string | null {
               }
             }
           }
-          <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
-            <div role="group" data-slot="field" data-orientation="vertical" [class]="fieldClass">
-              <label for="name" data-slot="field-label" [class]="labelClass">Name</label>
+          <div hlmFieldGroup [class]="clearanceClass">
+            <div hlmField>
+              <label hlmFieldLabel for="name">Name</label>
               <input
+                hlmInput
                 id="name"
                 type="text"
-                data-slot="input"
                 readonly
                 autocomplete="off"
                 [value]="organization.name"
-                [class]="inputClass + ' read-only:bg-muted/50'"
+                class="read-only:bg-muted/50"
               />
             </div>
             <div
-              role="group"
-              data-slot="field"
-              data-orientation="vertical"
+              hlmField
               [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
               [attr.data-invalid]="error() ? 'true' : null"
-              [class]="fieldClass"
             >
-              <label for="cityState" data-slot="field-label" [class]="labelClass"
-                >City, state</label
-              >
+              <label hlmFieldLabel for="cityState">City, state</label>
               <input
+                hlmInput
                 #cityStateInput
                 id="cityState"
                 type="text"
-                data-slot="input"
                 autocomplete="off"
                 [formField]="fields.cityState"
                 (blur)="shown.left()"
@@ -193,17 +193,10 @@ function cityStateRefusal(failure: unknown): string | null {
                 [attr.aria-invalid]="error() ? 'true' : null"
                 [attr.data-invalid]="error() ? 'true' : null"
                 [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
-                [class]="inputClass"
               />
-              <p
-                data-slot="field-description"
-                id="cityState-description"
-                [class]="descriptionClass"
-              >
-                {{ hint }}
-              </p>
+              <p hlmFieldDescription id="cityState-description">{{ hint }}</p>
               @if (error(); as error) {
-                <div role="alert" data-slot="field-error" id="cityState-error" [class]="errorClass">
+                <div hlmFieldError id="cityState-error">
                   <ng-icon
                     name="lucideCircleAlert"
                     class="mt-0.5 shrink-0 text-base"
@@ -224,12 +217,7 @@ function cityStateRefusal(failure: unknown): string | null {
               [attr.aria-disabled]="saving() || !online() ? 'true' : null"
             >
               @if (saving()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Saving…
+                <hlm-spinner data-icon="inline-start" />Saving…
               } @else {
                 Save
               }
@@ -252,12 +240,7 @@ function cityStateRefusal(failure: unknown): string | null {
             (click)="undo(target.previous)"
           >
             @if (undoing()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Undoing…
+              <hlm-spinner data-icon="inline-start" />Undoing…
             } @else {
               <ng-icon name="lucideUndo2" data-icon="inline-start" aria-hidden="true" />Undo<span
                 class="sr-only"
@@ -279,13 +262,7 @@ export class AdminDetails {
   protected readonly organization = this.context.organization;
   protected readonly online = injectOnline();
   protected readonly hint = CITY_STATE_HINT;
-  protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly saveClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
 

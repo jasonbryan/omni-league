@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleCheck } from '@ng-icons/lucide';
-import { FIELD_NOTE } from './field-classes';
+import { FIELD_NOTE } from './field-note';
 
 const ROOM_FOR_ONE_LINE = `${FIELD_NOTE} min-h-5`;
 

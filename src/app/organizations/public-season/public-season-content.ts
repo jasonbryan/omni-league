@@ -17,7 +17,6 @@ import {
   lucideArrowRight,
   lucideCalendarDays,
   lucideCheck,
-  lucideChevronRight,
   lucideClock,
   lucideMapPin,
   lucideShirt,
@@ -27,6 +26,8 @@ import {
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBadge, type HlmBadgeVariant } from '../../ui/badge';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import {
   BUTTON_BASE,
   OUTLINE_BUTTON_LARGE,
@@ -37,19 +38,19 @@ import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
+import { publicPageNames } from '../public-league/public-page-names';
 import {
   registrationCard,
   teamCard,
   type RegistrationCard,
   type ViewerTeam,
 } from './public-season-registration';
-import { BADGE_TEXT, FULL_BADGE, FULL_BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
+import { BADGE_TEXT, FULL_BADGE_TEXT } from '../season-status';
 import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
 const CRUMB_LINK =
-  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
-const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
+  'inline-flex items-center rounded-md font-medium hover:underline pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const REGISTRATION_CARD =
   'rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
@@ -63,10 +64,10 @@ const RESERVED_HEIGHT = {
   full: 'min-h-66 sm:min-h-58',
   closed: 'min-h-47 md:min-h-49',
 } as const;
-const PHASE_BADGES: Record<RegistrationCard['kind'], string> = {
-  open: OPEN_BADGE,
-  full: FULL_BADGE,
-  closed: MUTED_BADGE,
+const PHASE_BADGES: Record<RegistrationCard['kind'], HlmBadgeVariant> = {
+  open: 'secondary',
+  full: 'outline',
+  closed: 'muted',
 };
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -74,13 +75,12 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
-  imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
       lucideCalendarDays,
       lucideCheck,
-      lucideChevronRight,
       lucideClock,
       lucideMapPin,
       lucideShirt,
@@ -92,33 +92,35 @@ const FACT_ICON =
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
-      <nav aria-label="Breadcrumb">
-        <ol role="list" class="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
-          <li>
-            <a [routerLink]="organizationHref()" [class]="crumbLink">{{
+      <nav hlmBreadcrumb aria-label="Breadcrumb">
+        <ol hlmBreadcrumbList class="flex-wrap gap-x-1.5">
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbLink [link]="organizationHref()" [class]="crumbLink">{{
               season().organization.name
             }}</a>
           </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
+            <a
+              hlmBreadcrumbLink
+              [link]="leagueHref()"
+              [state]="leagueNames()"
+              [class]="crumbLink"
+              >{{ season().league.name }}</a
+            >
           </li>
-          <li>
-            <a [routerLink]="leagueHref()" [class]="crumbLink">{{ season().league.name }}</a>
-          </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
-          </li>
-          <li>
-            <a [routerLink]="seasonHref()" aria-current="page" [class]="currentCrumbLink">{{
-              season().name
-            }}</a>
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbPage [link]="seasonHref()" [class]="crumbLink">{{ season().name }}</a>
           </li>
         </ol>
       </nav>
       <div class="mt-4 flex flex-wrap items-center gap-2 md:mt-6">
-        <span data-slot="badge" [class]="openBadge">{{ season().league.sportName }}</span>
+        <span hlmBadge variant="secondary" size="fit">{{ season().league.sportName }}</span>
         @if (card(); as card) {
-          <span data-testid="season-phase" [class]="phaseBadge()">{{ phaseLabel(card) }}</span>
+          <span data-testid="season-phase" hlmBadge size="fit" [variant]="phaseBadge()">{{
+            phaseLabel(card)
+          }}</span>
         }
       </div>
       <h1 class="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-5xl">
@@ -225,7 +227,7 @@ const FACT_ICON =
                 @if (team(); as team) {
                   <div class="col-start-1 row-start-1">
                     <p>
-                      <span [class]="openBadge"
+                      <span hlmBadge variant="secondary" size="fit"
                         ><ng-icon
                           name="lucideCheck"
                           data-icon="inline-start"
@@ -420,7 +422,6 @@ export class PublicSeasonContent {
   /** Set only after hydration, for a signed-in viewer on a team in this season. */
   readonly viewerTeam = input<ViewerTeam | undefined>(undefined);
 
-  protected readonly openBadge = OPEN_BADGE;
   protected readonly phaseLabel = (card: RegistrationCard) =>
     card.kind === 'full' ? FULL_BADGE_TEXT : BADGE_TEXT[card.phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
@@ -428,7 +429,6 @@ export class PublicSeasonContent {
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
   protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly crumbLink = CRUMB_LINK;
-  protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -501,6 +501,9 @@ export class PublicSeasonContent {
   );
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.season().organization.slug, this.season().league.slug),
+  );
+  protected readonly leagueNames = computed(() =>
+    publicPageNames({ organization: this.season().organization, league: this.season().league }),
   );
   protected readonly seasonHref = computed(() =>
     publicSeasonPath(

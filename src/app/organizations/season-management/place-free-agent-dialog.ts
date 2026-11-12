@@ -18,19 +18,13 @@ import { teamIsFull } from '../../../../convex/lib/seasonInput';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { ConfirmDialog } from '../admin/confirm-dialog';
 import {
-  DESCRIPTION,
-  FIELD_CONTENT,
-  FIELD_ERROR,
-  FIELD_HORIZONTAL,
-  FIELD_SET,
-  LABEL,
-  LEGEND,
   RADIO_EDGE,
   RADIO_EDGE_INVALID,
   RADIO_INDICATOR,
   RADIO_INPUT,
   RADIO_ITEM,
 } from '../admin/field-classes';
+import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
 import { placeFailureText, type PlaceFailure, placeFailureOf } from './place-free-agent-text';
 import { teamRowLines } from './team-row-lines';
 
@@ -56,7 +50,7 @@ const TEAM_INPUT_NAME = 'place-team';
 
 @Component({
   selector: 'app-place-free-agent-dialog',
-  imports: [ConfirmDialog, NgIcon],
+  imports: [ConfirmDialog, HlmFieldImports, HlmFieldSetImports, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideUserPlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -77,22 +71,15 @@ const TEAM_INPUT_NAME = 'place-team';
         They join the team’s roster and can open its page. A person can be on one team in a season.
       </p>
       <fieldset
+        hlmFieldSet
         ngProjectAs="[confirm-body]"
         id="place-team"
-        data-slot="field-set"
-        [class]="fieldSetClass"
         [attr.aria-describedby]="unchosen() ? 'place-team-error' : null"
       >
-        <legend data-slot="field-legend" data-variant="label" [class]="legendClass">Team</legend>
+        <legend hlmFieldLegend variant="label">Team</legend>
         <div data-slot="radio-group" class="grid gap-3">
           @for (team of options(); track team.teamId) {
-            <div
-              role="group"
-              data-slot="field"
-              data-orientation="horizontal"
-              [attr.data-disabled]="team.full ? 'true' : null"
-              [class]="fieldHorizontalClass"
-            >
+            <div hlmField orientation="horizontal" [attr.data-disabled]="team.full ? 'true' : null">
               <span
                 data-slot="radio-group-item"
                 [attr.data-checked]="chosen() === team.teamId ? 'true' : null"
@@ -116,18 +103,9 @@ const TEAM_INPUT_NAME = 'place-team';
                   [class]="radioIndicatorClass"
                 ></span
               ></span>
-              <div data-slot="field-content" [class]="fieldContentClass">
-                <label
-                  [for]="'place-team-' + team.teamId"
-                  data-slot="field-label"
-                  [class]="labelClass"
-                  >{{ team.name }}</label
-                >
-                <p
-                  data-slot="field-description"
-                  [id]="'place-team-' + team.teamId + '-description'"
-                  [class]="fieldDescriptionClass"
-                >
+              <div hlmFieldContent>
+                <label hlmFieldLabel [for]="'place-team-' + team.teamId">{{ team.name }}</label>
+                <p hlmFieldDescription [id]="'place-team-' + team.teamId + '-description'">
                   {{ team.roster }}
                 </p>
               </div>
@@ -135,7 +113,7 @@ const TEAM_INPUT_NAME = 'place-team';
           }
         </div>
         @if (unchosen()) {
-          <div role="alert" data-slot="field-error" id="place-team-error" [class]="errorClass">
+          <div hlmFieldError id="place-team-error">
             <ng-icon
               name="lucideCircleAlert"
               class="mt-0.5 shrink-0 text-base"
@@ -161,13 +139,6 @@ export class PlaceFreeAgentDialog {
   protected readonly online = injectOnline();
   protected readonly firstTeamSelector = `input[name="${TEAM_INPUT_NAME}"]:not(:disabled)`;
   protected readonly teamInputName = TEAM_INPUT_NAME;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
-  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
-  protected readonly fieldContentClass = FIELD_CONTENT;
-  protected readonly labelClass = LABEL;
-  protected readonly fieldDescriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly radioItemClass = RADIO_ITEM;
   protected readonly radioEdge = RADIO_EDGE;
   protected readonly radioEdgeInvalid = RADIO_EDGE_INVALID;

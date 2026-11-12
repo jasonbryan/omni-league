@@ -13,14 +13,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
 import { SwPush } from '@angular/service-worker';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBell,
   lucideBellOff,
-  lucideChevronRight,
-  lucideLoaderCircle,
   lucideShare,
   lucideSmartphone,
   lucideSquarePlus,
@@ -39,14 +36,11 @@ import {
 import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
-import {
-  BADGE_DEFAULT,
-  BADGE_DESTRUCTIVE,
-  BADGE_OUTLINE,
-  BADGE_SECONDARY,
-} from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmBreadcrumbImports } from '../ui/breadcrumb';
+import { HlmSpinner } from '../ui/spinner';
 import { PUSH_DEVICE } from './push-device';
 import { TestNotification } from './test-notification';
 
@@ -62,21 +56,27 @@ interface RegistrationRead {
 type Alert = { kind: 'offline' | 'failed'; change: Change } | null;
 
 const CRUMB_LINK =
-  'inline-flex items-center font-medium underline underline-offset-4 hover:text-foreground pointer-coarse:min-h-11';
-const CURRENT_CRUMB_LINK =
-  'inline-flex items-center font-medium text-foreground pointer-coarse:min-h-11';
+  'inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11';
+const CURRENT_CRUMB_LINK = 'inline-flex items-center pointer-coarse:min-h-11';
 const STEP_NUMBER =
   'flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground';
 
 @Component({
   selector: 'app-notifications-page',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, RouterLink, Shell, TestNotification],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    HlmBadge,
+    HlmBreadcrumbImports,
+    HlmSpinner,
+    NgIcon,
+    Shell,
+    TestNotification,
+  ],
   providers: [
     provideIcons({
       lucideBell,
       lucideBellOff,
-      lucideChevronRight,
-      lucideLoaderCircle,
       lucideShare,
       lucideSmartphone,
       lucideSquarePlus,
@@ -86,18 +86,14 @@ const STEP_NUMBER =
   template: `
     <app-shell>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
-        <nav aria-label="Breadcrumb">
-          <ol role="list" class="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-            <li><a routerLink="/app" [class]="crumbLink">Home</a></li>
-            <li aria-hidden="true">
-              <ng-icon
-                name="lucideChevronRight"
-                class="translate-y-0.5 text-sm"
-                aria-hidden="true"
-              />
+        <nav hlmBreadcrumb aria-label="Breadcrumb">
+          <ol hlmBreadcrumbList class="flex-wrap gap-1.5">
+            <li hlmBreadcrumbItem>
+              <a hlmBreadcrumbLink link="/app" [class]="crumbLink">Home</a>
             </li>
-            <li>
-              <a routerLink="/app/notifications" aria-current="page" [class]="currentCrumbLink"
+            <li hlmBreadcrumbSeparator></li>
+            <li hlmBreadcrumbItem>
+              <a hlmBreadcrumbPage link="/app/notifications" [class]="currentCrumbLink"
                 >Notifications</a
               >
             </li>
@@ -124,12 +120,12 @@ const STEP_NUMBER =
                 ></span>
               }
               @case ('on') {
-                <span data-slot="badge" [class]="badgeOn"
+                <span hlmBadge variant="default"
                   ><ng-icon name="lucideBell" data-icon="inline-start" aria-hidden="true" />On</span
                 >
               }
               @case ('blocked') {
-                <span data-slot="badge" [class]="badgeBlocked"
+                <span hlmBadge variant="destructive"
                   ><ng-icon
                     name="lucideBellOff"
                     data-icon="inline-start"
@@ -138,10 +134,10 @@ const STEP_NUMBER =
                 >
               }
               @case ('not-available') {
-                <span data-slot="badge" [class]="badgeSecondary">Not available</span>
+                <span hlmBadge variant="secondary">Not available</span>
               }
               @case ('install-first') {
-                <span data-slot="badge" [class]="badgeSecondary"
+                <span hlmBadge variant="secondary"
                   ><ng-icon
                     name="lucideSmartphone"
                     data-icon="inline-start"
@@ -150,7 +146,7 @@ const STEP_NUMBER =
                 >
               }
               @default {
-                <span data-slot="badge" [class]="badgeOff"
+                <span hlmBadge variant="outline-muted"
                   ><ng-icon
                     name="lucideBellOff"
                     data-icon="inline-start"
@@ -270,12 +266,7 @@ const STEP_NUMBER =
                   (click)="turnOff()"
                 >
                   @if (busy() === 'turning-off') {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Turning off…
+                    <hlm-spinner data-icon="inline-start" />Turning off…
                   } @else {
                     <ng-icon name="lucideBellOff" data-icon="inline-start" aria-hidden="true" />Turn
                     off
@@ -306,12 +297,7 @@ const STEP_NUMBER =
                   (click)="turnOn()"
                 >
                   @if (busy() === 'turning-on') {
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Turning on…
+                    <hlm-spinner data-icon="inline-start" />Turning on…
                   } @else {
                     <ng-icon name="lucideBell" data-icon="inline-start" aria-hidden="true" />Turn on
                     notifications
@@ -343,11 +329,8 @@ const STEP_NUMBER =
                     role="status"
                     class="flex items-center gap-1.5 text-sm text-muted-foreground"
                   >
-                    <ng-icon
-                      name="lucideLoaderCircle"
-                      class="motion-safe:animate-spin text-base"
-                      aria-hidden="true"
-                    />Getting this device ready. This takes a few seconds the first time.
+                    <hlm-spinner />Getting this device ready. This takes a few seconds the first
+                    time.
                   </p>
                 } @else if (busy() === 'turning-on') {
                   <p role="status" class="text-sm text-muted-foreground">
@@ -479,10 +462,6 @@ export class NotificationsPage {
   protected readonly stepNumber = STEP_NUMBER;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly badgeOn = BADGE_DEFAULT;
-  protected readonly badgeOff = `${BADGE_OUTLINE} bg-muted`;
-  protected readonly badgeBlocked = BADGE_DESTRUCTIVE;
-  protected readonly badgeSecondary = BADGE_SECONDARY;
 
   protected refusedDescription(change: Change): string {
     return `Notifications are still ${change === 'on' ? 'off' : 'on'}. Try again when you're connected.`;

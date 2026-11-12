@@ -10,7 +10,9 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { CreateOrganizationPage } from './create-organization-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -381,6 +383,7 @@ describe('CreateOrganizationPage', () => {
       expect(submitButton().textContent?.trim()).toBe('Creating organization…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(status()?.textContent?.trim()).toBe('Creating the organization.');
       expect(status()?.getAttribute('role')).toBe('status');
       await submit();
@@ -829,6 +832,84 @@ describe('CreateOrganizationPage', () => {
       );
       await flush();
       expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const describedBy = (id: string, error: boolean) => ({
+      'aria-describedby': error ? `${id}-description ${id}-error` : `${id}-description`,
+    });
+
+    const form = (errors: { name?: boolean; cityState?: boolean; slug?: boolean }) => [
+      shapeOf('field-group'),
+      fieldShape(!!errors.name),
+      shapeOf('field-label', { for: 'name' }),
+      inputShape(
+        'name',
+        { type: 'text', autocomplete: 'organization', ...describedBy('name', !!errors.name) },
+        !!errors.name,
+      ),
+      shapeOf('field-description', { id: 'name-description' }),
+      ...(errors.name ? [shapeOf('field-error', { id: 'name-error' })] : []),
+      fieldShape(!!errors.cityState),
+      shapeOf('field-label', { for: 'cityState' }),
+      inputShape(
+        'cityState',
+        { type: 'text', autocomplete: 'off', ...describedBy('cityState', !!errors.cityState) },
+        !!errors.cityState,
+      ),
+      shapeOf('field-description', { id: 'cityState-description' }),
+      ...(errors.cityState ? [shapeOf('field-error', { id: 'cityState-error' })] : []),
+      fieldShape(!!errors.slug),
+      shapeOf('field-label', { for: 'slug' }),
+      inputShape(
+        'slug',
+        { type: 'text', autocomplete: 'off', ...describedBy('slug', !!errors.slug) },
+        !!errors.slug,
+      ),
+      shapeOf('field-description', { id: 'slug-description' }),
+      ...(errors.slug ? [shapeOf('field-error', { id: 'slug-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(page)).toEqual(form({}));
+    });
+
+    it('marks the empty fields invalid and ties each error to its input after a submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(page)).toEqual(form({ name: true, slug: true }));
+    });
+
+    it('marks only Web address when the server says the address is taken', async () => {
+      await open();
+      await type('name', NAME);
+      await submit();
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: ORGANIZATION_MESSAGES.slugTaken(SLUG),
+        }),
+      );
+      await flush();
+      expect(formShapes(page)).toEqual(form({ slug: true }));
+    });
+
+    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+      await open();
+      await submit();
+      const field = page.querySelector('#slug')!.closest('[data-slot="field"]')!;
+      expect(
+        [...field.children].map(
+          (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
+        ),
+      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      expect(
+        field.querySelector('[data-slot="field-description"] app-web-address-preview'),
+      ).not.toBeNull();
+      expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
     });
   });
 });

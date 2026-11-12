@@ -1,17 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { RouterLink, type Params } from '@angular/router';
+import { type Params } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronLeft, lucideChevronRight, lucideEllipsis } from '@ng-icons/lucide';
+import { lucideChevronLeft, lucideChevronRight } from '@ng-icons/lucide';
 import { LIST_PAGE_SIZE, listPageQuery } from '../core/list-page';
-import { BUTTON_BASE } from '../ui/button/button-classes';
-
-// Constants, not `buttonVariants()` calls, so the public page's chunk loads no class-merging code. The spec checks them against `buttonVariants`, so a change to the helm button shows up there.
-const GHOST =
-  'hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground';
-
-export const GHOST_BUTTON = `${BUTTON_BASE} ${GHOST} h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2 max-sm:w-8 max-sm:px-0`;
-export const GHOST_ICON_BUTTON = `${BUTTON_BASE} ${GHOST} size-8 tabular-nums`;
-export const CURRENT_PAGE_BUTTON = `${BUTTON_BASE} bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground size-8 font-semibold tabular-nums`;
+import { GHOST_BUTTON, HlmPaginationImports } from '../ui/pagination';
 
 export type PageWindowItem =
   | { readonly kind: 'page'; readonly n: number; readonly narrowHidden: boolean }
@@ -67,29 +59,30 @@ export function rangeText(page: number, total: number): string {
  */
 @Component({
   selector: 'app-page-control',
-  imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideChevronLeft, lucideChevronRight, lucideEllipsis })],
+  imports: [NgIcon, HlmPaginationImports],
+  providers: [provideIcons({ lucideChevronLeft, lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'contents' },
   template: `
     @if (total() > pageSize) {
       <nav
-        [attr.aria-label]="label()"
+        hlmPagination
+        [aria-label]="label()"
         class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border px-4 py-3 md:px-5"
       >
         <p class="text-sm text-muted-foreground tabular-nums">
           {{ range() }}<span class="sr-only"> {{ noun() }}</span>
         </p>
-        <ul role="list" class="flex items-center gap-1">
-          <li>
+        <ul hlmPaginationContent>
+          <li hlmPaginationItem>
             @if (page() > 1) {
               <a
-                [routerLink]="path()"
+                hlmPaginationLink
+                size="default"
+                [link]="path()"
                 [queryParams]="query(page() - 1)"
                 [fragment]="fragment()"
-                (click)="activated(page() - 1, $event)"
-                data-slot="button"
-                [class]="ghostButton"
+                (activated)="onActivated(page() - 1, $event)"
                 ><ng-icon
                   name="lucideChevronLeft"
                   data-icon="inline-start"
@@ -112,35 +105,36 @@ export function rangeText(page: number, total: number): string {
           </li>
           @for (item of items(); track $index) {
             @if (item.kind === 'gap') {
-              <li aria-hidden="true" [class]="item.view === 'wide' ? 'max-sm:hidden' : 'sm:hidden'">
-                <span class="flex h-8 w-4 items-center justify-center text-muted-foreground sm:w-8"
-                  ><ng-icon name="lucideEllipsis" class="text-base" aria-hidden="true"
-                /></span>
+              <li
+                hlmPaginationItem
+                aria-hidden="true"
+                [class]="item.view === 'wide' ? 'max-sm:hidden' : 'sm:hidden'"
+              >
+                <span hlmPaginationEllipsis></span>
               </li>
             } @else {
-              <li [class]="item.narrowHidden ? 'max-sm:hidden' : ''">
+              <li hlmPaginationItem [class]="item.narrowHidden ? 'max-sm:hidden' : ''">
                 <a
-                  [routerLink]="path()"
+                  hlmPaginationLink
+                  [isActive]="item.n === page()"
+                  [link]="path()"
                   [queryParams]="query(item.n)"
                   [fragment]="fragment()"
-                  [attr.aria-current]="item.n === page() ? 'page' : null"
-                  (click)="activated(item.n, $event)"
-                  data-slot="button"
-                  [class]="item.n === page() ? currentButton : ghostIconButton"
+                  (activated)="onActivated(item.n, $event)"
                   ><span class="sr-only">Page </span>{{ item.n }}</a
                 >
               </li>
             }
           }
-          <li>
+          <li hlmPaginationItem>
             @if (page() < pageCount()) {
               <a
-                [routerLink]="path()"
+                hlmPaginationLink
+                size="default"
+                [link]="path()"
                 [queryParams]="query(page() + 1)"
                 [fragment]="fragment()"
-                (click)="activated(page() + 1, $event)"
-                data-slot="button"
-                [class]="ghostButton"
+                (activated)="onActivated(page() + 1, $event)"
                 ><span class="max-sm:sr-only">Next</span><span class="sr-only"> page</span
                 ><ng-icon name="lucideChevronRight" data-icon="inline-end" aria-hidden="true"
               /></a>
@@ -172,8 +166,6 @@ export class PageControl {
 
   protected readonly pageSize = LIST_PAGE_SIZE;
   protected readonly ghostButton = GHOST_BUTTON;
-  protected readonly ghostIconButton = GHOST_ICON_BUTTON;
-  protected readonly currentButton = CURRENT_PAGE_BUTTON;
   protected readonly range = computed(() => rangeText(this.page(), this.total()));
   protected readonly items = computed(() => pageWindow(this.page(), this.pageCount()));
 
@@ -181,7 +173,7 @@ export class PageControl {
     return this.queryFor()(page);
   }
 
-  protected activated(page: number, event: MouseEvent): void {
+  protected onActivated(page: number, event: MouseEvent): void {
     const plain =
       event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
     if (plain && page !== this.page()) this.pageActivated.emit(page);

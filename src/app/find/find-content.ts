@@ -33,7 +33,9 @@ import { noMatchSentence, removalSuggestions } from '../organizations/no-match-s
 import { OrganizationMark } from '../organizations/organization-mark';
 import { PageControl } from '../organizations/page-control';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
+import { publicPageNames } from '../organizations/public-league/public-page-names';
 import { leagueSeasonStatus } from '../organizations/season-status';
+import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, findQuery, type FindResultRow } from './find-path';
 import { FindSkeleton } from './find-skeleton';
@@ -69,7 +71,15 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
 
 @Component({
   selector: 'app-find-content',
-  imports: [FindSkeleton, NgIcon, OrganizationMark, PageControl, RouterLink, SavedCopyNote],
+  imports: [
+    FindSkeleton,
+    HlmBadge,
+    NgIcon,
+    OrganizationMark,
+    PageControl,
+    RouterLink,
+    SavedCopyNote,
+  ],
   providers: [provideIcons({ lucideChevronRight, lucideCircleAlert, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -177,7 +187,9 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                         />
                         <div class="min-w-0 flex-1">
                           <h3 class="font-medium">
-                            <a [routerLink]="row.href" [class]="linkClasses">{{ row.name }}</a>
+                            <a [routerLink]="row.href" [state]="row.names" [class]="linkClasses">{{
+                              row.name
+                            }}</a>
                           </h3>
                           @if (row.divisionLabel) {
                             <p class="mt-0.5 text-sm font-medium">{{ row.divisionLabel }}</p>
@@ -185,8 +197,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ row.where }}</p>
                           @if (row.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              @if (status.badge) {
-                                <span data-slot="badge" [class]="status.badgeClass">{{
+                              @if (status.badge && status.badgeVariant; as variant) {
+                                <span hlmBadge size="fit" [variant]="variant">{{
                                   status.badge
                                 }}</span>
                               }
@@ -422,6 +434,7 @@ export class FindContent {
   protected readonly rows = computed(() =>
     (this.results()?.rows ?? []).map((league) => ({
       href: publicLeaguePath(league.organization.slug, league.slug),
+      names: publicPageNames({ organization: league.organization, league }),
       name: league.name,
       organizationName: league.organization.name,
       logoUrl: league.organization.logoUrl,

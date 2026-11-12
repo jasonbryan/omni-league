@@ -13,6 +13,9 @@ import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
+import { expectBadge } from '../ui/testing/badge';
+import { expectPendingSpinner } from '../ui/testing/spinner';
+import { slotsOf } from '../ui/testing/helm-slots';
 
 const VAPID_KEY = 'BPublicKeyFromGetConfig';
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
@@ -184,6 +187,8 @@ describe('NotificationsPage', () => {
   const text = (el: Element | null | undefined) =>
     el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   const badge = () => text(panel().querySelector('[data-slot="badge"]'));
+  const expectDeviceBadge = (variant: Parameters<typeof expectBadge>[1]) =>
+    expectBadge(panel().querySelector('[data-slot="badge"]'), variant, 'default');
   const button = () => panel().querySelector<HTMLButtonElement>('button');
   // The result region sits last in the panel, in the page from the first render, so a change is announced.
   const changeStatus = () => text([...panel().querySelectorAll('[role="status"]')].at(-1));
@@ -219,6 +224,15 @@ describe('NotificationsPage', () => {
     ).toEqual([
       ['Home', '/app', null],
       ['Notifications', '/app/notifications', 'page'],
+    ]);
+    expect(slotsOf(page.querySelector('nav[aria-label="Breadcrumb"]'))).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-page',
     ]);
     expect(text(page)).toContain(
       'This setting is for this device only. Turn notifications on in each browser or installed app where you want them. Signing out turns them off here.',
@@ -262,6 +276,7 @@ describe('NotificationsPage', () => {
       await open();
       await emitConfig(key);
       expect(badge()).toBe('Not available');
+      expectDeviceBadge('secondary');
       expect(text(panel())).toContain(NOT_AVAILABLE);
       expect(button()).toBeNull();
     });
@@ -308,6 +323,7 @@ describe('NotificationsPage', () => {
     await open();
     await emitConfig(VAPID_KEY);
     expect(badge()).toBe('Install first');
+    expectDeviceBadge('secondary');
     const body = text(panel());
     expect(body).toContain(
       'On iPhone and iPad, notifications work only in the Omni League app on your Home Screen.',
@@ -337,6 +353,7 @@ describe('NotificationsPage', () => {
     await open();
     await emitConfig(VAPID_KEY);
     expect(badge()).toBe('Blocked');
+    expectDeviceBadge('destructive');
     expect(text(panel())).toContain(
       "Notifications for Omni League are blocked in this browser's settings, so they can't be turned on from here.",
     );
@@ -353,6 +370,7 @@ describe('NotificationsPage', () => {
     device.permission.set('default');
     await settle();
     expect(badge()).toBe('Off');
+    expectDeviceBadge('outline-muted');
   });
 
   describe('off', () => {
@@ -386,6 +404,10 @@ describe('NotificationsPage', () => {
         'Getting this device ready. This takes a few seconds the first time.',
       );
       expect(help?.getAttribute('role')).toBe('status');
+      const spinner = help!.querySelector('hlm-spinner');
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+      expect(spinner?.hasAttribute('data-icon')).toBe(false);
+      expect(help!.firstElementChild).toBe(spinner);
 
       button()!.click();
       expect(log).toEqual([]);
@@ -408,6 +430,7 @@ describe('NotificationsPage', () => {
       await settle();
       expect(text(button())).toBe('Turning on…');
       expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button());
       expect(text(panel().querySelector('[role="status"]'))).toBe(
         "Choose Allow in your browser's prompt.",
       );
@@ -430,6 +453,7 @@ describe('NotificationsPage', () => {
       convex.calls[0].resolve(null);
       await settle();
       expect(badge()).toBe('On');
+      expectDeviceBadge('default');
       // The pressed button is gone; focus moves to the one that replaced it, and the result is announced.
       expect(document.activeElement).toBe(button());
       expect(text(button())).toBe('Turn off');
@@ -558,6 +582,7 @@ describe('NotificationsPage', () => {
       await settle();
       expect(text(button())).toBe('Turning off…');
       expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button());
       expect(text(panel().querySelector('[role="status"]'))).toBe('Turning off notifications.');
       expect(convex.calls.map((c) => [c.name, c.args])).toEqual([
         ['push:unsubscribe', { endpoint: ENDPOINT }],
@@ -724,6 +749,7 @@ describe('NotificationsPage', () => {
       expect(convex.calls.map((c) => [c.name, c.args])).toEqual([['push:sendTest', {}]]);
       expect(text(testButton())).toBe('Sending…');
       expect(testButton()!.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(testButton());
       expect(text(panel().querySelector('app-test-notification [role="status"]'))).toBe(
         'Sending the test notification.',
       );
@@ -880,7 +906,7 @@ describe('NotificationsPage', () => {
       [...panel().querySelectorAll('button')].find((b) => text(b) === 'Reload page') ?? null;
     const describedBy = (el: Element | null) =>
       text(panel().querySelector(`#${el?.getAttribute('aria-describedby') ?? ''}`));
-    const spinners = () => panel().querySelectorAll('ng-icon[name="lucideLoaderCircle"]');
+    const spinners = () => panel().querySelectorAll('hlm-spinner');
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
     const subscriptionUnsubscribes = () => unsubscribeHeld.mock.calls.length;
 

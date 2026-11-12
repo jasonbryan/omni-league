@@ -9,7 +9,7 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
-import { FULL_BADGE, MUTED_BADGE, OPEN_BADGE } from './season-status';
+import { expectBadge } from '../ui/testing/badge';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -66,8 +66,6 @@ const section = (harness: RouterTestingHarness) =>
   host(harness).querySelector('#registration-open');
 const heroLink = (harness: RouterTestingHarness) =>
   host(harness).querySelector<HTMLAnchorElement>('main a[href$="#registration-open"]');
-const classes = (value: Element | string) =>
-  (typeof value === 'string' ? value : value.className).split(' ').sort();
 const rowStatus = (harness: RouterTestingHarness, n: number) =>
   [...(host(harness).querySelector(`#league-${n} p:last-of-type`)?.children ?? [])].map(text);
 const COED_7V7 = {
@@ -252,9 +250,10 @@ describe('the Registration open section', () => {
         'In progress',
         'Registration closed',
       ]);
-      expect(classes(badges[0])).toEqual(classes(OPEN_BADGE));
-      expect(classes(badges[2])).toEqual(classes(MUTED_BADGE));
-      expect(classes(badges[3])).toEqual(classes(MUTED_BADGE));
+      expectBadge(badges[0], 'secondary', 'fit');
+      expectBadge(badges[1], 'secondary', 'fit');
+      expectBadge(badges[2], 'muted', 'fit');
+      expectBadge(badges[3], 'muted', 'fit');
     });
 
     it('leads with the season open for registration when another is in progress, and links to its registration card', async () => {
@@ -350,7 +349,7 @@ describe('the Registration open section', () => {
         'Register for Coed 7v7 Rec, Summer 2027',
       ]);
       const badge = host(harness).querySelector('#league-1 [data-slot="badge"]');
-      expect(classes(badge!)).toEqual(classes(FULL_BADGE));
+      expectBadge(badge, 'outline', 'fit');
       expect(
         host(harness).querySelector('#league-1 a[href$="#registration"]')?.getAttribute('href'),
       ).toBe(`${SEASON_PATH}/summer-2027#registration`);
@@ -379,7 +378,8 @@ describe('the Registration open section', () => {
       const [full, room] = cards(harness);
       const badges = (card: Element) => [...card.querySelectorAll('[data-slot="badge"]')];
       expect(badges(full).map(text)).toEqual(['Soccer', 'Full']);
-      expect(classes(badges(full)[1])).toEqual(classes(FULL_BADGE));
+      expectBadge(badges(full)[0], 'secondary', 'fit');
+      expectBadge(badges(full)[1], 'outline', 'fit');
       expect(badges(full)[0].parentElement).toBe(badges(full)[1].parentElement);
       expect(closingLine(full)).toBe('Waitlist open · closes May 19');
       expect(
@@ -527,6 +527,133 @@ describe('the Registration open section', () => {
       await settle(harness);
       expect(section(harness)?.querySelector('[role="status"]')).toBeNull();
       expect(section(harness)?.querySelectorAll(':scope > ul > li')).toHaveLength(2);
+    });
+  });
+
+  describe('the skeleton while the open seasons of a new view load', () => {
+    const season = (n: number, league: typeof COED_7V7) => ({
+      name: `Season ${n}`,
+      slug: `season-${n}`,
+      startDate: '2027-07-01',
+      endDate: '2027-09-01',
+      registrationDeadline: `2027-05-0${n}`,
+      minimumRosterSize: 7,
+      league,
+    });
+    const SOCCER = [1, 2, 3].map((n) => season(n, COED_7V7));
+    const ALL_SPORTS = [...SOCCER, season(4, SUNDAY_4S)];
+    const NO_SOFTBALL: PublicOpenSeasonRows = [];
+
+    const skeleton = (harness: RouterTestingHarness) =>
+      section(harness)?.querySelector('app-open-seasons-skeleton') ?? null;
+    const skeletonCards = (harness: RouterTestingHarness) =>
+      skeleton(harness)?.querySelectorAll('.rounded-xl').length;
+
+    async function visit(
+      harness: RouterTestingHarness,
+      url: string,
+      open: PublicOpenSeasonRows | undefined,
+    ): Promise<void> {
+      // The copy saved when the view was shown would fill the section at once.
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('cvx-saved:seasons:listOpenForOrganization')) {
+          localStorage.removeItem(key);
+        }
+      }
+      await harness.navigateByUrl(url);
+      await settle(harness);
+      const segment = /\/sports\/([^/?]+)/.exec(url)?.[1];
+      const page = withSeasons(open ?? []);
+      const results = segment ? sportQueryResults(page, segment) : queryResults(page);
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      if (open) subscription(OPEN_SEASONS).emit(open);
+      await settle(harness);
+    }
+
+    it('shows two cards on the first view of an organization', async () => {
+      const harness = await open();
+      const results = queryResults(withSeasons(ALL_SPORTS));
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      expect(skeletonCards(harness)).toBe(2);
+    });
+
+    it('shows the no-open line with no card for a sport with no open season', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, undefined);
+      expect(skeletonCards(harness)).toBe(0);
+      expect(text(skeleton(harness))).toBe(
+        'No softball season is open for registration right now. Each league below shows its next season once it is published.',
+      );
+      expect(skeleton(harness)?.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+      expect(text(section(harness)?.querySelector('[role="status"]'))).toBe(
+        'Loading the open seasons.',
+      );
+    });
+
+    it('shows the cards of the sport in All sports on the way to that sport', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('reads the All sports count, not the zero of the sport between', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, NO_SOFTBALL);
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('shows the All sports count again on the way back to All sports', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, ORG, undefined);
+      expect(skeletonCards(harness)).toBe(4);
+    });
+
+    it('shows the count of the view it came from when a filter is chosen', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, `${ORG}/sports/soccer?gender=coed`, undefined);
+      expect(skeletonCards(harness)).toBe(3);
+    });
+
+    it('takes a filter outside the sport scope for the view without it', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, SOCCER);
+      await visit(harness, `${ORG}/sports/softball`, NO_SOFTBALL);
+      // With several sports a format means nothing on All sports, so the page drops it.
+      await visit(harness, `${ORG}?format=4v4`, undefined);
+      expect(skeletonCards(harness)).toBe(4);
+    });
+
+    it('records nothing for a view whose seasons are still loading', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/softball`, undefined);
+      // Only rule 3 answers this view, so a Softball view recorded as empty would give 0.
+      await visit(harness, `${ORG}/sports/soccer?gender=coed`, undefined);
+      expect(skeletonCards(harness)).toBe(ALL_SPORTS.length);
+    });
+
+    it('leaves the cards in place once the seasons arrive', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons(ALL_SPORTS)));
+      await visit(harness, `${ORG}/sports/soccer`, undefined);
+      subscription(OPEN_SEASONS).emit(SOCCER);
+      await settle(harness);
+      expect(skeleton(harness)).toBeNull();
+      expect(section(harness)?.querySelectorAll(':scope > ul > li')).toHaveLength(3);
     });
   });
 

@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { Title } from '@angular/platform-browser';
-import { provideRouter, Router } from '@angular/router';
+import { By, Title } from '@angular/platform-browser';
+import { provideRouter, Router, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import {
@@ -20,7 +20,7 @@ import {
   SATURDAY_6S_ROW,
   SUNDAY_4S_ROW,
 } from './testing/find-data';
-import { FULL_BADGE } from '../organizations/season-status';
+import { expectBadge } from '../ui/testing/badge';
 
 const QUERY = 'search:leagues';
 
@@ -164,6 +164,37 @@ describe('FindPage results', () => {
     ]);
   });
 
+  it('gives each row’s link the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {
+    const links = harness.fixture.debugElement.queryAll(By.css('ul > li h3 a'));
+
+    expect(links.map((link) => link.injector.get(RouterLink).state)).toEqual([
+      {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: {
+          slug: 'sunday-reverse-coed-4s',
+          name: 'Sunday Reverse Coed 4s',
+          sportName: 'Beach volleyball',
+        },
+      },
+      {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: {
+          slug: 'thursday-night-coed-2s',
+          name: 'Thursday Night Coed 2s',
+          sportName: 'Beach volleyball',
+        },
+      },
+      {
+        organization: { slug: 'lakeshore-sand-league', name: 'Lakeshore Sand League' },
+        league: {
+          slug: 'saturday-coed-6s',
+          name: 'Saturday Coed 6s',
+          sportName: 'Beach volleyball',
+        },
+      },
+    ]);
+  });
+
   it('shows each row with its mark, link, division, organization and locations, and season status', () => {
     const [sunday, , saturday] = [...results(harness)!.querySelectorAll('ul > li')];
     expect(text(sunday.querySelector('[aria-hidden="true"]'))).toBe('GC');
@@ -174,6 +205,7 @@ describe('FindPage results', () => {
     expect(text(sunday)).toContain('Coed · 4v4 · BB');
     expect(text(sunday)).toContain('Gulf Coast Sport & Social · North Beach Sand Courts');
     expect(text(sunday.querySelector('[data-slot="badge"]'))).toBe('Registration open');
+    expectBadge(sunday.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
     expect(text(sunday)).toContain('Summer 2027 · closes May 23');
 
     expect(text(saturday)).toContain(
@@ -193,7 +225,7 @@ describe('FindPage results', () => {
     const row = results(harness)!.querySelector('ul > li')!;
     const badge = row.querySelector('[data-slot="badge"]');
     expect(text(badge)).toBe('Full');
-    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(badge, 'outline', 'fit');
     expect(text(row)).toContain('Summer 2027 · waitlist open');
     expect(text(row)).not.toContain('closes');
   });

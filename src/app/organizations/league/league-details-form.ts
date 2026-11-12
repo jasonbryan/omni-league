@@ -16,13 +16,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideLoaderCircle,
-  lucideSparkles,
-  lucideUndo2,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucideSparkles, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import { filledFromNameMessage } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
@@ -37,7 +31,6 @@ import {
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
-import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from '../admin/field-classes';
 import { FieldNoteText } from '../admin/field-note';
 import {
   LeagueDivisionFields,
@@ -57,6 +50,9 @@ import {
 } from './league-details-state';
 import { formatHint, publishedSeasonsEarliestFirst } from './league-format-hint';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 
 type Earlier = FunctionReturnType<typeof api.leagues.update>;
 
@@ -89,11 +85,14 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 @Component({
   selector: 'app-league-details-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
     FieldNoteText,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     LeagueDivisionFields,
     NgIcon,
     StickyFooter,
@@ -103,7 +102,6 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
-      lucideLoaderCircle,
       lucideSparkles,
       lucideUndo2,
     }),
@@ -137,19 +135,16 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
       }
       <div data-slot="field-group" [class]="clearanceClass + ' flex flex-col gap-6'">
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="details.errors.name() ? 'true' : null"
           [attr.data-invalid]="details.errors.name() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="league-name" data-slot="field-label" [class]="labelClass">Name</label>
+          <label hlmFieldLabel for="league-name">Name</label>
           <input
+            hlmInput
             #name
             id="league-name"
             type="text"
-            data-slot="input"
             autocomplete="off"
             [formField]="details.fields.name"
             (blur)="details.left('name')"
@@ -157,16 +152,15 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
             [attr.aria-invalid]="details.errors.name() ? 'true' : null"
             [attr.data-invalid]="details.errors.name() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="details.errors.name() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="league-name-description" [class]="descriptionClass">
+          <p hlmFieldDescription id="league-name-description">
             The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
           @if (details.notes.name(); as note) {
             <app-field-note id="league-name-note" [note]="note" />
           }
           @if (details.errors.name(); as error) {
-            <div role="alert" data-slot="field-error" id="league-name-error" [class]="errorClass">
+            <div hlmFieldError id="league-name-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -249,12 +243,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
           [attr.aria-disabled]="details.submitting() || !online() ? 'true' : null"
         >
           @if (details.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save changes
           }
@@ -285,11 +274,6 @@ export class LeagueDetailsForm implements OnInit {
   protected readonly details = new LeagueDetails(() => this.league().sport);
   protected readonly alerts = DETAILS_ALERTS;
 
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
   protected readonly statusClass = `${FOOTER_STATUS} flex flex-wrap items-center gap-x-3 gap-y-1`;

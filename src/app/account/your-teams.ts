@@ -4,7 +4,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowRight, lucideCircleAlert, lucideCrown, lucideUsers } from '@ng-icons/lucide';
 import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
-import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
 
 // Keyed by string: a role this build does not know (one a later backend adds) gets no badge.
@@ -16,7 +16,7 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
 
 @Component({
   selector: 'app-your-teams',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmBadge, NgIcon, RouterLink],
   providers: [provideIcons({ lucideArrowRight, lucideCircleAlert, lucideCrown, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -101,7 +101,7 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
                 <p class="text-sm text-muted-foreground">{{ row.organizationName }}</p>
                 @if (row.badge; as badge) {
                   <p class="mt-1.5">
-                    <span data-slot="badge" data-variant="secondary" [class]="badgeClass">
+                    <span hlmBadge variant="secondary">
                       @if (badge.crown) {
                         <ng-icon name="lucideCrown" data-icon="inline-start" aria-hidden="true" />
                       }
@@ -133,7 +133,6 @@ export class YourTeams {
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
 
-  protected readonly badgeClass = BADGE_SECONDARY;
   protected readonly teamPageButton = `${OUTLINE_BUTTON} flex-1 sm:flex-none`;
   protected readonly placeholders = [1, 2];
   protected readonly failed = computed(() => this.mine.error() !== undefined);

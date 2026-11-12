@@ -17,7 +17,6 @@ import {
   lucideCircleAlert,
   lucideCopy,
   lucideLink,
-  lucideLoaderCircle,
   lucideUserPlus,
 } from '@ng-icons/lucide';
 import type { Id } from '../../../convex/_generated/dataModel';
@@ -37,6 +36,7 @@ import {
 } from '../organizations/admin/field-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmSpinner } from '../ui/spinner';
 import { TEAM_INVITE_FORM_ALERTS, TeamInviteForm } from './team-invite-form';
 
 interface CreatedInvite {
@@ -55,14 +55,21 @@ const TEXTAREA =
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-team-invite-panel',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon, RevealOnFocus],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    FormField,
+    HlmSpinner,
+    MousePressKeepsFocus,
+    NgIcon,
+    RevealOnFocus,
+  ],
   providers: [
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
       lucideCopy,
       lucideLink,
-      lucideLoaderCircle,
       lucideUserPlus,
     }),
   ],
@@ -241,12 +248,7 @@ const TEXTAREA =
             [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
           >
             @if (form.submitting()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Creating invite link…
+              <hlm-spinner data-icon="inline-start" />Creating invite link…
             } @else {
               <ng-icon name="lucideLink" data-icon="inline-start" aria-hidden="true" />Create invite
               link

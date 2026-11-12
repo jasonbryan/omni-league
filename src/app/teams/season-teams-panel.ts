@@ -4,7 +4,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight } from '@ng-icons/lucide';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { AdminAlert } from '../organizations/admin/admin-alert';
-import { BADGE_OUTLINE, BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { HlmBadge } from '../ui/badge';
 import { teamPath } from './team-paths';
 
 export interface SeasonTeamRow {
@@ -24,7 +24,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
 
 @Component({
   selector: 'app-season-teams-panel',
-  imports: [AdminAlert, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmBadge, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -60,9 +60,9 @@ export function seasonTeamsCount(shown: number, total: number): string {
                 <!-- A flex container drops this space visually; it keeps the badge a separate word in the link's name. -->
                 &ngsp;
                 @if (row.teamId === currentTeamId()) {
-                  <span data-slot="badge" [class]="outlineBadge">This team</span>
+                  <span hlmBadge variant="outline">This team</span>
                 } @else if (row.isViewerTeam) {
-                  <span data-slot="badge" [class]="secondaryBadge">Your team</span>
+                  <span hlmBadge variant="secondary">Your team</span>
                 }
                 <ng-icon
                   name="lucideChevronRight"
@@ -91,8 +91,6 @@ export class SeasonTeamsPanel {
   readonly failed = input(false);
   readonly currentTeamId = input.required<string>();
 
-  protected readonly outlineBadge = BADGE_OUTLINE;
-  protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly placeholders = [1, 2, 3];
   protected readonly href = teamPath;
 

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { api, injectOnline, injectQuery } from '../../core/data/convex';
 import { parseListPage } from '../../core/list-page';
@@ -14,6 +14,7 @@ import { injectPageLoadWait } from '../../public-layout/page-load-wait';
 import { PublicLayout } from '../../public-layout/public-layout';
 import { PublicLeagueContent } from './public-league-content';
 import { PublicLeagueSkeleton } from './public-league-skeleton';
+import { readPublicPageNames } from './public-page-names';
 import {
   publicLeagueCanonicalPath,
   type PublicLeagueSeasons,
@@ -52,7 +53,7 @@ import {
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
       } @else {
-        <app-public-league-skeleton />
+        <app-public-league-skeleton [names]="names()" />
       }
       <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
@@ -68,6 +69,15 @@ export class PublicLeaguePage {
     this.route.paramMap.pipe(map((params) => params.get('leagueSlug') ?? '')),
     { requireSync: true },
   );
+  private readonly arrivedState = inject(Router).currentNavigation()?.extras.state;
+
+  protected readonly names = computed(() =>
+    readPublicPageNames(this.arrivedState, {
+      orgSlug: this.orgSlug(),
+      leagueSlug: this.leagueSlug(),
+    }),
+  );
+
   private readonly requestedPage = toSignal(
     this.route.queryParamMap.pipe(map((params) => parseListPage(params.getAll('page')))),
     { requireSync: true },
