@@ -7,15 +7,17 @@ import { pathOf } from '../league/league-landing';
 import { AdminContext } from './admin-context';
 import { adminPath } from './admin-path';
 
-const LEAGUES_SECTION = 'leagues';
-const CREATE_LEAGUE_FRAGMENT = 'create-league';
+const CREATE_FORM_FRAGMENTS: Readonly<Record<string, string>> = {
+  leagues: 'create-league',
+  tournaments: 'create-tournament',
+};
 
 /**
  * Provided by the admin area, which renders its pages only once it is ready, so it starts at each arrival
- * and sees a later choice or scroll while the admin area is still loading, before the Leagues page exists.
+ * and sees a later choice or scroll while the admin area is still loading, before the page with the form exists.
  */
 @Injectable()
-export class CreateLeagueLanding {
+export class CreateFormLanding {
   private readonly document = inject(DOCUMENT);
   private readonly router = inject(Router);
   private readonly context = inject(AdminContext);
@@ -27,7 +29,7 @@ export class CreateLeagueLanding {
     inject(DestroyRef).onDestroy(() => this.listening.abort());
     const snapshot = inject(ActivatedRoute).snapshot;
     const section = snapshot.firstChild?.url.map((segment) => segment.path).join('/');
-    this.arm(section === LEAGUES_SECTION && snapshot.fragment === CREATE_LEAGUE_FRAGMENT);
+    this.arm(section !== undefined && CREATE_FORM_FRAGMENTS[section] === snapshot.fragment);
     this.router.events.pipe(takeUntilDestroyed()).subscribe((event) => {
       if (!(event instanceof NavigationEnd)) return;
       const path = pathOf(event.urlAfterRedirects);
@@ -36,8 +38,10 @@ export class CreateLeagueLanding {
       if (!arrived) return;
       const fragment = this.router.parseUrl(event.urlAfterRedirects).fragment;
       this.arm(
-        path === adminPath(this.context.slug(), LEAGUES_SECTION) &&
-          fragment === CREATE_LEAGUE_FRAGMENT,
+        Object.entries(CREATE_FORM_FRAGMENTS).some(
+          ([section, createFragment]) =>
+            path === adminPath(this.context.slug(), section) && fragment === createFragment,
+        ),
       );
     });
   }

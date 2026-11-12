@@ -123,7 +123,6 @@ export default defineSchema({
       'sortName',
     ])
     .index('by_status_and_sport_and_sortName', ['status', 'sport', 'sortName'])
-    // Whether any league still uses a custom level, so deleting one reads an index, not the table.
     .index('by_customLevelId', ['customLevelId'])
     .searchIndex('search_searchText', {
       searchField: 'searchText',
@@ -150,12 +149,30 @@ export default defineSchema({
     leagueId: v.optional(v.id('leagues')),
   })
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
+    .index('by_customLevelId', ['customLevelId'])
     .index('by_organizationId_and_type_and_status_and_sortName', [
       'organizationId',
       'type',
       'status',
       'sortName',
     ]),
+
+  // The tournament part of a program of type `tournament`; `programs` holds its name, slug, status, and division. Written only by `convex/lib/tenantWrites.ts`.
+  tournaments: defineTable({
+    programId: v.id('programs'),
+    organizationId: v.id('organizations'),
+    /** Calendar dates, `YYYY-MM-DD`; a one-day tournament ends on its start date. */
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    maximumTeams: v.number(),
+    /** The division's players per side. */
+    minimumRosterSize: v.number(),
+    structure: v.literal('bracket'),
+    bracketType: v.literal('single'),
+  })
+    .index('by_programId', ['programId'])
+    .index('by_organizationId_and_startDate', ['organizationId', 'startDate']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

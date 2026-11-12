@@ -442,6 +442,44 @@ describe('the release backfill', () => {
       expect(afterFirst.programs).toHaveLength(2);
     });
 
+    test('leaves a tournament, its program, and its slug alone, and gives only the league a program', async () => {
+      const t = setup();
+      const tenant = await insertTenantWithoutCounters(t, 'mixed', { published: 1 });
+      const tournament = await t.run(async (ctx) => {
+        const programId = await ctx.db.insert(
+          'programs',
+          tournamentProgramFields(tenant.organizationId, 'winter-open'),
+        );
+        const tournamentId = await ctx.db.insert('tournaments', {
+          programId,
+          organizationId: tenant.organizationId,
+          startDate: '2027-01-16',
+          endDate: '2027-01-16',
+          registrationDeadline: '2027-01-09',
+          maximumTeams: 8,
+          minimumRosterSize: 4,
+          structure: 'bracket',
+          bracketType: 'single',
+        });
+        return {
+          program: (await ctx.db.get('programs', programId))!,
+          row: (await ctx.db.get('tournaments', tournamentId))!,
+        };
+      });
+
+      const first = await t.action(internal.releaseBackfill.run, {});
+      const second = await t.action(internal.releaseBackfill.run, {});
+
+      expect(first.backfilled.programs).toBe(1);
+      expect(second.backfilled).toEqual(ZERO);
+      await t.run(async (ctx) => {
+        expect(await ctx.db.get('programs', tournament.program._id)).toEqual(tournament.program);
+        expect(await ctx.db.get('tournaments', tournament.row._id)).toEqual(tournament.row);
+        const programs = await ctx.db.query('programs').collect();
+        expect(programs.map((program) => program.type).sort()).toEqual(['league', 'tournament']);
+      });
+    });
+
     test('picks up where an interrupted pass stopped, without a second program for a league', async () => {
       const t = setup();
       const leagues = BATCH_SIZE.programs + 1;
