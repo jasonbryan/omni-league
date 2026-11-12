@@ -28,11 +28,17 @@ import {
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel, isPlayersPerSideOfSport } from './lib/divisions';
+import { programStatusValidator } from './lib/programs';
+import { sportValidator } from './lib/sports';
 import {
+  divisionSeedValidator,
+  insertDraftTournament,
   insertLeague,
   insertSeason,
   insertTenant,
   leagueSeedValidator,
+  programSlugTaken,
+  publishTournament,
   tenantValidator,
   defaultDivision,
   type LeagueSeed,
@@ -343,6 +349,53 @@ export const seedSeason = internalMutation({
     if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
     await insertSeason(ctx, league, withPlayersPerSide(league, season), status);
     return { slug: season.slug };
+  },
+});
+
+// Skips `tournaments.create`'s rules, so a test can seed a deadline that has passed.
+export const seedTournament = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    sport: sportValidator,
+    locationNames: v.array(v.string()),
+    division: v.optional(divisionSeedValidator),
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    maximumTeams: v.number(),
+    status: v.optional(programStatusValidator),
+  },
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, { organizationSlug, locationNames, division, status, ...tournament }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    if (await programSlugTaken(ctx, organization._id, tournament.slug)) {
+      throw new Error(`The web address ${JSON.stringify(tournament.slug)} is taken`);
+    }
+    const locationIds: Id<'locations'>[] = [];
+    for (const name of locationNames) {
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization._id).eq('name', name),
+        )
+        .first();
+      if (!location) throw new Error(`No location is named ${JSON.stringify(name)}`);
+      locationIds.push(location._id);
+    }
+    const { gender, playersPerSide, level, ageGroup } =
+      division ?? defaultDivision(tournament.sport);
+    const tournamentId = await insertDraftTournament(ctx, organization._id, {
+      ...tournament,
+      locationIds,
+      division: { gender, playersPerSide, level, ageGroup },
+    });
+    if (status === 'published') {
+      await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+    }
+    return { slug: tournament.slug };
   },
 });
 

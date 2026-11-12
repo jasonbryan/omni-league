@@ -250,6 +250,16 @@ describe('AdminSidebar', () => {
     );
   });
 
+  it('marks Tournaments as the section of a tournament management page: aria-current="true", the same classes', async () => {
+    const { host } = await render(`${BASE}/tournaments/winter-doubles-classic?x=1#details`);
+    expect(host.querySelector('[aria-current="page"]')).toBeNull();
+    const current = host.querySelectorAll('[aria-current="true"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Tournaments');
+    expect(current[0].getAttribute('href')).toBe(`${BASE}/tournaments`);
+    expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+  });
+
   it('marks Staff current on the staff path, and ignores a query string and a fragment', async () => {
     const { host } = await render(`${BASE}/staff?x=1#invite`);
     const current = host.querySelectorAll('[aria-current="page"]');

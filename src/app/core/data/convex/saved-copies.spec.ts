@@ -6,6 +6,7 @@ import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
+  getTournamentPublicPageReturns,
   publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
@@ -71,7 +72,7 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists the organization, league, season, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+  it('lists the organization, league, season, tournament, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
     ).toEqual([
@@ -84,6 +85,7 @@ describe('ConvexSavedCopies', () => {
       ['seasons:listPublic', publicSeasonsValidator],
       ['seasons:getPublicPage', getSeasonPublicPageReturns],
       ['teams:listPublic', publicTeamsValidator],
+      ['tournaments:getPublicPage', getTournamentPublicPageReturns],
       ['search:leagues', searchLeaguesValidator],
       ['search:leaguesBySport', searchLeaguesBySportValidator],
       ['search:organizations', searchOrganizationsValidator],

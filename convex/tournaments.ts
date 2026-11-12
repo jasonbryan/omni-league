@@ -1,10 +1,14 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdmin } from './lib/access';
+import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { isChoosableSlug } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { programStatusValidator } from './lib/programs';
+import { getTournamentPublicPageReturns, type PublicTournamentPage } from './lib/publicPage';
+import { findOrganizationBySlug } from './lib/seasonLookup';
+import { tournamentDetailsValidator } from './lib/tournamentDetails';
+import { findTournamentBySlugs, tournamentDetails } from './lib/tournamentLookup';
 import { sportValidator, type Sport } from './lib/sports';
 import {
   checkTournamentFields,
@@ -12,7 +16,7 @@ import {
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
-import { insertDraftTournament, leagueSlugTaken } from './lib/tenantWrites';
+import { insertDraftTournament, leagueSlugTaken, publishTournament } from './lib/tenantWrites';
 
 export const ADMIN_TOURNAMENTS_LIMIT = 200;
 
@@ -169,5 +173,58 @@ export const listForOrganization = query({
       });
     }
     return rows;
+  },
+});
+
+export const publish = mutation({
+  args: { tournamentId: v.id('tournaments') },
+  returns: v.null(),
+  handler: async (ctx, { tournamentId }) => {
+    // Signed in first, so an unknown tournament and another organization's look alike.
+    await requireUser(ctx);
+    const tournament = await ctx.db.get('tournaments', tournamentId);
+    if (!tournament) throw new Error('Not allowed');
+    await requireOrgAdmin(ctx, tournament.organizationId);
+    await publishTournament(ctx, tournament);
+    return null;
+  },
+});
+
+export const getForManagement = query({
+  args: { orgSlug: v.string(), tournamentSlug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      tournamentId: v.id('tournaments'),
+      status: programStatusValidator,
+      ...tournamentDetailsValidator.fields,
+    }),
+  ),
+  handler: async (ctx, { orgSlug, tournamentSlug }) => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    // Null for any caller: the public page already shows whether the organization exists.
+    if (!organization) return null;
+    await requireOrgAdminOrForbidden(ctx, organization._id);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) return null;
+    return {
+      tournamentId: found.tournament._id,
+      status: found.program.status,
+      ...(await tournamentDetails(ctx, organization, found)),
+    };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const getPublicPage = query({
+  args: { orgSlug: v.string(), tournamentSlug: v.string() },
+  returns: getTournamentPublicPageReturns,
+  handler: async (ctx, { orgSlug, tournamentSlug }): Promise<PublicTournamentPage | null> => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    if (!organization) return null;
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
+    if (found?.program.status !== 'published') return null;
+    return tournamentDetails(ctx, organization, found);
   },
 });

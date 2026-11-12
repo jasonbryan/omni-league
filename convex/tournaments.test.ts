@@ -12,6 +12,7 @@ import {
 import { defaultDivision, insertCustomLevel, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules, tournamentProgramFields } from './test.setup';
+import { isForbidden } from './lib/forbidden';
 import { ADMIN_TOURNAMENTS_LIMIT } from './tournaments';
 
 const identity = (authUserId: string) => ({
@@ -632,5 +633,280 @@ describe('tournaments.listForOrganization', () => {
         label,
       ).rejects.toThrow(message);
     }
+  });
+});
+
+type Overrides = Partial<ReturnType<typeof valid>> & { customLevelId?: Id<'customLevels'> };
+
+async function draftIn(s: Setup, overrides: Overrides = {}) {
+  const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+    ...valid(s),
+    ...overrides,
+  });
+  return tournamentId;
+}
+
+const programOf = (s: Setup, tournamentId: Id<'tournaments'>) =>
+  s.t.run(async (ctx) => {
+    const tournament = (await ctx.db.get('tournaments', tournamentId))!;
+    return (await ctx.db.get('programs', tournament.programId))!;
+  });
+
+async function forbiddenBy(call: Promise<unknown>) {
+  const error = await call.then(
+    () => null,
+    (e: unknown) => e,
+  );
+  expect(isForbidden(error)).toBe(true);
+}
+
+describe('tournaments.publish', () => {
+  test('an org admin publishes a draft: its program reads published and nothing else changes', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    const after = await snapshot(s.t);
+    const asDraft = (rows: typeof after.programs) =>
+      rows.map((program) =>
+        program.type === 'tournament' ? { ...program, status: 'draft' as const } : program,
+      );
+    expect(after.programs.filter((program) => program.type === 'tournament')).toMatchObject([
+      { status: 'published' },
+    ]);
+    expect({ ...after, programs: asDraft(after.programs) }).toEqual(before);
+  });
+
+  test('publishing a published tournament changes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    const before = await snapshot(s.t);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses every caller who is not an org admin of the organization, and keeps the draft', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.mutation(api.tournaments.publish, { tournamentId }),
+        label,
+      ).rejects.toThrow(message);
+    }
+    expect((await programOf(s, tournamentId)).status).toBe('draft');
+  });
+
+  test('refuses a tournament that does not exist, as it refuses another organization’s', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) => ctx.db.delete('tournaments', tournamentId));
+    await expect(s.adminA.mutation(api.tournaments.publish, { tournamentId })).rejects.toThrow(
+      'Not allowed',
+    );
+  });
+});
+
+describe('tournaments.getForManagement', () => {
+  const slugs = { orgSlug: 'org-a', tournamentSlug: 'winter-doubles-classic' };
+
+  test('gives an org admin the draft’s details and its id for Publish', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s, { locationIds: [s.bravo, s.alpha] });
+    expect(await s.adminA.query(api.tournaments.getForManagement, slugs)).toEqual({
+      tournamentId,
+      name: 'Winter Doubles Classic',
+      slug: 'winter-doubles-classic',
+      status: 'draft',
+      organization: { name: 'Org A', slug: 'org-a' },
+      sportName: 'Beach volleyball',
+      divisionLabel: 'Coed · 2v2 · Open',
+      locations: [
+        { name: 'bravo Beach', address: '2 Bravo St' },
+        { name: 'Alpha Field', address: '1 Alpha St' },
+      ],
+      startDate: '2027-01-16',
+      endDate: '2027-01-17',
+      registrationDeadline: '2027-01-09',
+      maximumTeams: 16,
+      minimumRosterSize: 2,
+    });
+  });
+
+  test('reads published after Publish', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    expect((await s.adminA.query(api.tournaments.getForManagement, slugs))?.status).toBe(
+      'published',
+    );
+  });
+
+  test('names a custom level in the division', async () => {
+    const s = await setup();
+    const customLevelId = await s.t.run((ctx) =>
+      insertCustomLevel(ctx, s.organizationA, {
+        sport: 'beachVolleyball',
+        name: 'Sandy',
+        standardLevel: 'rec',
+      }),
+    );
+    await draftIn(s, { customLevelId });
+    const page = await s.adminA.query(api.tournaments.getForManagement, slugs);
+    expect(page?.divisionLabel).toBe('Coed · 2v2 · Sandy (Rec)');
+  });
+
+  test('is null for an unknown organization, an unknown web address, and a league’s web address', async () => {
+    const s = await setup();
+    await draftIn(s);
+    for (const args of [
+      { orgSlug: 'nowhere', tournamentSlug: slugs.tournamentSlug },
+      { orgSlug: 'org-a', tournamentSlug: 'no-such-tournament' },
+      { orgSlug: 'org-a', tournamentSlug: 'coed-7v7' },
+    ]) {
+      expect(
+        await s.adminA.query(api.tournaments.getForManagement, args),
+        args.tournamentSlug,
+      ).toBe(null);
+    }
+  });
+
+  test('does not give another organization’s tournament to an org admin of A', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const programId = await ctx.db.insert('programs', {
+        ...tournamentProgramFields(s.organizationB, 'b-open'),
+        locationIds: [s.bField],
+      });
+      await ctx.db.insert('tournaments', {
+        programId,
+        organizationId: s.organizationB,
+        startDate: '2027-01-16',
+        endDate: '2027-01-16',
+        registrationDeadline: '2027-01-09',
+        maximumTeams: 8,
+        minimumRosterSize: 4,
+        structure: 'bracket',
+        bracketType: 'single',
+      });
+    });
+    expect(
+      await s.adminA.query(api.tournaments.getForManagement, {
+        orgSlug: 'org-a',
+        tournamentSlug: 'b-open',
+      }),
+    ).toBeNull();
+    await forbiddenBy(
+      s.adminA.query(api.tournaments.getForManagement, {
+        orgSlug: 'org-b',
+        tournamentSlug: 'b-open',
+      }),
+    );
+    expect(
+      (
+        await s.adminB.query(api.tournaments.getForManagement, {
+          orgSlug: 'org-b',
+          tournamentSlug: 'b-open',
+        })
+      )?.name,
+    ).toBe('b-open');
+  });
+
+  test('refuses a league organizer, a member of another organization, a non-member, and a signed-out caller as forbidden', async () => {
+    const s = await setup();
+    await draftIn(s);
+    for (const caller of [
+      s.t,
+      s.t.withIdentity(identity('ghost')),
+      s.t.withIdentity(identity('organizer-a')),
+      s.adminB,
+      s.t.withIdentity(identity('stranger')),
+    ]) {
+      await forbiddenBy(caller.query(api.tournaments.getForManagement, slugs));
+    }
+  });
+
+  test('does not say whether a web address exists to a caller who may not manage the organization', async () => {
+    const s = await setup();
+    await draftIn(s);
+    await forbiddenBy(
+      s.adminB.query(api.tournaments.getForManagement, { ...slugs, tournamentSlug: 'unknown' }),
+    );
+  });
+});
+
+describe('tournaments.getPublicPage', () => {
+  const slugs = { orgSlug: 'org-a', tournamentSlug: 'winter-doubles-classic' };
+
+  async function published(s: Setup, overrides: Overrides = {}) {
+    const tournamentId = await draftIn(s, overrides);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    return tournamentId;
+  }
+
+  test('gives a signed-out caller the published tournament with no id', async () => {
+    const s = await setup();
+    await published(s, { locationIds: [s.bravo, s.alpha] });
+    expect(await s.t.query(api.tournaments.getPublicPage, slugs)).toEqual({
+      organization: { name: 'Org A', slug: 'org-a' },
+      name: 'Winter Doubles Classic',
+      slug: 'winter-doubles-classic',
+      sportName: 'Beach volleyball',
+      divisionLabel: 'Coed · 2v2 · Open',
+      locations: [
+        { name: 'bravo Beach', address: '2 Bravo St' },
+        { name: 'Alpha Field', address: '1 Alpha St' },
+      ],
+      startDate: '2027-01-16',
+      endDate: '2027-01-17',
+      registrationDeadline: '2027-01-09',
+      minimumRosterSize: 2,
+      maximumTeams: 16,
+    });
+  });
+
+  test('gives every caller the same answer', async () => {
+    const s = await setup();
+    await published(s);
+    const anonymous = await s.t.query(api.tournaments.getPublicPage, slugs);
+    for (const caller of [s.adminA, s.adminB, s.t.withIdentity(identity('stranger'))]) {
+      expect(await caller.query(api.tournaments.getPublicPage, slugs)).toEqual(anonymous);
+    }
+  });
+
+  test('is null for a draft, even for its org admin, and answers once it is published', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    expect(await s.t.query(api.tournaments.getPublicPage, slugs)).toBeNull();
+    expect(await s.adminA.query(api.tournaments.getPublicPage, slugs)).toBeNull();
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    expect(await s.t.query(api.tournaments.getPublicPage, slugs)).not.toBeNull();
+  });
+
+  test('is null for an unknown organization, an unknown web address, a league’s, and another organization’s', async () => {
+    const s = await setup();
+    await published(s);
+    for (const args of [
+      { orgSlug: 'nowhere', tournamentSlug: slugs.tournamentSlug },
+      { orgSlug: 'org-a', tournamentSlug: 'no-such-tournament' },
+      { orgSlug: 'org-a', tournamentSlug: 'coed-7v7' },
+      { orgSlug: 'org-b', tournamentSlug: slugs.tournamentSlug },
+    ]) {
+      expect(await s.t.query(api.tournaments.getPublicPage, args), JSON.stringify(args)).toBeNull();
+    }
+  });
+
+  test('leaves out a location of another organization', async () => {
+    const s = await setup();
+    await published(s);
+    await s.t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.type === 'tournament',
+      )!;
+      await ctx.db.patch('programs', program._id, { locationIds: [s.bField, s.bravo] });
+    });
+    const page = await s.t.query(api.tournaments.getPublicPage, slugs);
+    expect(page?.locations).toEqual([{ name: 'bravo Beach', address: '2 Bravo St' }]);
   });
 });

@@ -6,7 +6,7 @@ import { seasonIsFull } from './seasonInput';
 export async function leagueLocations(
   ctx: Pick<QueryCtx, 'db'>,
   organization: Doc<'organizations'>,
-  league: Doc<'leagues'>,
+  league: Pick<Doc<'leagues'>, 'locationIds'>,
 ): Promise<{ name: string; address: string }[]> {
   const locations: { name: string; address: string }[] = [];
   for (const id of league.locationIds) {

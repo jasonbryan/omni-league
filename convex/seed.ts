@@ -54,6 +54,7 @@ import {
   insertLeague,
   insertLocation,
   insertDraftTournament,
+  publishTournament,
   insertSeason,
   insertTenant,
   programSlugTaken,
@@ -624,9 +625,10 @@ interface DemoTournament {
   endDaysFromRun: number;
   deadlineDaysFromRun: number;
   maximumTeams: number;
+  status: 'draft' | 'published';
 }
 
-// Dated from the run, so a new deployment shows the draft ahead of its dates. Insert-only like the rest, so a preview reused across pushes keeps the dates of its first run.
+// Dated from the run, so a new deployment shows each tournament ahead of its dates, the published one with registration open. Insert-only like the rest, so a preview reused across pushes keeps the dates of its first run.
 export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
   {
     organizationSlug: 'gulf-coast-sport-social',
@@ -639,6 +641,20 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     endDaysFromRun: 61,
     deadlineDaysFromRun: 53,
     maximumTeams: 16,
+    status: 'draft',
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Gulf Coast Beach Open',
+    slug: 'gulf-coast-beach-open',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 30,
+    endDaysFromRun: 31,
+    deadlineDaysFromRun: 23,
+    maximumTeams: 16,
+    status: 'published',
   },
 ];
 
@@ -660,7 +676,7 @@ async function ensureTournament(
     if (!location) return false;
     locationIds.push(location._id);
   }
-  await insertDraftTournament(ctx, organization._id, {
+  const tournamentId = await insertDraftTournament(ctx, organization._id, {
     name: demo.name,
     slug: demo.slug,
     sport: demo.sport,
@@ -671,6 +687,9 @@ async function ensureTournament(
     registrationDeadline: addCalendarDays(today, demo.deadlineDaysFromRun),
     maximumTeams: demo.maximumTeams,
   });
+  if (demo.status === 'published') {
+    await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+  }
   return true;
 }
 

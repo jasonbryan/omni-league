@@ -18,6 +18,7 @@ const EDGE_PATHS = [
   '/organizations/cache-key-sample/sports/soccer',
   '/organizations/cache-key-sample/leagues/cache-key-sample',
   '/organizations/cache-key-sample/leagues/cache-key-sample/seasons/cache-key-sample',
+  '/organizations/cache-key-sample/tournaments/cache-key-sample',
   '/sign-up',
   '/sign-in',
 ];
@@ -83,6 +84,7 @@ test.describe('query strings and the CDN', () => {
         `/organizations${unique}/sports/soccer`,
         `/organizations${unique}/leagues/sample`,
         `/organizations${unique}/leagues/sample/seasons/sample`,
+        `/organizations${unique}/tournaments/sample`,
         `/sign-up`,
         `/sign-in`,
       ]) {
