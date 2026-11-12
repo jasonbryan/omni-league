@@ -543,7 +543,7 @@ test.describe('who may open a tournament’s management page', () => {
   });
 
   test(
-    'a signed-out visitor is sent to sign in, and returns to the page afterwards',
+    'a signed-out visitor is sent to sign in, with the page as returnTo',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
       const tenant = await seedTenant({ name: 'E2E Signed Out', locations: LOCATIONS });
