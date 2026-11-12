@@ -13,7 +13,12 @@ import {
   defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
-import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
+import {
+  modules,
+  leagueRequiredFields,
+  organizationListFields,
+  tournamentProgramFields,
+} from './test.setup';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -540,6 +545,85 @@ describe('leagues.create', () => {
     await expect(
       s.adminA.mutation(api.leagues.create, { ...valid(s), slug: 'sand-2s' }),
     ).resolves.toBeDefined();
+  });
+
+  test('writes one league program holding the league’s fields, and points the league to it', async () => {
+    const s = await setup();
+    const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+      ...valid(s),
+      locationIds: [s.bravo, s.alpha],
+      gender: 'womens',
+      ageGroup: 'over40',
+    });
+    const { league, programs } = await s.t.run(async (ctx) => ({
+      league: (await ctx.db.get('leagues', leagueId))!,
+      programs: await ctx.db
+        .query('programs')
+        .withIndex('by_organizationId_and_slug', (q) => q.eq('organizationId', s.organizationA))
+        .collect(),
+    }));
+    const program = programs.find((row) => row.slug === 'sunday-reverse-coed-4s');
+    expect(programs.filter((row) => row.leagueId === leagueId)).toHaveLength(1);
+    expect(league.programId).toBe(program?._id);
+    expect(program).toMatchObject({
+      organizationId: s.organizationA,
+      type: 'league',
+      leagueId,
+      name: 'Sunday Reverse Coed 4s',
+      sortName: 'sunday reverse coed 4s',
+      sport: 'beachVolleyball',
+      status: 'draft',
+      locationIds: [s.bravo, s.alpha],
+      gender: 'womens',
+      playersPerSide: 4,
+      level: 'bb',
+      ageGroup: 'over40',
+    });
+  });
+
+  test('a refused create writes no program', async () => {
+    const s = await setup();
+    const before = await s.t.run((ctx) => ctx.db.query('programs').collect());
+    for (const [, caller] of refusedCallers(s)) {
+      await expect(caller.mutation(api.leagues.create, valid(s))).rejects.toThrow();
+    }
+    await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), slug: 'coed-7v7' }));
+    expect(await s.t.run((ctx) => ctx.db.query('programs').collect())).toEqual(before);
+  });
+
+  test('refuses a slug a program of another type holds in the organization, and allows it in another one', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert('programs', tournamentProgramFields(s.organizationA, 'summer-open'));
+    });
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), slug: 'summer-open' })),
+    ).toEqual({
+      field: 'slug',
+      code: 'slugTaken',
+      message: 'summer-open is already taken. Choose another web address.',
+    });
+    expect(await snapshot(s.t)).toEqual(before);
+    await expect(
+      s.adminB.mutation(api.leagues.create, {
+        ...valid(s),
+        organizationId: s.organizationB,
+        locationIds: [s.bField],
+        slug: 'summer-open',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  test('reports a slug a program of another type holds as unavailable', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert('programs', tournamentProgramFields(s.organizationA, 'summer-open'));
+    });
+    const available = (slug: string) =>
+      s.adminA.query(api.leagues.isSlugAvailable, { organizationId: s.organizationA, slug });
+    expect(await available('summer-open')).toBe(false);
+    expect(await available('winter-open')).toBe(true);
   });
 
   test('a draft keeps its slug against a second create, so slugs stay unique', async () => {

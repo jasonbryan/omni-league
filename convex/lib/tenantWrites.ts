@@ -562,6 +562,7 @@ export async function updateLeague(
     }),
     ...leagueDivisionPatch(change.division),
   });
+  await syncProgramOfLeague(ctx, league._id);
   const { customLevelId, minimumRosterSize } = change.division;
   const written: LeagueWritten = {
     name: change.name,
@@ -627,6 +628,7 @@ export async function restoreLeague(
     ageGroup: values.ageGroup,
     minimumRosterSize: values.minimumRosterSize,
   });
+  await syncProgramOfLeague(ctx, league._id);
   for (const { seasonId, playersPerSide, minimumRosterSize } of drafts) {
     await ctx.db.patch('seasons', seasonId, { playersPerSide, minimumRosterSize });
   }
@@ -642,6 +644,7 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
       league,
     ),
   });
+  await syncProgramOfLeague(ctx, league._id);
   await markHasPublishedLeague(ctx, league.organizationId);
   if (league.status === 'draft') await changeDraftLeagueCount(ctx, league.organizationId, -1);
   const wasPublicAndCounted = league.status === undefined;
@@ -746,6 +749,7 @@ async function insertLeagueRow(
     publishedSeasonCount: 0,
     ...divisionFields(league.division),
   });
+  await insertProgramOfLeague(ctx, (await ctx.db.get('leagues', leagueId))!);
   if (status === 'draft') await changeDraftLeagueCount(ctx, organizationId, 1);
   if (status === 'published') {
     await markHasPublishedLeague(ctx, organizationId);
@@ -792,6 +796,20 @@ function divisionFields(division: LeagueDivision) {
   };
 }
 
+export async function programSlugTaken(
+  ctx: Pick<QueryCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  slug: string,
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query('programs')
+    .withIndex('by_organizationId_and_slug', (q) =>
+      q.eq('organizationId', organizationId).eq('slug', slug),
+    )
+    .first();
+  return existing !== null;
+}
+
 export async function leagueSlugTaken(
   ctx: Pick<QueryCtx, 'db'>,
   organizationId: Id<'organizations'>,
@@ -803,7 +821,60 @@ export async function leagueSlugTaken(
       q.eq('organizationId', organizationId).eq('slug', slug),
     )
     .first();
-  return existing !== null;
+  return existing !== null || (await programSlugTaken(ctx, organizationId, slug));
+}
+
+// Every writer of a league's name, status, locations, or division calls `syncProgramOfLeague` after the league patch, so a new writer must too.
+function programFieldsOfLeague(league: Doc<'leagues'>) {
+  return {
+    name: league.name,
+    sortName: sortName(league.name),
+    sport: league.sport,
+    // A league stored before drafts existed was published.
+    status: league.status ?? 'published',
+    locationIds: league.locationIds,
+    gender: league.gender,
+    playersPerSide: league.playersPerSide,
+    level: league.level,
+    customLevelId: league.customLevelId,
+    ageGroup: league.ageGroup,
+  };
+}
+
+async function insertProgramOfLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
+  const programId = await ctx.db.insert('programs', {
+    ...programFieldsOfLeague(league),
+    organizationId: league.organizationId,
+    type: 'league',
+    slug: league.slug,
+    leagueId: league._id,
+  });
+  await ctx.db.patch('leagues', league._id, { programId });
+}
+
+/** Throws when another program of the organization holds the league's slug, so two programs never share one. */
+export async function ensureProgramOfLeague(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+): Promise<boolean> {
+  if (league.programId !== undefined) return false;
+  if (await programSlugTaken(ctx, league.organizationId, league.slug)) {
+    throw new Error(
+      `League ${league._id} cannot get a program: slug ${JSON.stringify(league.slug)} is held by another program of its organization`,
+    );
+  }
+  await insertProgramOfLeague(ctx, league);
+  return true;
+}
+
+async function syncProgramOfLeague(ctx: MutationCtx, leagueId: Id<'leagues'>): Promise<void> {
+  const league = await ctx.db.get('leagues', leagueId);
+  if (!league) throw new Error('No league has this id');
+  if (league.programId === undefined) {
+    await ensureProgramOfLeague(ctx, league);
+    return;
+  }
+  await ctx.db.patch('programs', league.programId, programFieldsOfLeague(league));
 }
 
 // A sport counted here for an organization with unset sport counters would be counted twice by the

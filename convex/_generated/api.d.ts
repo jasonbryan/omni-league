@@ -44,6 +44,7 @@ import type * as lib_organizationInput from "../lib/organizationInput.js";
 import type * as lib_organizationLogo from "../lib/organizationLogo.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_previewOrigin from "../lib/previewOrigin.js";
+import type * as lib_programs from "../lib/programs.js";
 import type * as lib_publicLeague from "../lib/publicLeague.js";
 import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   "lib/organizationLogo": typeof lib_organizationLogo;
   "lib/password": typeof lib_password;
   "lib/previewOrigin": typeof lib_previewOrigin;
+  "lib/programs": typeof lib_programs;
   "lib/publicLeague": typeof lib_publicLeague;
   "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;
