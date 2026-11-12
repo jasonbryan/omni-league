@@ -41,6 +41,7 @@ import { WebAddressPreview } from './admin/web-address-preview';
 import { WebAddressStatus } from './admin/web-address-status';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { HlmAlertImports } from '../ui/alert';
+import { HlmCard } from '../ui/card';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
@@ -90,6 +91,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
     MousePressKeepsFocus,
     FormField,
     HlmAlertImports,
+    HlmCard,
     HlmFieldImports,
     HlmInputImports,
     NgIcon,
@@ -110,9 +112,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
             ><ng-icon name="lucideArrowLeft" class="text-base" aria-hidden="true" />Your
             organizations</a
           >
-          <div
-            class="mt-3 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <div hlmCard size="bare" class="mt-3 overflow-hidden">
             <div class="px-5 pt-6 md:px-8 md:pt-8">
               <h1 id="create-heading" class="text-2xl font-semibold tracking-tight">
                 Create an organization

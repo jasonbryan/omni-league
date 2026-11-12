@@ -10,6 +10,7 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
+import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignInPage } from './sign-in-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -111,6 +112,13 @@ describe('SignInPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await harness.fixture.whenStable();
   }
+
+  it('draws its form in a bare helm card', async () => {
+    await open();
+    const cards = page.querySelectorAll('[data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'mx-auto w-full max-w-md overflow-hidden');
+  });
 
   it('renders in the public layout: top bar and footer, no sidebar', async () => {
     await open();
