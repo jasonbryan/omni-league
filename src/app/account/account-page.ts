@@ -45,7 +45,7 @@ const HOME_PATH = '/app';
             <app-admin-alert
               class="mt-6 md:mt-8"
               kind="error"
-              title="Your teams could not be loaded."
+              title="Your teams and registrations could not be loaded."
               description="Check your connection."
               ><a [href]="homePath">Try again</a></app-admin-alert
             >
@@ -77,7 +77,7 @@ const HOME_PATH = '/app';
 })
 export class AccountPage {
   private readonly auth = inject(AuthService);
-  private readonly now = injectNow();
+  protected readonly now = injectNow();
 
   private readonly me = injectQuery(api.users.me, () =>
     this.auth.convexAuthenticated() ? {} : skipToken,

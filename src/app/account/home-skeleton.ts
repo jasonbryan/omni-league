@@ -8,7 +8,7 @@ import { HlmSkeleton } from '../ui/skeleton';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <p role="status" class="sr-only">Loading your teams.</p>
+    <p role="status" class="sr-only">Loading your teams and registrations.</p>
     <div aria-hidden="true">
       <span hlmSkeleton class="block mt-6 h-56 w-full rounded-xl sm:h-24 md:mt-8"></span>
       <div class="mt-8 md:mt-10">

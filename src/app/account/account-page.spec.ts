@@ -507,7 +507,9 @@ describe('AccountPage', () => {
     it('shows the skeleton and a polite status while the teams load, with no card', async () => {
       await open();
       accept();
-      expect(text(main().querySelector('[role="status"]'))).toBe('Loading your teams.');
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
       expect(cards()).toHaveLength(0);
       expect(main().querySelector('main > div a, a[data-slot="button"]')).toBeNull();
       const placeholders = main().querySelectorAll('[data-slot="home-skeleton-card"]');
@@ -529,7 +531,9 @@ describe('AccountPage', () => {
         if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
       }
       await harness.fixture.whenStable();
-      expect(text(main().querySelector('[role="status"]'))).toBe('Loading your teams.');
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
       expect(cards()).toHaveLength(0);
     });
 
@@ -541,7 +545,9 @@ describe('AccountPage', () => {
         if (subscription.name === 'organizations:listMine') subscription.emit([]);
       }
       await harness.fixture.whenStable();
-      expect(text(main().querySelector('[role="status"]'))).toBe('Loading your teams.');
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
       expect(cards()).toHaveLength(0);
     });
 
@@ -565,7 +571,7 @@ describe('AccountPage', () => {
       }
       await harness.fixture.whenStable();
       const alert = main().querySelector('[role="alert"]');
-      expect(text(alert)).toContain('Your teams could not be loaded.');
+      expect(text(alert)).toContain('Your teams and registrations could not be loaded.');
       expect(text(alert?.querySelector('a'))).toBe('Try again');
       expect(cards()).toHaveLength(0);
       expect(freeAgentSection()).toBeNull();
@@ -582,7 +588,7 @@ describe('AccountPage', () => {
       await harness.fixture.whenStable();
       expect(main().querySelector('[role="status"]')).toBeNull();
       const alert = main().querySelector('[role="alert"]');
-      expect(text(alert)).toContain('Your teams could not be loaded.');
+      expect(text(alert)).toContain('Your teams and registrations could not be loaded.');
       expect(text(alert)).toContain('Check your connection.');
       expect(alert?.textContent).not.toContain('Server Error');
       const retry = alert?.querySelector('a');

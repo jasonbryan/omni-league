@@ -418,7 +418,9 @@ test.describe('/app: while the teams load', () => {
     await expect.poll(() => held.isHolding()).toBe(true);
 
     await expect(homeHeading(page)).toBeVisible();
-    await expect(main(page).getByRole('status')).toHaveText('Loading your teams.');
+    await expect(main(page).getByRole('status')).toHaveText(
+      'Loading your teams and registrations.',
+    );
     await expect(main(page).getByRole('link')).toHaveCount(0);
     const heading = page.locator('[data-slot="home-skeleton-heading"]');
     const card = page.locator('[data-slot="home-skeleton-card"]').first();
@@ -456,7 +458,7 @@ test.describe('/app: the teams cannot be loaded', () => {
     await page.goto('/app');
 
     const alert = main(page).getByRole('alert');
-    await expect(alert).toContainText('Your teams could not be loaded.');
+    await expect(alert).toContainText('Your teams and registrations could not be loaded.');
     await expect(alert).toContainText('Check your connection.');
     await expect(alert).not.toContainText('forced failure');
     await expect(teams(page)).toHaveCount(0);
