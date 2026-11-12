@@ -9,6 +9,7 @@ import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
+import { HOME_HEADING, homeHeading } from './support/home';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -275,9 +276,9 @@ test.describe('the app shell', () => {
       page,
     }) => {
       const { base } = await member(page, 'orgAdmin');
-      const targets: [string, string][] = [
+      const targets: [string, string | RegExp][] = [
         [base, 'Overview'],
-        ['/app', 'Home'],
+        ['/app', HOME_HEADING],
         ['/app/account', 'Account settings'],
         ['/app/organizations/new', 'Create an organization'],
       ];
@@ -764,7 +765,7 @@ test.describe('the app shell', () => {
       await expectNoteBox(page, isMobile);
       socket.refuse = false;
       await page.clock.fastForward(10_000);
-      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+      await expect(homeHeading(page)).toBeVisible();
       await context.setOffline(true);
       await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
       await expectNoteBox(page, isMobile);

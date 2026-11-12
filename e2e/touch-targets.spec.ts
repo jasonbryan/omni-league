@@ -6,6 +6,7 @@ import { convexRun } from './support/convex';
 import { LIST_PAGE_SIZE } from '../src/app/core/list-page';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { HOME_HEADING } from './support/home';
 import { seedBatch } from './support/seed-batch';
 import { signUp } from './support/session';
 import {
@@ -284,10 +285,11 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     ]);
   });
 
-  test('Your organizations and the Overview of an empty organization', async ({ page }) => {
+  test('the home of a user with organizations and the Overview of an empty organization', async ({
+    page,
+  }) => {
     const user = newUser('Admin');
-    // A league organizer row with its league link, and an empty organization whose Overview shows
-    // the next-step links.
+    // The empty organization's Overview shows the Get set up checklist.
     const [, admin, organizing, empty] = await Promise.all([
       signUp(page, user),
       seedTenant(ONE_LEAGUE_TENANT),
@@ -303,11 +305,40 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
         leagueSlugs: [FIRST_LEAGUE],
       }),
     ]);
-    await measureRoute(page, ['/app', 'Home'], async () => {
-      await expect(page.getByRole('link', { name: `Manage ${admin.name}` })).toBeVisible();
-      await expect(page.getByRole('link', { name: LEAGUE_NAMES[0] })).toBeVisible();
+    await measureRoute(page, ['/app', HOME_HEADING], async () => {
+      await expect(
+        page.getByRole('main').getByRole('link', { name: 'Find a league' }),
+      ).toBeVisible();
     });
     await measureRoute(page, [`/app/organizations/${empty.slug}`, 'Overview']);
+  });
+
+  test('the home next step and team card links', async ({ page }) => {
+    const user = newUser('Captain');
+    const [, tenant] = await Promise.all([signUp(page, user), seedTenant(ONE_LEAGUE_TENANT)]);
+    await seedSeasons(tenant, FIRST_LEAGUE, [
+      {
+        name: 'Summer 2099',
+        slug: 'summer-2099',
+        startDate: '2099-06-06',
+        endDate: '2099-08-29',
+        registrationDeadline: dateFromToday(10),
+      },
+    ]);
+    await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: FIRST_LEAGUE,
+      seasonSlug: 'summer-2099',
+      name: 'Sand Sharks',
+      captainEmail: user.email,
+    });
+    await measureRoute(page, ['/app', HOME_HEADING], async () => {
+      const main = page.getByRole('main');
+      await expect(main.getByRole('link', { name: 'Invite players to Sand Sharks' })).toBeVisible();
+      await expect(main.getByRole('heading', { level: 3 }).getByRole('link')).toHaveText([
+        'Sand Sharks',
+      ]);
+    });
   });
 
   test('the admin Overview, Locations, and Details pages and the menu sheet', async ({ page }) => {
@@ -473,9 +504,13 @@ test.describe('desktop: controls keep their sizes', () => {
     await expectSelectSize(page.locator('#details-age-group'), 36);
     await page.getByRole('button', { name: 'Add a custom level' }).click();
     await expectSelectSize(page.locator('#custom-level-maps'), 36);
-    await visit(page, '/app', 'Home');
-    expect(await heightOf(page.getByRole('link', { name: `Manage ${tenant.name}` }))).toBeLessThan(
-      TARGET,
-    );
+    await visit(page, '/app', HOME_HEADING);
+    expect(
+      await heightOf(
+        page
+          .getByRole('navigation', { name: 'Your account' })
+          .getByRole('link', { name: tenant.name }),
+      ),
+    ).toBeLessThan(TARGET);
   });
 });
