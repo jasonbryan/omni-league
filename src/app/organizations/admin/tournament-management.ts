@@ -10,9 +10,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
@@ -23,10 +22,7 @@ import {
   lucideMapPin,
   lucideUsers,
 } from '@ng-icons/lucide';
-import { map } from 'rxjs';
-import { isForbidden } from '../../../../convex/lib/forbidden';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
-import { api, injectQuery } from '../../core/data/convex';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
 import { HlmBadge } from '../../ui/badge';
@@ -36,27 +32,20 @@ import { seasonDates } from '../league/season-dates';
 import { publicTournamentNames } from '../public-tournament/public-tournament-names';
 import { publicTournamentPath } from '../public-tournament/public-tournament-path';
 import { AdminAlert } from './admin-alert';
-import { AdminContext } from './admin-context';
-import { AdminNoAccess } from './admin-no-access';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import {
   PublishTournamentDialog,
   type PublishTournamentOutcome,
 } from './publish-tournament-dialog';
 import { TournamentBreadcrumb } from './tournament-breadcrumb';
+import { TournamentContext } from './tournament-context';
+import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
 
-type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
-
-/**
- * The area has already shown the no-access view to anyone who is not an org admin of the organization, so the
- * forbidden answer here is only a race with a membership change.
- */
 @Component({
   selector: 'app-tournament-management',
   imports: [
     AdminAlert,
-    AdminNoAccess,
     HlmBadge,
     HlmCard,
     HlmSkeleton,
@@ -66,6 +55,7 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
     RouterLink,
     ServerErrorView,
     TournamentBreadcrumb,
+    TournamentNoAccess,
   ],
   providers: [
     provideIcons({
@@ -88,6 +78,7 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
             <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
               <div class="min-w-0">
                 <app-tournament-breadcrumb
+                  [role]="tournament.role"
                   [organizationName]="tournament.organization.name"
                   [organizationSlug]="tournament.organization.slug"
                   [name]="tournament.name"
@@ -255,7 +246,7 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
         </div>
       }
       @case ('forbidden') {
-        <app-admin-no-access />
+        <app-tournament-no-access />
       }
       @case ('not-found') {
         <app-not-found-view />
@@ -267,35 +258,16 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
   `,
 })
 export class TournamentManagement {
-  private readonly context = inject(AdminContext);
+  private readonly context = inject(TournamentContext);
   private readonly injector = inject(Injector);
   private readonly title = inject(Title);
-
-  private readonly tournamentSlug = toSignal(
-    inject(ActivatedRoute).paramMap.pipe(map((params) => params.get('tournamentSlug') ?? '')),
-    { requireSync: true },
-  );
-
-  private readonly result = injectQuery(api.tournaments.getForManagement, () => ({
-    orgSlug: this.context.slug(),
-    tournamentSlug: this.tournamentSlug(),
-  }));
 
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly rows = [1, 2, 3, 4];
 
-  protected readonly state = computed<TournamentState>(() => {
-    const error = this.result.error();
-    if (error) return isForbidden(error) ? 'forbidden' : 'error';
-    const value = this.result.value();
-    if (value === undefined) return 'loading';
-    return value === null ? 'not-found' : 'ready';
-  });
-
-  protected readonly tournament = computed(() =>
-    this.state() === 'ready' ? (this.result.value() ?? null) : null,
-  );
+  protected readonly state = this.context.state;
+  protected readonly tournament = this.context.tournament;
   protected readonly dates = computed(() => {
     const tournament = this.tournament();
     return tournament ? seasonDates(tournament.startDate, tournament.endDate) : '';
@@ -315,7 +287,7 @@ export class TournamentManagement {
       : undefined;
   });
   protected readonly retryHref = computed(() =>
-    tournamentPath(this.context.slug(), this.tournamentSlug()),
+    tournamentPath(this.context.orgSlug(), this.context.tournamentSlug()),
   );
 
   private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');

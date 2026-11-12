@@ -59,6 +59,8 @@ export default defineSchema({
     organizationId: v.id('organizations'),
     role: roleValidator,
     leagueIds: v.array(v.id('leagues')),
+    /** Programs of a type other than league that the organizer runs; absent means none. */
+    programIds: v.optional(v.array(v.id('programs'))),
   })
     .index('by_organizationId', ['organizationId'])
     .index('by_userId_and_organizationId', ['userId', 'organizationId']),
@@ -69,6 +71,8 @@ export default defineSchema({
     email: v.string(),
     role: roleValidator,
     leagueIds: v.array(v.id('leagues')),
+    /** Programs of a type other than league the invite assigns; absent means none. */
+    programIds: v.optional(v.array(v.id('programs'))),
     // Only the hash is stored, so a database read cannot reveal a usable invite link.
     tokenHash: v.string(),
     expiresAt: v.number(),

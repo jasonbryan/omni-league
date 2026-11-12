@@ -31,6 +31,7 @@ const URL = `/app/organizations/${COASTAL.slug}/staff`;
 const LIST_MEMBERS = 'memberships:listForOrganization';
 const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
+const LIST_TOURNAMENTS = 'tournaments:listForOrganization';
 const STAFF_COUNT = 'memberships:staffCount';
 const PENDING_COUNT = 'invites:pendingCount';
 const CREATE = 'invites:create';
@@ -120,6 +121,27 @@ const LEAGUES = [
   },
 ];
 
+const TOURNAMENTS = [
+  {
+    tournamentId: 'tn_gulf',
+    programId: 'pg_gulf',
+    name: 'Gulf Coast Beach Open',
+    slug: 'gulf-coast-beach-open',
+    startDate: '2027-01-16',
+    endDate: '2027-01-17',
+    status: 'published',
+  },
+  {
+    tournamentId: 'tn_winter',
+    programId: 'pg_winter',
+    name: 'Winter Doubles Classic',
+    slug: 'winter-doubles-classic',
+    startDate: '2027-02-06',
+    endDate: '2027-02-06',
+    status: 'draft',
+  },
+];
+
 const TOKEN = 'vT3kq9Xo-PwGYsFI6eyKfmW2cGdPZEabYr7_hN1uLcA';
 
 describe('AdminStaff', () => {
@@ -140,7 +162,12 @@ describe('AdminStaff', () => {
   });
 
   async function open(
-    lists: { members?: unknown[]; pending?: unknown[]; leagues?: unknown[] } = {},
+    lists: {
+      members?: unknown[];
+      pending?: unknown[];
+      leagues?: unknown[];
+      tournaments?: unknown[] | 'pending';
+    } = {},
   ) {
     o = await openAdmin(ROUTES, URL);
     if (timeoutsFaked) {
@@ -158,6 +185,9 @@ describe('AdminStaff', () => {
     if (lists.members) o.subscription(LIST_MEMBERS)!.emit(lists.members);
     if (lists.pending) o.subscription(LIST_PENDING)!.emit(lists.pending);
     if (lists.leagues) o.subscription(LIST_LEAGUES)!.emit(lists.leagues);
+    if (lists.tournaments !== 'pending') {
+      o.subscription(LIST_TOURNAMENTS)!.emit(lists.tournaments ?? []);
+    }
     await o.flush();
   }
   const main = () => document.querySelector<HTMLElement>('main#main')!;
@@ -231,6 +261,7 @@ describe('AdminStaff', () => {
         [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
+        [LIST_TOURNAMENTS, { organizationId: COASTAL.organizationId }],
         [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
         [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
       ]);
@@ -243,7 +274,7 @@ describe('AdminStaff', () => {
       expect(page.querySelectorAll('h1')).toHaveLength(1);
       expect(text(main.querySelector('h1'))).toBe('Staff');
       expect(text(main.querySelector('h1 + p'))).toBe(
-        'Org admins manage everything here. League organizers run the leagues you assign them.',
+        'Org admins manage everything here. League organizers run the leagues and tournaments you assign them.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe('Staff | Coastal Bend Rec Club | Omni League');
     });
@@ -1192,6 +1223,233 @@ describe('AdminStaff', () => {
       await leaveLeagues(1, null);
       expect(error('email')).toBeNull();
       expect(error('leagues')).toBeNull();
+    });
+  });
+
+  describe('tournaments', () => {
+    const tournament = (n: number) => page.querySelector<HTMLButtonElement>(`#tournament-${n}`)!;
+    const openWithTournaments = (tournaments: unknown[] = TOURNAMENTS) =>
+      open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, tournaments });
+    const labels = (group: Element) => [...group.querySelectorAll('label')].map((l) => text(l));
+
+    it('names tournaments in the role description and the picker, the leagues first', async () => {
+      await openWithTournaments();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues and tournaments you choose.',
+      );
+      const leagues = page.querySelector('fieldset#leagues')!;
+      const tournaments = page.querySelector('fieldset#tournaments')!;
+      expect(text(leagues.querySelector('legend'))).toBe('Leagues');
+      expect(text(tournaments.querySelector('legend'))).toBe('Tournaments');
+      expect(labels(tournaments)).toEqual(TOURNAMENTS.map((t) => t.name));
+      expect(
+        leagues.compareDocumentPosition(tournaments) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(text(leagues.querySelector('#leagues-description'))).toBe(
+        'Choose one or more leagues or tournaments.',
+      );
+      expect(tournaments.querySelector('#leagues-description')).toBeNull();
+      expect(tournament(1).getAttribute('role')).toBe('checkbox');
+      expect(tournament(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('draws no Tournaments group, and keeps the league wording, when the organization has none', async () => {
+      await openWithTournaments([]);
+      expect(page.querySelector('fieldset#tournaments')).toBeNull();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues you choose.',
+      );
+      expect(text(page.querySelector('#leagues-description'))).toBe('Choose one or more.');
+    });
+
+    it('draws the Tournaments group alone, with the League organizer role available, when there is no league', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [], tournaments: TOURNAMENTS });
+      expect(page.querySelector('fieldset#leagues')).toBeNull();
+      expect(page.querySelector('fieldset#tournaments')).not.toBeNull();
+      expect(input('role-organizer').disabled).toBe(false);
+      expect(input('role-organizer').checked).toBe(true);
+      expect(page.querySelector('#role-unavailable')).toBeNull();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the tournaments you choose.',
+      );
+      expect(text(page.querySelector('#leagues-description'))).toBe('Choose one or more.');
+    });
+
+    it('lists the tournaments in name order, whatever order the server sends', async () => {
+      await openWithTournaments([TOURNAMENTS[1], TOURNAMENTS[0]]);
+      expect(labels(page.querySelector('fieldset#tournaments')!)).toEqual(
+        TOURNAMENTS.map((t) => t.name),
+      );
+    });
+
+    it('with neither a league nor a tournament, says to create one first', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [], tournaments: [] });
+      expect(text(page.querySelector('#role-unavailable'))).toBe(
+        'Create a league first to invite a league organizer.',
+      );
+    });
+
+    it('waits for the tournaments before it draws the form, so nothing moves when they arrive', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, tournaments: 'pending' });
+      expect(page.querySelector('#invite form')).toBeNull();
+      expect(text(page.querySelector('#invite [role="status"]'))).toBe('Loading the leagues.');
+      o.subscription(LIST_TOURNAMENTS)!.emit(TOURNAMENTS);
+      await o.flush();
+      expect(page.querySelector('#invite form')).not.toBeNull();
+    });
+
+    it('a failed tournament list shows its own alert in place of the form', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, tournaments: 'pending' });
+      o.subscription(LIST_TOURNAMENTS)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+        'The tournaments could not be loaded. Check your connection and try again.',
+      );
+      expect(page.querySelector('#email')).toBeNull();
+    });
+
+    it('sends the chosen tournaments as programIds with the chosen leagues, in list order', async () => {
+      await openWithTournaments();
+      await type('email', 'jordan@example.com');
+      await toggleLeague(2);
+      page.querySelector<HTMLButtonElement>('#tournament-2')!.click();
+      tournament(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()).toEqual([
+        [
+          CREATE,
+          {
+            organizationId: COASTAL.organizationId,
+            email: 'jordan@example.com',
+            role: 'leagueOrganizer',
+            leagueIds: ['lg_4s'],
+            programIds: ['pg_gulf', 'pg_winter'],
+          },
+        ],
+      ]);
+    });
+
+    it('a tournament alone is a valid choice, and sends no league', async () => {
+      await openWithTournaments();
+      await type('email', 'jordan@example.com');
+      tournament(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()[0][1]).toMatchObject({ leagueIds: [], programIds: ['pg_gulf'] });
+    });
+
+    it('sends programIds only when the organization has tournaments', async () => {
+      await openWithTournaments([]);
+      await type('email', 'jordan@example.com');
+      await toggleLeague(1);
+      await submit();
+      expect('programIds' in (calls()[0][1] as object)).toBe(false);
+    });
+
+    it('an org admin invite sends no tournaments, whatever was checked before', async () => {
+      await openWithTournaments();
+      tournament(1).click();
+      await chooseRole('role-admin');
+      await type('email', 'boss@example.com');
+      await submit();
+      expect(calls()[0][1]).toEqual({
+        organizationId: COASTAL.organizationId,
+        email: 'boss@example.com',
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+    });
+
+    it('with nothing chosen, says to choose a league or tournament, under the last group, and focuses the first box', async () => {
+      await openWithTournaments();
+      await type('email', 'dana@example.com');
+      await submit();
+      expect(error('leagues')).toBe('Choose at least one league or tournament.');
+      expect(page.querySelector('fieldset#tournaments #leagues-error')).not.toBeNull();
+      for (const group of ['leagues', 'tournaments']) {
+        const fieldset = page.querySelector(`fieldset#${group}`)!;
+        expect(fieldset.getAttribute('aria-describedby')).toContain('leagues-error');
+        expect(fieldset.getAttribute('data-invalid')).toBe('true');
+      }
+      expect(document.activeElement).toBe(league(1));
+      expect(calls()).toEqual([]);
+    });
+
+    it('with nothing chosen and only tournaments to choose from, focuses the first tournament', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [], tournaments: TOURNAMENTS });
+      await type('email', 'dana@example.com');
+      await submit();
+      expect(error('leagues')).toBe('Choose at least one league or tournament.');
+      expect(document.activeElement).toBe(tournament(1));
+    });
+
+    it('checks the pair of groups when focus leaves them, not while it moves from one to the other', async () => {
+      await openWithTournaments();
+      tournament(1).click();
+      tournament(1).click();
+      await o.harness.fixture.whenStable();
+      tournament(1).dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: league(1) }),
+      );
+      await o.harness.fixture.whenStable();
+      expect(error('leagues')).toBeNull();
+      league(1).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      await o.harness.fixture.whenStable();
+      expect(error('leagues')).toBe('Choose at least one league or tournament.');
+      tournament(2).click();
+      await o.harness.fixture.whenStable();
+      expect(error('leagues')).toBeNull();
+    });
+
+    it('"Invite someone else" returns the form with no tournament chosen', async () => {
+      await openWithTournaments();
+      await type('email', 'jordan@example.com');
+      tournament(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      o.convex.calls[0].resolve({ inviteId: 'inv_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
+      await o.flush();
+      [...page.querySelectorAll<HTMLButtonElement>('#invite button')]
+        .find((b) => b.textContent?.includes('Invite someone else'))!
+        .click();
+      await o.flush();
+      expect(tournament(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('names a member’s and a pending invite’s tournaments after their leagues', async () => {
+      await open({
+        members: [
+          ...MEMBERS,
+          {
+            membershipId: 'mem_4',
+            name: 'Tomas Rivera',
+            email: 'tomas@example.com',
+            role: 'leagueOrganizer',
+            leagueNames: [],
+            tournamentNames: ['Gulf Coast Beach Open'],
+            isYou: false,
+          },
+        ],
+        pending: [
+          {
+            ...PENDING[0],
+            leagueNames: ['Wednesday Coed Slow-Pitch'],
+            tournamentNames: ['Winter Doubles Classic'],
+          },
+          { ...PENDING[1], leagueNames: [], tournamentNames: ['Gulf Coast Beach Open'] },
+        ],
+        leagues: LEAGUES,
+      });
+      expect(text(members()[3].querySelectorAll('p')[1])).toBe(
+        'League organizer for Gulf Coast Beach Open',
+      );
+      expect(text(pending()[0].querySelectorAll('p')[0])).toBe(
+        'League organizer for Wednesday Coed Slow-Pitch, Winter Doubles Classic',
+      );
+      expect(text(pending()[1].querySelectorAll('p')[0])).toBe(
+        'League organizer for Gulf Coast Beach Open',
+      );
     });
   });
 

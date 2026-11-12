@@ -2,8 +2,20 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import type { Id } from '../_generated/dataModel';
 import schema from '../schema';
-import { insertLeagueWithProgram, modules, leagueRequiredFields } from '../test.setup';
-import { requireLeagueOrganizer, requireOrgAdmin } from './access';
+import {
+  insertLeagueWithProgram,
+  modules,
+  leagueRequiredFields,
+  tournamentProgramFields,
+} from '../test.setup';
+import {
+  requireLeagueOrganizer,
+  requireOrgAdmin,
+  requireProgramOrganizer,
+  requireProgramOrganizerOrForbidden,
+  requireStaffOrForbidden,
+} from './access';
+import { isForbidden } from './forbidden';
 import { insertTenant } from './tenantWrites';
 
 const identity = (authUserId: string) => ({
@@ -202,5 +214,172 @@ describe('requireLeagueOrganizer, forged assignments', () => {
     await expect(
       t.withIdentity(identity('empty-organizer')).run((ctx) => requireLeagueOrganizer(ctx, l1)),
     ).rejects.toThrow('Not allowed');
+  });
+});
+
+async function programSetup() {
+  const base = await setup();
+  const ids = await base.t.run(async (ctx) => {
+    const tournamentA = await ctx.db.insert(
+      'programs',
+      tournamentProgramFields(base.organizationA, 'open-a'),
+    );
+    const otherTournamentA = await ctx.db.insert(
+      'programs',
+      tournamentProgramFields(base.organizationA, 'other-a'),
+    );
+    const tournamentB = await ctx.db.insert(
+      'programs',
+      tournamentProgramFields(base.organizationB, 'open-b'),
+    );
+    const leagueProgram = (await ctx.db.get('leagues', base.l1))!.programId;
+    const user = (authUserId: string) =>
+      ctx.db.insert('users', { authUserId, name: authUserId, adultConfirmedAt: 1 });
+    const organizerT = await user('organizer-t');
+    const organizerForged = await user('organizer-forged');
+    await ctx.db.insert('memberships', {
+      userId: organizerT,
+      organizationId: base.organizationA,
+      role: 'leagueOrganizer',
+      leagueIds: [],
+      programIds: [tournamentA],
+    });
+    await ctx.db.insert('memberships', {
+      userId: organizerForged,
+      organizationId: base.organizationA,
+      role: 'leagueOrganizer',
+      leagueIds: [],
+      programIds: [tournamentB, leagueProgram],
+    });
+    return { tournamentA, otherTournamentA, tournamentB, leagueProgram };
+  });
+  return { ...base, ...ids };
+}
+
+describe('requireProgramOrganizer', () => {
+  test('passes an org admin of the program’s organization and an organizer assigned to it', async () => {
+    const { t, tournamentA } = await programSetup();
+    const admin = await t
+      .withIdentity(identity('admin-a'))
+      .run((ctx) => requireProgramOrganizer(ctx, tournamentA));
+    expect(admin.membership.role).toBe('orgAdmin');
+    expect(admin.program._id).toBe(tournamentA);
+    const organizer = await t
+      .withIdentity(identity('organizer-t'))
+      .run((ctx) => requireProgramOrganizer(ctx, tournamentA));
+    expect(organizer.membership.role).toBe('leagueOrganizer');
+  });
+
+  test('refuses an organizer of the organization who is not assigned to the program, and a league organizer assigned only to leagues', async () => {
+    const { t, otherTournamentA, tournamentA } = await programSetup();
+    await expect(
+      t
+        .withIdentity(identity('organizer-t'))
+        .run((ctx) => requireProgramOrganizer(ctx, otherTournamentA)),
+    ).rejects.toThrow('Not allowed');
+    await expect(
+      t
+        .withIdentity(identity('organizer-l1'))
+        .run((ctx) => requireProgramOrganizer(ctx, tournamentA)),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('refuses a member and an org admin of another organization, and a non-member', async () => {
+    const { t, tournamentA, tournamentB } = await programSetup();
+    for (const [caller, programId] of [
+      ['organizer-lb', tournamentA],
+      ['admin-b', tournamentA],
+      ['stranger', tournamentA],
+      ['admin-a', tournamentB],
+    ] as const) {
+      await expect(
+        t.withIdentity(identity(caller)).run((ctx) => requireProgramOrganizer(ctx, programId)),
+        `${caller} on ${programId}`,
+      ).rejects.toThrow('Not allowed');
+    }
+  });
+
+  test('refuses an assignment that names another organization’s program', async () => {
+    const { t, tournamentB } = await programSetup();
+    await expect(
+      t
+        .withIdentity(identity('organizer-forged'))
+        .run((ctx) => requireProgramOrganizer(ctx, tournamentB)),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('refuses a league’s program, even to an org admin or an assignment that names it', async () => {
+    const { t, leagueProgram } = await programSetup();
+    for (const caller of ['admin-a', 'organizer-forged']) {
+      await expect(
+        t.withIdentity(identity(caller)).run((ctx) => requireProgramOrganizer(ctx, leagueProgram)),
+        caller,
+      ).rejects.toThrow('Not allowed');
+    }
+  });
+
+  test('refuses a caller with no identity, an identity with no users row, and a program that does not exist', async () => {
+    const { t, tournamentA } = await programSetup();
+    await expect(t.run((ctx) => requireProgramOrganizer(ctx, tournamentA))).rejects.toThrow(
+      'Sign in required',
+    );
+    await expect(
+      t.withIdentity(identity('ghost')).run((ctx) => requireProgramOrganizer(ctx, tournamentA)),
+    ).rejects.toThrow('Sign in required');
+    await t.run((ctx) => ctx.db.delete('programs', tournamentA));
+    await expect(
+      t.withIdentity(identity('admin-a')).run((ctx) => requireProgramOrganizer(ctx, tournamentA)),
+    ).rejects.toThrow('Not allowed');
+  });
+});
+
+describe('requireStaffOrForbidden and requireProgramOrganizerOrForbidden', () => {
+  async function forbiddenFor(call: Promise<unknown>) {
+    const failure = await call.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(isForbidden(failure)).toBe(true);
+  }
+
+  test('requireStaffOrForbidden passes any member of the organization and refuses the rest as forbidden', async () => {
+    const { t, organizationA } = await programSetup();
+    for (const caller of ['admin-a', 'organizer-l1', 'organizer-t']) {
+      await t
+        .withIdentity(identity(caller))
+        .run((ctx) => requireStaffOrForbidden(ctx, organizationA));
+    }
+    for (const caller of ['admin-b', 'stranger', 'ghost']) {
+      await forbiddenFor(
+        t.withIdentity(identity(caller)).run((ctx) => requireStaffOrForbidden(ctx, organizationA)),
+      );
+    }
+    await forbiddenFor(t.run((ctx) => requireStaffOrForbidden(ctx, organizationA)));
+  });
+
+  test('requireProgramOrganizerOrForbidden passes an org admin and the assigned organizer, and refuses everyone else as forbidden', async () => {
+    const { t, tournamentA, otherTournamentA } = await programSetup();
+    const [program, other] = await t.run(async (ctx) => [
+      (await ctx.db.get('programs', tournamentA))!,
+      (await ctx.db.get('programs', otherTournamentA))!,
+    ]);
+    for (const caller of ['admin-a', 'organizer-t']) {
+      const { membership } = await t
+        .withIdentity(identity(caller))
+        .run((ctx) => requireProgramOrganizerOrForbidden(ctx, program));
+      expect(membership.organizationId).toBe(program.organizationId);
+    }
+    for (const caller of ['organizer-l1', 'organizer-lb', 'admin-b', 'stranger', 'ghost']) {
+      await forbiddenFor(
+        t
+          .withIdentity(identity(caller))
+          .run((ctx) => requireProgramOrganizerOrForbidden(ctx, program)),
+      );
+    }
+    await forbiddenFor(
+      t
+        .withIdentity(identity('organizer-t'))
+        .run((ctx) => requireProgramOrganizerOrForbidden(ctx, other)),
+    );
   });
 });

@@ -502,31 +502,64 @@ test.describe('Tournaments: the management page and Publish', () => {
   });
 });
 
+async function assignedTo(page: Page, tournamentSlugs: string[]) {
+  const managed = await managedBy(page, null);
+  await seedTournament(managed.tenant, {
+    name: 'Spring Open',
+    slug: 'spring-open',
+    locations: [PELICAN],
+    startDate: dateFromToday(80),
+    endDate: dateFromToday(80),
+    registrationDeadline: dateFromToday(70),
+    status: 'draft',
+  });
+  await convexRun('testing:addLeagueOrganizer', {
+    organizationSlug: managed.tenant.slug,
+    email: managed.user.email,
+    leagueSlugs: [],
+    tournamentSlugs,
+  });
+  return managed;
+}
+
 test.describe('who may open a tournament’s management page', () => {
   for (const [label, role] of [
-    ['a league organizer of the organization', 'leagueOrganizer'],
+    ['a league organizer of the organization who is assigned no tournament', 'leagueOrganizer'],
     ['a signed-in user with no membership', null],
   ] as const) {
-    test(
-      `${label} sees the no-access view, and the tournament is not requested`,
-      VIEWPORT_AGNOSTIC,
-      async ({ page }) => {
-        const { managePath } = await managedBy(page, role);
-        const frames: string[] = [];
-        page.on('websocket', (socket) => {
-          socket.on('framesent', (frame) => {
-            frames.push(String(frame.payload));
-          });
+    test(`${label} sees the no-access view, and no tournament data reaches the page`, async ({
+      page,
+    }, testInfo) => {
+      const { managePath } = await managedBy(page, role);
+      const received: string[] = [];
+      page.on('websocket', (socket) => {
+        socket.on('framereceived', (frame) => {
+          received.push(String(frame.payload));
         });
-        await page.goto(managePath);
-        await expect(
-          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-        ).toBeVisible();
-        await expect(main(page).getByText('Winter Doubles Classic')).toHaveCount(0);
-        expect(frames.join('\n')).not.toContain('tournaments:getForManagement');
-      },
-    );
+      });
+      await page.goto(managePath);
+      await expect(
+        main(page).getByRole('heading', { level: 1, name: 'You can’t manage this tournament' }),
+      ).toBeVisible();
+      await expect(main(page).getByText('Winter Doubles Classic')).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: /admin$/ })).toHaveCount(0);
+      expect(received.join('\n')).not.toContain('Pelican Shoals Sand Courts');
+      await screenshot(page, testInfo, 'tournament-no-access');
+      await expectAccessible(page);
+    });
   }
+
+  test('a league organizer assigned to another tournament only sees the no-access view, and Publish is refused', async ({
+    page,
+  }) => {
+    const { managePath, publicPath } = await assignedTo(page, ['spring-open']);
+    await page.goto(managePath);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this tournament' }),
+    ).toBeVisible();
+    await expect(publishButton(page)).toHaveCount(0);
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+  });
 
   test('an org admin of another organization sees the no-access view too', async ({ page }) => {
     const { user, managePath } = await managedBy(page, null);
@@ -538,7 +571,7 @@ test.describe('who may open a tournament’s management page', () => {
     });
     await page.goto(managePath);
     await expect(
-      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this tournament' }),
     ).toBeVisible();
   });
 
@@ -553,4 +586,56 @@ test.describe('who may open a tournament’s management page', () => {
       expect(new URL(page.url()).searchParams.get('returnTo')).toBe(managePath);
     },
   );
+});
+
+test.describe('an assigned league organizer', () => {
+  test('manages and publishes the tournament, with the organizer sidebar and a breadcrumb they can follow', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath, publicPath } = await assignedTo(page, ['winter-doubles-classic']);
+    await page.goto(managePath);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Winter Doubles Classic' }),
+    ).toBeVisible();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    const crumbs = main(page).getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(crumbs.getByRole('link', { name: 'Your organizations' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
+    await expect(crumbs.getByRole('link', { name: 'Winter Doubles Classic' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    // The sidebar is the phone sheet's content below 1024px, so it is read hidden.
+    const nav = page.getByRole('navigation', {
+      name: `${tenant.name} tournaments`,
+      includeHidden: true,
+    });
+    const mine = nav.getByRole('list', { name: 'Your tournaments', includeHidden: true });
+    await expect(mine.getByRole('link', { includeHidden: true })).toHaveCount(1);
+    await expect(
+      mine.getByRole('link', { name: 'Winter Doubles Classic', includeHidden: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'Staff', includeHidden: true })).toHaveCount(0);
+    await screenshot(page, testInfo, 'tournament-organizer');
+    await expectAccessible(page);
+
+    await publishButton(page).click();
+    await publishDialog(page).getByRole('button', { name: 'Publish tournament' }).click();
+    await expect(stateBadge(page)).toHaveText('Published');
+    expect((await page.request.get(publicPath)).status()).toBe(200);
+  });
+
+  test('cannot open the admin area, and Home links to their tournament', async ({ page }) => {
+    const { tenant, managePath } = await assignedTo(page, ['winter-doubles-classic']);
+    await page.goto(`/app/organizations/${tenant.slug}/tournaments`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+    ).toBeVisible();
+    await page.goto('/app');
+    await expect(
+      page.getByRole('link', { name: tenant.name, includeHidden: true }).first(),
+    ).toHaveAttribute('href', managePath);
+  });
 });

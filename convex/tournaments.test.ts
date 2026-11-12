@@ -559,8 +559,15 @@ describe('tournaments.listForOrganization', () => {
     const rows = await s.adminA.query(api.tournaments.listForOrganization, {
       organizationId: s.organizationA,
     });
-    expect(rows.map(({ tournamentId, ...row }) => [typeof tournamentId, row])).toEqual([
+    expect(
+      rows.map(({ tournamentId, programId, ...row }) => [
+        typeof tournamentId,
+        typeof programId,
+        row,
+      ]),
+    ).toEqual([
       [
+        'string',
         'string',
         {
           name: 'Spring Open',
@@ -572,6 +579,7 @@ describe('tournaments.listForOrganization', () => {
       ],
       [
         'string',
+        'string',
         {
           name: 'Winter Doubles Classic',
           slug: 'winter-doubles-classic',
@@ -581,6 +589,15 @@ describe('tournaments.listForOrganization', () => {
         },
       ],
     ]);
+  });
+
+  test('names each tournament’s program id, the id an invite assigns', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const [row] = await s.adminA.query(api.tournaments.listForOrganization, {
+      organizationId: s.organizationA,
+    });
+    expect(row.programId).toBe((await programOf(s, tournamentId))._id);
   });
 
   test('shows a published tournament as published', async () => {
@@ -664,6 +681,23 @@ const programOf = (s: Setup, tournamentId: Id<'tournaments'>) =>
     return (await ctx.db.get('programs', tournament.programId))!;
   });
 
+async function assign(s: Setup, authUserId: string, ...tournamentIds: Id<'tournaments'>[]) {
+  await s.t.run(async (ctx) => {
+    const user = (await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique())!;
+    const membership = (await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
+      .first())!;
+    const programIds = [];
+    for (const id of tournamentIds)
+      programIds.push((await ctx.db.get('tournaments', id))!.programId);
+    await ctx.db.patch('memberships', membership._id, { programIds });
+  });
+}
+
 async function forbiddenBy(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -715,6 +749,47 @@ describe('tournaments.publish', () => {
     expect((await programOf(s, tournamentId)).status).toBe('draft');
   });
 
+  test('an organizer assigned to the tournament publishes it', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await assign(s, 'organizer-a', tournamentId);
+    await s.t
+      .withIdentity(identity('organizer-a'))
+      .mutation(api.tournaments.publish, { tournamentId });
+    expect((await programOf(s, tournamentId)).status).toBe('published');
+  });
+
+  test('refuses an organizer assigned to another tournament, and an assignment that names another organization’s program', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const other = await draftIn(s, { name: 'Other Open', slug: 'other-open' });
+    await assign(s, 'organizer-a', other);
+    await expect(
+      s.t.withIdentity(identity('organizer-a')).mutation(api.tournaments.publish, { tournamentId }),
+    ).rejects.toThrow('Not allowed');
+    const bProgram = await s.t.run((ctx) =>
+      ctx.db.insert('programs', {
+        ...tournamentProgramFields(s.organizationB, 'b-open'),
+        locationIds: [s.bField],
+      }),
+    );
+    await s.t.run(async (ctx) => {
+      const user = (await ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', 'organizer-a'))
+        .unique())!;
+      const membership = (await ctx.db
+        .query('memberships')
+        .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
+        .first())!;
+      await ctx.db.patch('memberships', membership._id, { programIds: [bProgram] });
+    });
+    await expect(
+      s.t.withIdentity(identity('organizer-a')).mutation(api.tournaments.publish, { tournamentId }),
+    ).rejects.toThrow('Not allowed');
+    expect((await programOf(s, tournamentId)).status).toBe('draft');
+  });
+
   test('refuses a tournament that does not exist, as it refuses another organization’s', async () => {
     const s = await setup();
     const tournamentId = await draftIn(s);
@@ -733,6 +808,8 @@ describe('tournaments.getForManagement', () => {
     const tournamentId = await draftIn(s, { locationIds: [s.bravo, s.alpha] });
     expect(await s.adminA.query(api.tournaments.getForManagement, slugs)).toEqual({
       tournamentId,
+      organizationId: s.organizationA,
+      role: 'orgAdmin',
       name: 'Winter Doubles Classic',
       slug: 'winter-doubles-classic',
       status: 'draft',
@@ -749,6 +826,49 @@ describe('tournaments.getForManagement', () => {
       maximumTeams: 16,
       minimumRosterSize: 2,
     });
+  });
+
+  test('gives the assigned organizer the same details, with their role', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await assign(s, 'organizer-a', tournamentId);
+    const page = await s.t
+      .withIdentity(identity('organizer-a'))
+      .query(api.tournaments.getForManagement, slugs);
+    expect(page).toMatchObject({
+      tournamentId,
+      organizationId: s.organizationA,
+      role: 'leagueOrganizer',
+      name: 'Winter Doubles Classic',
+      status: 'draft',
+    });
+  });
+
+  test('refuses an organizer of the organization who is assigned to another tournament only', async () => {
+    const s = await setup();
+    await draftIn(s);
+    const other = await draftIn(s, { name: 'Other Open', slug: 'other-open' });
+    await assign(s, 'organizer-a', other);
+    const organizer = s.t.withIdentity(identity('organizer-a'));
+    await forbiddenBy(organizer.query(api.tournaments.getForManagement, slugs));
+    expect(
+      (
+        await organizer.query(api.tournaments.getForManagement, {
+          ...slugs,
+          tournamentSlug: 'other-open',
+        })
+      )?.name,
+    ).toBe('Other Open');
+  });
+
+  test('is null for an unknown web address when the caller is an organizer of the organization', async () => {
+    const s = await setup();
+    await draftIn(s);
+    expect(
+      await s.t
+        .withIdentity(identity('organizer-a'))
+        .query(api.tournaments.getForManagement, { ...slugs, tournamentSlug: 'unknown' }),
+    ).toBeNull();
   });
 
   test('reads published after Publish', async () => {

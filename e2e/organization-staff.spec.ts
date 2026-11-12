@@ -10,7 +10,8 @@ import { expectSpinnerAtButtonStart } from './support/pending-spinner';
 import { screenshot } from './support/screenshot';
 import { seedAccountsInCalls } from './support/seed-accounts';
 import { signUp } from './support/session';
-import { seedTenant, type TenantSeed } from './support/tenant';
+import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { newUser, seedUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -310,6 +311,116 @@ test.describe('Staff: inviting', () => {
       await screenshot(page, testInfo, '67-staff-already-invited');
       await expectAccessible(page);
     });
+  });
+});
+
+async function openStaffWithTournaments(page: Page, leagues = LEAGUES) {
+  const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues });
+  // Winter starts later, so only a name sort puts Gulf first.
+  for (const [name, slug, startsIn] of [
+    ['Gulf Coast Beach Open', 'gulf-coast-beach-open', 40],
+    ['Winter Doubles Classic', 'winter-doubles-classic', 60],
+  ] as const) {
+    await seedTournament(org.tenant, {
+      name,
+      slug,
+      locations: [LOCATIONS[0].name],
+      startDate: dateFromToday(startsIn),
+      endDate: dateFromToday(startsIn + 1),
+      registrationDeadline: dateFromToday(startsIn - 10),
+      status: 'draft',
+    });
+  }
+  await page.goto(`${org.base}/staff`);
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
+  return org;
+}
+
+test.describe('Staff: tournaments', () => {
+  test('the picker lists the tournaments under their own heading after the leagues', async ({
+    page,
+  }, testInfo) => {
+    await openStaffWithTournaments(page);
+    await expect(form(page).locator('fieldset#leagues > legend')).toHaveText('Leagues');
+    await expect(form(page).locator('fieldset#leagues + fieldset#tournaments > legend')).toHaveText(
+      'Tournaments',
+    );
+    const tournaments = page.getByRole('group', { name: 'Tournaments' });
+    await expect(tournaments.getByRole('checkbox')).toHaveCount(2);
+    await expect(tournaments.getByRole('checkbox').first()).toHaveAccessibleName(
+      'Gulf Coast Beach Open',
+    );
+    await expect(page.getByText('Runs only the leagues and tournaments you choose.')).toBeVisible();
+    await screenshot(page, testInfo, 'staff-tournaments-picker');
+    await expectAccessible(page);
+  });
+
+  test('a tournament alone is enough: the link is made, and the lists name the tournament', async ({
+    page,
+  }, testInfo) => {
+    await openStaffWithTournaments(page);
+    await page.locator('#email').fill('dana@example.com');
+    await page.getByRole('checkbox', { name: 'Gulf Coast Beach Open' }).click();
+    await createButton(page).click();
+    await expect(page.getByRole('heading', { name: 'Invite link ready' })).toBeFocused();
+    await expect(pendingRows(page).first()).toContainText(
+      'League organizer for Gulf Coast Beach Open',
+    );
+    await screenshot(page, testInfo, 'staff-tournaments-pending');
+    await expectAccessible(page);
+  });
+
+  test('a league and a tournament are named together, leagues first', async ({ page }) => {
+    await openStaffWithTournaments(page);
+    await invite(page, 'dana@example.com', ['Coed 7v7 Rec', 'Winter Doubles Classic']);
+    await expect(pendingRows(page).first()).toContainText(
+      'League organizer for Coed 7v7 Rec, Winter Doubles Classic',
+    );
+  });
+
+  test('choosing nothing says to choose a league or tournament, under the last group, and creates nothing', async ({
+    page,
+  }, testInfo) => {
+    await openStaffWithTournaments(page);
+    await page.locator('#email').fill('dana@example.com');
+    await createButton(page).click();
+    const error = page.locator('#leagues-error');
+    await expect(error).toHaveText('Choose at least one league or tournament.');
+    await expect(
+      page.getByRole('group', { name: 'Tournaments' }).locator('#leagues-error'),
+    ).toHaveCount(1);
+    await expect(page.getByRole('checkbox', { name: 'Coed 7v7 Rec' })).toBeFocused();
+    await expect(pendingRows(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'staff-tournaments-error');
+    await expectAccessible(page);
+  });
+
+  test('an organization with tournaments and no league can still invite a league organizer', async ({
+    page,
+  }) => {
+    await openStaffWithTournaments(page, []);
+    await expect(page.getByRole('radio', { name: 'League organizer' })).toBeEnabled();
+    await expect(page.getByRole('group', { name: 'Leagues' })).toHaveCount(0);
+    await invite(page, 'dana@example.com', ['Winter Doubles Classic']);
+    await expect(pendingRows(page).first()).toContainText(
+      'League organizer for Winter Doubles Classic',
+    );
+  });
+
+  test('a member who accepted a tournament invite lists with the tournament', async ({ page }) => {
+    const org = await openStaffWithTournaments(page);
+    const member = newUser('Tournament Organizer');
+    await seedUser(member);
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: org.tenant.slug,
+      email: member.email,
+      leagueSlugs: [],
+      tournamentSlugs: ['gulf-coast-beach-open'],
+    });
+    await page.reload();
+    await expect(memberRows(page).filter({ hasText: member.name })).toContainText(
+      'League organizer for Gulf Coast Beach Open',
+    );
   });
 });
 
