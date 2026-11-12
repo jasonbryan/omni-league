@@ -38,12 +38,11 @@ import {
   draftSeasonEarlierValidator,
   insertDraftLeague,
   leagueEarlierValidator,
-  leagueExpectedValidator,
   leagueHolds,
   leagueSlugTaken,
   leagueUpdateEarlierValidator,
   leagueWrittenValidator,
-  type LeagueExpected,
+  type LeagueEarlier,
   MAX_DRAFT_SEASONS_UPDATED,
   publishLeague,
   recountDraftLeagues,
@@ -235,7 +234,7 @@ export const update = mutation({
     ageGroup: v.string(),
     minimumRosterSize: v.optional(v.number()),
     // What the form last showed, so a save made from out-of-date details is refused. A previous release's tab sends none.
-    expected: v.optional(leagueExpectedValidator),
+    expected: v.optional(leagueEarlierValidator),
   },
   returns: leagueUpdateEarlierValidator,
   handler: async (ctx, { leagueId, name: typedName, expected, ...input }) => {
@@ -370,7 +369,7 @@ async function organizerDivision(ctx: QueryCtx, league: Doc<'leagues'>) {
 
 // Compares what the organizer's page shows, so a custom level the page never shows cannot lock a save out.
 function organizerShows(
-  expected: LeagueExpected,
+  expected: LeagueEarlier,
   name: string,
   division: Awaited<ReturnType<typeof organizerDivision>>,
 ): boolean {

@@ -440,17 +440,6 @@ export const leagueEarlierValidator = v.object({
   minimumRosterSize: v.optional(v.number()),
 });
 
-// A tab of the previous release sends only the name for a league that then had no division.
-export const leagueExpectedValidator = v.object({
-  name: v.string(),
-  gender: v.optional(genderValidator),
-  playersPerSide: v.optional(v.number()),
-  level: v.optional(standardLevelValidator),
-  customLevelId: v.optional(v.id('customLevels')),
-  ageGroup: v.optional(ageGroupValidator),
-  minimumRosterSize: v.optional(v.number()),
-});
-
 export const draftSeasonEarlierValidator = v.object({
   seasonId: v.id('seasons'),
   playersPerSide: v.number(),
@@ -474,7 +463,6 @@ export const leagueUpdateEarlierValidator = v.object({
 });
 
 export type LeagueEarlier = Infer<typeof leagueEarlierValidator>;
-export type LeagueExpected = Infer<typeof leagueExpectedValidator>;
 export type DraftSeasonEarlier = Infer<typeof draftSeasonEarlierValidator>;
 export type LeagueWritten = Infer<typeof leagueWrittenValidator>;
 export type LeagueUpdateEarlier = Infer<typeof leagueUpdateEarlierValidator>;
