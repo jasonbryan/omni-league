@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { buttonVariants } from '../ui/button';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { hlm } from '../ui/utils';
 import { NotFoundView } from './not-found-view';
 
@@ -68,25 +69,7 @@ describe('NotFoundView', () => {
       ['block', 'mx-auto', 'w-full', 'max-w-5xl', 'px-4', 'py-6', 'md:px-8', 'md:py-16'].sort(),
     );
     const card = host.querySelector(':scope > div');
-    expect(classList(card)).toEqual(
-      [
-        'mx-auto',
-        'flex',
-        'max-w-lg',
-        'flex-col',
-        'items-center',
-        'px-6',
-        'py-10',
-        'text-center',
-        'md:py-12',
-        'rounded-xl',
-        'bg-card',
-        'text-card-foreground',
-        'shadow-xs',
-        'ring-1',
-        'ring-foreground/10',
-      ].sort(),
-    );
+    expectBareCard(card, MESSAGE_CARD_LAYOUT);
     expect(classList(card?.querySelector(':scope > span'))).toEqual(
       [
         'flex',
