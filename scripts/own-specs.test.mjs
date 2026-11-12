@@ -962,7 +962,12 @@ describe('ownSpecs: how a spec refers to a changed file', () => {
 
   describe('files under e2e/ that are not scripts', () => {
     const files = {
-      'e2e/support/env.ts': "import backend from './backend.json';",
+      'e2e/support/env.ts': [
+        "import backend from './backend.json';",
+        "const assets = ['./page.html', './style.css', './notes.md'];",
+        "import { helper } from './helper.mjs';",
+      ].join('\n'),
+      'e2e/support/helper.mjs': "export const helper = '../../src/m.ts';",
       'e2e/a.spec.ts': "import { env } from './support/env';",
       'e2e/support/backend.json': '{ "path": "../../src/x.ts" }',
       'e2e/support/page.html': '<a href="../../src/y.ts">y</a>',
@@ -972,6 +977,10 @@ describe('ownSpecs: how a spec refers to a changed file', () => {
 
     it('selects the specs that import a changed json file through its importer', () => {
       assert.deepEqual(listIn(files, ['e2e/support/backend.json']), ['e2e/a.spec.ts']);
+    });
+
+    it('reads a .mjs file under e2e/ for references', () => {
+      assert.deepEqual(listIn(files, ['src/m.ts']), ['e2e/a.spec.ts']);
     });
 
     for (const target of ['src/x.ts', 'src/y.ts', 'src/z.ts', 'src/w.ts']) {
