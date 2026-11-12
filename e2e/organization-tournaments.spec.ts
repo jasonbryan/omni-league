@@ -9,7 +9,8 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { dateFromToday, seedTenant, seedTournament, type TenantSeed } from './support/tenant';
+import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 

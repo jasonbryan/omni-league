@@ -4,7 +4,8 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { dateFromToday, seedSeasons, seedTenant, seedTournament } from './support/tenant';
+import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
+import { seedTournament } from './support/tournament';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 

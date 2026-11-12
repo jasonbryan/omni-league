@@ -4,7 +4,8 @@ import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
-import { dateFromToday, seedTenant, seedTournament, type Tenant } from './support/tenant';
+import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
