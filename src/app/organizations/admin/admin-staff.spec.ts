@@ -3,6 +3,7 @@ import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { INVITE_MESSAGES, INVITE_RESTORE_WINDOW_MS } from '../../../../convex/lib/inviteInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminStaff } from './admin-staff';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -396,6 +397,15 @@ describe('AdminStaff', () => {
         'Invites you create wait here until they’re accepted or revoked.',
       );
       expect(section.querySelector('ul')).toBeNull();
+    });
+
+    it('loading: every placeholder is drawn through the skeleton, each with its own radius', async () => {
+      await open();
+      expectSkeletonBoxes(page.querySelector('main')!, {
+        'rounded-full': 3,
+        'rounded-lg': 3,
+        'rounded-md': 12,
+      });
     });
 
     it('loading: placeholders and polite statuses', async () => {

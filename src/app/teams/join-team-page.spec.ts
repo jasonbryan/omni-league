@@ -12,6 +12,7 @@ import { captureTeamInviteToken } from '../invites/capture-invite-token';
 import { INVITE_TOKEN_KEY, TEAM_INVITE_TOKEN_KEY } from '../invites/invite-token-store';
 import { JoinTeamPage } from './join-team-page';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'teamtokenABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_abc';
@@ -170,6 +171,15 @@ describe('JoinTeamPage', () => {
   });
 
   describe('checking', () => {
+    it('draws every box of the invite card skeleton through the skeleton, each with its own radius', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expectSkeletonBoxes(page.querySelector('main [data-testid="invite-skeleton"]')!, {
+        'rounded-lg': 2,
+        'rounded-md': 14,
+      });
+    });
+
     it('shows a skeleton of the invite card with five detail rows and a status', async () => {
       const { page, flush, sub } = await open();
       await flush();

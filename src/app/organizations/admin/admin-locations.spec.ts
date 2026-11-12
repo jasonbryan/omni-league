@@ -4,6 +4,7 @@ import { ConvexError } from 'convex/values';
 import { LOCATION_MESSAGES } from '../../../../convex/lib/locationInput';
 import { ConvexConnection } from '../../core/data/convex';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminLocations } from './admin-locations';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -99,6 +100,11 @@ describe('AdminLocations', () => {
       expect(panel.querySelector('ul')).toBeNull();
       expect(panel.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(3);
       expect(page.querySelector('#add-location form')).not.toBeNull();
+    });
+
+    it('loading: every placeholder is drawn through the skeleton', async () => {
+      await open();
+      expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-lg': 3, 'rounded-md': 6 });
     });
 
     it('loading: each placeholder row has a rounded-lg mark and rounded-md text bars', async () => {

@@ -11,6 +11,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { AcceptInvitePage } from './accept-invite-page';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY } from './invite-token-store';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
@@ -120,6 +121,15 @@ describe('AcceptInvitePage', () => {
       const status = page.querySelector('main [role="status"]');
       expect(text(status)).toBe('Checking your invite…');
       expect(page.querySelector('h1')).toBeNull();
+    });
+
+    it('draws every box of the invite card skeleton through the skeleton, each with its own radius', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expectSkeletonBoxes(page.querySelector('main [data-testid="invite-skeleton"]')!, {
+        'rounded-lg': 2,
+        'rounded-md': 10,
+      });
     });
 
     it('shows a skeleton of the invite card (icon, heading, three detail rows, a button) and no spinner', async () => {

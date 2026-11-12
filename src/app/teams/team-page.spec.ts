@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { forbiddenError, openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { TeamPage } from './team-page';
 
 @Component({ template: '<a id="go" href="/app/teams/team_sharks">go</a>' })
@@ -56,6 +57,11 @@ describe('TeamPage', () => {
     await open();
     expect(o.subscription(GET)?.args).toEqual({ teamId: 'team_sharks' });
     expect(text(main().querySelector('[role="status"]'))).toBe('Loading the team.');
+  });
+
+  it('while loading, every placeholder is drawn through the skeleton, each with its own radius', async () => {
+    await open();
+    expectSkeletonBoxes(main(), { 'rounded-full': 3, 'rounded-md': 11 });
   });
 
   it('while loading, each roster avatar placeholder is rounded-full and its text bars are rounded-md', async () => {

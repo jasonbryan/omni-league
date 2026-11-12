@@ -15,6 +15,7 @@ import { SeasonPage } from './season-page';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { slotsOf } from '../../ui/testing/helm-slots';
 
 const GET_VIEW = 'seasons:getOrganizerView';
@@ -118,6 +119,12 @@ describe('SeasonPage', () => {
       TestBed.tick();
       expect(o.convex.subscriptions).toEqual([]);
       expect(text(o.page.querySelector('main [role="status"]'))).toBe('Loading the season.');
+    });
+
+    it('draws every placeholder through the skeleton, each with its own radius', async () => {
+      o = await openAdmin(ROUTES, URL);
+      TestBed.tick();
+      expectSkeletonBoxes(o.page.querySelector('main')!, { 'rounded-md': 24 });
     });
 
     it('asks the league and the season with the slugs, and the free agents only once both answer', async () => {

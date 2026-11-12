@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import {
   adminRoutes,
@@ -67,6 +68,11 @@ describe('AdminArea', () => {
       expect(
         page.querySelectorAll('[aria-hidden="true"].motion-safe\\:animate-pulse').length,
       ).toBeGreaterThan(5);
+    });
+
+    it('draws every placeholder in the panel through the skeleton, each with its own radius', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-lg': 3, 'rounded-md': 13 });
     });
 
     it('draws each row mark in the panel placeholder rounded-lg', async () => {
