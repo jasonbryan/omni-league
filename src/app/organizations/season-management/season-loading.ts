@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 
-const CARD = 'rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
-const PANEL = `overflow-hidden ${CARD}`;
+const PANEL = 'overflow-hidden';
 
 @Component({
   selector: 'app-season-loading',
-  imports: [HlmSkeleton],
+  imports: [HlmCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
@@ -16,14 +16,14 @@ const PANEL = `overflow-hidden ${CARD}`;
     <div hlmSkeleton aria-hidden="true" class="rounded-md mt-3 h-5 w-64 max-w-full"></div>
     <div class="mt-6 grid grid-cols-2 gap-3 md:gap-4">
       @for (tile of tiles; track tile) {
-        <div aria-hidden="true" class="${CARD} px-3 py-3 md:px-4 md:py-4">
+        <div aria-hidden="true" hlmCard size="bare" class="px-3 py-3 md:px-4 md:py-4">
           <div hlmSkeleton aria-hidden="true" class="rounded-md h-3.5 w-16"></div>
           <div hlmSkeleton aria-hidden="true" class="rounded-md mt-2 h-7 w-8"></div>
         </div>
       }
     </div>
     <div class="mt-4 grid items-start gap-4 md:mt-6 md:gap-6 lg:grid-cols-3">
-      <div aria-hidden="true" class="${PANEL} lg:col-span-2">
+      <div aria-hidden="true" hlmCard size="bare" class="${PANEL} lg:col-span-2">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div hlmSkeleton aria-hidden="true" class="rounded-md h-5 w-20"></div>
         </div>
@@ -47,7 +47,7 @@ const PANEL = `overflow-hidden ${CARD}`;
           }
         </div>
       </div>
-      <div aria-hidden="true" class="${PANEL}">
+      <div aria-hidden="true" hlmCard size="bare" class="${PANEL}">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div hlmSkeleton aria-hidden="true" class="rounded-md h-5 w-28"></div>
         </div>

@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
+import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
@@ -73,6 +74,14 @@ describe('AdminArea', () => {
     it('draws every placeholder in the panel through the skeleton, each with its own radius', async () => {
       const { page } = await openAdmin(ROUTES, OVERVIEW);
       expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-lg': 3, 'rounded-md': 13 });
+    });
+
+    it('draws the two panel placeholders as bare helm cards, as the panels they stand for', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      expectBareCards(page.querySelector('app-admin-loading')!, [
+        'overflow-hidden lg:col-span-2',
+        'overflow-hidden',
+      ]);
     });
 
     it('draws each row mark in the panel placeholder rounded-lg', async () => {
@@ -154,6 +163,11 @@ describe('AdminArea', () => {
         LIST_MINE,
         LIST_MY_TEAMS,
       ]);
+    });
+
+    it('draws the message in a bare helm card', async () => {
+      const { page } = await forbidden();
+      expectBareCards(page.querySelector('app-admin-no-access')!, [MESSAGE_CARD_LAYOUT]);
     });
 
     it('serves the same view for the locations path', async () => {

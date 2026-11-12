@@ -34,9 +34,9 @@ import {
   promoteOfflineText,
   waitlistNote,
 } from './waitlist-text';
+import { HlmCard } from '../../ui/card';
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const PANEL_HEAD =
   'flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5';
 const PANEL_NOTE = 'border-b border-border px-4 py-3 md:px-5';
@@ -63,7 +63,7 @@ function localDay(ms: number): string {
 /** Promote acts at once, with no confirmation: it only adds a team, and the result says what happened. */
 @Component({
   selector: 'app-season-waitlist-panel',
-  imports: [AdminAlert, AdminOfflineAlert, HlmSpinner, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, HlmCard, HlmSpinner, NgIcon],
   providers: [
     provideIcons({
       lucideCalendarDays,
@@ -76,7 +76,7 @@ function localDay(ms: number): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section id="waitlist" aria-labelledby="waitlist-heading" [class]="panel">
+    <section hlmCard size="bare" id="waitlist" aria-labelledby="waitlist-heading" [class]="panel">
       <div [class]="panelHead">
         <h2 id="waitlist-heading" tabindex="-1" class="font-semibold focus:outline-none">
           Waitlist

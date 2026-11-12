@@ -28,6 +28,7 @@ import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { HlmBadge, type HlmBadgeVariant } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
+import { HlmCard } from '../../ui/card';
 import {
   BUTTON_BASE,
   OUTLINE_BUTTON_LARGE,
@@ -52,8 +53,7 @@ const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-m
 const CRUMB_LINK =
   'inline-flex items-center rounded-md font-medium hover:underline pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
-const REGISTRATION_CARD =
-  'rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
+const REGISTRATION_CARD = 'p-5 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
 /**
  * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration. The signed-out card
  * stays in the card behind the team card, so the card is never shorter than it; these floors cover the team card when it is the taller one.
@@ -75,7 +75,15 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
-  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [
+    HlmBadge,
+    HlmBreadcrumbImports,
+    HlmCard,
+    NgIcon,
+    PageControl,
+    RouterLink,
+    SavedCopyNote,
+  ],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -138,7 +146,7 @@ const FACT_ICON =
             aria-labelledby="registration-heading"
             class="scroll-mt-20 pt-2 lg:col-start-3 lg:row-start-1 lg:pt-10 lg:pb-10"
           >
-            <div [class]="registrationCardClass()">
+            <div hlmCard size="bare" [class]="registrationCardClass()">
               <h2 id="registration-heading" class="sr-only">Registration</h2>
               <div class="grid grid-cols-1">
                 <div
@@ -351,7 +359,9 @@ const FACT_ICON =
               <section
                 id="teams"
                 aria-labelledby="teams-heading"
-                class="scroll-mt-20 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                hlmCard
+                size="bare"
+                class="scroll-mt-20 overflow-hidden"
               >
                 <div class="border-b border-border px-4 py-3 md:px-5">
                   <h2

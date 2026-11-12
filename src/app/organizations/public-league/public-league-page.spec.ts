@@ -12,6 +12,7 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { slotsOf } from '../../ui/testing/helm-slots';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCard } from '../../ui/testing/card';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -298,6 +299,12 @@ describe('PublicLeaguePage populated', () => {
 
   describe('the open season card', () => {
     const card = () => host(harness).querySelector('section#registration-open');
+
+    it('is a bare helm card inside its section', () => {
+      const cards = card()?.querySelectorAll('[data-slot="card"]');
+      expect(cards).toHaveLength(1);
+      expectBareCard(cards?.[0], 'mt-5 flex flex-col gap-5 p-5 md:flex-row md:items-center md:p-6');
+    });
 
     it('comes first, with the season, dates, division and team size, deadline, and a Register link', () => {
       expect(text(card()?.querySelector('h2'))).toBe('Registration open');

@@ -15,6 +15,7 @@ import {
   TEAM_MESSAGES,
   type RegistrationClosedError,
 } from './lib/teamInput';
+import { getCurrentUser } from './lib/users';
 
 export const register = mutation({
   args: seasonSlugsValidator.fields,
@@ -52,6 +53,51 @@ export const place = mutation({
     if (team?.seasonId !== season._id) throw new Error('The team is not in this season');
     await placeFreeAgent(ctx, freeAgent, team, user._id);
     return null;
+  },
+});
+
+export const FREE_AGENTS_LIST_MINE_LIMIT = 20;
+
+// eslint-disable-next-line @convex-dev/require-access-control -- the caller's own waiting rows only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
+export const listMine = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      freeAgentId: v.id('freeAgents'),
+      leagueName: v.string(),
+      seasonName: v.string(),
+      organizationName: v.string(),
+      registrationDeadline: v.string(),
+      seasonStartDate: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const waiting = await ctx.db
+      .query('freeAgents')
+      .withIndex('by_userId_and_status', (q) => q.eq('userId', user._id).eq('status', 'waiting'))
+      .order('desc')
+      .take(FREE_AGENTS_LIST_MINE_LIMIT);
+    const rows = [];
+    for (const freeAgent of waiting) {
+      const season = await ctx.db.get('seasons', freeAgent.seasonId);
+      if (!season) continue;
+      const [league, organization] = await Promise.all([
+        ctx.db.get('leagues', season.leagueId),
+        ctx.db.get('organizations', freeAgent.organizationId),
+      ]);
+      if (!league || !organization) continue;
+      rows.push({
+        freeAgentId: freeAgent._id,
+        leagueName: league.name,
+        seasonName: season.name,
+        organizationName: organization.name,
+        registrationDeadline: season.registrationDeadline,
+        seasonStartDate: season.startDate,
+      });
+    }
+    return rows;
   },
 });
 

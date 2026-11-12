@@ -40,6 +40,7 @@ import { HlmBadge } from '../ui/badge';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmBreadcrumbImports } from '../ui/breadcrumb';
+import { HlmCard } from '../ui/card';
 import { HlmSpinner } from '../ui/spinner';
 import { PUSH_DEVICE } from './push-device';
 import { TestNotification } from './test-notification';
@@ -69,6 +70,7 @@ const STEP_NUMBER =
     AdminOfflineAlert,
     HlmBadge,
     HlmBreadcrumbImports,
+    HlmCard,
     HlmSkeleton,
     HlmSpinner,
     NgIcon,
@@ -107,8 +109,10 @@ const STEP_NUMBER =
           choose.
         </p>
         <section
+          hlmCard
+          size="bare"
           aria-labelledby="device-heading"
-          class="mt-6 max-w-xl overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="mt-6 max-w-xl overflow-hidden"
         >
           <div
             class="flex items-center justify-between gap-3 border-b border-border px-4 py-3 md:px-5"

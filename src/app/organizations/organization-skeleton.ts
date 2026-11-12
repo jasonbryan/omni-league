@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { HlmCard } from '../ui/card';
 import { HlmSkeleton } from '../ui/skeleton';
 import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
 import { OPEN_SEASONS_INTRO } from './season-status';
@@ -34,7 +35,7 @@ export class OrganizationRowsSkeleton {
 
 @Component({
   selector: 'app-open-seasons-skeleton',
-  imports: [HlmSkeleton],
+  imports: [HlmCard, HlmSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -48,9 +49,7 @@ export class OrganizationRowsSkeleton {
       </div>
       <div class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
         @for (card of cards(); track card) {
-          <div
-            class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <div hlmCard size="bare" class="flex flex-col p-5">
             <span hlmSkeleton aria-hidden="true" class="block h-5.5 w-28 rounded-full"></span>
             <div class="mt-3 flex h-7 items-center pointer-coarse:h-11">
               <span hlmSkeleton aria-hidden="true" class="${BAR} h-6 w-3/4"></span>

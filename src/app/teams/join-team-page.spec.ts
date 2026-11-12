@@ -11,6 +11,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { captureTeamInviteToken } from '../invites/capture-invite-token';
 import { INVITE_TOKEN_KEY, TEAM_INVITE_TOKEN_KEY } from '../invites/invite-token-store';
 import { JoinTeamPage } from './join-team-page';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -188,6 +189,43 @@ describe('JoinTeamPage', () => {
       expect(card?.querySelectorAll('[data-skeleton="row"]')).toHaveLength(5);
       expect(text(card?.querySelector('[role="status"]'))).toBe('Checking your invite…');
       expect(page.querySelector('h1')).toBeNull();
+    });
+  });
+
+  describe('cards', () => {
+    const CONTAINER_LAYOUT = 'mx-auto w-full max-w-md overflow-hidden';
+
+    it('draws the checking skeleton, with its test id kept, in a bare helm card', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-testid="invite-skeleton"]'), CONTAINER_LAYOUT);
+    });
+
+    it('draws the invite in a bare helm card', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(INVITE);
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), CONTAINER_LAYOUT);
+    });
+
+    it('draws the invalid view in a bare helm card with the message layout', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({ status: 'invalid' });
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
+    });
+
+    it('draws the accepted view in a bare helm card with the message layout', async () => {
+      const { page, emitInvite, signIn, accept, flush, call } = await open({ signedIn: true });
+      await emitInvite(INVITE);
+      await signIn();
+      accept()?.click();
+      await flush();
+      call()?.resolve(JOINED);
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
     });
   });
 

@@ -8,11 +8,12 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { Shell } from '../shell';
 import { initialsOf } from '../shell/initials';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 import { HlmSkeleton } from '../ui/skeleton';
 
 @Component({
   selector: 'app-account-settings-page',
-  imports: [AdminAlert, HlmSkeleton, NgIcon, Shell],
+  imports: [AdminAlert, HlmCard, NgIcon, Shell],
   providers: [provideIcons({ lucideLogOut })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -20,8 +21,10 @@ import { HlmSkeleton } from '../ui/skeleton';
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
         <h1 class="text-2xl font-semibold tracking-tight">Account settings</h1>
         <section
+          hlmCard
+          size="bare"
           aria-labelledby="account-details-heading"
-          class="mt-4 max-w-xl overflow-hidden md:mt-6 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="mt-4 max-w-xl overflow-hidden md:mt-6"
         >
           <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
             <h2 id="account-details-heading" class="font-semibold">Your details</h2>

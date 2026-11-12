@@ -55,6 +55,7 @@ import { RenameMinorForm, type RenameMinorOutcome } from './rename-minor-form';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
+import { HlmCard } from '../ui/card';
 import { HlmSkeleton } from '../ui/skeleton';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
@@ -64,8 +65,7 @@ interface RosterNotice {
   description?: string;
 }
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const BACK_LINK =
   'inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground pointer-coarse:min-h-11';
 const INLINE_LINK = 'underline underline-offset-4 hover:text-foreground';
@@ -81,6 +81,7 @@ export interface TeamPageNavigationState {
     AddMinorPanel,
     AdminAlert,
     HlmBadge,
+    HlmCard,
     HlmSkeleton,
     NgIcon,
     NotFoundView,
@@ -121,6 +122,8 @@ export interface TeamPageNavigationState {
         @case ('forbidden') {
           <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
             <div
+              hlmCard
+              size="bare"
               class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 ${PANEL}"
             >
               <span
@@ -154,7 +157,7 @@ export interface TeamPageNavigationState {
               <div hlmSkeleton class="rounded-md mt-3 h-4 w-72 max-w-full"></div>
             </div>
             <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
-              <div aria-hidden="true" class="${PANEL} lg:col-span-2">
+              <div aria-hidden="true" hlmCard size="bare" class="${PANEL} lg:col-span-2">
                 <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
                   <div hlmSkeleton class="rounded-md h-5 w-24"></div>
                 </div>
@@ -255,7 +258,7 @@ export interface TeamPageNavigationState {
               }
               <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
                 <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
-                  <section aria-labelledby="roster-heading" class="${PANEL}">
+                  <section aria-labelledby="roster-heading" hlmCard size="bare" class="${PANEL}">
                     <div
                       class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                     >
@@ -394,6 +397,8 @@ export interface TeamPageNavigationState {
                     <section
                       [id]="full.id"
                       aria-labelledby="team-full-heading"
+                      hlmCard
+                      size="bare"
                       class="${PANEL}"
                       data-testid="team-full"
                     >

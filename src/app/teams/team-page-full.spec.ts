@@ -1,4 +1,5 @@
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { expectBareCard } from '../ui/testing/card';
 import { TeamPage } from './team-page';
 
 const GET = 'teams:getForMember';
@@ -56,6 +57,11 @@ describe('TeamPage: maximum roster size', () => {
       'The team is full',
       'Sand Sharks has 4 players, this season’s maximum. Remove a player to invite someone else or add a minor.',
     ]);
+  });
+
+  it('draws the full panel as a bare helm card, with its test id kept', async () => {
+    await open(SHARKS);
+    expectBareCard(full(), 'overflow-hidden');
   });
 
   it('a teammate sees the panel as Add a minor, asking the captain to make room', async () => {

@@ -1,5 +1,6 @@
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
+import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminOverview } from './admin-overview';
@@ -62,6 +63,18 @@ describe('AdminOverview', () => {
     ]);
     expect(subscription(ATTENTION)).toBeDefined();
     expect(convex.activeSubscriptions.map((s) => s.name)).not.toContain('invites:pendingCount');
+  });
+
+  it('draws the setup, attention, and open-seasons panels as bare helm cards', async () => {
+    const { page, subscription, flush } = await open();
+    subscription(LIST_FOR_ADMIN)!.emit([]);
+    subscription(PUBLISHED_COUNT)!.emit(0);
+    await flush();
+    expectBareCards(page.querySelector('main')!, [
+      'overflow-hidden',
+      'overflow-hidden',
+      'overflow-hidden',
+    ]);
   });
 
   describe('the header', () => {

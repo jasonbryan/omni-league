@@ -5,6 +5,7 @@ import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { seasonTeamsCount } from './season-teams-panel';
 import { TeamPage } from './team-page';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 
 const GET = 'teams:getForMember';
@@ -61,6 +62,11 @@ describe('TeamPage: rosters in a season', () => {
       a.getAttribute('href'),
       a.getAttribute('aria-current'),
     ]);
+
+  it('draws the season teams panel as a bare helm card', async () => {
+    await open(PARTY);
+    expectBareCard(seasonPanel(), 'overflow-hidden');
+  });
 
   it('an opponent sees the roster names and captain mark, a note naming their team, and no control, email, or pending invite', async () => {
     await open(PARTY);

@@ -11,6 +11,7 @@ import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
+import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { CreateOrganizationPage } from './create-organization-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -73,6 +74,13 @@ describe('CreateOrganizationPage', () => {
     submitButton().click();
     await flush();
   }
+
+  it('draws its form in a bare helm card', async () => {
+    await open();
+    const cards = page.querySelectorAll('[data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'mt-3 overflow-hidden');
+  });
 
   it('carries the directive that keeps a mouse press from losing the click', async () => {
     await open();

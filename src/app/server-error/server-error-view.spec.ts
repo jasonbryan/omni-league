@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { buttonVariants } from '../ui/button';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { hlm } from '../ui/utils';
 import { ServerErrorView } from './server-error-view';
 
@@ -32,6 +33,10 @@ describe('ServerErrorView', () => {
       'Omni League could not load it just now. It will appear here as soon as it loads, or you can try again.',
     );
     expect(host.querySelector('ng-icon[name="lucideCloudOff"]')).not.toBeNull();
+  });
+
+  it('draws its card as a bare helm card with the message layout', () => {
+    expectBareCard(create().firstElementChild, MESSAGE_CARD_LAYOUT);
   });
 
   it('links Try again to the given path as a plain link, so it works before hydration', () => {
