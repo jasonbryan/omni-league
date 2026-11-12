@@ -35,10 +35,11 @@ function readNamed(value: unknown): Named | undefined {
 /**
  * Navigation state is whatever the history entry holds, so the names are used only when each field is
  * text and the slugs are the route's: a stale or edited entry falls back to the plain skeleton.
+ * A route with a season slug needs the season's names too.
  */
 export function readPublicPageNames(
   state: unknown,
-  route: { orgSlug: string; leagueSlug: string },
+  route: { orgSlug: string; leagueSlug: string; seasonSlug?: string },
 ): PublicPageNames | undefined {
   if (typeof state !== 'object' || state === null) return undefined;
   const { organization, league, season } = state as Record<string, unknown>;
@@ -49,7 +50,10 @@ export function readPublicPageNames(
   if (!isText(sportName)) return undefined;
   if (org.slug !== route.orgSlug || lg.slug !== route.leagueSlug) return undefined;
   const names = { organization: org, league: { ...lg, sportName } };
-  if (season === undefined) return publicPageNames(names);
+  if (season === undefined && route.seasonSlug === undefined) return publicPageNames(names);
   const seasonNames = readNamed(season);
-  return seasonNames ? publicPageNames({ ...names, season: seasonNames }) : undefined;
+  if (!seasonNames || (route.seasonSlug !== undefined && seasonNames.slug !== route.seasonSlug)) {
+    return undefined;
+  }
+  return publicPageNames({ ...names, season: seasonNames });
 }

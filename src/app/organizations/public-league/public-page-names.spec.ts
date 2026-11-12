@@ -9,6 +9,11 @@ const NAMES: PublicPageNames = {
   },
 };
 const ROUTE = { orgSlug: 'gulf-coast-sport-social', leagueSlug: 'sunday-reverse-coed-4s' };
+const SEASON_NAMES: PublicPageNames = {
+  ...NAMES,
+  season: { slug: 'summer-2027', name: 'Summer 2027' },
+};
+const SEASON_ROUTE = { ...ROUTE, seasonSlug: 'summer-2027' };
 
 describe('publicPageNames', () => {
   it('keeps the slug and the name of the organization and the league, and the sport name', () => {
@@ -66,5 +71,33 @@ describe('readPublicPageNames', () => {
     ['an empty league name', (n) => ({ ...n, league: { ...n.league, name: '' } })],
   ])('returns nothing when %s is missing, empty, or not a string', (_, break_) => {
     expect(readPublicPageNames(break_(NAMES), ROUTE)).toBeUndefined();
+  });
+});
+
+describe('readPublicPageNames for a season route', () => {
+  it('returns the names of a state that carries the route’s season', () => {
+    expect(readPublicPageNames(SEASON_NAMES, SEASON_ROUTE)).toEqual(SEASON_NAMES);
+  });
+
+  it('returns nothing for a state with no season, such as the league page’s', () => {
+    expect(readPublicPageNames(NAMES, SEASON_ROUTE)).toBeUndefined();
+  });
+
+  it.each([
+    ['organization', { ...SEASON_ROUTE, orgSlug: 'lakeshore-sand-league' }],
+    ['league', { ...SEASON_ROUTE, leagueSlug: 'thursday-night-coed-2s' }],
+    ['season', { ...SEASON_ROUTE, seasonSlug: 'fall-2027' }],
+  ])('returns nothing when the %s slug is not the route’s', (_, route) => {
+    expect(readPublicPageNames(SEASON_NAMES, route)).toBeUndefined();
+  });
+
+  it.each<[string, unknown]>([
+    ['the season name is not text', { ...SEASON_NAMES, season: { slug: 'summer-2027', name: 7 } }],
+    ['the season name is empty', { ...SEASON_NAMES, season: { slug: 'summer-2027', name: '' } }],
+    ['the season has no slug', { ...SEASON_NAMES, season: { name: 'Summer 2027' } }],
+    ['the season is not an object', { ...SEASON_NAMES, season: 'Summer 2027' }],
+    ['the season is null', { ...SEASON_NAMES, season: null }],
+  ])('returns nothing when %s', (_, state) => {
+    expect(readPublicPageNames(state, SEASON_ROUTE)).toBeUndefined();
   });
 });

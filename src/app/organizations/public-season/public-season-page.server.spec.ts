@@ -228,6 +228,18 @@ describe('PublicSeasonPage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
+  it('renders the loaded page with no skeleton and no navigation state, since a server request carries none', async () => {
+    const { body } = await render(SEASON_PATH, answer());
+
+    expect(body.querySelector('[data-testid="season-skeleton"]')).toBeNull();
+    expect(text(body.querySelector('main h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+    expect([...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map(text)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Sunday Reverse Coed 4s',
+      'Summer 2027',
+    ]);
+  });
+
   it('writes one description tag that matches og:description', async () => {
     const { head } = await render(SEASON_PATH, answer());
     const description = meta(head, 'og:description');

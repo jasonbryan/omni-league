@@ -241,6 +241,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                       <h3 class="mt-3 text-lg font-semibold tracking-tight">
                         <a
                           [routerLink]="card.href"
+                          [state]="card.names"
                           class="rounded-md hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                           >{{ card.leagueName }}</a
                         >
@@ -281,6 +282,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           </p>
                           <a
                             [routerLink]="card.href"
+                            [state]="card.names"
                             fragment="registration"
                             data-slot="button"
                             [class]="registerButton"
@@ -406,6 +408,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                               @if (league.register; as register) {
                                 <a
                                   [routerLink]="register.href"
+                                  [state]="register.names"
                                   fragment="registration"
                                   class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-fine:-my-1 pointer-fine:py-1 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                                   >Register<span class="sr-only">
@@ -650,6 +653,7 @@ export class OrganizationOverview {
   protected readonly openCards = computed(() =>
     this.openSeasons()?.map((season) => ({
       href: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
+      names: publicPageNames({ organization: this.page(), league: season.league, season }),
       sportName: season.league.sportName,
       leagueName: season.league.name,
       name: season.name,
@@ -679,6 +683,11 @@ export class OrganizationOverview {
           status?.registrationOpen && status.season
             ? {
                 href: publicSeasonPath(this.page().slug, league.slug, status.season.slug),
+                names: publicPageNames({
+                  organization: this.page(),
+                  league,
+                  season: status.season,
+                }),
                 seasonName: status.season.name,
               }
             : undefined,

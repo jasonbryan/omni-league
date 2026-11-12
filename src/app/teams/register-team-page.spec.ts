@@ -11,6 +11,7 @@ import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { radiusClasses } from '../ui/testing/radius-classes';
 import { RegisterTeamPage } from './register-team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { routerLinkState } from '../ui/testing/router-link-state';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -202,6 +203,20 @@ describe('RegisterTeamPage', () => {
       expect(back?.getAttribute('href')).toBe(SEASON_PATH);
     });
 
+    it('closed: sets no navigation state on the links to the season page, so its skeleton shows the bars', async () => {
+      await open({ now: '2027-05-24T12:00:00Z' });
+      await answer(SUMMER);
+      const links = [...page.querySelectorAll('main a')].filter(
+        (a) => a.getAttribute('href') === SEASON_PATH,
+      );
+
+      expect(links).toHaveLength(2);
+      expect(links.map((link) => routerLinkState(harness.fixture, link))).toEqual([
+        undefined,
+        undefined,
+      ]);
+    });
+
     it('closed from the start date when the deadline is on or after it', async () => {
       await open({ now: '2027-06-06T12:00:00Z' });
       await answer({ ...SUMMER, registrationDeadline: '2027-06-10' });
@@ -243,6 +258,20 @@ describe('RegisterTeamPage', () => {
       );
       expect(link?.getAttribute('href')).toBe(SEASON_PATH);
       expect(page.querySelector('form')).toBeNull();
+    });
+
+    it('waitlisted: sets no navigation state on the links to the season page', async () => {
+      await open();
+      await answer(WAITLISTED);
+      const links = [...page.querySelectorAll('main a')].filter(
+        (a) => a.getAttribute('href') === SEASON_PATH,
+      );
+
+      expect(links).toHaveLength(2);
+      expect(links.map((link) => routerLinkState(harness.fixture, link))).toEqual([
+        undefined,
+        undefined,
+      ]);
     });
 
     it('waitlisted after the deadline: the position, not the closed state', async () => {
