@@ -10,6 +10,7 @@ import {
 import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { LOAD_PAGE } from '../shell/follow-link';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { radiusClasses } from '../ui/testing/radius-classes';
 import { OrganizationPage } from './organization-page';
 import { SAND, sandResults } from './testing/pages';
 
@@ -153,6 +154,9 @@ describe('the no-matches suggestions after hydration', () => {
     for (const pill of skeleton(harness) ?? []) {
       expect(pill.classList.contains('h-9')).toBe(true);
       expect(pill.classList.contains('pointer-coarse:h-11')).toBe(true);
+      expect(pill.getAttribute('data-slot')).toBe('skeleton');
+      expect(pill.classList).toContain('bg-muted');
+      expect(radiusClasses(pill)).toEqual(['rounded-lg']);
     }
     expect(suggestions(harness)).toHaveLength(0);
     expect(text(box(harness))).toContain("Sand Org has no men's 6v6 league.");
@@ -170,6 +174,9 @@ describe('the no-matches suggestions after hydration', () => {
       'form[aria-label="Filter leagues"] > span[aria-hidden="true"]',
     );
     expect(placeholder).not.toBeNull();
+    expect(placeholder?.getAttribute('data-slot')).toBe('skeleton');
+    expect(placeholder?.classList).toContain('bg-muted');
+    expect(radiusClasses(placeholder)).toEqual(['rounded-full']);
     for (const name of ['h-11', 'md:h-9', 'pointer-coarse:min-h-11']) {
       expect(placeholder?.classList.contains(name), name).toBe(true);
     }

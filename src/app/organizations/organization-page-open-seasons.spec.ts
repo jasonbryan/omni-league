@@ -10,6 +10,7 @@ import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
 import { expectBadge } from '../ui/testing/badge';
+import { radiusClasses } from '../ui/testing/radius-classes';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -522,6 +523,12 @@ describe('the Registration open section', () => {
       );
       expect(section(harness)?.querySelectorAll('li')).toHaveLength(0);
       expect(heroLink(harness)).toBeNull();
+      const placeholder = host(harness).querySelector(
+        '[data-hero-actions] > span[aria-hidden="true"]',
+      );
+      expect(placeholder?.getAttribute('data-slot')).toBe('skeleton');
+      expect(placeholder?.classList).toContain('bg-muted');
+      expect(radiusClasses(placeholder)).toEqual(['rounded-md']);
       expect(text(host(harness).querySelector('#leagues h2'))).toBe('Leagues');
       subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);

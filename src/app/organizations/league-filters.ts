@@ -37,6 +37,7 @@ import {
   CHIP_CHOICE_LABEL_CLASSES,
   CHIP_CHOICE_WRAPPER_CLASSES,
 } from '../ui/chip/chip-classes';
+import { HlmSkeleton } from '../ui/skeleton';
 import {
   filterPills,
   filterPopoverId,
@@ -71,7 +72,7 @@ const PILL =
  */
 @Component({
   selector: 'app-league-filters',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmSkeleton, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronDown, lucideSlidersHorizontal, lucideX })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', '(document:keydown.escape)': 'dropPendingPress()' },
@@ -185,8 +186,9 @@ const PILL =
             }
           } @else {
             <span
+              hlmSkeleton
               aria-hidden="true"
-              class="block h-11 w-28 rounded-full bg-muted motion-safe:animate-pulse md:h-9 pointer-coarse:min-h-11"
+              class="block h-11 w-28 rounded-full md:h-9 pointer-coarse:min-h-11"
             ></span>
           }
           <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
