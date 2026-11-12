@@ -822,6 +822,34 @@ describe('AdminStaff', () => {
       );
     });
 
+    it('Role: one radiogroup named by its legend, with a brn-radio per option holding one native radio', async () => {
+      await openFull();
+      const role = page.querySelector('fieldset#role')!;
+      const groups = role.querySelectorAll('[role="radiogroup"]');
+      expect(groups).toHaveLength(1);
+      const legend = role.querySelector('legend')!;
+      expect(legend.id).not.toBe('');
+      expect(groups[0].getAttribute('aria-labelledby')).toBe(legend.id);
+      expect(groups[0].hasAttribute('aria-invalid')).toBe(false);
+      const radios = [...groups[0].querySelectorAll('brn-radio')];
+      expect(radios.map((radio) => radio.id)).toEqual(['role-organizer-radio', 'role-admin-radio']);
+      expect(radios.map((radio) => radio.querySelectorAll('input[type="radio"]').length)).toEqual([
+        1, 1,
+      ]);
+      expect(radios.map((radio) => radio.querySelector('input')!.id)).toEqual([
+        'role-organizer',
+        'role-admin',
+      ]);
+    });
+
+    it('Role: the unavailable League organizer is disabled in its radio, and Org admin is not', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [] });
+      expect(page.querySelector('#role-organizer-radio')!.getAttribute('data-disabled')).toBe(
+        'true',
+      );
+      expect(page.querySelector('#role-admin-radio')!.getAttribute('data-disabled')).toBe('false');
+    });
+
     it('Leagues: a fieldset listing every league, drafts included, in list order', async () => {
       await openFull();
       const group = page.querySelector('fieldset#leagues')!;
@@ -923,7 +951,7 @@ describe('AdminStaff', () => {
       shapeOf('field-description', { id: 'email-description' }),
       ...(errors.email ? [shapeOf('field-error', { id: 'email-error' })] : []),
       shapeOf('field-set', { id: 'role' }),
-      shapeOf('field-legend', { 'data-variant': 'label' }),
+      shapeOf('field-legend', { id: 'role-legend', 'data-variant': 'label' }),
       ...radio('role-organizer'),
       ...radio('role-admin'),
       shapeOf('field-set', {
@@ -977,7 +1005,7 @@ describe('AdminStaff', () => {
       await open({ members: MEMBERS, pending: PENDING, leagues: [] });
       expect(formShapes(form()).slice(5)).toEqual([
         shapeOf('field-set', { id: 'role' }),
-        shapeOf('field-legend', { 'data-variant': 'label' }),
+        shapeOf('field-legend', { id: 'role-legend', 'data-variant': 'label' }),
         ...radio('role-organizer', 'opacity-50'),
         ...radio('role-admin'),
         shapeOf('field-description', { id: 'role-unavailable' }),

@@ -17,14 +17,8 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { teamIsFull } from '../../../../convex/lib/seasonInput';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { ConfirmDialog } from '../admin/confirm-dialog';
-import {
-  RADIO_EDGE,
-  RADIO_EDGE_INVALID,
-  RADIO_INDICATOR,
-  RADIO_INPUT,
-  RADIO_ITEM,
-} from '../admin/field-classes';
 import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
+import { HlmRadioGroupImports } from '../../ui/radio-group';
 import { placeFailureText, type PlaceFailure, placeFailureOf } from './place-free-agent-text';
 import { teamRowLines } from './team-row-lines';
 
@@ -50,7 +44,7 @@ const TEAM_INPUT_NAME = 'place-team';
 
 @Component({
   selector: 'app-place-free-agent-dialog',
-  imports: [ConfirmDialog, HlmFieldImports, HlmFieldSetImports, NgIcon],
+  imports: [ConfirmDialog, HlmFieldImports, HlmFieldSetImports, HlmRadioGroupImports, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideUserPlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -76,33 +70,24 @@ const TEAM_INPUT_NAME = 'place-team';
         id="place-team"
         [attr.aria-describedby]="unchosen() ? 'place-team-error' : null"
       >
-        <legend hlmFieldLegend variant="label">Team</legend>
-        <div data-slot="radio-group" class="grid gap-3">
+        <legend hlmFieldLegend id="place-team-legend" variant="label">Team</legend>
+        <hlm-radio-group
+          [name]="teamInputName"
+          aria-labelledby="place-team-legend"
+          [invalid]="unchosen()"
+          [value]="chosen()"
+          (valueChange)="choose($event)"
+        >
           @for (team of options(); track team.teamId) {
             <div hlmField orientation="horizontal" [attr.data-disabled]="team.full ? 'true' : null">
-              <span
-                data-slot="radio-group-item"
-                [attr.data-checked]="chosen() === team.teamId ? 'true' : null"
-                [class]="
-                  radioItemClass +
-                  ' ' +
-                  (unchosen() ? radioEdgeInvalid : radioEdge) +
-                  (team.full ? ' opacity-50' : '')
-                "
-                ><input
-                  type="radio"
-                  [id]="'place-team-' + team.teamId"
-                  [name]="teamInputName"
-                  [value]="team.teamId"
-                  [disabled]="team.full"
-                  [checked]="chosen() === team.teamId"
-                  [attr.aria-describedby]="'place-team-' + team.teamId + '-description'"
-                  (change)="choose(team.teamId)"
-                  [class]="radioInputClass" /><span
-                  aria-hidden="true"
-                  [class]="radioIndicatorClass"
-                ></span
-              ></span>
+              <hlm-radio
+                [inputId]="'place-team-' + team.teamId"
+                [value]="team.teamId"
+                [disabled]="team.full"
+                [aria-describedby]="'place-team-' + team.teamId + '-description'"
+              >
+                <hlm-radio-indicator />
+              </hlm-radio>
               <div hlmFieldContent>
                 <label hlmFieldLabel [for]="'place-team-' + team.teamId">{{ team.name }}</label>
                 <p hlmFieldDescription [id]="'place-team-' + team.teamId + '-description'">
@@ -111,7 +96,7 @@ const TEAM_INPUT_NAME = 'place-team';
               </div>
             </div>
           }
-        </div>
+        </hlm-radio-group>
         @if (unchosen()) {
           <div hlmFieldError id="place-team-error">
             <ng-icon
@@ -139,11 +124,6 @@ export class PlaceFreeAgentDialog {
   protected readonly online = injectOnline();
   protected readonly firstTeamSelector = `input[name="${TEAM_INPUT_NAME}"]:not(:disabled)`;
   protected readonly teamInputName = TEAM_INPUT_NAME;
-  protected readonly radioItemClass = RADIO_ITEM;
-  protected readonly radioEdge = RADIO_EDGE;
-  protected readonly radioEdgeInvalid = RADIO_EDGE_INVALID;
-  protected readonly radioInputClass = RADIO_INPUT;
-  protected readonly radioIndicatorClass = RADIO_INDICATOR;
 
   protected readonly target = signal<PlaceFreeAgentTarget | null>(null);
   protected readonly chosen = signal<Id<'teams'> | null>(null);
@@ -186,7 +166,7 @@ export class PlaceFreeAgentDialog {
     this.dialog().open();
   }
 
-  protected choose(teamId: Id<'teams'>): void {
+  protected choose(teamId: Id<'teams'> | null): void {
     this.chosen.set(teamId);
     this.unchosen.set(false);
   }

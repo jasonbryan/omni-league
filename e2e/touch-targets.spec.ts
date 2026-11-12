@@ -6,10 +6,12 @@ import { convexRun } from './support/convex';
 import { LIST_PAGE_SIZE } from '../src/app/core/list-page';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { seedBatch } from './support/seed-batch';
 import { signUp } from './support/session';
 import {
   dateFromToday,
   numberedLocations,
+  newTenant,
   numberedSeasons,
   type SeasonSeed,
   seedSeasons,
@@ -39,6 +41,8 @@ const LEAGUES: NonNullable<TenantSeed['leagues']> = LEAGUE_NAMES.map((name) => (
 }));
 const FIRST_LEAGUE = 'league-01-sand-2s';
 const SEASONS = numberedSeasons(ROWS);
+const PLACE_LEAGUE_SLUG = 'sunday-reverse-coed-4s';
+const PLACE_SEASON_SLUG = 'summer-open';
 
 interface Measured {
   undersized: string[];
@@ -341,6 +345,56 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     await expect(page.getByRole('radio')).toHaveCount(2);
     await expect(page.getByRole('checkbox', { name: LEAGUE_NAMES[0] })).toBeVisible();
     expect(await expectRows(page)).toBe(3);
+  });
+
+  test('the Team rows of the place free agent dialog', async ({ page }) => {
+    const admin = newUser('Admin');
+    const captains = [newUser('Captain'), newUser('Captain')];
+    const waiting = newUser('Waiting');
+    const league = { leagueSlug: PLACE_LEAGUE_SLUG, seasonSlug: PLACE_SEASON_SLUG };
+    const { tenant, args } = newTenant({
+      name: 'E2E Touch',
+      locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: 'Sunday Reverse Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+        },
+      ],
+    });
+    await signUp(page, admin);
+    await seedBatch({
+      tenant: args,
+      accounts: [...captains, waiting],
+      memberships: [{ email: admin.email, role: 'orgAdmin' }],
+      seasons: [
+        {
+          leagueSlug: PLACE_LEAGUE_SLUG,
+          name: 'Summer Open',
+          slug: PLACE_SEASON_SLUG,
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(100),
+          registrationDeadline: dateFromToday(20),
+        },
+      ],
+      teams: ['Block Party', 'Dig Deep'].map((name, i) => ({
+        ...league,
+        name,
+        captainEmail: captains[i].email,
+      })),
+      freeAgents: [{ ...league, email: waiting.email }],
+    });
+    await visit(
+      page,
+      `/app/organizations/${tenant.slug}/leagues/${PLACE_LEAGUE_SLUG}/seasons/${PLACE_SEASON_SLUG}`,
+      'Summer Open',
+    );
+    await page.getByRole('button', { name: `Place on team: ${waiting.name}` }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('radio')).toHaveCount(2);
+    expect(await expectRows(page)).toBe(2);
   });
 
   test('the admin league page and its menu sheet', async ({ page }) => {
