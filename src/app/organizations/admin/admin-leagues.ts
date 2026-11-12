@@ -5,6 +5,7 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  effect,
   inject,
   Injector,
   signal,
@@ -30,6 +31,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
+import { CreateLeagueLanding } from './create-league-landing';
 import { HlmBadge } from '../../ui/badge';
 import { LeagueCreateForm } from './league-create-form';
 import {
@@ -329,6 +331,7 @@ export class AdminLeagues {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly landing = inject(CreateLeagueLanding);
 
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
@@ -389,6 +392,7 @@ export class AdminLeagues {
 
   constructor() {
     bindAdminTitle('Leagues');
+    effect(() => this.landOnceItsTargetRenders());
     keepFocusWhenAlertGoes(
       () => this.locationsAlertHost()?.nativeElement,
       () => this.createSection()?.nativeElement,
@@ -401,6 +405,14 @@ export class AdminLeagues {
       },
       write: () => this.skeletonShown.set(this.locationsLoading()),
     });
+  }
+
+  private landOnceItsTargetRenders(): void {
+    if (!this.landing.pending() || this.locationsLoading()) return;
+    const section = this.createSection()?.nativeElement;
+    if (!section) return;
+    this.landing.settle();
+    afterNextRender(() => this.sectionJump.jump(section), { injector: this.injector });
   }
 
   protected publish(row: PublishTarget): void {

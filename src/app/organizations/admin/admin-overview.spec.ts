@@ -184,7 +184,7 @@ describe('AdminOverview', () => {
       });
       expect(links).toEqual([
         ['Add a location', `/app/organizations/${COASTAL.slug}/locations`],
-        ['Create a league', `/app/organizations/${COASTAL.slug}/leagues`],
+        ['Create a league', `/app/organizations/${COASTAL.slug}/leagues#create-league`],
         null,
         ['Invite staff', `/app/organizations/${COASTAL.slug}/staff`],
       ]);

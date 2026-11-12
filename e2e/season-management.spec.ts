@@ -307,6 +307,9 @@ test.describe('Season management: placing a free agent', () => {
       await expect(
         dialog.getByRole('heading', { name: `Place ${waiting.name} on a team` }),
       ).toBeVisible();
+      await expect(dialog.getByRole('radiogroup', { name: 'Team' }).getByRole('radio')).toHaveCount(
+        3,
+      );
       await expect(dialog.getByRole('radio', { name: 'Block Party' })).toBeFocused();
       await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toHaveAccessibleDescription(
         '2 of 4 players · 2 more needed',
@@ -755,6 +758,12 @@ test.describe('Season management: maximum roster size', () => {
     await expect(full).toBeDisabled();
     await expect(full).toHaveAccessibleDescription('Full: 4 of 4 players');
     await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeFocused();
+    await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeChecked();
+    await page.keyboard.press('ArrowUp');
+    await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeFocused();
+    await expect(full).not.toBeChecked();
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '144-place-full-team');
   });
@@ -782,6 +791,24 @@ test.describe('Season management: placing a free agent, with no team chosen or o
     await expect(dialog.getByRole('radio', { name: 'Block Party' })).toBeFocused();
     await screenshot(page, testInfo, '135-place-unchosen');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+
+  test('Tab enters the Team group at the first team, arrow keys move and choose, and Tab leaves and re-enters at the chosen team', async ({
+    page,
+    browser,
+  }) => {
+    const dialog = await openPlaceDialog(page, browser);
+    const blockParty = dialog.getByRole('radio', { name: 'Block Party' });
+    const digDeep = dialog.getByRole('radio', { name: 'Dig Deep' });
+    await expect(blockParty).toBeFocused();
+    await expect(blockParty).not.toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(digDeep).toBeFocused();
+    await expect(digDeep).toBeChecked();
+    await page.keyboard.press(tabKey(page));
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(digDeep).toBeFocused();
   });
 
   test('offline, the confirm button looks disabled and a press shows the offline alert in the dialog, focused', async ({

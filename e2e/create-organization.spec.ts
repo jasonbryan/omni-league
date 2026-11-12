@@ -19,7 +19,12 @@ const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.'
 const tabOrderBeforeMain = (): string[] =>
   test.info().project.use.isMobile
     ? ['button[aria-label="Open navigation"]', 'header a[href="/app/account"]']
-    : ['a[href="/"]', 'nav[aria-label="Your account"] a[href="/app"]', 'a[href="/app/account"]'];
+    : [
+        'a[href="/"]',
+        'nav[aria-label="Your account"] a[href="/app"]',
+        'nav[aria-label="Your account"] a[href="/leagues"]',
+        'a[href="/app/account"]',
+      ];
 
 const formOrder = (): string[] => [
   'a[href$="#main"]',
@@ -34,7 +39,11 @@ const formOrder = (): string[] => [
 const field = (page: Page, id: string) => page.locator(`#${id}`);
 const fieldError = (page: Page, id: string) => page.locator(`#${id}-error`);
 const createButton = (page: Page) => page.getByRole('button', { name: /Create organization/ });
-const organizations = (page: Page) => page.getByRole('region', { name: 'Your organizations' });
+// The home sidebar's group, which a phone keeps in its closed menu.
+const organizations = (page: Page) =>
+  page.getByRole('list', { name: 'Your organizations', includeHidden: true });
+const organizationLinks = (page: Page) =>
+  organizations(page).getByRole('link', { includeHidden: true });
 
 function newOrganization(label = 'Org') {
   const id = randomBytes(4).toString('hex');
@@ -49,25 +58,27 @@ async function openForm(page: Page): Promise<void> {
 }
 
 test.describe('create an organization', () => {
-  test('/app with no organization shows the none state; its button opens the form', async ({
+  test('/app with no organization offers to run a league; its button opens the form', async ({
     page,
   }, testInfo) => {
     await signUp(page, newUser('None'));
-    await expect(organizations(page).getByText('No organizations yet')).toBeVisible();
-    await expect(organizations(page)).toContainText(
-      'Ask your league organizer for an invite or registration link to join a league, or create an organization to run your own.',
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { level: 2, name: 'Run a league?' })).toBeVisible();
+    await expect(main).toContainText(
+      'Create an organization to publish your leagues and take registrations.',
     );
+    await expect(organizations(page)).toHaveCount(0);
     await screenshot(page, testInfo, '64-app-none');
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
         ...tabOrderBeforeMain(),
-        'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
+        'main a[href="/app/organizations/new"]',
         'main a[href="/app/notifications"]',
       ],
     });
-    await organizations(page).getByRole('link', { name: 'Create an organization' }).click();
+    await main.getByRole('link', { name: 'Create an organization' }).click();
     await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
     await expect(page).toHaveTitle('Create an organization | Omni League');
   });
@@ -391,20 +402,11 @@ test.describe('create an organization', () => {
     await expect(page.getByText('No leagues yet').first()).toBeVisible();
 
     await page.goto('/app');
-    const panel = organizations(page);
-    const row = panel.getByRole('listitem').filter({ hasText: org.name });
-    await expect(row).toHaveCount(1);
-    await expect(row).toContainText('Org admin');
-    // The accessible name is "Public page: <name>" (a screen-reader-only span names the
-    // organization); the browser lays the span out as a block, so a space can precede the colon.
-    await expect(
-      row.getByRole('link', { name: new RegExp(`^Public page ?: ${org.name}$`) }),
-    ).toHaveAttribute('href', `/organizations/${org.slug}`);
-    await expect(row.getByRole('link', { name: `Manage ${org.name}` })).toHaveAttribute(
-      'href',
-      `/app/organizations/${org.slug}`,
-    );
-    await expect(panel.getByRole('link', { name: 'Create an organization' })).toBeVisible();
+    await expect(organizationLinks(page)).toHaveText([org.name]);
+    await expect(organizationLinks(page)).toHaveAttribute('href', `/app/organizations/${org.slug}`);
+    const main = page.getByRole('main');
+    await expect(main).not.toContainText(org.name);
+    await expect(main).not.toContainText('Run a league?');
     await screenshot(page, testInfo, '64-app-one');
     await expectAccessible(page);
   });
@@ -431,13 +433,9 @@ test.describe('create an organization', () => {
         await expect(second).toHaveURL(`${baseURL}/app/organizations/${b.slug}`);
 
         await page.goto('/app');
-        await expect(organizations(page).getByRole('listitem')).toHaveCount(1);
-        await expect(organizations(page)).toContainText(a.name);
-        await expect(organizations(page)).not.toContainText(b.name);
+        await expect(organizationLinks(page)).toHaveText([a.name]);
         await second.goto('/app');
-        await expect(organizations(second).getByRole('listitem')).toHaveCount(1);
-        await expect(organizations(second)).toContainText(b.name);
-        await expect(organizations(second)).not.toContainText(a.name);
+        await expect(organizationLinks(second)).toHaveText([b.name]);
       } finally {
         await second.context().close();
       }
@@ -459,8 +457,7 @@ test.describe('create an organization', () => {
       );
     }
     await page.goto('/app');
-    await expect(organizations(page).getByRole('listitem')).toHaveCount(3);
-    await expect(organizations(page).getByRole('heading', { level: 3 })).toHaveText([
+    await expect(organizationLinks(page)).toHaveText([
       `Alpha Club ${id}`,
       `Mike Club ${id}`,
       `Zulu Club ${id}`,

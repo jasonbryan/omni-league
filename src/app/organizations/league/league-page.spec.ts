@@ -343,6 +343,7 @@ describe('LeaguePage', () => {
         ME,
         ME,
         'organizations:listMine',
+        'teams:listMine',
       ]);
       expect(page.textContent).not.toContain('Coed 7v7 Rec');
     });
@@ -372,6 +373,7 @@ describe('LeaguePage', () => {
         ME,
         ME,
         'organizations:listMine',
+        'teams:listMine',
       ]);
     });
   });

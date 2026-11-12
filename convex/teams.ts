@@ -96,6 +96,11 @@ const myTeamValidator = v.object({
   leagueName: v.string(),
   organizationName: v.string(),
   role: v.union(v.literal('captain'), v.literal('player'), v.literal('guardian')),
+  seasonStartDate: v.string(),
+  seasonEndDate: v.string(),
+  registrationDeadline: v.string(),
+  minimumRosterSize: v.number(),
+  rosterCount: v.number(),
 });
 
 type MyTeamRole = 'captain' | 'player' | 'guardian';
@@ -136,6 +141,11 @@ export const listMine = query({
           leagueName: league.name,
           organizationName: organization.name,
           role: entryRole === 'player' && team.captainUserId === user._id ? 'captain' : entryRole,
+          seasonStartDate: season.startDate,
+          seasonEndDate: season.endDate,
+          registrationDeadline: season.registrationDeadline,
+          minimumRosterSize: season.minimumRosterSize,
+          rosterCount: team.rosterCount,
         },
       });
     }

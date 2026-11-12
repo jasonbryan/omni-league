@@ -10,10 +10,8 @@ const uiDir = join(appDir, 'ui');
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
 const PENDING = [
-  'src/app/account/account-page.ts',
   'src/app/account/account-settings-page.ts',
-  'src/app/account/your-organizations.ts',
-  'src/app/account/your-teams.ts',
+  'src/app/account/home-notifications.ts',
   'src/app/notifications/notifications-page.ts',
   'src/app/organizations/admin/admin-attention.ts',
   'src/app/organizations/admin/admin-details.ts',
