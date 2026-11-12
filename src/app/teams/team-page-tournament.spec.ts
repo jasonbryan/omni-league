@@ -71,6 +71,21 @@ describe('TeamPage: a tournament team', () => {
     expect(document.title).toBe('Sand Crabs | Omni League');
   });
 
+  it('renders from an answer that also carries the stand-in season and league, linking the tournament and not the season', async () => {
+    await open({
+      ...CRABS,
+      season: { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+      league: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
+    });
+    const links = [...main().querySelectorAll('h1 + p a')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual([
+      '/organizations/gulf-coast-sport-social/tournaments/gulf-coast-beach-open',
+      '/organizations/gulf-coast-sport-social',
+    ]);
+    expect(main().querySelector('a[href*="/leagues/"]')).toBeNull();
+    expect(text(main().querySelector('[data-testid="roster-count"]'))).toBe('1 of 2 players');
+  });
+
   it('shows the roster against the tournament’s minimum', async () => {
     await open();
     expect(text(main().querySelector('[data-testid="roster-count"]'))).toBe('1 of 2 players');

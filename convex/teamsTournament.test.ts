@@ -554,6 +554,15 @@ describe('teams.getForMember for a tournament team', () => {
     });
   });
 
+  test('answers an admin of the organization with the stand-in season and league too', async () => {
+    const { s, teamId } = await registered();
+    expect(await as(s, 'admin-a').query(api.teams.getForMember, { teamId })).toMatchObject({
+      season: { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+      league: { name: 'Org A', slug: 'org-a' },
+      tournament: { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+    });
+  });
+
   test.each([
     ['a signed-out caller', null],
     ['a stranger', 'stranger'],
