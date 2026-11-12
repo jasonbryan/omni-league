@@ -369,7 +369,7 @@ describe('SeasonCreateForm', () => {
       expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
     });
 
-    it('describes the Web address with and without an error as it did before', async () => {
+    it('describes the Web address by its description, and by its error once one shows', async () => {
       await open();
       expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description');
       await submit();
