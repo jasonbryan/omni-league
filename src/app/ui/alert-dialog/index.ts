@@ -9,8 +9,6 @@
 // - the content takes Nova's colours, ring, radius, padding, gap, and widths, plus `shadow-xl`, and leaves out Nova's open and close
 //   animation and helm's outline reset;
 // - the media is `bg-accent text-accent-foreground`, where Nova's is `bg-muted`;
-// - the footer carries the Nova footer's `bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4` with helm's flex classes;
-// - the title and description use brain's alert-dialog directives as host directives, as upstream does.
 import { HlmAlertDialogContent } from './hlm-alert-dialog-content';
 import { HlmAlertDialogDescription } from './hlm-alert-dialog-description';
 import { HlmAlertDialogFooter } from './hlm-alert-dialog-footer';

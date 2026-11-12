@@ -12,7 +12,6 @@ function sources(directory: string): string[] {
   });
 }
 
-/** Every non-spec source under `src/app`, outside `src/app/ui`. */
 export const OUTSIDE_UI = sources(APP).filter((path) => !path.startsWith(UI));
 
 export const appPath = (path: string) => relative(APP, path);
