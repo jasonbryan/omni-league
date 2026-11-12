@@ -55,6 +55,8 @@ import {
 import { HlmBadge } from '../ui/badge';
 import { HlmCard } from '../ui/card';
 import {
+  BUTTON_BASE,
+  BUTTON_SIZE_LARGE,
   OUTLINE_BUTTON,
   OUTLINE_BUTTON_LARGE,
   PRIMARY_BUTTON,
@@ -143,7 +145,16 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
           }
           @if (!isEmpty() && !noMatches()) {
             @if (openCards() === undefined) {
-              <span hlmSkeleton aria-hidden="true" class="block h-11 w-48 rounded-md"></span>
+              @if (expectedOpenSeasons() > 0) {
+                <span hlmSkeleton aria-hidden="true" [class]="registerPlaceholder"
+                  ><span class="invisible">Register for a season</span
+                  ><ng-icon
+                    name="lucideArrowDown"
+                    data-icon="inline-end"
+                    class="invisible"
+                    aria-hidden="true"
+                /></span>
+              }
             } @else if (openCards()?.length) {
               <a
                 [href]="openHref()"
@@ -511,6 +522,7 @@ export class OrganizationOverview {
   protected readonly followLink = inject(FollowLink);
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
   protected readonly registerButton = PRIMARY_BUTTON;
+  protected readonly registerPlaceholder = `${BUTTON_BASE} ${BUTTON_SIZE_LARGE}`;
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly findButton = OUTLINE_BUTTON_LARGE;
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;

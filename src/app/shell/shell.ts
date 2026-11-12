@@ -152,9 +152,12 @@ export class Shell {
   /** True while the page waits for the sidebar it will render, so the home sidebar does not show first. */
   readonly sidebarPending = input(false);
 
+  /** Not named `title`: a `title` attribute on the host element would show as a tooltip. */
+  readonly barTitle = input<string>();
+
   protected readonly sidebar = contentChild(ShellSidebar);
   protected readonly title = computed(
-    () => this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
+    () => this.barTitle() ?? this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
   );
   protected readonly rowWidths = ['w-28', 'w-24', 'w-24', 'w-20'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
