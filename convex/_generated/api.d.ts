@@ -71,6 +71,7 @@ import type * as lib_teamInput from "../lib/teamInput.js";
 import type * as lib_teamInviteInput from "../lib/teamInviteInput.js";
 import type * as lib_tenantWrites from "../lib/tenantWrites.js";
 import type * as lib_testOnly from "../lib/testOnly.js";
+import type * as lib_tournamentInput from "../lib/tournamentInput.js";
 import type * as lib_userName from "../lib/userName.js";
 import type * as lib_users from "../lib/users.js";
 import type * as lib_waitlist from "../lib/waitlist.js";
@@ -89,6 +90,7 @@ import type * as signInThrottle from "../signInThrottle.js";
 import type * as teamInvites from "../teamInvites.js";
 import type * as teams from "../teams.js";
 import type * as testing from "../testing.js";
+import type * as tournaments from "../tournaments.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
 
@@ -162,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   "lib/teamInviteInput": typeof lib_teamInviteInput;
   "lib/tenantWrites": typeof lib_tenantWrites;
   "lib/testOnly": typeof lib_testOnly;
+  "lib/tournamentInput": typeof lib_tournamentInput;
   "lib/userName": typeof lib_userName;
   "lib/users": typeof lib_users;
   "lib/waitlist": typeof lib_waitlist;
@@ -180,6 +183,7 @@ declare const fullApi: ApiFromModules<{
   teamInvites: typeof teamInvites;
   teams: typeof teams;
   testing: typeof testing;
+  tournaments: typeof tournaments;
   users: typeof users;
   waitlist: typeof waitlist;
 }>;

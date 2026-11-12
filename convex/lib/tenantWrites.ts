@@ -412,7 +412,7 @@ export async function insertCustomLevel(
   });
 }
 
-// The caller has checked access and that no league uses it.
+// The caller has checked access and that no program uses it.
 export async function deleteCustomLevel(
   ctx: MutationCtx,
   customLevelId: Id<'customLevels'>,
@@ -426,6 +426,50 @@ export async function insertDraftLeague(
   league: NewLeague,
 ): Promise<Id<'leagues'>> {
   return insertLeagueRow(ctx, organizationId, league, 'draft');
+}
+
+export interface NewTournament {
+  name: string;
+  slug: string;
+  sport: Sport;
+  locationIds: Id<'locations'>[];
+  division: Omit<LeagueDivision, 'minimumRosterSize'>;
+  startDate: string;
+  endDate: string;
+  registrationDeadline: string;
+  maximumTeams: number;
+}
+
+// The caller has checked access, the input, and that the slug is free. The minimum roster size is the division's players per side, which a tournament cannot raise.
+export async function insertDraftTournament(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  tournament: NewTournament,
+): Promise<Id<'tournaments'>> {
+  const { division } = tournament;
+  assertDivision(tournament.sport, division);
+  const programId = await ctx.db.insert('programs', {
+    organizationId,
+    type: 'tournament',
+    name: tournament.name,
+    sortName: sortName(tournament.name),
+    slug: tournament.slug,
+    sport: tournament.sport,
+    status: 'draft',
+    locationIds: tournament.locationIds,
+    ...divisionFields(division),
+  });
+  return ctx.db.insert('tournaments', {
+    programId,
+    organizationId,
+    startDate: tournament.startDate,
+    endDate: tournament.endDate,
+    registrationDeadline: tournament.registrationDeadline,
+    maximumTeams: tournament.maximumTeams,
+    minimumRosterSize: division.playersPerSide,
+    structure: 'bracket',
+    bracketType: 'single',
+  });
 }
 
 export const MAX_DRAFT_SEASONS_UPDATED = 200;

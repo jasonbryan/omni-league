@@ -31,7 +31,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { HlmBadge } from '../../ui/badge';
 import { LeagueCreateForm } from './league-create-form';
 import {
@@ -356,7 +356,7 @@ export class AdminLeagues {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly landing = inject(CreateLeagueLanding);
+  private readonly landing = inject(CreateFormLanding);
 
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;

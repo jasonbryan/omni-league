@@ -119,6 +119,18 @@ const FORMS: Record<string, Parts> = {
     horizontal: 1,
     handWritten: ['field-set'],
   },
+  'src/app/organizations/admin/tournament-create-form.ts': {
+    inputs: 4,
+    fields: 5,
+    labels: 5,
+    descriptions: 5,
+    errors: 5,
+    contents: 1,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 1,
+    handWritten: ['field-set'],
+  },
   'src/app/organizations/league/league-details-form.ts': {
     inputs: 1,
     fields: 1,

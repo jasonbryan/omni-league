@@ -260,7 +260,15 @@ describe('every writer sets the required fields', () => {
     const t = setup();
     const result = await t.mutation(internal.seed.insertDemoData, {});
     expect(Object.keys(result).sort()).toEqual(
-      ['backfilled', 'customLevels', 'leagues', 'locations', 'organizations', 'seasons'].sort(),
+      [
+        'backfilled',
+        'customLevels',
+        'leagues',
+        'locations',
+        'organizations',
+        'seasons',
+        'tournaments',
+      ].sort(),
     );
     expect(result.backfilled).toEqual({
       organizations: 0,

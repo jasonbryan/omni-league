@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { AdminArea } from './admin-area';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { adminRoutes, COASTAL, GET_ADMIN_CONTEXT, openAdmin } from './testing/admin-harness';
 
 @Component({ template: '<p id="child">child</p>' })
@@ -9,12 +9,14 @@ class Child {}
 const ROUTES = adminRoutes(AdminArea, [
   { path: '', component: Child },
   { path: 'leagues', component: Child },
+  { path: 'tournaments', component: Child },
   { path: 'locations', component: Child },
 ]);
 const BASE = `/app/organizations/${COASTAL.slug}`;
 const LEAGUES = `${BASE}/leagues`;
+const TOURNAMENTS = `${BASE}/tournaments`;
 
-describe('CreateLeagueLanding', () => {
+describe('CreateFormLanding', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
   let o: Opened;
 
@@ -25,7 +27,7 @@ describe('CreateLeagueLanding', () => {
     await o.flush();
   }
 
-  const landing = () => o.harness.routeDebugElement!.injector.get(CreateLeagueLanding);
+  const landing = () => o.harness.routeDebugElement!.injector.get(CreateFormLanding);
   const arrive = async (url: string) => {
     await o.harness.navigateByUrl(url);
     await o.flush();
@@ -65,13 +67,34 @@ describe('CreateLeagueLanding', () => {
       ['another fragment', `${LEAGUES}#details`],
       ['another admin path with #create-league', `${BASE}/locations#create-league`],
       ['the Overview with #create-league', `${BASE}#create-league`],
+      ['Leagues with the form of Tournaments', `${LEAGUES}#create-tournament`],
+      ['Tournaments with the form of Leagues', `${TOURNAMENTS}#create-league`],
+      ['Tournaments with no fragment', TOURNAMENTS],
     ])('does not arm for %s', async (_name, url) => {
       o = await openAdmin(ROUTES, url);
       expect(landing().pending()).toBe(false);
     });
   });
 
+  describe('on a page load at Tournaments', () => {
+    it('arms for the Tournaments path with #create-tournament', async () => {
+      o = await openAdmin(ROUTES, `${TOURNAMENTS}#create-tournament`);
+      expect(landing().pending()).toBe(true);
+    });
+  });
+
   describe('on an arrival', () => {
+    it('arms on an arrival at the Tournaments path with #create-tournament, and not with #create-league', async () => {
+      await open(BASE);
+      await arrive(`${TOURNAMENTS}#create-league`);
+      expect(landing().pending()).toBe(false);
+      await arrive(`${TOURNAMENTS}#create-tournament`);
+      expect(landing().pending()).toBe(false);
+      await arrive(BASE);
+      await arrive(`${TOURNAMENTS}#create-tournament`);
+      expect(landing().pending()).toBe(true);
+    });
+
     it('arms on each arrival at the Leagues path with #create-league', async () => {
       await open(BASE);
       expect(landing().pending()).toBe(false);

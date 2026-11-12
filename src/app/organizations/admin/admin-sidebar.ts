@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
@@ -8,11 +9,13 @@ import {
   lucideGlobe,
   lucideLayoutDashboard,
   lucideMapPin,
+  lucideSwords,
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
 import {
+  SIDEBAR_GROUP_LABEL,
   SIDEBAR_HEAD_LINK,
   SIDEBAR_ICON,
   SIDEBAR_ICON_CURRENT,
@@ -29,7 +32,7 @@ import { adminPath } from './admin-path';
 /** The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`. */
 @Component({
   selector: 'app-admin-sidebar',
-  imports: [NgIcon, RouterLink],
+  imports: [NgIcon, NgTemplateOutlet, RouterLink],
   providers: [
     provideIcons({
       lucideBuilding2,
@@ -37,6 +40,7 @@ import { adminPath } from './admin-path';
       lucideGlobe,
       lucideLayoutDashboard,
       lucideMapPin,
+      lucideSwords,
       lucideTrophy,
       lucideUsers,
     }),
@@ -55,23 +59,19 @@ import { adminPath } from './admin-path';
           aria-hidden="true"
       /></a>
       <ul role="list" class="flex flex-col gap-0.5">
-        @for (link of sections(); track link.label) {
-          <li>
-            <a
-              [routerLink]="link.path"
-              [attr.aria-current]="link.current"
-              [class]="link.current ? currentRow : row"
-              ><ng-icon
-                [name]="link.icon"
-                [class]="link.current ? currentIcon : icon"
-                aria-hidden="true"
-              /><span class="min-w-0 flex-1 truncate">{{ link.label }}</span>
-              @if (link.count !== null) {
-                <span class="text-xs tabular-nums text-muted-foreground">{{ link.count }}</span>
-              }
-            </a>
-          </li>
-        }
+        <ng-container [ngTemplateOutlet]="rows" [ngTemplateOutletContext]="{ links: overview() }" />
+      </ul>
+      <div>
+        <p [class]="groupLabel">Programs</p>
+        <ul role="list" aria-label="Programs" class="mt-1 flex flex-col gap-0.5">
+          <ng-container
+            [ngTemplateOutlet]="rows"
+            [ngTemplateOutletContext]="{ links: programs() }"
+          />
+        </ul>
+      </div>
+      <ul role="list" class="flex flex-col gap-0.5">
+        <ng-container [ngTemplateOutlet]="rows" [ngTemplateOutletContext]="{ links: settings() }" />
       </ul>
       <ul role="list" class="flex flex-col gap-0.5 border-t border-sidebar-border pt-4">
         <li>
@@ -84,6 +84,25 @@ import { adminPath } from './admin-path';
         </li>
       </ul>
     </nav>
+    <ng-template #rows let-links="links">
+      @for (link of links; track link.label) {
+        <li>
+          <a
+            [routerLink]="link.path"
+            [attr.aria-current]="link.current"
+            [class]="link.current ? currentRow : row"
+            ><ng-icon
+              [name]="link.icon"
+              [class]="link.current ? currentIcon : icon"
+              aria-hidden="true"
+            /><span class="min-w-0 flex-1 truncate">{{ link.label }}</span>
+            @if (link.count !== null) {
+              <span class="text-xs tabular-nums text-muted-foreground">{{ link.count }}</span>
+            }
+          </a>
+        </li>
+      }
+    </ng-template>
   `,
 })
 export class AdminSidebar {
@@ -96,6 +115,7 @@ export class AdminSidebar {
   protected readonly mark = SIDEBAR_MARK;
   protected readonly row = SIDEBAR_ROW;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;
+  protected readonly groupLabel = SIDEBAR_GROUP_LABEL;
   protected readonly icon = SIDEBAR_ICON;
   protected readonly currentIcon = SIDEBAR_ICON_CURRENT;
 
@@ -114,42 +134,36 @@ export class AdminSidebar {
     () => `/organizations/${encodeURIComponent(this.organization().slug)}`,
   );
 
-  protected readonly sections = computed(() => {
+  private readonly links = computed(() => {
     const { slug } = this.organization();
     const here = pathWithoutQueryOrTrailingSlash(this.url());
     const ariaCurrentFor = (path: string, includeChildren = false): 'page' | 'true' | null =>
       here === path ? 'page' : includeChildren && here.startsWith(`${path}/`) ? 'true' : null;
-    return [
-      {
-        label: 'Overview',
-        icon: 'lucideLayoutDashboard',
-        path: adminPath(slug),
-        count: null,
-      },
-      {
-        label: 'Leagues',
-        icon: 'lucideTrophy',
-        path: adminPath(slug, 'leagues'),
-        count: this.counts.leagues(),
-      },
-      {
-        label: 'Locations',
-        icon: 'lucideMapPin',
-        path: adminPath(slug, 'locations'),
-        count: this.counts.locations(),
-      },
-      {
-        label: 'Staff',
-        icon: 'lucideUsers',
-        path: adminPath(slug, 'staff'),
-        count: this.counts.staff(),
-      },
-      {
-        label: 'Details',
-        icon: 'lucideBuilding2',
-        path: adminPath(slug, 'details'),
-        count: null,
-      },
-    ].map((link) => ({ ...link, current: ariaCurrentFor(link.path, link.label === 'Leagues') }));
+    const link = (
+      label: string,
+      icon: string,
+      section: string,
+      count: number | null,
+      includeChildren = false,
+    ) => {
+      const path = adminPath(slug, section);
+      return { label, icon, path, count, current: ariaCurrentFor(path, includeChildren) };
+    };
+    return {
+      overview: [link('Overview', 'lucideLayoutDashboard', '', null)],
+      programs: [
+        link('Leagues', 'lucideTrophy', 'leagues', this.counts.leagues(), true),
+        link('Tournaments', 'lucideSwords', 'tournaments', null),
+      ],
+      settings: [
+        link('Locations', 'lucideMapPin', 'locations', this.counts.locations()),
+        link('Staff', 'lucideUsers', 'staff', this.counts.staff()),
+        link('Details', 'lucideBuilding2', 'details', null),
+      ],
+    };
   });
+
+  protected readonly overview = computed(() => this.links().overview);
+  protected readonly programs = computed(() => this.links().programs);
+  protected readonly settings = computed(() => this.links().settings);
 }

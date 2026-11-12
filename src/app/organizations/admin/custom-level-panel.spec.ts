@@ -355,9 +355,15 @@ describe('The custom level panel in the create form', () => {
       await press(buttonNamed('Undo'));
       o.convex.calls
         .find((c) => c.name === REMOVE_LEVEL)!
-        .reject(new ConvexError({ field: 'name', code: 'inUse', message: 'A league uses Gold.' }));
+        .reject(
+          new ConvexError({
+            field: 'name',
+            code: 'inUse',
+            message: 'A league or tournament uses Gold.',
+          }),
+        );
       await o.flush();
-      expect(text(status())).toBe('A league uses Gold.');
+      expect(text(status())).toBe('A league or tournament uses Gold.');
       expect(checkedLevel()).toBe('Gold');
     });
   });

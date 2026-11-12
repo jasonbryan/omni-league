@@ -254,10 +254,69 @@ describe('customLevels.remove', () => {
     });
     expect(
       await refusal(s.adminA.mutation(api.customLevels.remove, { customLevelId: id })),
-    ).toEqual({ field: 'name', code: 'inUse', message: 'A league uses Gold.' });
+    ).toEqual({ field: 'name', code: 'inUse', message: 'A league or tournament uses Gold.' });
     expect(await rows(s)).toHaveLength(2);
     await s.adminA.mutation(api.customLevels.remove, { customLevelId: unused });
     expect((await rows(s)).map((row) => row.name)).toEqual(['Gold']);
+  });
+
+  test('refuses a level a league with no program row uses, as before the programs backfill', async () => {
+    const s = await setup();
+    const id = await withGold(s);
+    await s.t.run(async (ctx) => {
+      const location = (await ctx.db.query('locations').first())!;
+      const leagueId = await insertDraftLeague(ctx, s.organizationA, {
+        name: 'Gold league',
+        slug: 'gold-league',
+        sport: 'beachVolleyball',
+        locationIds: [location._id],
+        division: {
+          gender: 'coed',
+          playersPerSide: 4,
+          level: 'a',
+          customLevelId: id,
+          ageGroup: 'adult',
+        },
+      });
+      const league = (await ctx.db.get('leagues', leagueId))!;
+      await ctx.db.delete('programs', league.programId!);
+      await ctx.db.patch('leagues', leagueId, { programId: undefined });
+    });
+    expect(
+      await refusal(s.adminA.mutation(api.customLevels.remove, { customLevelId: id })),
+    ).toEqual({ field: 'name', code: 'inUse', message: 'A league or tournament uses Gold.' });
+    expect(await rows(s)).toHaveLength(1);
+  });
+
+  test('refuses a level a tournament uses and keeps it, until the tournament no longer does', async () => {
+    const s = await setup();
+    const id = await withGold(s);
+    const locationId = await s.t.run(async (ctx) => (await ctx.db.query('locations').first())!._id);
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      organizationId: s.organizationA,
+      name: 'Gold Open',
+      slug: 'gold-open',
+      sport: 'beachVolleyball',
+      locationIds: [locationId],
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'rec',
+      customLevelId: id,
+      ageGroup: 'adult',
+      startDate: '2027-01-16',
+      registrationDeadline: '2027-01-09',
+      maximumTeams: 8,
+    });
+    expect(
+      await refusal(s.adminA.mutation(api.customLevels.remove, { customLevelId: id })),
+    ).toEqual({ field: 'name', code: 'inUse', message: 'A league or tournament uses Gold.' });
+    expect(await rows(s)).toHaveLength(1);
+    await s.t.run(async (ctx) => {
+      const tournament = (await ctx.db.get('tournaments', tournamentId))!;
+      await ctx.db.patch('programs', tournament.programId, { customLevelId: undefined });
+    });
+    await s.adminA.mutation(api.customLevels.remove, { customLevelId: id });
+    expect(await rows(s)).toEqual([]);
   });
 
   test('refuses a level that is gone, as not allowed', async () => {
