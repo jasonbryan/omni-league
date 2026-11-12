@@ -279,8 +279,7 @@ function upcomingByEndDate(
         );
 }
 
-// The row's program, when it is the organization's own and its division passes the filters.
-async function shownProgram(
+async function ownProgramMatchingDivision(
   ctx: QueryCtx,
   tournament: Doc<'tournaments'>,
   filters: DivisionFilters,
@@ -327,7 +326,10 @@ export const listPublic = query({
     const read = await upcomingByEndDate(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
     const matching: Doc<'tournaments'>[] = [];
     for (const tournament of read) {
-      if (!hasDivisionFilters(filters) || (await shownProgram(ctx, tournament, filters))) {
+      if (
+        !hasDivisionFilters(filters) ||
+        (await ownProgramMatchingDivision(ctx, tournament, filters))
+      ) {
         matching.push(tournament);
       }
     }
@@ -335,17 +337,14 @@ export const listPublic = query({
     if (pageCount === 0) return EMPTY_LIST;
     const rows = [];
     for (const tournament of pageRows(matching.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
-      const program = await shownProgram(ctx, tournament, filters);
+      const program = await ownProgramMatchingDivision(ctx, tournament, filters);
       if (program) rows.push(await publicTournamentRow(ctx, organization, tournament, program));
     }
     return { rows, page, pageCount, total: matching.length };
   },
 });
 
-/**
- * Reads the deadline index from today, so the page keeps the tournaments whose registration is open (`registrationIsOpen`) at the viewer's time
- * and merges them with the open seasons.
- */
+// Reads from today's date only to skip closed rows; the page decides at the viewer's time which are open (`registrationIsOpen`).
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const listOpenForOrganization = query({
   args: { organizationSlug: v.string(), sport: v.optional(sportValidator), ...divisionFilterArgs },
@@ -370,7 +369,7 @@ export const listOpenForOrganization = query({
     const cards: PublicOpenTournaments = [];
     for (const tournament of read) {
       if (sport !== undefined && tournament.sport !== sport) continue;
-      const program = await shownProgram(ctx, tournament, filters);
+      const program = await ownProgramMatchingDivision(ctx, tournament, filters);
       if (!program) continue;
       cards.push({
         ...(await publicTournamentRow(ctx, organization, tournament, program)),

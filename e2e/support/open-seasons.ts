@@ -68,10 +68,7 @@ function openSeasonRows(orgSlug: string, nowMs: number): OpenSeasonRow[] {
   return openSeasonsBySoonestDeadline(rows, nowMs);
 }
 
-/**
- * The cards of the page's Registration open section at `nowMs`: the open seasons and the published demo tournaments with
- * registration open, by deadline. A tournament's card is titled with its name and reads Tournament where a season's reads its name.
- */
+/** A tournament's card is titled with its name and reads Tournament where a season's reads its name, as on the page. */
 export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
   const today = dateAtUtcMinus12(nowMs);
   const cards = openSeasonRows(orgSlug, nowMs).map((row) => ({

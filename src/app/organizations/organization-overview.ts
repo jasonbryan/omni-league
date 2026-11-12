@@ -794,7 +794,7 @@ export class OrganizationOverview {
     })),
   );
 
-  // Open until both have answered, so a card does not arrive after the others and move what is below.
+  // Undefined until both have answered, so a card does not arrive after the others and move what is below.
   protected readonly openCards = computed(() => {
     const seasons = this.openSeasonCards();
     const tournaments = this.openTournamentCards();
