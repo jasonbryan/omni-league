@@ -7,6 +7,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { radiusClasses } from '../ui/testing/radius-classes';
 import { RegisterTeamPage } from './register-team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -156,6 +157,8 @@ describe('RegisterTeamPage', () => {
       await answer(ON_TEAM);
       const card = page.querySelector('[data-slot="alert"]');
       expect(card?.getAttribute('role')).toBe('status');
+      expectAlertSlots(card);
+      expectAlertClasses(card, 'default');
       expect(text(card)).toBe(
         'You’re on Sand Sharks in this season. Each person plays on one team per season, so there’s nothing to register here.',
       );
@@ -190,6 +193,8 @@ describe('RegisterTeamPage', () => {
       expect(text(page.querySelector('[data-slot="alert"]'))).toBe(
         'Registration for this season is closed. It closed on May 23, 2027.',
       );
+      expectAlertSlots(page.querySelector('[data-slot="alert"]'));
+      expectAlertClasses(page.querySelector('[data-slot="alert"]'), 'default');
       expect(page.querySelector('form')).toBeNull();
       const back = [...page.querySelectorAll('main a')].find(
         (a) => text(a) === 'Back to the season page',
@@ -210,6 +215,9 @@ describe('RegisterTeamPage', () => {
       await answer(FULL);
       const note = page.querySelector('form [data-slot="alert"]');
       expect(note?.getAttribute('role')).toBe('note');
+      expect(note?.hasAttribute('tabindex')).toBe(false);
+      expectAlertSlots(note);
+      expectAlertClasses(note, 'default');
       expect(text(note)).toBe(
         'This season is full, so your team joins the waitlist. Waiting teams keep their place in line. If a place opens, an organizer moves a team from the waitlist into the season, and you become its captain.',
       );
@@ -225,6 +233,8 @@ describe('RegisterTeamPage', () => {
       await answer(WAITLISTED);
       const card = page.querySelector('[data-slot="alert"]');
       expect(card?.getAttribute('role')).toBe('status');
+      expectAlertSlots(card);
+      expectAlertClasses(card, 'default', 'outline-offset-2 focus:outline-2 focus:outline-ring');
       expect(text(card)).toBe(
         'Late Lobsters is on the waitlist, position 2. One team is ahead of yours. If an organizer gives your team a place, it appears under Your teams, and you can invite your players.',
       );

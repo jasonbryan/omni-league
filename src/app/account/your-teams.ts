@@ -4,6 +4,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowRight, lucideCircleAlert, lucideCrown, lucideUsers } from '@ng-icons/lucide';
 import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
+import { HlmAlertImports } from '../ui/alert';
 import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
 
@@ -16,7 +17,7 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
 
 @Component({
   selector: 'app-your-teams',
-  imports: [HlmBadge, NgIcon, RouterLink],
+  imports: [HlmAlertImports, HlmBadge, NgIcon, RouterLink],
   providers: [provideIcons({ lucideArrowRight, lucideCircleAlert, lucideCrown, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -31,24 +32,10 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
       </div>
       @if (failed()) {
         <div class="px-4 py-4 md:px-5">
-          <div
-            data-slot="alert"
-            role="alert"
-            class="group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 mb-5"
-          >
+          <div hlmAlert variant="destructive" role="alert" class="mb-5">
             <ng-icon name="lucideCircleAlert" aria-hidden="true" />
-            <div
-              data-slot="alert-title"
-              class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
-            >
-              Your teams could not be loaded.
-            </div>
-            <div
-              data-slot="alert-description"
-              class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
-            >
-              Check your connection and try again.
-            </div>
+            <div hlmAlertTitle>Your teams could not be loaded.</div>
+            <div hlmAlertDescription>Check your connection and try again.</div>
           </div>
         </div>
       } @else if (loading()) {

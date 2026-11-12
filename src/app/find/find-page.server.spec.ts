@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { REQUEST, RESPONSE_INIT, inject } from '@angular/core';
+import { Component, REQUEST, RESPONSE_INIT, inject } from '@angular/core';
 import {
   Meta,
   bootstrapApplication,
@@ -20,6 +20,7 @@ import {
 } from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
+import { expectFindAlert } from '../ui/testing/alert';
 import { slotsOf } from '../ui/testing/helm-slots';
 import {
   at,
@@ -30,6 +31,8 @@ import {
   OPEN_DAY,
   sportResults,
 } from './testing/find-data';
+import { FindContent } from './find-content';
+import { FindOrganizationsList } from './find-organizations';
 import { NO_ORGANIZATIONS, ORGANIZATIONS, organizationsPage } from './testing/organizations-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
@@ -447,5 +450,43 @@ describe('FindPage server render by sport', () => {
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
     expect(body.querySelector('main a')?.getAttribute('href')).toBe('/leagues?sport=soccer');
     expect(html).not.toContain('internal-db');
+  });
+});
+
+@Component({
+  selector: 'app-error-states',
+  imports: [FindContent, FindOrganizationsList],
+  template: `
+    <app-find-content query="coed" status="error" [now]="0" retryHref="/leagues?q=coed" />
+    <app-find-organizations state="error" retryHref="/leagues" />
+  `,
+})
+class ErrorStates {}
+
+// The page renders the server-error view when a query fails on the server, so the alerts are rendered here on their own.
+describe('the Find error alerts server render', () => {
+  async function renderAlerts(): Promise<HTMLElement> {
+    const html = await renderApplication(
+      (context: BootstrapContext) =>
+        bootstrapApplication(
+          ErrorStates,
+          { providers: [provideServerRendering(), provideRouter([]), provideClientHydration()] },
+          context,
+        ),
+      {
+        document:
+          '<!doctype html><html><head><base href="/"></head><body><app-error-states></app-error-states></body></html>',
+      },
+    );
+    return new DOMParser().parseFromString(html, 'text/html').body;
+  }
+
+  it('writes the slot, role, and classes of each alert as static attributes', async () => {
+    const body = await renderAlerts();
+    const alerts = [...body.querySelectorAll('[data-slot="alert"]')];
+    expect(alerts).toHaveLength(2);
+    expectFindAlert(alerts[0]);
+    expectFindAlert(alerts[1], 'mt-4');
+    expect(slotsOf(alerts[0])).toEqual(['alert', 'alert-title', 'alert-description']);
   });
 });

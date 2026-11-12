@@ -18,6 +18,7 @@ import { OrganizationMark } from '../organizations/organization-mark';
 import { organizationPath } from '../organizations/organization-path';
 import { PageControl } from '../organizations/page-control';
 import { sportsCommaList } from '../organizations/sport-list';
+import { HlmAlertImports } from '../ui/alert';
 import { FIND_PATH, type FindOrganizations } from './find-path';
 
 export type OrganizationsState = 'loading' | 'error' | 'ready';
@@ -59,7 +60,14 @@ export class FindOrganizationsSkeleton {
  */
 @Component({
   selector: 'app-find-organizations',
-  imports: [FindOrganizationsSkeleton, NgIcon, OrganizationMark, PageControl, RouterLink],
+  imports: [
+    FindOrganizationsSkeleton,
+    HlmAlertImports,
+    NgIcon,
+    OrganizationMark,
+    PageControl,
+    RouterLink,
+  ],
   providers: [provideIcons({ lucideChevronRight, lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -82,14 +90,10 @@ export class FindOrganizationsSkeleton {
             <app-find-organizations-skeleton class="mt-4" />
           }
           @case ('error') {
-            <div
-              data-slot="alert"
-              role="alert"
-              class="group/alert relative mt-4 grid w-full max-w-xl gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-start text-sm text-destructive has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]"
-            >
+            <div hlmAlert variant="destructive" role="alert" class="mt-4 max-w-xl">
               <ng-icon name="lucideCircleAlert" aria-hidden="true" />
-              <div class="col-start-2 font-medium">The organizations could not be loaded.</div>
-              <div class="col-start-2 text-sm text-balance text-muted-foreground">
+              <div hlmAlertTitle>The organizations could not be loaded.</div>
+              <div hlmAlertDescription>
                 Check your connection, then try again. You can still search above.
               </div>
               <a

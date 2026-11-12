@@ -35,6 +35,7 @@ import { PageControl } from '../organizations/page-control';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { publicPageNames } from '../organizations/public-league/public-page-names';
 import { leagueSeasonStatus } from '../organizations/season-status';
+import { HlmAlertImports } from '../ui/alert';
 import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, findQuery, type FindResultRow } from './find-path';
@@ -73,6 +74,7 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
   selector: 'app-find-content',
   imports: [
     FindSkeleton,
+    HlmAlertImports,
     HlmBadge,
     NgIcon,
     OrganizationMark,
@@ -143,14 +145,10 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
               <app-find-skeleton [withCount]="query() !== ''" />
             }
             @case ('error') {
-              <div
-                data-slot="alert"
-                role="alert"
-                class="group/alert relative grid w-full max-w-xl gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-start text-sm text-destructive has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]"
-              >
+              <div hlmAlert variant="destructive" role="alert" class="max-w-xl">
                 <ng-icon name="lucideCircleAlert" aria-hidden="true" />
-                <div class="col-start-2 font-medium">The search could not be completed.</div>
-                <div class="col-start-2 text-sm text-balance text-muted-foreground">
+                <div hlmAlertTitle>The search could not be completed.</div>
+                <div hlmAlertDescription>
                   Check your connection, then try again. Your search is kept above.
                 </div>
                 <a

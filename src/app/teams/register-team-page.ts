@@ -41,16 +41,12 @@ import {
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { injectNow } from '../core/now';
 import { NotFoundView } from '../not-found/not-found-view';
-import {
-  AdminAlert,
-  ALERT_DESCRIPTION,
-  ALERT_NEUTRAL,
-  ALERT_TITLE,
-} from '../organizations/admin/admin-alert';
+import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import { publicSeasonPath } from '../organizations/public-league/public-league-path';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
+import { HlmAlertImports } from '../ui/alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
@@ -124,6 +120,7 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmAlertImports,
     HlmFieldImports,
     HlmInputImports,
     HlmSpinner,
@@ -171,16 +168,15 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                   @if (season.team; as team) {
                     <div
                       #cardAlert
-                      data-slot="alert"
+                      hlmAlert
                       [attr.role]="refused() ? 'alert' : 'status'"
                       tabindex="-1"
-                      [class]="neutralAlert"
                     >
                       <ng-icon name="lucideUsers" aria-hidden="true" />
-                      <div data-slot="alert-title" [class]="alertTitle">
+                      <div hlmAlertTitle>
                         {{ messages.onTeamTitle(team.name) }}
                       </div>
-                      <div data-slot="alert-description" [class]="alertDescription">
+                      <div hlmAlertDescription>
                         {{ messages.onTeamDescription }}
                       </div>
                     </div>
@@ -196,16 +192,15 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                 @case ('waiting') {
                   <div
                     #cardAlert
-                    data-slot="alert"
+                    hlmAlert
                     [attr.role]="refused() ? 'alert' : 'status'"
                     tabindex="-1"
-                    [class]="neutralAlert"
                   >
                     <ng-icon name="lucideHourglass" aria-hidden="true" />
-                    <div data-slot="alert-title" [class]="alertTitle">
+                    <div hlmAlertTitle>
                       {{ messages.waitingTitle }}
                     </div>
-                    <div data-slot="alert-description" [class]="alertDescription">
+                    <div hlmAlertDescription>
                       {{ messages.waitingDescription }}
                     </div>
                   </div>
@@ -220,16 +215,15 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                 @case ('closed') {
                   <div
                     #cardAlert
-                    data-slot="alert"
+                    hlmAlert
                     [attr.role]="refused() ? 'alert' : 'status'"
                     tabindex="-1"
-                    [class]="neutralAlert"
                   >
                     <ng-icon name="lucideCalendarX" aria-hidden="true" />
-                    <div data-slot="alert-title" [class]="alertTitle">
+                    <div hlmAlertTitle>
                       {{ messages.closedTitle }}
                     </div>
-                    <div data-slot="alert-description" [class]="alertDescription">
+                    <div hlmAlertDescription>
                       {{ closedLine() }}
                     </div>
                   </div>
@@ -248,18 +242,16 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                   @if (waitlistPlace(); as place) {
                     <div
                       #cardAlert
-                      data-slot="alert"
+                      hlmAlert
                       [attr.role]="refused() ? 'alert' : 'status'"
                       tabindex="-1"
-                      [class]="
-                        neutralAlert + ' outline-offset-2 focus:outline-2 focus:outline-ring'
-                      "
+                      class="outline-offset-2 focus:outline-2 focus:outline-ring"
                     >
                       <ng-icon name="lucideListOrdered" aria-hidden="true" />
-                      <div data-slot="alert-title" [class]="alertTitle">
+                      <div hlmAlertTitle>
                         {{ messages.waitlistedTitle(place.teamName, place.position) }}
                       </div>
-                      <div data-slot="alert-description" [class]="alertDescription">
+                      <div hlmAlertDescription>
                         {{ messages.waitlistedDescription(place.position) }}
                       </div>
                     </div>
@@ -295,12 +287,12 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                       }
                     }
                     @if (joinsWaitlist()) {
-                      <div data-slot="alert" role="note" [class]="neutralAlert">
+                      <div hlmAlert role="note">
                         <ng-icon name="lucideListOrdered" aria-hidden="true" />
-                        <div data-slot="alert-title" [class]="alertTitle">
+                        <div hlmAlertTitle>
                           {{ messages.waitlistTitle }}
                         </div>
-                        <div data-slot="alert-description" [class]="alertDescription">
+                        <div hlmAlertDescription>
                           {{ messages.waitlistDescription }}
                         </div>
                       </div>
@@ -392,9 +384,6 @@ export class RegisterTeamPage {
   protected readonly maxLength = MAX_TEAM_NAME_LENGTH;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly neutralAlert = ALERT_NEUTRAL;
-  protected readonly alertTitle = ALERT_TITLE;
-  protected readonly alertDescription = ALERT_DESCRIPTION;
   protected readonly online = injectOnline();
   private readonly now = injectNow();
 
