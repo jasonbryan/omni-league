@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { ConvexError } from 'convex/values';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { TeamPage } from './team-page';
 
@@ -117,6 +118,18 @@ describe('TeamPage: a tournament team', () => {
       'Sand Crabs is registered for Gulf Coast Beach Open. You’re the captain and the first player on the roster.',
     );
     expect(document.activeElement).toBe(status);
+  });
+
+  it('FORBIDDEN for a tournament team shows the no-access view with copy that holds for a tournament', async () => {
+    o = await openAdmin(ROUTES, URL);
+    o.acceptToken();
+    await o.flush();
+    o.subscription(GET)!.fail(new ConvexError({ code: 'FORBIDDEN', team: 'tournament' }));
+    await o.flush();
+    expect(text(main().querySelector('h1'))).toBe('You can’t open this team page');
+    expect(text(main().querySelector('h1 + p'))).toBe(
+      'Only its players and the people who run it can see it.',
+    );
   });
 
   it('tells an organization admin on no roster they are an organizer, without offering to manage the roster', async () => {

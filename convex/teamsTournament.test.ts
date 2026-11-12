@@ -573,6 +573,9 @@ describe('teams.getForMember for a tournament team', () => {
     const caller = authUserId ? as(s, authUserId) : s.t;
     const failure = await caller.query(api.teams.getForMember, { teamId }).catch(refusalOf);
     expect(failure).toMatchObject({ code: FORBIDDEN_CODE });
+    expect((failure as { team?: string }).team).toBe(
+      authUserId === null ? undefined : 'tournament',
+    );
   });
 
   test('answers null for the season team list of a tournament team', async () => {

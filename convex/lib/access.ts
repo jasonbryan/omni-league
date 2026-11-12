@@ -1,6 +1,6 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
-import { forbidden } from './forbidden';
+import { forbidden, forbiddenTournamentTeam } from './forbidden';
 import { adultEntryInTournament, isMinorEntry, rosteredEntriesInSeason } from './rosterWrites';
 import { getCurrentUser } from './users';
 
@@ -124,7 +124,7 @@ export async function requireTournamentTeamMemberOrAdmin(
   const own = await adultEntryInTournament(ctx, team.tournamentId, user._id);
   const ownTeamId = own?.teamId === team._id ? team._id : null;
   const organizes = await isOrgAdmin(ctx, user._id, team.organizationId);
-  if (ownTeamId === null && !organizes) throw forbidden();
+  if (ownTeamId === null && !organizes) throw forbiddenTournamentTeam();
   return {
     user,
     ownTeamId,

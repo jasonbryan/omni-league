@@ -194,6 +194,9 @@ describe('TeamPage', () => {
     );
     expect(main().querySelector('a[href="/app"]')).not.toBeNull();
     expect(document.title).toBe('No access | Omni League');
+    expect(text(main().querySelector('h1 + p'))).toBe(
+      'Only the players on teams in its season and the league’s organizers can see it. If you were removed from the team, ask the captain to invite you again.',
+    );
   });
 
   it('any other failure shows the server-error view with a retry to this page', async () => {

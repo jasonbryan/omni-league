@@ -29,7 +29,7 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { map } from 'rxjs';
-import { isForbidden } from '../../../convex/lib/forbidden';
+import { isForbidden, isForbiddenTournamentTeam } from '../../../convex/lib/forbidden';
 import { AuthService } from '../core/auth/auth.service';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { api, injectQuery, skipToken } from '../core/data/convex';
@@ -138,7 +138,12 @@ export interface TeamPageNavigationState {
                 You can&rsquo;t open this team page
               </h1>
               <p class="mt-3 text-balance text-muted-foreground">
-                Only its players and the people who run it can see it.
+                @if (forbiddenTournamentTeam()) {
+                  Only its players and the people who run it can see it.
+                } @else {
+                  Only the players on teams in its season and the league&rsquo;s organizers can see
+                  it. If you were removed from the team, ask the captain to invite you again.
+                }
               </p>
               <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
                 ><ng-icon name="lucideArrowLeft" data-icon="inline-start" aria-hidden="true" />Go to
@@ -493,6 +498,10 @@ export class TeamPage {
     if (value === undefined) return 'loading';
     return value === null ? 'not-found' : 'ready';
   });
+
+  protected readonly forbiddenTournamentTeam = computed(() =>
+    isForbiddenTournamentTeam(this.query.error()),
+  );
 
   protected readonly team = computed(() =>
     this.state() === 'ready' ? (this.query.value() ?? null) : null,
