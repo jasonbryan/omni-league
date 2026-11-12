@@ -21,10 +21,35 @@ const TOKEN = 'Qm7Zp2vXr9LkT4cW1yNe8HsA0dUfGj3bVo6iRqKx5Ey';
 
 const LINK_LABEL_CLASSES =
   'flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none';
-const LINK_LABEL_ADDITIONS = '';
+const LINK_LABEL_ADDITIONS = [
+  '*:data-[slot=field]:p-2.5',
+  'dark:has-data-checked:bg-primary/10',
+  'dark:has-data-checked:border-primary/20',
+  'group-data-[disabled=true]/field:opacity-50',
+  'group-data-[disabled=true]:opacity-50',
+  'group-data-[disabled=true]:pointer-events-none',
+  'group/field-label',
+  'has-[>[data-slot=field]]:border',
+  'has-[>[data-slot=field]]:flex-col',
+  'has-[>[data-slot=field]]:rounded-lg',
+  'has-[>[data-slot=field]]:w-full',
+  'has-data-checked:bg-primary/5',
+  'has-data-checked:border-primary/30',
+  'peer-disabled:cursor-not-allowed',
+  'peer-disabled:opacity-50',
+  'peer/field-label',
+].join(' ');
 const LINK_TEXTAREA_CLASSES =
   'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
-const LINK_TEXTAREA_ADDITIONS = '';
+const LINK_TEXTAREA_ADDITIONS = [
+  'dark:data-[matches-spartan-invalid=true]:border-destructive/50',
+  'dark:data-[matches-spartan-invalid=true]:ring-destructive/40',
+  'dark:disabled:bg-input/80',
+  'data-[matches-spartan-invalid=true]:border-destructive',
+  'data-[matches-spartan-invalid=true]:ring-3',
+  'data-[matches-spartan-invalid=true]:ring-destructive/20',
+  'disabled:bg-input/50',
+].join(' ');
 const sorted = (classes: string) => classes.split(/\s+/).filter(Boolean).sort();
 
 const SHARKS = {
