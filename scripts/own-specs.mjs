@@ -205,6 +205,122 @@ export function ownSpecs({
 const SPEC_PATH = /^e2e\/|\.spec\.ts$/;
 
 /**
+ * The options of `playwright test --help`, each with whether it takes a value: `required` for
+ * `<value>`, `optional` for `[value]`, `none` for a switch. A test compares it with the installed
+ * Playwright.
+ * @type {{ names: string[], value: 'required' | 'optional' | 'none' }[]}
+ */
+export const PLAYWRIGHT_TEST_OPTIONS = [
+  { names: ['--add-reporter'], value: 'required' },
+  { names: ['--browser'], value: 'required' },
+  { names: ['-c', '--config'], value: 'required' },
+  { names: ['--debug'], value: 'optional' },
+  { names: ['--fail-on-flaky-tests'], value: 'none' },
+  { names: ['--forbid-only'], value: 'none' },
+  { names: ['--fully-parallel'], value: 'none' },
+  { names: ['-g', '--grep'], value: 'required' },
+  { names: ['-G', '--grep-invert'], value: 'required' },
+  { names: ['--global-timeout'], value: 'required' },
+  { names: ['--headed'], value: 'none' },
+  { names: ['--ignore-snapshots'], value: 'none' },
+  { names: ['-j', '--workers'], value: 'required' },
+  { names: ['--last-failed'], value: 'none' },
+  { names: ['--last-failed-file'], value: 'required' },
+  { names: ['--list'], value: 'none' },
+  { names: ['--max-failures'], value: 'required' },
+  { names: ['--no-deps'], value: 'none' },
+  { names: ['--only-changed'], value: 'optional' },
+  { names: ['--output'], value: 'required' },
+  { names: ['--pass-with-no-tests'], value: 'none' },
+  { names: ['--project'], value: 'required' },
+  { names: ['--quiet'], value: 'none' },
+  { names: ['--repeat-each'], value: 'required' },
+  { names: ['--reporter'], value: 'required' },
+  { names: ['--retries'], value: 'required' },
+  { names: ['--run-agents'], value: 'required' },
+  { names: ['--shard'], value: 'required' },
+  { names: ['--shuffle'], value: 'optional' },
+  { names: ['--test-list'], value: 'required' },
+  { names: ['--test-list-invert'], value: 'required' },
+  { names: ['--timeout'], value: 'required' },
+  { names: ['--trace'], value: 'required' },
+  { names: ['--tsconfig'], value: 'required' },
+  { names: ['-u', '--update-snapshots'], value: 'optional' },
+  { names: ['--ui'], value: 'none' },
+  { names: ['--ui-host'], value: 'required' },
+  { names: ['--ui-port'], value: 'required' },
+  { names: ['--update-source-method'], value: 'required' },
+  { names: ['-x'], value: 'none' },
+];
+
+const HELP_OPTIONS = ['-h', '--help'];
+const USAGE_EXIT_CODE = 2;
+const OPTION_TERMINATOR = '--';
+
+const OPTIONS_BY_NAME = new Map(
+  PLAYWRIGHT_TEST_OPTIONS.flatMap((option) => option.names.map((name) => [name, option])),
+);
+
+/**
+ * @param {string} arg an argument that starts with `-`
+ * @returns {{ valid: boolean, takesNextArg: boolean }}
+ */
+function readOption(arg) {
+  const invalid = { valid: false, takesNextArg: false };
+  if (arg.startsWith('--')) {
+    const separator = arg.indexOf('=');
+    const name = separator === -1 ? arg : arg.slice(0, separator);
+    const option = OPTIONS_BY_NAME.get(name);
+    if (option === undefined) return invalid;
+    if (separator !== -1) return { valid: option.value !== 'none', takesNextArg: false };
+    return { valid: true, takesNextArg: option.value === 'required' };
+  }
+  const option = OPTIONS_BY_NAME.get(arg.slice(0, 2));
+  if (option === undefined) return invalid;
+  if (arg.length === 2) return { valid: true, takesNextArg: option.value === 'required' };
+  return { valid: option.value !== 'none', takesNextArg: false };
+}
+
+/**
+ * @param {string[]} args
+ * @returns {{ help: boolean, invalid: string | undefined }}
+ */
+function checkArgs(args) {
+  let help = false;
+  let invalid;
+  let valueNext = false;
+  for (const arg of args) {
+    if (valueNext) {
+      valueNext = false;
+      continue;
+    }
+    if (arg === OPTION_TERMINATOR) break;
+    if (!arg.startsWith('-')) continue;
+    if (HELP_OPTIONS.includes(arg)) {
+      help = true;
+      continue;
+    }
+    const option = readOption(arg);
+    if (!option.valid) invalid ??= arg;
+    valueNext = option.takesNextArg;
+  }
+  return { help, invalid };
+}
+
+const USAGE = `Usage: npm run e2e:own -- [--list] [spec ...] [playwright test options]
+
+Runs the PR's own e2e specs on the head SHA: the changed and imported specs, the specs of the
+changed screens, the specs named here, and the smoke spec as a floor.
+See docs/process/dev-cycle.md (Own e2e specs).
+
+Options:
+  --list        Print the own specs, one per line, without running them.
+  -h, --help    Print this help.
+
+Any other option goes to \`playwright test\`; see \`npx playwright test --help\`.
+An unknown option exits 2 before anything starts.`;
+
+/**
  * @param {string[]} args
  * @returns {{ named: string[], passthrough: string[] }}
  */
@@ -212,12 +328,20 @@ function splitArgs(args) {
   const named = [];
   const passthrough = [];
   let takesValue = false;
+  let valueNext = false;
   for (const arg of args) {
     if (arg.startsWith('-')) {
       passthrough.push(arg);
+      if (valueNext) {
+        valueNext = false;
+        takesValue = false;
+        continue;
+      }
       takesValue = !arg.includes('=');
+      valueNext = readOption(arg).takesNextArg;
       continue;
     }
+    valueNext = false;
     if (takesValue && !SPEC_PATH.test(arg)) passthrough.push(arg);
     else named.push(arg);
     takesValue = false;
@@ -239,6 +363,15 @@ export async function main(
   argv,
   { own = ownSpecs, run = runE2e, print = console.log, log = console.error } = {},
 ) {
+  const { help, invalid } = checkArgs(argv);
+  if (help) {
+    print(USAGE);
+    return 0;
+  }
+  if (invalid !== undefined) {
+    log(`e2e:own: unknown option ${invalid}; see npm run e2e:own -- --help`);
+    return USAGE_EXIT_CODE;
+  }
   const args = argv.filter((arg) => arg !== '--list');
   const { named, passthrough } = splitArgs(args);
   const specs = own({ named, log });
