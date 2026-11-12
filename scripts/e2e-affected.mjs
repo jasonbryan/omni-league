@@ -59,7 +59,7 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-s
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the tournament route.
-const TOURNAMENT_PAGE = ['tournament-page', 'public-page-layout-shift', 'cache-key'];
+const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
