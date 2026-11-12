@@ -622,6 +622,8 @@ describe('AdminTournaments', () => {
     };
     const copySubscription = () => o.subscription(GET_FOR_COPY);
     const note = () => form().querySelector<HTMLElement>('[data-slot="copy-note"]');
+    const divisionStatus = () =>
+      text(form().querySelector('fieldset [role="status"]:not(.sr-only)'));
     const panel = () => page.querySelector<HTMLElement>('#create-tournament')!;
 
     async function openCopy(source?: unknown, url = COPY_URL) {
@@ -721,9 +723,7 @@ describe('AdminTournaments', () => {
       await leave('name');
       expect(input('format-2').checked).toBe(true);
       expect(input('level-open').checked).toBe(true);
-      expect(text(form().querySelector('[role="status"]'))).not.toContain(
-        'filled in from the name',
-      );
+      expect(divisionStatus()).toBe('');
       await type('start-date', '2028-01-15');
       await type('registration-deadline', '2028-01-08');
       await submit();
@@ -732,6 +732,17 @@ describe('AdminTournaments', () => {
         playersPerSide: 2,
         level: 'open',
       });
+    });
+
+    it('fills the division from a new name that states one, once the copy is renamed', async () => {
+      await openCopy(COPY);
+      await type('name', 'Summer 4v4 BB Classic');
+      await leave('name');
+      expect(input('format-4').checked).toBe(true);
+      expect(input('level-bb').checked).toBe(true);
+      expect(divisionStatus()).toBe(
+        'Format and level were filled in from the name. Change any that are wrong.',
+      );
     });
 
     it('keeps a custom level, so the new tournament sends it', async () => {
