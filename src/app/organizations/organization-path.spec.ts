@@ -87,3 +87,41 @@ describe('pageQueryFor', () => {
     expect(pageQueryFor('locations', { leagues: 2, locations: 2 }, true)(1)).toEqual({ page: 2 });
   });
 });
+
+describe('the tournaments page', () => {
+  it('is tournamentsPage after locations, on the organization page and the sport view, and omitted on page 1', () => {
+    const pages = { leagues: 3, locations: 2, tournaments: 2 };
+    for (const sportView of [false, true]) {
+      const query = listPagesQuery(pages, sportView);
+      expect(Object.keys(query)).toEqual([
+        sportView ? 'page' : 'leagues',
+        'locations',
+        'tournamentsPage',
+      ]);
+      expect(query['tournamentsPage']).toBe(2);
+    }
+    expect(listPagesQuery({ leagues: 1, locations: 1, tournaments: 1 }, false)).toEqual({});
+    expect(listPagesQuery({ leagues: 1, locations: 1 }, false)).toEqual({});
+  });
+
+  it('is in the path of the page', () => {
+    expect(listPagesPath('gulf', undefined, { leagues: 1, locations: 1, tournaments: 3 })).toBe(
+      '/organizations/gulf?tournamentsPage=3',
+    );
+    expect(listPagesPath('gulf', 'soccer', { leagues: 2, locations: 1, tournaments: 2 })).toBe(
+      '/organizations/gulf/sports/soccer?page=2&tournamentsPage=2',
+    );
+  });
+
+  it('is kept in each leagues and locations link, and the other lists in each tournaments link', () => {
+    const pages = { leagues: 3, locations: 2, tournaments: 4 };
+    expect(pageQueryFor('leagues', pages, false)(1)).toEqual({ locations: 2, tournamentsPage: 4 });
+    expect(pageQueryFor('locations', pages, false)(1)).toEqual({ leagues: 3, tournamentsPage: 4 });
+    expect(pageQueryFor('tournaments', pages, false)(1)).toEqual({ leagues: 3, locations: 2 });
+    expect(pageQueryFor('tournaments', pages, true)(5)).toEqual({
+      page: 3,
+      locations: 2,
+      tournamentsPage: 5,
+    });
+  });
+});

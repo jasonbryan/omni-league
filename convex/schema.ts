@@ -156,10 +156,13 @@ export default defineSchema({
       'sortName',
     ]),
 
-  // The tournament part of a program of type `tournament`; `programs` holds its name, slug, status, and division. Written only by `convex/lib/tenantWrites.ts`.
+  // The tournament part of a program of type `tournament`; `programs` holds its name, slug, and division. Written only by `convex/lib/tenantWrites.ts`.
   tournaments: defineTable({
     programId: v.id('programs'),
     organizationId: v.id('organizations'),
+    /** The program's `status` and `sport`, kept equal to it by the tenant writers so the date indexes can serve the public lists. */
+    status: programStatusValidator,
+    sport: sportValidator,
     /** Calendar dates, `YYYY-MM-DD`; a one-day tournament ends on its start date. */
     startDate: v.string(),
     endDate: v.string(),
@@ -171,7 +174,19 @@ export default defineSchema({
     bracketType: v.literal('single'),
   })
     .index('by_programId', ['programId'])
-    .index('by_organizationId_and_startDate', ['organizationId', 'startDate']),
+    .index('by_organizationId_and_startDate', ['organizationId', 'startDate'])
+    .index('by_organizationId_and_status_and_endDate', ['organizationId', 'status', 'endDate'])
+    .index('by_organizationId_and_sport_and_status_and_endDate', [
+      'organizationId',
+      'sport',
+      'status',
+      'endDate',
+    ])
+    .index('by_organizationId_and_status_and_registrationDeadline', [
+      'organizationId',
+      'status',
+      'registrationDeadline',
+    ]),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

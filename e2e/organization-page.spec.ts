@@ -28,6 +28,7 @@ import {
   type Tenant,
 } from './support/tenant';
 import { holdQueries } from './support/hold-queries';
+import type { TournamentSeed } from './support/tournament';
 import { screenshot } from './support/screenshot';
 import { topBarFind } from './support/top-bar-find';
 
@@ -1415,7 +1416,7 @@ const textOfHtml = (html: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-function rowIdsOf(html: string, kind: 'league' | 'location'): string[] {
+function rowIdsOf(html: string, kind: 'league' | 'location' | 'tournament'): string[] {
   return [...html.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
 }
 
@@ -1451,7 +1452,7 @@ function disabledOf(nav: string | undefined): string[] {
 const rangeOf = (nav: string | undefined) =>
   textOfHtml(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(nav ?? '')?.[1] ?? '');
 
-const rowIds = (kind: 'league' | 'location', from: number, to: number) =>
+const rowIds = (kind: 'league' | 'location' | 'tournament', from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
 
 const rowNames = (noun: string, from: number, to: number) =>
@@ -1782,4 +1783,342 @@ test.describe('organization page: a page change that never answers', () => {
     await expect(unavailable(page)).toBeFocused();
     held.release();
   });
+});
+
+const SAND_COURTS = {
+  name: 'North Beach Sand Courts',
+  address: '3500 Sandcourt Ln, Corpus Christi, TX 78402',
+};
+const COED_2S = { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' } as const;
+const WOMENS_2S = {
+  gender: 'womens',
+  playersPerSide: 2,
+  level: 'open',
+  ageGroup: 'adult',
+} as const;
+const MENS_4S = { gender: 'mens', playersPerSide: 4, level: 'a', ageGroup: 'over30' } as const;
+
+function sandTournament(
+  name: string,
+  endsInDays: number,
+  extra: Partial<TournamentSeed> = {},
+): TournamentSeed {
+  return {
+    name,
+    slug: name.toLowerCase().replace(/ /g, '-'),
+    locations: [SAND_COURTS.name],
+    division: COED_2S,
+    startDate: dateFromToday(endsInDays - 1),
+    endDate: dateFromToday(endsInDays),
+    registrationDeadline: dateFromToday(endsInDays - 8),
+    ...extra,
+  };
+}
+
+const GULF_COAST_BEACH_OPEN = sandTournament('Gulf Coast Beach Open', 31);
+
+function tournamentTenant(
+  tournaments: TournamentSeed[],
+  name = 'E2E Tournaments',
+): Promise<Tenant> {
+  return seedTenant({
+    name,
+    locations: [
+      SAND_COURTS,
+      { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
+    ],
+    leagues: [
+      { name: 'Open League', sport: 'soccer', locations: ['Alpha Field'] },
+      {
+        name: 'Women Sand 2s',
+        sport: 'beachVolleyball',
+        locations: [SAND_COURTS.name],
+        division: WOMENS_2S,
+      },
+    ],
+    tournaments,
+  });
+}
+
+const sectionWithId = (html: string, id: string): string => {
+  const at = html.indexOf(`id="${id}"`);
+  return at === -1
+    ? ''
+    : html.slice(html.lastIndexOf('<section', at), html.indexOf('</section>', at));
+};
+
+const titlesIn = (section: string): string[] =>
+  [...section.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, inner]) => plainText(inner));
+
+test.describe('organization page: Tournaments, raw server HTML', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'a published tournament with registration open is in Tournaments with its badge and a Register link, and in Registration open ordered by deadline with the seasons',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await tournamentTenant([GULF_COAST_BEACH_OPEN]);
+      await seedSeasons(tenant, 'open-league', [
+        {
+          name: 'Soon Season',
+          slug: 'soon-season',
+          startDate: dateFromToday(20),
+          endDate: dateFromToday(80),
+          registrationDeadline: dateFromToday(10),
+        },
+        {
+          name: 'Far Season',
+          slug: 'far-season',
+          startDate: dateFromToday(60),
+          endDate: dateFromToday(120),
+          registrationDeadline: dateFromToday(40),
+        },
+      ]);
+      const { status, html } = await fetchRawHtml(request, tenant.path);
+      expect(status).toBe(200);
+
+      const tournaments = sectionWithId(html, 'tournaments');
+      expect(plainText(tournaments)).toMatch(
+        /^Tournaments Gulf Coast Beach Open Coed · 2v2 · Open Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Gulf Coast Beach Open$/,
+      );
+      const path = `${tenant.path}/tournaments/gulf-coast-beach-open`;
+      expect(tournaments).toMatch(
+        new RegExp(`<a\\b[^>]*href="${path}"[^>]*>Gulf Coast Beach Open`),
+      );
+      expect(tournaments).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${path}#registration"[^>]*>Register<span class="sr-only"> for Gulf Coast Beach Open`,
+        ),
+      );
+      expect(html.indexOf('id="leagues"')).toBeLessThan(html.indexOf('id="tournaments"'));
+      expect(html.indexOf('id="tournaments"')).toBeLessThan(html.indexOf('id="locations"'));
+
+      const open = sectionOf(html);
+      expect(titlesIn(open)).toEqual(['Open League', 'Gulf Coast Beach Open', 'Open League']);
+      expect(
+        [...open.matchAll(/<h3\b[\s\S]*?<\/h3>\s*<p\b[^>]*>([\s\S]*?)<\/p>/g)].map(([, p]) =>
+          plainText(p),
+        ),
+      ).toEqual(['Soon Season', 'Tournament', 'Far Season']);
+      expect(plainText(open)).toContain('Coed · 2v2 · Open, teams of at least 2');
+      expect(open).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${path}#registration"[^>]*>Register<span class="sr-only"> for Gulf Coast Beach Open`,
+        ),
+      );
+    },
+  );
+
+  test(
+    'tournaments whose registration is closed say so with no Register link, and a draft or ended tournament is in neither list',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await tournamentTenant([
+        sandTournament('Closed Cup', 20, {
+          registrationDeadline: dateFromToday(-3),
+          startDate: dateFromToday(2),
+        }),
+        sandTournament('Draft Cup', 25, { status: 'draft' }),
+        sandTournament('Ended Cup', -2),
+        sandTournament('Open Cup', 30),
+      ]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      const tournaments = sectionWithId(html, 'tournaments');
+      expect(titlesIn(tournaments)).toEqual(['Closed Cup', 'Open Cup']);
+      const closed = tournaments.slice(0, tournaments.indexOf('id="tournament-2"'));
+      expect(plainText(closed)).toContain('Registration closed');
+      expect(closed).not.toContain('#registration"');
+      expect(titlesIn(sectionOf(html))).toEqual(['Open Cup']);
+      expect(html).not.toContain('Draft Cup');
+      expect(html).not.toContain('Ended Cup');
+    },
+  );
+
+  test(
+    '7 upcoming tournaments: page 1 holds 5, page 2 the last 2 with its range, links, and canonical, and a page past the last shows page 1',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await tournamentTenant([
+        ...Array.from({ length: 7 }, (_, i) => sandTournament(`Open ${i + 1}`, 20 + i)),
+        sandTournament('Draft Cup', 22, { status: 'draft' }),
+        sandTournament('Ended Cup', -2),
+      ]);
+      const first = await fetchRawHtml(request, tenant.path);
+      expect(rowIdsOf(first.html, 'tournament')).toEqual(rowIds('tournament', 1, 5));
+      expect(titlesIn(sectionWithId(first.html, 'tournaments'))).toEqual([
+        'Open 1',
+        'Open 2',
+        'Open 3',
+        'Open 4',
+        'Open 5',
+      ]);
+      const firstControl = controlOf(first.html, 'Tournaments pages');
+      expect(rangeOf(firstControl)).toBe('1–5 of 7 tournaments');
+      expect(linksOf(firstControl).find((link) => link.text === 'Next page')?.href).toBe(
+        `${tenant.path}?tournamentsPage=2#tournaments`,
+      );
+
+      const second = await fetchRawHtml(request, `${tenant.path}?tournamentsPage=2`);
+      expect(second.status).toBe(200);
+      expect(rowIdsOf(second.html, 'tournament')).toEqual(['tournament-6', 'tournament-7']);
+      expect(titlesIn(sectionWithId(second.html, 'tournaments'))).toEqual(['Open 6', 'Open 7']);
+      const control = controlOf(second.html, 'Tournaments pages');
+      expect(rangeOf(control)).toBe('6–7 of 7 tournaments');
+      const links = linksOf(control);
+      expect(links.filter((link) => link.current).map((link) => link.text)).toEqual(['Page 2']);
+      expect(links.find((link) => link.text === 'Previous page')?.href).toBe(
+        `${tenant.path}#tournaments`,
+      );
+      expect(disabledOf(control)).toEqual(['Next page']);
+      expect(canonicalHrefs(second.html).map(decoded)).toEqual([
+        `${ORIGIN}${tenant.path}?tournamentsPage=2`,
+      ]);
+      expect(second.html).not.toContain('Draft Cup');
+      expect(second.html).not.toContain('Ended Cup');
+
+      for (const query of ['3', '0', 'abc']) {
+        const past = await fetchRawHtml(request, `${tenant.path}?tournamentsPage=${query}`);
+        expect(rowIdsOf(past.html, 'tournament'), query).toEqual(rowIds('tournament', 1, 5));
+        expect(canonicalHrefs(past.html).map(decoded), query).toEqual([`${ORIGIN}${tenant.path}`]);
+      }
+    },
+  );
+
+  test(
+    'a division filter hides the tournaments it does not match from Tournaments and from Registration open',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await tournamentTenant([
+        sandTournament('Coed Open', 30),
+        sandTournament('Women Open', 31, { division: WOMENS_2S }),
+        sandTournament('Men Fours', 32, { division: MENS_4S }),
+      ]);
+      const all = await fetchRawHtml(request, tenant.path);
+      expect(titlesIn(sectionWithId(all.html, 'tournaments'))).toEqual([
+        'Coed Open',
+        'Women Open',
+        'Men Fours',
+      ]);
+
+      const womens = await fetchRawHtml(request, `${tenant.path}?gender=womens`);
+      expect(titlesIn(sectionWithId(womens.html, 'tournaments'))).toEqual(['Women Open']);
+      expect(titlesIn(sectionOf(womens.html))).toEqual(['Women Open']);
+      expect(womens.html).not.toContain('Coed Open');
+      expect(womens.html).not.toContain('Men Fours');
+
+      const sport = await fetchRawHtml(
+        request,
+        `${tenant.path}/sports/beach-volleyball?format=2v2&gender=coed&gender=womens`,
+      );
+      expect(titlesIn(sectionWithId(sport.html, 'tournaments'))).toEqual([
+        'Coed Open',
+        'Women Open',
+      ]);
+    },
+  );
+
+  test(
+    'an organization with no upcoming tournament has no Tournaments section',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await tournamentTenant([
+        sandTournament('Draft Cup', 25, { status: 'draft' }),
+        sandTournament('Ended Cup', -2),
+      ]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      expect(html).not.toContain('id="tournaments"');
+      expect(html).not.toContain('tournamentsPage');
+      expect(html).toContain('id="leagues"');
+      expect(titlesIn(sectionOf(html))).toEqual([]);
+
+      const none = await smallTenant();
+      expect((await fetchRawHtml(request, none.path)).html).not.toContain('id="tournaments"');
+    },
+  );
+});
+
+test.describe('organization page: Tournaments in the browser', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('Register opens the tournament page at its registration card, and Next by keyboard moves to page 2 and focuses the heading', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const tenant = await tournamentTenant([
+      GULF_COAST_BEACH_OPEN,
+      ...Array.from({ length: 6 }, (_, i) => sandTournament(`Open ${i + 1}`, 40 + i)),
+    ]);
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const section = page.locator('#tournaments');
+    await expect(section.getByRole('heading', { level: 2, name: 'Tournaments' })).toBeVisible();
+    await expect(section.locator(':scope > ul > li h3')).toHaveText([
+      'Gulf Coast Beach Open',
+      'Open 1',
+      'Open 2',
+      'Open 3',
+      'Open 4',
+    ]);
+
+    await section
+      .getByRole('navigation', { name: 'Tournaments pages' })
+      .getByRole('link', { name: 'Next page' })
+      .focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${tenant.path}?tournamentsPage=2#tournaments`);
+    await expect(section.locator(':scope > ul > li h3')).toHaveText(['Open 5', 'Open 6']);
+    await expect(section.getByRole('heading', { level: 2, name: 'Tournaments' })).toBeFocused();
+
+    await page.goBack();
+    await expect(section.locator(':scope > ul > li h3').first()).toHaveText(
+      'Gulf Coast Beach Open',
+    );
+    await section.getByRole('link', { name: 'Register for Gulf Coast Beach Open' }).click();
+    await expect(page).toHaveURL(`${tenant.path}/tournaments/gulf-coast-beach-open#registration`);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Gulf Coast Beach Open' }),
+    ).toBeVisible();
+  });
+
+  const STATES = [
+    ['upcoming tournaments on page 1', '', 7],
+    ['the last page of the tournaments', '?tournamentsPage=2', 7],
+    ['a division filter', '?gender=womens', 7],
+    ['one tournament and no page control', '', 1],
+    ['no upcoming tournament', '', 0],
+  ] as const;
+
+  for (const [label, query, count] of STATES) {
+    test(`${label}: passes the axe helper at 360px and 1280px, and nothing scrolls sideways at 320px`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'the widths are set by the test');
+      const tenant = await tournamentTenant(
+        Array.from({ length: count }, (_, i) =>
+          sandTournament(`Tournament ${i + 1} with a long name that wraps on a phone`, 20 + i, {
+            division: i === 1 ? WOMENS_2S : COED_2S,
+          }),
+        ),
+      );
+      await page.goto(`${tenant.path}${query}`);
+      await hydrated(consoleGuard);
+      if (count > 0) await expect(page.locator('#tournaments')).toBeVisible();
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
+        await expectAccessible(page);
+        await screenshot(page, testInfo, `337-tournaments-${count}-${width}`);
+      }
+      await page.setViewportSize({ width: 320, height: 800 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        320,
+      );
+    });
+  }
 });

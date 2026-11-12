@@ -1,4 +1,4 @@
-import { expectedOpenCards } from '../support/open-seasons';
+import { expectedOpenCards, expectedRegistrationOpenCards } from '../support/open-seasons';
 import { expect, test } from '../support/fixtures';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
@@ -46,3 +46,31 @@ test.describe('expected Registration open cards from the demo data', VIEWPORT_AG
     );
   });
 });
+
+test.describe(
+  'expected Registration open cards with the demo tournaments',
+  VIEWPORT_AGNOSTIC,
+  () => {
+    const RUN = Date.parse('2026-10-30T17:00:00Z');
+
+    test('puts Gulf Coast Beach Open, the published tournament, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
+      expect(expectedRegistrationOpenCards(GULF_COAST, RUN)).toEqual([
+        { leagueName: 'Gulf Coast Beach Open', seasonName: 'Tournament' },
+        { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
+        { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
+        { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
+      ]);
+    });
+
+    test('leaves out the draft tournament and one whose deadline has passed', () => {
+      const titles = (nowMs: number) =>
+        expectedRegistrationOpenCards(GULF_COAST, nowMs).map((card) => card.leagueName);
+      expect(titles(RUN)).not.toContain('Winter Doubles Classic');
+      expect(titles(Date.parse('2027-05-25T12:00:00Z'))).toEqual([]);
+    });
+
+    test('is the seasons alone for a demo organization with no tournament', () => {
+      expect(expectedRegistrationOpenCards('port-aransas-beach-volleyball-club', RUN)).toEqual([]);
+    });
+  },
+);

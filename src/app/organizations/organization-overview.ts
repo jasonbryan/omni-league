@@ -36,6 +36,8 @@ import {
   type PagedList,
   type PublicLeagueRows,
   type PublicOpenSeasonRows,
+  type PublicOpenTournamentRows,
+  type PublicTournamentRows,
   type PublicLocationRows,
   type PublicOrganizationHeader,
   type PublicSport,
@@ -67,12 +69,16 @@ import { publicLeaguePath, publicSeasonPath } from './public-league/public-leagu
 import { publicPageNames } from './public-league/public-page-names';
 import {
   closesText,
+  compare,
   FULL_BADGE_TEXT,
   OPEN_SEASONS_INTRO,
   leagueSeasonStatus,
 } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
+import { publicTournamentNames } from './public-tournament/public-tournament-names';
+import { publicTournamentPath } from './public-tournament/public-tournament-path';
+import { OPEN_TOURNAMENTS_INTRO, tournamentStatus, upcomingTournaments } from './tournament-status';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -84,7 +90,11 @@ export interface ListPaging {
   readonly total: number;
 }
 
-function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: number): string {
+function rowId(
+  list: 'league' | 'location' | 'tournament',
+  paging: ListPaging | undefined,
+  i: number,
+): string {
   const rowsBefore = ((paging?.page ?? 1) - 1) * LIST_PAGE_SIZE;
   return `${list}-${rowsBefore + i + 1}`;
 }
@@ -161,10 +171,8 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                 data-slot="button"
                 (click)="followLink.clicked($event)"
                 [class]="registerButtonLarge"
-                >Register for a season<ng-icon
-                  name="lucideArrowDown"
-                  data-icon="inline-end"
-                  aria-hidden="true"
+                >{{ heroRegisterText()
+                }}<ng-icon name="lucideArrowDown" data-icon="inline-end" aria-hidden="true"
               /></a>
             }
           }
@@ -212,7 +220,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
         </div>
       </div>
     }
-    @if (!isEmpty() || locationsLoading() || locationRows().length) {
+    @if (!isEmpty() || locationsLoading() || locationRows().length || tournamentRows().length) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
         @if (!isEmpty() && !noMatches()) {
           <section
@@ -228,7 +236,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
             </h2>
             @if (openCards(); as cards) {
               @if (cards.length) {
-                <p class="mt-1 text-sm text-muted-foreground">{{ openSeasonsIntro }}</p>
+                <p class="mt-1 text-sm text-muted-foreground">{{ openIntro() }}</p>
                 <ul role="list" class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
                   @for (card of cards; track card.href) {
                     <li hlmCard size="bare" class="flex flex-col p-5">
@@ -243,10 +251,10 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           [routerLink]="card.href"
                           [state]="card.names"
                           class="rounded-md hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
-                          >{{ card.leagueName }}</a
+                          >{{ card.title }}</a
                         >
                       </h3>
-                      <p class="text-sm text-muted-foreground">{{ card.name }}</p>
+                      <p class="text-sm text-muted-foreground">{{ card.subtitle }}</p>
                       <ul role="list" class="mt-4 space-y-2 text-sm">
                         <li class="flex items-start gap-2.5">
                           <ng-icon
@@ -286,9 +294,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                             fragment="registration"
                             data-slot="button"
                             [class]="registerButton"
-                            >Register<span class="sr-only">
-                              for {{ card.leagueName }}, {{ card.name }}</span
-                            ></a
+                            >Register<span class="sr-only"> {{ card.registerFor }}</span></a
                           >
                         </div>
                       </div>
@@ -446,6 +452,83 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
               }
             </section>
           }
+          @if (tournamentRows().length) {
+            <section
+              id="tournaments"
+              aria-labelledby="tournaments-heading"
+              [class]="tournamentsClass()"
+            >
+              <h2
+                #tournamentsHeading
+                id="tournaments-heading"
+                tabindex="-1"
+                class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+              >
+                {{ tournamentsHeadingText() }}
+              </h2>
+              <ul
+                role="list"
+                class="mt-2 divide-y divide-border"
+                [attr.aria-busy]="tournamentsBusy() ? 'true' : null"
+              >
+                @for (tournament of tournamentRows(); track tournament.id) {
+                  <li [id]="tournament.id" class="group relative">
+                    <div class="flex min-h-18 items-center gap-4 py-4">
+                      <div class="min-w-0 flex-1">
+                        <h3 class="font-medium">
+                          <a
+                            [routerLink]="tournament.href"
+                            [state]="tournament.names"
+                            class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
+                            >{{ tournament.name }}</a
+                          >
+                        </h3>
+                        <p class="mt-0.5 text-sm font-medium">{{ tournament.divisionLabel }}</p>
+                        <p class="mt-0.5 text-sm text-muted-foreground">{{ tournament.where }}</p>
+                        <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span hlmBadge size="fit" [variant]="tournament.status.badgeVariant">{{
+                            tournament.status.badge
+                          }}</span>
+                          <span class="text-xs text-muted-foreground">{{
+                            tournament.status.text
+                          }}</span>
+                          @if (tournament.status.registrationOpen) {
+                            <a
+                              [routerLink]="tournament.href"
+                              [state]="tournament.names"
+                              fragment="registration"
+                              class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-fine:-my-1 pointer-fine:py-1 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                              >Register<span class="sr-only"> for {{ tournament.name }}</span></a
+                            >
+                          }
+                        </p>
+                      </div>
+                      <ng-icon
+                        name="lucideChevronRight"
+                        class="shrink-0 text-lg text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (tournamentPaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Tournaments pages"
+                    noun="tournaments"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [path]="pagePath()"
+                    fragment="tournaments"
+                    [queryFor]="tournamentQueryFor()"
+                    (pageActivated)="pageRequested.tournaments = true"
+                  />
+                </div>
+              }
+            </section>
+          }
           @if (locationsLoading() || locationRows().length) {
             <section id="locations" aria-labelledby="locations-heading" [class]="locationsClass()">
               <h2
@@ -514,7 +597,11 @@ export class OrganizationOverview {
   readonly locationPaging = input<ListPaging | undefined>(undefined);
   readonly leaguesBusy = input(false);
   readonly locationsBusy = input(false);
+  readonly tournaments = input<PublicTournamentRows | undefined>(undefined);
+  readonly tournamentPaging = input<ListPaging | undefined>(undefined);
+  readonly tournamentsBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
+  readonly openTournaments = input<PublicOpenTournamentRows | undefined>(undefined);
   readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
   readonly now = input.required<number>();
   readonly canManage = input(false);
@@ -532,15 +619,16 @@ export class OrganizationOverview {
   protected readonly removeButton = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-normal! py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
-  protected readonly openSeasonsIntro = OPEN_SEASONS_INTRO;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');
+  private readonly tournamentsHeading = viewChild<ElementRef<HTMLElement>>('tournamentsHeading');
   private readonly injector = inject(Injector);
 
   protected readonly pageRequested: Record<PagedList, boolean> = {
     leagues: false,
     locations: false,
+    tournaments: false,
   };
 
   protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
@@ -569,10 +657,17 @@ export class OrganizationOverview {
     return names ? `${names} · ${counts}` : counts;
   });
 
+  // Beside Leagues and Tournaments, which stack in the first two columns.
   protected readonly locationsClass = computed(() =>
     this.isEmpty()
       ? 'py-8 md:py-12 lg:col-span-3'
-      : 'border-t border-border py-8 md:py-12 lg:border-t-0',
+      : 'border-t border-border py-8 md:py-12 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:border-t-0',
+  );
+
+  protected readonly tournamentsClass = computed(() =>
+    this.isEmpty()
+      ? 'py-8 md:py-12 lg:col-span-3'
+      : 'border-t border-border py-8 md:py-12 lg:col-span-2',
   );
 
   protected readonly sportLeagueCounts = computed((): SportCounts =>
@@ -619,6 +714,11 @@ export class OrganizationOverview {
     return sport ? `${sport.name} leagues` : 'Leagues';
   });
 
+  protected readonly tournamentsHeadingText = computed(() => {
+    const sport = this.sport();
+    return sport ? `${sport.name} tournaments` : 'Tournaments';
+  });
+
   // The chip row and the filter bar end in a rule of their own, so the sections below start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
     !this.noMatches() && (!this.isEmpty() || !hasSportChoice(this.page().sports))
@@ -634,12 +734,16 @@ export class OrganizationOverview {
   private readonly shownPages = computed(() => ({
     leagues: this.leaguePaging()?.page ?? 1,
     locations: this.locationPaging()?.page ?? 1,
+    tournaments: this.tournamentPaging()?.page ?? 1,
   }));
   protected readonly leagueQueryFor = computed(() =>
     pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
   protected readonly locationQueryFor = computed(() =>
     pageQueryFor('locations', this.shownPages(), this.sport() !== undefined, this.filters()),
+  );
+  protected readonly tournamentQueryFor = computed(() =>
+    pageQueryFor('tournaments', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
 
   protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);
@@ -650,13 +754,16 @@ export class OrganizationOverview {
     return `No ${sport ? `${sport} ` : ''}season is open for registration right now. Each league below shows its next season once it is published.`;
   });
 
-  protected readonly openCards = computed(() =>
+  private readonly openSeasonCards = computed(() =>
     this.openSeasons()?.map((season) => ({
+      kind: 'season' as const,
       href: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
       names: publicPageNames({ organization: this.page(), league: season.league, season }),
       sportName: season.league.sportName,
-      leagueName: season.league.name,
-      name: season.name,
+      title: season.league.name,
+      subtitle: season.name,
+      registerFor: `for ${season.league.name}, ${season.name}`,
+      deadline: season.registrationDeadline,
       dates: seasonDates(season.startDate, season.endDate),
       teams: season.league.divisionLabel
         ? `${season.league.divisionLabel}, teams of at least ${season.minimumRosterSize}`
@@ -665,6 +772,64 @@ export class OrganizationOverview {
       closes: closesText(season.registrationDeadline),
       full: season.isFull === true,
       closesLabel: season.isFull === true ? 'Waitlist open · closes' : 'Closes',
+    })),
+  );
+
+  private readonly openTournamentCards = computed(() =>
+    this.openTournaments()?.map((tournament) => ({
+      kind: 'tournament' as const,
+      href: publicTournamentPath(this.page().slug, tournament.slug),
+      names: publicTournamentNames({ organization: this.page(), tournament }),
+      sportName: tournament.sportName,
+      title: tournament.name,
+      subtitle: 'Tournament',
+      registerFor: `for ${tournament.name}`,
+      deadline: tournament.registrationDeadline,
+      dates: seasonDates(tournament.startDate, tournament.endDate),
+      teams: `${tournament.divisionLabel}, teams of at least ${tournament.minimumRosterSize}`,
+      where: tournament.locationNames.join(', '),
+      closes: closesText(tournament.registrationDeadline),
+      full: false,
+      closesLabel: 'Closes',
+    })),
+  );
+
+  // Open until both have answered, so a card does not arrive after the others and move what is below.
+  protected readonly openCards = computed(() => {
+    const seasons = this.openSeasonCards();
+    const tournaments = this.openTournamentCards();
+    if (!seasons || !tournaments) return undefined;
+    return [...seasons, ...tournaments].sort(
+      (a, b) =>
+        compare(a.deadline, b.deadline) ||
+        compare(a.title, b.title) ||
+        compare(a.subtitle, b.subtitle),
+    );
+  });
+
+  protected readonly heroRegisterText = computed(() =>
+    this.openCards()?.some((card) => card.kind === 'season')
+      ? 'Register for a season'
+      : 'Register for a tournament',
+  );
+
+  protected readonly openIntro = computed(() =>
+    this.openCards()?.some((card) => card.kind === 'season')
+      ? OPEN_SEASONS_INTRO
+      : OPEN_TOURNAMENTS_INTRO,
+  );
+
+  protected readonly tournamentRows = computed(() =>
+    upcomingTournaments(this.tournaments() ?? [], this.now()).map((tournament, i) => ({
+      id: rowId('tournament', this.tournamentPaging(), i),
+      name: tournament.name,
+      href: publicTournamentPath(this.page().slug, tournament.slug),
+      names: publicTournamentNames({ organization: this.page(), tournament }),
+      divisionLabel: tournament.divisionLabel,
+      where: [tournament.sportName, tournament.locationNames.join(', ')]
+        .filter(Boolean)
+        .join(' · '),
+      status: tournamentStatus(tournament, this.now()),
     })),
   );
 
@@ -707,6 +872,7 @@ export class OrganizationOverview {
   constructor() {
     this.focusHeadingAfterPageChange('leagues', this.leagues, this.heading);
     this.focusHeadingAfterPageChange('locations', this.locations, this.locationsHeading);
+    this.focusHeadingAfterPageChange('tournaments', this.tournaments, this.tournamentsHeading);
   }
 
   // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.
