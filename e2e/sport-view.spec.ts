@@ -315,7 +315,9 @@ test.describe('the sport view: tournaments', () => {
 
   const textOfSection = (html: string, id: string) => {
     const at = html.indexOf(`id="${id}"`);
-    return at === -1 ? undefined : textOf(html.slice(at, html.indexOf('</section>', at)));
+    return at === -1
+      ? undefined
+      : textOf(html.slice(html.indexOf('>', at) + 1, html.indexOf('</section>', at)));
   };
 
   test(
