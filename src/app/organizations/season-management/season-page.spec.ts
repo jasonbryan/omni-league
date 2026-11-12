@@ -624,7 +624,7 @@ describe('SeasonPage', () => {
         );
       });
 
-      it('shows the invalid edge on every indicator while no team is chosen after Place on team, and clears it on a choice', async () => {
+      it('shows the invalid edge on every radio while no team is chosen after Place on team, and clears it on a choice', async () => {
         await openDialog();
         const edges = () => circles().map((el) => el.classList.contains('border-destructive'));
         expect(edges()).toEqual([false, false, false]);

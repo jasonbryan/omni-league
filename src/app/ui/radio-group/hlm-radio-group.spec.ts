@@ -106,7 +106,7 @@ describe('helm radio group', () => {
     expect(root.querySelector('brn-radio[data-disabled="true"]')!.id).toBe('pick-b-radio');
   });
 
-  it('shows the invalid edge on every indicator only while the consumer says invalid', async () => {
+  it('shows the invalid edge on every radio only while the consumer says invalid', async () => {
     const edge = () => circles().map((el) => el.classList.contains('border-destructive'));
     const normal = () => circles().map((el) => el.classList.contains('border-input'));
     expect(edge()).toEqual([false, false, false]);
