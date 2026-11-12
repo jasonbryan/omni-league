@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { insertDraftLeague, insertTenant } from './lib/tenantWrites';
+import { insertDraftLeague, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -25,7 +25,14 @@ async function setup() {
         { name: 'Alpha Field', address: '1 Alpha St' },
         { name: 'Bravo Beach', address: '2 Bravo St' },
       ],
-      leagues: [{ name: 'Live Soccer', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Live Soccer',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const locationIn = async (name: string) =>
       (await ctx.db

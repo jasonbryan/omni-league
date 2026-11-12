@@ -12,6 +12,7 @@ import {
   insertSeason,
   insertTenant,
   type LeagueSeed,
+  defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -157,32 +158,6 @@ describe('organizations.listPublicLeagues with division filters', () => {
     });
     expect(names(result.rows)).toEqual(['Thursday Men 4s']);
     expect(result.total).toBe(1);
-  });
-
-  test('a published league with no division matches no filter and still counts unfiltered', async () => {
-    const t = await setup();
-    await t.run(async (ctx) => {
-      const organization = await orgByslug(ctx, 'sand');
-      await insertLeague(ctx, organization._id, {
-        name: 'Undivided',
-        sport: 'beachVolleyball',
-        locations: ['Sand'],
-      });
-    });
-    const unfiltered = await t.query(api.organizations.listPublicLeagues, {
-      slug: 'sand',
-      page: 1,
-    });
-    expect(unfiltered.total).toBe(8);
-    for (const filter of [
-      { gender: ['coed', 'mens', 'womens'] as Gender[] },
-      { playersPerSide: [2, 3, 4, 5, 6] },
-      { level: ['rec', 'b', 'bb', 'a', 'aa', 'open'] as StandardLevel[] },
-      { ageGroup: ['adult'] as AgeGroup[] },
-    ]) {
-      const { found } = await allFilteredNames(t, filter);
-      expect(found, JSON.stringify(filter)).not.toContain('Undivided');
-    }
   });
 
   test('a custom level matches through the standard level it maps to and keeps its own label', async () => {
@@ -347,14 +322,16 @@ describe('organizations.listPublicLeagueFacets', () => {
     }
   });
 
-  test('leaves out drafts, other organizations, and leagues with no division', async () => {
+  test('leaves out drafts', async () => {
     const t = await setup();
     await t.run(async (ctx) => {
       const organization = await orgByslug(ctx, 'sand');
       await insertLeague(ctx, organization._id, {
-        name: 'Undivided',
+        name: 'Draft',
         sport: 'beachVolleyball',
         locations: ['Sand'],
+        status: 'draft',
+        division: defaultDivision('beachVolleyball'),
       });
     });
     const facets = await t.query(api.organizations.listPublicLeagueFacets, { slug: 'sand' });

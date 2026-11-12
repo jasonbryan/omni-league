@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import type { Id } from '../_generated/dataModel';
 import schema from '../schema';
-import { modules } from '../test.setup';
+import { modules, leagueRequiredFields } from '../test.setup';
 import { requireLeagueOrganizer, requireOrgAdmin } from './access';
 import { insertTenant } from './tenantWrites';
 
@@ -30,6 +30,7 @@ async function setup() {
     });
     const league = (organizationId: Id<'organizations'>, slug: string) =>
       ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', slug),
         organizationId,
         name: slug,
         slug,
@@ -148,6 +149,7 @@ describe('requireLeagueOrganizer', () => {
     );
     const gone = await t.run(async (ctx) => {
       const id = await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'x'),
         organizationId: (await ctx.db.query('organizations').first())!._id,
         name: 'x',
         slug: 'xxx',

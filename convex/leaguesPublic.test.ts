@@ -2,9 +2,9 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules, setTeamCounts } from './test.setup';
+import { modules, setTeamCounts, leagueRequiredFields } from './test.setup';
 
 async function setup() {
   const t = convexTest(schema, modules);
@@ -16,15 +16,38 @@ async function setup() {
         { name: 'Beta Courts', address: '2 Beta St' },
       ],
       leagues: [
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Beta Courts', 'Alpha Field'] },
-        { name: 'Draft League', sport: 'soccer', locations: ['Alpha Field'], status: 'draft' },
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Beta Courts', 'Alpha Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Sand 2s', sport: 'beachVolleyball', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['B Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
   });
   return t;
@@ -42,6 +65,7 @@ describe('leagues.getPublicPage', () => {
       name: 'Sand 2s',
       slug: 'sand-2s',
       sportName: 'Beach volleyball',
+      divisionLabel: 'Coed · 2v2 · Rec',
       locationNames: ['Beta Courts', 'Alpha Field'],
       locations: [
         { name: 'Beta Courts', address: '2 Beta St' },
@@ -88,6 +112,7 @@ describe('leagues.getPublicPage', () => {
         )
         .unique())!;
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
         name: league.name,
         slug: league.slug,

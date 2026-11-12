@@ -5,9 +5,15 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertSeason, insertTenant, publishSeason, type NewSeason } from './lib/tenantWrites';
+import {
+  insertSeason,
+  insertTenant,
+  publishSeason,
+  type NewSeason,
+  defaultDivision,
+} from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields } from './test.setup';
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -62,7 +68,14 @@ async function tenant(t: T): Promise<Doc<'leagues'>> {
     await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const organization = (await ctx.db
       .query('organizations')
@@ -131,6 +144,7 @@ describe('leagues.publishedSeasonCount: the writers', () => {
     const league = await tenant(t);
     await t.run(async (ctx) => {
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
         name: league.name,
         slug: league.slug,
@@ -256,6 +270,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       await insertSeason(ctx, league, season(2), 'published');
       await insertSeason(ctx, league, season(3));
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
         name: league.name,
         slug: league.slug,
@@ -277,8 +292,6 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       organizations: 0,
       locations: 0,
       leagues: 0,
-      seasons: 0,
-      leagueDivisions: 0,
       teamCounts: 0,
       pendingInviteCounts: 0,
       waitlistCounts: 0,
@@ -306,6 +319,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
     await t.run(async (ctx) => {
       await insertSeason(ctx, league, season(1), 'published');
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
         name: league.name,
         slug: league.slug,

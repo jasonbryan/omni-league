@@ -9,11 +9,12 @@ import {
   insertLocation,
   insertTenant,
   type Tenant,
+  defaultDivision,
 } from './lib/tenantWrites';
 import { insertPendingInvite } from './lib/inviteWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
 import organizationsSource from './organizations.ts?raw';
 
 const BEACH = {
@@ -49,9 +50,20 @@ function seedA(t: T): Promise<Id<'organizations'>> {
         name: 'Wednesday Coed Slow-Pitch',
         sport: 'softball',
         locations: ['North Beach Sand Courts', 'Bayside Athletic Complex'],
+        division: defaultDivision('softball'),
       },
-      { name: 'coed 7v7 Rec', sport: 'soccer', locations: ['Bayside Athletic Complex'] },
-      { name: 'Thursday Night Coed 2s', sport: 'beachVolleyball', locations: [] },
+      {
+        name: 'coed 7v7 Rec',
+        sport: 'soccer',
+        locations: ['Bayside Athletic Complex'],
+        division: defaultDivision('soccer'),
+      },
+      {
+        name: 'Thursday Night Coed 2s',
+        sport: 'beachVolleyball',
+        locations: [],
+        division: defaultDivision('beachVolleyball'),
+      },
     ],
   });
 }
@@ -60,7 +72,14 @@ function seedB(t: T): Promise<Id<'organizations'>> {
   return seed(t, {
     organization: { name: 'Other Org', slug: 'other-org' },
     locations: [{ name: 'B Field', address: '1 B Street' }],
-    leagues: [{ name: 'B League', sport: 'soccer', locations: ['B Field'] }],
+    leagues: [
+      {
+        name: 'B League',
+        sport: 'soccer',
+        locations: ['B Field'],
+        division: defaultDivision('soccer'),
+      },
+    ],
   });
 }
 
@@ -97,7 +116,12 @@ function seedLeagues(t: T, slug: string, names: string[]) {
   return seed(t, {
     organization: { name: `Org ${slug}`, slug },
     locations: [{ name: 'Home Field', address: '1 Home Road' }],
-    leagues: names.map((name) => ({ name, sport: 'soccer' as const, locations: ['Home Field'] })),
+    leagues: names.map((name) => ({
+      name,
+      sport: 'soccer' as const,
+      locations: ['Home Field'],
+      division: defaultDivision('soccer' as const),
+    })),
   });
 }
 
@@ -155,7 +179,13 @@ describe('organizations:getPublicPage', () => {
 
   test('reads a missing counter as 0 (an organization the backfill has not reached yet)', async () => {
     const t = setup();
-    await t.run((ctx) => ctx.db.insert('organizations', { name: 'Old Club', slug: 'old' }));
+    await t.run((ctx) =>
+      ctx.db.insert('organizations', {
+        ...organizationListFields('Old Club'),
+        name: 'Old Club',
+        slug: 'old',
+      }),
+    );
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old' })).toEqual({
       name: 'Old Club',
       slug: 'old',
@@ -176,6 +206,7 @@ describe('organizations:getPublicPage', () => {
         name: `League ${name}`,
         sport: i % 2 ? ('soccer' as const) : ('softball' as const),
         locations: [locations[i % 12].name],
+        division: defaultDivision(i % 2 ? ('soccer' as const) : ('softball' as const)),
       })),
     });
     await seedB(t);
@@ -322,6 +353,7 @@ describe.each(LISTS)('organizations:listPublic $kind', ({ kind, seedNames, list 
           name: 'Aardvark',
           sport: 'soccer',
           locations: [],
+          division: defaultDivision('soccer'),
         });
       }
     });
@@ -423,10 +455,30 @@ describe('organizations:listPublicLocations rows', () => {
       organization: { name: 'Order Club', slug: 'order-club' },
       locations: [{ name: 'Shared Field', address: '1 Shared Road' }],
       leagues: [
-        { name: 'Softball One', sport: 'softball', locations: ['Shared Field'] },
-        { name: 'Soccer One', sport: 'soccer', locations: ['Shared Field'] },
-        { name: 'Beach One', sport: 'beachVolleyball', locations: ['Shared Field'] },
-        { name: 'Soccer Two', sport: 'soccer', locations: ['Shared Field'] },
+        {
+          name: 'Softball One',
+          sport: 'softball',
+          locations: ['Shared Field'],
+          division: defaultDivision('softball'),
+        },
+        {
+          name: 'Soccer One',
+          sport: 'soccer',
+          locations: ['Shared Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Beach One',
+          sport: 'beachVolleyball',
+          locations: ['Shared Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Soccer Two',
+          sport: 'soccer',
+          locations: ['Shared Field'],
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     const locations = await t.query(api.organizations.listPublicLocations, {
@@ -445,7 +497,13 @@ describe('organizations:listPublicLocations rows', () => {
         { name: 'Draft Field', address: '2 Draft Road' },
       ],
       leagues: [
-        { name: 'Draft League', sport: 'soccer', locations: ['Draft Field'], status: 'draft' },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Draft Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     const locations = await t.query(api.organizations.listPublicLocations, {
@@ -533,7 +591,13 @@ describe('organizations:listPublicLocations with a sport', () => {
       organization: { name: 'Draft Club', slug: 'draft-club' },
       locations: [{ name: 'Draft Field', address: '2 Draft Road' }],
       leagues: [
-        { name: 'Draft League', sport: 'soccer', locations: ['Draft Field'], status: 'draft' },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Draft Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     const names = async (slug: string) =>
@@ -575,7 +639,14 @@ describe('organizations:listPublicLocations with a sport', () => {
     await seed(t, {
       organization: { name: 'Many Fields', slug: 'many-fields' },
       locations: THIRTEEN.map((name) => ({ name, address: `${name} address` })),
-      leagues: [{ name: 'All Fields', sport: 'soccer', locations: THIRTEEN }],
+      leagues: [
+        {
+          name: 'All Fields',
+          sport: 'soccer',
+          locations: THIRTEEN,
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const page = (n: number) =>
       t.query(api.organizations.listPublicLocations, {
@@ -616,6 +687,7 @@ describe('organizations:listPublicLeagues rows', () => {
           slug: 'coed-7v7-rec',
           sportName: 'Soccer',
           locationNames: ['Bayside Athletic Complex'],
+          divisionLabel: 'Coed · 4v4 · Rec',
           seasons: [],
         },
         {
@@ -623,6 +695,7 @@ describe('organizations:listPublicLeagues rows', () => {
           slug: 'thursday-night-coed-2s',
           sportName: 'Beach volleyball',
           locationNames: [],
+          divisionLabel: 'Coed · 2v2 · Rec',
           seasons: [],
         },
         {
@@ -630,6 +703,7 @@ describe('organizations:listPublicLeagues rows', () => {
           slug: 'wednesday-coed-slow-pitch',
           sportName: 'Softball',
           locationNames: ['North Beach Sand Courts', 'Bayside Athletic Complex'],
+          divisionLabel: 'Coed · 9v9 · Rec',
           seasons: [],
         },
       ],
@@ -639,7 +713,7 @@ describe('organizations:listPublicLeagues rows', () => {
     });
   });
 
-  test('a league with a division carries its label, and one without carries no label', async () => {
+  test('a league carries its division label', async () => {
     const t = setup();
     await seed(t, {
       organization: { name: 'Divided Club', slug: 'divided-club' },
@@ -662,7 +736,6 @@ describe('organizations:listPublicLeagues rows', () => {
           locations: ['Home Field'],
           division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
         },
-        { name: 'Undivided', sport: 'softball', locations: ['Home Field'] },
       ],
     });
     const leagues = await t.query(api.organizations.listPublicLeagues, {
@@ -672,9 +745,7 @@ describe('organizations:listPublicLeagues rows', () => {
     expect(leagues.rows.map((row) => [row.name, row.divisionLabel])).toEqual([
       ['Coed 4s', 'Coed · 4v4 · BB'],
       ['Men Over-30 11v11', 'Men · 11v11 · Rec · 30+'],
-      ['Undivided', undefined],
     ]);
-    expect(Object.keys(leagues.rows[2] ?? {})).not.toContain('divisionLabel');
   });
 
   test("a league with a custom level shows the organization's name for it beside the standard level", async () => {
@@ -758,7 +829,14 @@ describe('organizations:listPublicLeagues rows', () => {
     await seed(t, {
       organization: { name: 'Far Club', slug: 'far' },
       locations,
-      leagues: [{ name: 'Far League', sport: 'softball', locations: ['Row 013', 'Row 001'] }],
+      leagues: [
+        {
+          name: 'Far League',
+          sport: 'softball',
+          locations: ['Row 013', 'Row 001'],
+          division: defaultDivision('softball'),
+        },
+      ],
     });
     const shownLocations = await t.query(api.organizations.listPublicLocations, {
       slug: 'far',
@@ -772,6 +850,7 @@ describe('organizations:listPublicLeagues rows', () => {
         slug: 'far-league',
         sportName: 'Softball',
         locationNames: ['Row 013', 'Row 001'],
+        divisionLabel: 'Coed · 9v9 · Rec',
         seasons: [],
       },
     ]);
@@ -790,6 +869,7 @@ describe('organizations:listPublicLeagues rows', () => {
         name: 'Crossed League',
         sport: 'soccer',
         locations: [],
+        division: defaultDivision('soccer'),
       });
       await ctx.db.patch('leagues', leagueId, { locationIds: [bField._id, bayside._id] });
     });
@@ -802,6 +882,7 @@ describe('organizations:listPublicLeagues rows', () => {
       slug: 'crossed-league',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
+      divisionLabel: 'Coed · 4v4 · Rec',
       seasons: [],
     });
     expect(JSON.stringify(leagues)).not.toContain('B Field');
@@ -823,6 +904,7 @@ describe('organizations:listPublicLeagues rows', () => {
     }
     for (const league of leagues.rows) {
       expect(Object.keys(league).sort()).toEqual([
+        'divisionLabel',
         'locationNames',
         'name',
         'seasons',
@@ -890,13 +972,19 @@ describe('organizations: totals and page bounds against a recount', () => {
     await seedB(t);
     await t.run(async (ctx) => {
       await insertLocation(ctx, orgA, { name: 'aaa Courts', address: '9 Shore Rd' });
-      await insertLeague(ctx, orgA, { name: 'zz League', sport: 'soccer', locations: [] });
+      await insertLeague(ctx, orgA, {
+        name: 'zz League',
+        sport: 'soccer',
+        locations: [],
+        division: defaultDivision('soccer'),
+      });
     });
     await t.mutation(internal.testing.addLeague, {
       organizationSlug: 'other-org',
       name: 'Second B League',
       sport: 'beachVolleyball',
       locations: ['B Field'],
+      division: defaultDivision('beachVolleyball'),
     });
     const expected = await recount(t);
     for (const slug of ['gulf-coast', 'other-org']) {
@@ -922,6 +1010,7 @@ describe('organizations: totals and page bounds against a recount', () => {
           name: `Concurrent League ${i}`,
           sport: 'softball',
           locations: ['Bayside Athletic Complex'],
+          division: defaultDivision('softball'),
         }),
       ),
       ...Array.from({ length: 10 }, (_, i) =>
@@ -976,11 +1065,13 @@ function seedSports(t: T, slug: string) {
         name: `Sand ${name}`,
         sport: 'beachVolleyball' as const,
         locations: i === 0 ? ['Court A', 'Court A'] : [fields[i % 3]],
+        division: defaultDivision('beachVolleyball' as const),
       })),
       ...numbered(3).map((name) => ({
         name: `Kick ${name}`,
         sport: 'soccer' as const,
         locations: ['Turf'],
+        division: defaultDivision('soccer' as const),
       })),
     ],
   });
@@ -1013,8 +1104,18 @@ describe('organizations:getPublicPage sports', () => {
         { name: 'Diamond', address: '1 Diamond Rd' },
       ],
       leagues: [
-        { name: 'Other Soccer', sport: 'soccer', locations: ['Turf', 'Diamond'] },
-        { name: 'Other Softball', sport: 'softball', locations: ['Diamond'] },
+        {
+          name: 'Other Soccer',
+          sport: 'soccer',
+          locations: ['Turf', 'Diamond'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Other Softball',
+          sport: 'softball',
+          locations: ['Diamond'],
+          division: defaultDivision('softball'),
+        },
       ],
     });
     expect((await t.query(api.organizations.getPublicPage, { slug: 'sandy' }))?.sports).toEqual([
@@ -1036,9 +1137,14 @@ describe('organizations:getPublicPage sports', () => {
       organization: { name: 'Order', slug: 'order' },
       locations: [],
       leagues: [
-        { name: 'S', sport: 'softball', locations: [] },
-        { name: 'B', sport: 'beachVolleyball', locations: [] },
-        { name: 'F', sport: 'soccer', locations: [] },
+        { name: 'S', sport: 'softball', locations: [], division: defaultDivision('softball') },
+        {
+          name: 'B',
+          sport: 'beachVolleyball',
+          locations: [],
+          division: defaultDivision('beachVolleyball'),
+        },
+        { name: 'F', sport: 'soccer', locations: [], division: defaultDivision('soccer') },
       ],
     });
     const page = await t.query(api.organizations.getPublicPage, { slug: 'order' });
@@ -1061,7 +1167,13 @@ describe('organizations:getPublicPage sports', () => {
 
   test('reads missing sport counters as no sports (an organization the backfill has not reached)', async () => {
     const t = setup();
-    await t.run((ctx) => ctx.db.insert('organizations', { name: 'Old Club', slug: 'old' }));
+    await t.run((ctx) =>
+      ctx.db.insert('organizations', {
+        ...organizationListFields('Old Club'),
+        name: 'Old Club',
+        slug: 'old',
+      }),
+    );
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old' })).toMatchObject({
       sportCount: 0,
       sports: [],
@@ -1071,11 +1183,20 @@ describe('organizations:getPublicPage sports', () => {
   test('a league written to an organization without sport counters leaves them unset and writes no sportLocations row', async () => {
     const t = setup();
     const organizationId = await t.run((ctx) =>
-      ctx.db.insert('organizations', { name: 'Old Club', slug: 'old' }),
+      ctx.db.insert('organizations', {
+        ...organizationListFields('Old Club'),
+        name: 'Old Club',
+        slug: 'old',
+      }),
     );
     await t.run(async (ctx) => {
       await ctx.db.insert('locations', { organizationId, name: 'F', address: 'A' });
-      await insertLeague(ctx, organizationId, { name: 'L', sport: 'soccer', locations: ['F'] });
+      await insertLeague(ctx, organizationId, {
+        name: 'L',
+        sport: 'soccer',
+        locations: ['F'],
+        division: defaultDivision('soccer'),
+      });
     });
     const state = await t.run(async (ctx) => ({
       organization: await ctx.db.get('organizations', organizationId),
@@ -1102,11 +1223,21 @@ describe('organizations:getPublicPage sports', () => {
       );
     expect(await sportsOf()).toEqual([]);
     await t.run((ctx) =>
-      insertLeague(ctx, organizationId, { name: 'A', sport: 'soccer', locations: ['One'] }),
+      insertLeague(ctx, organizationId, {
+        name: 'A',
+        sport: 'soccer',
+        locations: ['One'],
+        division: defaultDivision('soccer'),
+      }),
     );
     expect(await sportsOf()).toEqual([['soccer', 1, 1]]);
     await t.run((ctx) =>
-      insertLeague(ctx, organizationId, { name: 'B', sport: 'soccer', locations: ['One', 'Two'] }),
+      insertLeague(ctx, organizationId, {
+        name: 'B',
+        sport: 'soccer',
+        locations: ['One', 'Two'],
+        division: defaultDivision('soccer'),
+      }),
     );
     expect(await sportsOf()).toEqual([['soccer', 2, 2]]);
     await expect(
@@ -1115,6 +1246,7 @@ describe('organizations:getPublicPage sports', () => {
           name: 'C',
           sport: 'soccer',
           locations: ['One', 'Nope'],
+          division: defaultDivision('soccer'),
         }),
       ),
     ).rejects.toThrow(/Nope/);
@@ -1159,15 +1291,36 @@ describe('organizations:listPublicLeagues with a sport', () => {
       organization: { name: `Org ${slug}`, slug },
       locations: [{ name: 'Home Field', address: '1 Home Road' }],
       leagues: [
-        { name: 'Aaa Sand', sport: 'beachVolleyball', locations: ['Home Field'] },
+        {
+          name: 'Aaa Sand',
+          sport: 'beachVolleyball',
+          locations: ['Home Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
         ...SOCCER_NAMES.map((name) => ({
           name,
           sport: 'soccer' as const,
           locations: ['Home Field'],
+          division: defaultDivision('soccer' as const),
         })),
-        { name: 'Bbb Sand', sport: 'beachVolleyball', locations: [] },
-        { name: 'Aaa Softball', sport: 'softball', locations: ['Home Field'] },
-        { name: 'Zzz Sand', sport: 'beachVolleyball', locations: [] },
+        {
+          name: 'Bbb Sand',
+          sport: 'beachVolleyball',
+          locations: [],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Aaa Softball',
+          sport: 'softball',
+          locations: ['Home Field'],
+          division: defaultDivision('softball'),
+        },
+        {
+          name: 'Zzz Sand',
+          sport: 'beachVolleyball',
+          locations: [],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
   }
@@ -1282,8 +1435,13 @@ describe('organizations:listPublicLeagues with a sport', () => {
   test('a missing sport counter reads as 0 leagues', async () => {
     const t = setup();
     await t.run(async (ctx) => {
-      const organizationId = await ctx.db.insert('organizations', { name: 'Old', slug: 'old' });
+      const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('Old'),
+        name: 'Old',
+        slug: 'old',
+      });
       await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'L'),
         organizationId,
         name: 'L',
         slug: 'l',
@@ -1367,6 +1525,7 @@ describe('organizations.getAttention', () => {
       for (const name of names) {
         ids.push(
           await ctx.db.insert('leagues', {
+            ...leagueRequiredFields('soccer', name),
             organizationId,
             name,
             slug: name.toLowerCase().replaceAll(' ', '-'),
@@ -1397,6 +1556,7 @@ describe('organizations.getAttention', () => {
           startDate: '2031-06-01',
           endDate: '2031-08-30',
           registrationDeadline: season.registrationDeadline,
+          playersPerSide: 4,
           minimumRosterSize: 4,
           status: season.status ?? 'draft',
         });

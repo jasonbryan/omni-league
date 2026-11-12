@@ -7,7 +7,7 @@ import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatValidator, sportCountsValidator, sportValidator } from './lib/sports';
+import { sportCountsValidator, sportValidator } from './lib/sports';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
@@ -45,8 +45,8 @@ export default defineSchema({
     pendingInviteCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
-    sortName: v.optional(v.string()),
-    hasPublishedLeague: v.optional(v.boolean()),
+    sortName: v.string(),
+    hasPublishedLeague: v.boolean(),
     logoStorageId: v.optional(v.id('_storage')),
   })
     .index('by_slug', ['slug'])
@@ -98,16 +98,16 @@ export default defineSchema({
     sortName: v.optional(v.string()),
     status: v.optional(leagueStatusValidator),
     publishedSeasonCount: v.optional(v.number()),
-    gender: v.optional(genderValidator),
-    playersPerSide: v.optional(v.number()),
+    gender: genderValidator,
+    playersPerSide: v.number(),
     /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
-    level: v.optional(standardLevelValidator),
+    level: standardLevelValidator,
     customLevelId: v.optional(v.id('customLevels')),
-    ageGroup: v.optional(ageGroupValidator),
+    ageGroup: ageGroupValidator,
     /** Absent means `playersPerSide`; when set it is at least that, and at most `ROSTER_SIZE_INPUT_MAX`. */
     minimumRosterSize: v.optional(v.number()),
     /** The words a search finds the league by: its name, its organization's name, its locations' names, and City, state. */
-    searchText: v.optional(v.string()),
+    searchText: v.string(),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
@@ -155,8 +155,7 @@ export default defineSchema({
     endDate: v.string(),
     registrationDeadline: v.string(),
     /** The league's players per side when the season was created. */
-    playersPerSide: v.optional(v.number()),
-    format: v.optional(formatValidator),
+    playersPerSide: v.number(),
     minimumRosterSize: v.number(),
     status: seasonStatusValidator,
     /** Kept by `convex/lib/rosterWrites.ts`; absent on a season written before teams existed, which has none. */

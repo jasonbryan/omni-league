@@ -5,7 +5,7 @@ import { api, internal } from './_generated/api';
 import { recountPendingInvites } from './lib/inviteWrites';
 import { hashInviteToken } from './lib/inviteToken';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
-import { insertSeason, insertTenant } from './lib/tenantWrites';
+import { insertSeason, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -19,7 +19,14 @@ async function setup() {
     await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Field', address: '1 Test Road' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
   });
   return t;

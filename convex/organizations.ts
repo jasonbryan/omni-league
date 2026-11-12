@@ -226,7 +226,7 @@ async function publicLeagueRow(
     slug: league.slug,
     sportName: sportName(league.sport),
     locationNames,
-    ...(label !== undefined && { divisionLabel: label }),
+    divisionLabel: label,
     seasons: await leagueRowSeasons(ctx, league),
   };
 }
@@ -270,17 +270,12 @@ export const listPublicLeagueFacets = query({
     const organization = await findOrganizationBySlug(ctx, slug);
     if (!organization) return [];
     const leagues = await publishedLeagues(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
-    const facets: PublicLeagueFacets = [];
-    for (const { gender, playersPerSide, level, ageGroup } of leagues) {
-      const facet = {
-        ...(gender !== undefined && { gender }),
-        ...(playersPerSide !== undefined && { playersPerSide }),
-        ...(level !== undefined && { level }),
-        ...(ageGroup !== undefined && { ageGroup }),
-      };
-      if (Object.keys(facet).length > 0) facets.push(facet);
-    }
-    return facets;
+    return leagues.map(({ gender, playersPerSide, level, ageGroup }) => ({
+      gender,
+      playersPerSide,
+      level,
+      ageGroup,
+    }));
   },
 });
 

@@ -8,7 +8,7 @@ import type { Id } from './_generated/dataModel';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { addRosterEntry, insertFreeAgent, insertTeamWithCaptain } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -48,7 +48,14 @@ async function setup() {
     const organizationId = await insertTenant(ctx, {
       organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] }],
+      leagues: [
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const league = (await ctx.db
       .query('leagues')

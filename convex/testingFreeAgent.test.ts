@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { components, internal } from './_generated/api';
 import { ACCOUNTS_PER_SEED_CALL } from './lib/seedCallLimits';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
-import { insertSeason, insertTenant } from './lib/tenantWrites';
+import { insertSeason, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -28,7 +28,14 @@ async function setup() {
     const organizationId = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] }],
+      leagues: [
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const league = (await ctx.db
       .query('leagues')
