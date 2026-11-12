@@ -43,6 +43,7 @@ import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm, type CreatedSeason, type SeasonShown } from './season-create-form';
+import { HlmSkeleton } from '../../ui/skeleton';
 
 interface PublishedSeason {
   seasonId: Id<'seasons'>;
@@ -59,6 +60,7 @@ interface PublishedSeason {
   imports: [
     AdminAlert,
     HlmBadge,
+    HlmSkeleton,
     LeagueBreadcrumb,
     LeagueDetailsForm,
     NgIcon,
@@ -309,12 +311,14 @@ interface PublishedSeason {
                 <div class="flex gap-3 px-4 py-3.5 md:px-5">
                   <div class="flex-1">
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-48 max-w-full"
+                      class="rounded-md h-4 w-48 max-w-full"
                     ></div>
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-64 max-w-full"
+                      class="rounded-md mt-2 h-3.5 w-64 max-w-full"
                     ></div>
                   </div>
                 </div>

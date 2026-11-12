@@ -5,9 +5,7 @@ import { lucideArrowLeft } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../convex/lib/seasonInput';
 import { seasonDates } from '../organizations/league/season-dates';
 import type { RegistrationAnswer } from './register-team-state';
-
-const FILL = 'bg-muted motion-safe:animate-pulse';
-const SKELETON = `rounded-md ${FILL}`;
+import { HlmSkeleton } from '../ui/skeleton';
 
 export function rosterRange(minimumRosterSize: number, maxRosterSize?: number): string {
   if (maxRosterSize === undefined) return `At least ${minimumRosterSize} players`;
@@ -91,6 +89,7 @@ export class RegisterCard {
 
 @Component({
   selector: 'app-register-skeleton',
+  imports: [HlmSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -98,31 +97,31 @@ export class RegisterCard {
       <div data-testid="register-skeleton" class="mx-auto w-full max-w-lg">
         <p role="status" class="sr-only">Loading the season.</p>
         <div aria-hidden="true" class="flex h-5 items-center pointer-coarse:h-11">
-          <div class="${SKELETON} h-4 w-56"></div>
+          <div hlmSkeleton class="rounded-md h-4 w-56"></div>
         </div>
         <div
           aria-hidden="true"
           class="mt-3 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
           <div class="px-5 pt-6 md:px-8 md:pt-8">
-            <div class="${SKELETON} h-5 w-28"></div>
-            <div class="${SKELETON} mt-1 h-8 w-72 max-w-full"></div>
-            <div class="${SKELETON} mt-2 h-5 w-44"></div>
+            <div hlmSkeleton class="rounded-md h-5 w-28"></div>
+            <div hlmSkeleton class="rounded-md mt-1 h-8 w-72 max-w-full"></div>
+            <div hlmSkeleton class="rounded-md mt-2 h-5 w-44"></div>
           </div>
           <div class="mx-5 mt-5 divide-y divide-border rounded-lg border border-border md:mx-8">
             @for (row of rows; track row) {
               <div class="flex justify-between gap-x-4 px-3 py-2.5">
-                <div class="${SKELETON} h-5 w-24"></div>
-                <div class="${SKELETON} h-5 w-32"></div>
+                <div hlmSkeleton class="rounded-md h-5 w-24"></div>
+                <div hlmSkeleton class="rounded-md h-5 w-32"></div>
               </div>
             }
           </div>
           <div class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
-            <div class="${SKELETON} h-5 w-full"></div>
+            <div hlmSkeleton class="rounded-md h-5 w-full"></div>
             @if (withNameField()) {
-              <div class="${SKELETON} mt-5 h-9 w-full"></div>
+              <div hlmSkeleton class="rounded-md mt-5 h-9 w-full"></div>
             }
-            <div class="${FILL} mt-6 h-9 w-full rounded-lg"></div>
+            <div hlmSkeleton class="mt-6 h-9 w-full rounded-lg"></div>
           </div>
         </div>
       </div>

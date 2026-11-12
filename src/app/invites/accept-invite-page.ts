@@ -46,6 +46,7 @@ import { InviteOfflineAlert } from './invite-offline-alert';
 import type { AlertTexts } from '../organizations/admin/alert-text';
 import { HlmSpinner } from '../ui/spinner';
 import { InviteTokenStore } from './invite-token-store';
+import { HlmSkeleton } from '../ui/skeleton';
 
 interface InviteSummary {
   organizationName: string;
@@ -94,6 +95,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
 @Component({
   selector: 'app-accept-invite-page',
   imports: [
+    HlmSkeleton,
     HlmSpinner,
     InviteAlert,
     InviteOfflineAlert,
@@ -130,23 +132,19 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                 <p role="status" class="sr-only">Checking your invite…</p>
                 <div class="px-5 pt-6 md:px-8 md:pt-8">
                   <div
+                    hlmSkeleton
                     data-skeleton="icon"
                     aria-hidden="true"
-                    class="size-10 rounded-lg bg-muted motion-safe:animate-pulse"
+                    class="size-10 rounded-lg"
                   ></div>
+                  <div hlmSkeleton aria-hidden="true" class="mt-4 h-5 w-20 rounded-md"></div>
                   <div
-                    aria-hidden="true"
-                    class="mt-4 h-5 w-20 rounded-md bg-muted motion-safe:animate-pulse"
-                  ></div>
-                  <div
+                    hlmSkeleton
                     data-skeleton="heading"
                     aria-hidden="true"
-                    class="mt-1 h-8 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
+                    class="mt-1 h-8 w-64 max-w-full rounded-md"
                   ></div>
-                  <div
-                    aria-hidden="true"
-                    class="mt-2 h-5 w-full rounded-md bg-muted motion-safe:animate-pulse"
-                  ></div>
+                  <div hlmSkeleton aria-hidden="true" class="mt-2 h-5 w-full rounded-md"></div>
                 </div>
                 <div
                   aria-hidden="true"
@@ -154,20 +152,18 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                 >
                   @for (row of skeletonRows; track row) {
                     <div class="flex justify-between gap-x-4 px-3 py-2.5">
-                      <div
-                        data-skeleton="row"
-                        class="h-5 w-24 rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div class="h-5 w-32 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                      <div hlmSkeleton data-skeleton="row" class="h-5 w-24 rounded-md"></div>
+                      <div hlmSkeleton class="h-5 w-32 rounded-md"></div>
                     </div>
                   }
                 </div>
                 <div aria-hidden="true" class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
-                  <div class="h-5 w-40 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                  <div hlmSkeleton class="h-5 w-40 rounded-md"></div>
                   <div
+                    hlmSkeleton
                     data-skeleton="button"
                     aria-hidden="true"
-                    class="mt-4 h-9 w-full rounded-lg bg-muted motion-safe:animate-pulse"
+                    class="mt-4 h-9 w-full rounded-lg"
                   ></div>
                 </div>
               </div>

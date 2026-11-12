@@ -16,8 +16,8 @@ import {
   moreItemsText,
 } from './attention-text';
 import { OUTLINE_BUTTON } from './button-classes';
+import { HlmSkeleton } from '../../ui/skeleton';
 
-const PULSE = 'bg-muted motion-safe:animate-pulse';
 const ROW = 'flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 md:px-5';
 const ICON =
   'flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -25,7 +25,7 @@ const ACTION = `${OUTLINE_BUTTON} w-full sm:w-auto`;
 
 @Component({
   selector: 'app-admin-attention',
-  imports: [AdminAlert, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmSkeleton, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCalendar, lucidePencil, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block self-start xl:col-span-3' },
@@ -124,12 +124,12 @@ const ACTION = `${OUTLINE_BUTTON} w-full sm:w-auto`;
         <div aria-hidden="true" class="divide-y divide-border">
           @for (row of skeletonRows; track row) {
             <div class="${ROW}">
-              <div class="${PULSE} size-9 shrink-0 rounded-lg"></div>
+              <div hlmSkeleton class="size-9 shrink-0 rounded-lg"></div>
               <div class="min-w-0 flex-1">
-                <div class="${PULSE} h-5 w-48 max-w-full rounded-md"></div>
-                <div class="${PULSE} mt-1 h-4 w-64 max-w-full rounded-md"></div>
+                <div hlmSkeleton class="h-5 w-48 max-w-full rounded-md"></div>
+                <div hlmSkeleton class="mt-1 h-4 w-64 max-w-full rounded-md"></div>
               </div>
-              <div class="${PULSE} h-9 w-full rounded-lg pointer-coarse:h-11 sm:w-24"></div>
+              <div hlmSkeleton class="h-9 w-full rounded-lg pointer-coarse:h-11 sm:w-24"></div>
             </div>
           }
         </div>

@@ -8,10 +8,11 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { Shell } from '../shell';
 import { initialsOf } from '../shell/initials';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
+import { HlmSkeleton } from '../ui/skeleton';
 
 @Component({
   selector: 'app-account-settings-page',
-  imports: [AdminAlert, NgIcon, Shell],
+  imports: [AdminAlert, HlmSkeleton, NgIcon, Shell],
   providers: [provideIcons({ lucideLogOut })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -41,14 +42,10 @@ import { OUTLINE_BUTTON } from '../ui/button/button-classes';
             } @else if (loading()) {
               <p role="status" class="sr-only">Loading your account details.</p>
               <div aria-hidden="true" class="flex items-center gap-3">
-                <div class="bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-full"></div>
+                <div hlmSkeleton class="size-10 shrink-0 rounded-full"></div>
                 <div class="flex-1">
-                  <div
-                    class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-40 max-w-full"
-                  ></div>
-                  <div
-                    class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-56 max-w-full"
-                  ></div>
+                  <div hlmSkeleton class="rounded-md h-4 w-40 max-w-full"></div>
+                  <div hlmSkeleton class="rounded-md mt-2 h-3.5 w-56 max-w-full"></div>
                 </div>
               </div>
             } @else if (name(); as name) {

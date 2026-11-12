@@ -8,6 +8,7 @@ import { AdminContext, bindAdminTitle } from './admin-context';
 import { AdminOpenSeasons } from './admin-open-seasons';
 import { adminPath } from './admin-path';
 import { PRIMARY_BUTTON } from './button-classes';
+import { HlmSkeleton } from '../../ui/skeleton';
 
 const COUNT_LINK =
   'rounded-sm hover:text-foreground hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center';
@@ -18,7 +19,7 @@ const COUNT_LINK =
  */
 @Component({
   selector: 'app-admin-overview',
-  imports: [AdminAttention, AdminOpenSeasons, NgIcon, RouterLink],
+  imports: [AdminAttention, AdminOpenSeasons, HlmSkeleton, NgIcon, RouterLink],
   providers: [provideIcons({ lucideArrowRight, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -40,8 +41,9 @@ const COUNT_LINK =
               }
             } @else {
               <span
+                hlmSkeleton
                 aria-hidden="true"
-                class="block h-5 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
+                class="block h-5 w-64 max-w-full rounded-md"
               ></span>
             }
           </p>

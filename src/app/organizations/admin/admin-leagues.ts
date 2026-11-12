@@ -40,14 +40,21 @@ import {
   type PublishTarget,
 } from './publish-league-dialog';
 import { injectSectionJump } from './section-jump';
+import { HlmSkeleton } from '../../ui/skeleton';
 
-const FILL = 'bg-muted motion-safe:animate-pulse';
-const PULSE = `rounded-md ${FILL}`;
 const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="alert"]'];
 
 @Component({
   selector: 'app-admin-leagues',
-  imports: [AdminAlert, HlmBadge, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
+  imports: [
+    AdminAlert,
+    HlmBadge,
+    HlmSkeleton,
+    LeagueCreateForm,
+    NgIcon,
+    PublishLeagueDialog,
+    RouterLink,
+  ],
   providers: [
     provideIcons({
       lucideCircleCheck,
@@ -202,12 +209,14 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 <div class="flex gap-3 px-4 py-3.5 md:px-5">
                   <div class="flex-1">
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-48 max-w-full"
+                      class="rounded-md h-4 w-48 max-w-full"
                     ></div>
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-64 max-w-full"
+                      class="rounded-md mt-2 h-3.5 w-64 max-w-full"
                     ></div>
                   </div>
                 </div>
@@ -271,51 +280,61 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               class="px-4 py-4 md:px-5 md:py-5"
             >
               <div class="mb-5">
-                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-full"></div></div>
-                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-24"></div></div>
+                <div class="flex h-5 items-center">
+                  <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
+                </div>
+                <div class="flex h-5 items-center">
+                  <div hlmSkeleton class="rounded-md h-3.5 w-24"></div>
+                </div>
               </div>
               <div class="flex flex-col gap-5">
                 @for (field of skeletonFields; track field) {
                   <div class="flex flex-col gap-2">
-                    <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-16"></div></div>
+                    <div class="flex h-5 items-center">
+                      <div hlmSkeleton class="rounded-md h-3.5 w-16"></div>
+                    </div>
                     <div
+                      hlmSkeleton
                       data-slot="skeleton-input"
-                      class="${FILL} h-9 w-full rounded-lg pointer-coarse:h-11"
+                      class="h-9 w-full rounded-lg pointer-coarse:h-11"
                     ></div>
                     <div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-full"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
                       </div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-full"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
                       </div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-24"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-24"></div>
                       </div>
                     </div>
                   </div>
                 }
                 <div>
                   <div class="mb-1.5 flex h-5 items-center">
-                    <div class="${PULSE} h-3.5 w-16"></div>
+                    <div hlmSkeleton class="rounded-md h-3.5 w-16"></div>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     @for (chip of skeletonChips; track chip) {
                       <div
+                        hlmSkeleton
                         data-slot="skeleton-chip"
-                        class="${FILL} h-9 w-24 rounded-full pointer-coarse:h-11"
+                        class="h-9 w-24 rounded-full pointer-coarse:h-11"
                       ></div>
                     }
                   </div>
                 </div>
                 <div>
-                  <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-20"></div></div>
+                  <div class="flex h-5 items-center">
+                    <div hlmSkeleton class="rounded-md h-3.5 w-20"></div>
+                  </div>
                   <div
                     data-slot="skeleton-location"
                     class="mt-3 flex h-5 items-center gap-3 pointer-coarse:h-11"
                   >
-                    <div class="${FILL} size-4 shrink-0 rounded-sm"></div>
-                    <div class="${PULSE} h-3.5 w-48 max-w-full"></div>
+                    <div hlmSkeleton class="size-4 shrink-0 rounded-sm"></div>
+                    <div hlmSkeleton class="rounded-md h-3.5 w-48 max-w-full"></div>
                   </div>
                 </div>
               </div>

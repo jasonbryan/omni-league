@@ -12,6 +12,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { adminPath } from '../organizations/admin/admin-path';
 import { teamPath } from '../teams/team-paths';
+import { SKELETON_CLASSES } from '../ui/skeleton';
 import { injectCurrentUrl } from './current-url';
 import {
   SIDEBAR_GROUP_LABEL,
@@ -110,7 +111,8 @@ const HOME_PATH = '/app';
           <p role="status" class="sr-only">Loading your teams and organizations.</p>
           <div
             aria-hidden="true"
-            class="mx-3 h-9 rounded-lg bg-muted motion-safe:animate-pulse"
+            data-slot="skeleton"
+            class="${SKELETON_CLASSES} mx-3 h-9 rounded-lg"
           ></div>
         </div>
       }
