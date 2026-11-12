@@ -9,11 +9,12 @@ import {
   PRIMARY_BUTTON,
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 
 /** It reads no data and nothing per visitor, so the server and the browser render the same DOM. */
 @Component({
   selector: 'app-not-found-view',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCompass, lucideHouse, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 md:px-8', '[class]': 'spacing()' },
@@ -41,7 +42,9 @@ import {
       </div>
     } @else {
       <div
-        class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+        hlmCard
+        size="bare"
+        class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
       >
         <span
           class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"

@@ -21,6 +21,7 @@ import {
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
 import { slotsOf } from '../../ui/testing/helm-slots';
+import { expectBareCard } from '../../ui/testing/card';
 import {
   at,
   leagueQueryResults,
@@ -214,6 +215,13 @@ describe('PublicLeaguePage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
+  });
+
+  it('puts the open season card’s slot, size, and classes in the raw HTML as static attributes', async () => {
+    const { body } = await render(LEAGUE_PATH, answer());
+    const cards = body.querySelectorAll('main section#registration-open [data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'mt-5 flex flex-col gap-5 p-5 md:flex-row md:items-center md:p-6');
   });
 
   it('puts Full and the open waitlist in the raw HTML of a full season’s card and row', async () => {

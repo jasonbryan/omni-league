@@ -1,24 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
 import { OPEN_SEASONS_INTRO } from './season-status';
 
-const FILL = 'block bg-muted motion-safe:animate-pulse';
-const BAR = `rounded-md ${FILL}`;
+const BAR = 'block rounded-md';
 
 @Component({
   selector: 'app-organization-rows-skeleton',
+  imports: [HlmSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="divide-y divide-border">
       @for (row of rows(); track row) {
         <div class="flex flex-col gap-2 py-4">
-          <span aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
+          <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
           @if (kind() === 'league') {
-            <span aria-hidden="true" class="${BAR} h-4 w-1/3"></span>
-            <span aria-hidden="true" class="${BAR} h-4 w-2/3"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-1/3"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-2/3"></span>
           } @else {
-            <span aria-hidden="true" class="${BAR} h-4 w-2/3"></span>
-            <span aria-hidden="true" class="${BAR} h-3 w-1/4"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-2/3"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-3 w-1/4"></span>
           }
         </div>
       }
@@ -33,36 +35,36 @@ export class OrganizationRowsSkeleton {
 
 @Component({
   selector: 'app-open-seasons-skeleton',
+  imports: [HlmCard, HlmSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     @if (count() === 0) {
-      <div class="${BAR} mt-1 w-fit text-sm">
+      <div hlmSkeleton class="${BAR} mt-1 w-fit text-sm">
         <span aria-hidden="true" class="invisible">{{ noOpenText() }}</span>
       </div>
     } @else {
-      <div class="${BAR} mt-1 w-fit text-sm">
+      <div hlmSkeleton class="${BAR} mt-1 w-fit text-sm">
         <span aria-hidden="true" class="invisible">{{ intro }}</span>
       </div>
       <div class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
         @for (card of cards(); track card) {
-          <div
-            class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
-            <span aria-hidden="true" class="${FILL} h-5.5 w-28 rounded-full"></span>
+          <div hlmCard size="bare" class="flex flex-col p-5">
+            <span hlmSkeleton aria-hidden="true" class="block h-5.5 w-28 rounded-full"></span>
             <div class="mt-3 flex h-7 items-center pointer-coarse:h-11">
-              <span aria-hidden="true" class="${BAR} h-6 w-3/4"></span>
+              <span hlmSkeleton aria-hidden="true" class="${BAR} h-6 w-3/4"></span>
             </div>
-            <span aria-hidden="true" class="${BAR} h-5 w-1/3"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-1/3"></span>
             <div class="mt-4 space-y-2">
-              <span aria-hidden="true" class="${BAR} h-5 w-2/3"></span>
-              <span aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
-              <span aria-hidden="true" class="${BAR} h-5 w-3/5"></span>
+              <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-2/3"></span>
+              <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
+              <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-3/5"></span>
             </div>
             <div class="mt-auto pt-5">
               <div class="flex items-center justify-between gap-3 border-t border-border pt-4">
-                <span aria-hidden="true" class="${BAR} h-5 w-24"></span>
+                <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-24"></span>
                 <span
+                  hlmSkeleton
                   aria-hidden="true"
                   class="${BAR} h-9 w-28 shrink-0 pointer-coarse:h-11"
                 ></span>
@@ -84,7 +86,7 @@ export class OpenSeasonsSkeleton {
 
 @Component({
   selector: 'app-organization-skeleton',
-  imports: [OpenSeasonsSkeleton, OrganizationRowsSkeleton],
+  imports: [HlmSkeleton, OpenSeasonsSkeleton, OrganizationRowsSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'data-testid': 'organization-skeleton', 'data-page-loading': '' },
   template: `
@@ -94,22 +96,28 @@ export class OpenSeasonsSkeleton {
         <div class="min-w-0 flex-1">
           <div class="flex items-start gap-3 md:items-center md:gap-4">
             <span
+              hlmSkeleton
               aria-hidden="true"
-              class="${FILL} mt-0.5 size-8 shrink-0 rounded-lg md:mt-0 md:size-12 md:rounded-xl"
+              class="block mt-0.5 size-8 shrink-0 rounded-lg md:mt-0 md:size-12 md:rounded-xl"
             ></span>
-            <span aria-hidden="true" class="${BAR} h-8 w-3/4 md:h-12 md:w-2/3"></span>
+            <span hlmSkeleton aria-hidden="true" class="${BAR} h-8 w-3/4 md:h-12 md:w-2/3"></span>
           </div>
-          <span aria-hidden="true" class="${BAR} mt-2 h-6 w-3/5 md:mt-3 md:h-7 md:w-1/3"></span>
+          <span
+            hlmSkeleton
+            aria-hidden="true"
+            class="${BAR} mt-2 h-6 w-3/5 md:mt-3 md:h-7 md:w-1/3"
+          ></span>
         </div>
-        <span aria-hidden="true" class="${BAR} h-11 w-56 md:shrink-0"></span>
+        <span hlmSkeleton aria-hidden="true" class="${BAR} h-11 w-56 md:shrink-0"></span>
       </div>
     </div>
     <div class="border-b border-border pb-4 md:pb-6">
       <div class="mx-auto flex w-full max-w-6xl flex-wrap gap-2 px-4 md:px-8">
         @for (width of chipWidths; track $index) {
           <span
+            hlmSkeleton
             aria-hidden="true"
-            class="${FILL} h-11 rounded-full md:h-9 pointer-coarse:min-h-11"
+            class="block h-11 rounded-full md:h-9 pointer-coarse:min-h-11"
             [class]="width"
           ></span>
         }
@@ -117,16 +125,16 @@ export class OpenSeasonsSkeleton {
     </div>
     <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
       <div class="py-8 md:py-12">
-        <span aria-hidden="true" class="${BAR} h-7 w-48"></span>
+        <span hlmSkeleton aria-hidden="true" class="${BAR} h-7 w-48"></span>
         <app-open-seasons-skeleton />
       </div>
       <div class="grid gap-x-12 border-t border-border lg:grid-cols-3">
         <div class="py-8 md:py-12 lg:col-span-2">
-          <span aria-hidden="true" class="${BAR} h-7 w-32"></span>
+          <span hlmSkeleton aria-hidden="true" class="${BAR} h-7 w-32"></span>
           <app-organization-rows-skeleton kind="league" class="mt-2 block" />
         </div>
         <div class="border-t border-border py-8 md:py-12 lg:border-t-0">
-          <span aria-hidden="true" class="${BAR} h-7 w-32"></span>
+          <span hlmSkeleton aria-hidden="true" class="${BAR} h-7 w-32"></span>
           <app-organization-rows-skeleton kind="location" class="mt-4 block" />
         </div>
       </div>

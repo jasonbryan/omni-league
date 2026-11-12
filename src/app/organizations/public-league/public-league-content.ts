@@ -26,6 +26,7 @@ import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { HlmBadge } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
+import { HlmCard } from '../../ui/card';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
@@ -40,7 +41,15 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-public-league-content',
-  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [
+    HlmBadge,
+    HlmBreadcrumbImports,
+    HlmCard,
+    NgIcon,
+    PageControl,
+    RouterLink,
+    SavedCopyNote,
+  ],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -95,7 +104,9 @@ function plural(count: number, noun: string): string {
                 Registration open
               </h2>
               <div
-                class="mt-5 flex flex-col gap-5 rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:flex-row md:items-center md:p-6"
+                hlmCard
+                size="bare"
+                class="mt-5 flex flex-col gap-5 p-5 md:flex-row md:items-center md:p-6"
               >
                 <div class="min-w-0 flex-1">
                   <h3 class="text-lg font-semibold tracking-tight">

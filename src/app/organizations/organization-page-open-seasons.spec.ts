@@ -10,6 +10,8 @@ import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
+import { radiusClasses } from '../ui/testing/radius-classes';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -181,6 +183,12 @@ describe('the Registration open section', () => {
         'Coed 7v7 Rec',
         'Sunday Reverse Coed 4s',
       ]);
+    });
+
+    it('draws each card as a bare helm card on its list item', () => {
+      const cards = [...(section(harness)?.querySelectorAll(':scope > ul > li') ?? [])];
+      expect(cards).toHaveLength(2);
+      for (const card of cards) expectBareCard(card, 'flex flex-col p-5');
     });
 
     it('shows the sport, league, season, dates, division and team size, locations, and deadline', () => {
@@ -522,6 +530,12 @@ describe('the Registration open section', () => {
       );
       expect(section(harness)?.querySelectorAll('li')).toHaveLength(0);
       expect(heroLink(harness)).toBeNull();
+      const placeholder = host(harness).querySelector(
+        '[data-hero-actions] > span[aria-hidden="true"]',
+      );
+      expect(placeholder?.getAttribute('data-slot')).toBe('skeleton');
+      expect(placeholder?.classList).toContain('bg-muted');
+      expect(radiusClasses(placeholder)).toEqual(['rounded-md']);
       expect(text(host(harness).querySelector('#leagues h2'))).toBe('Leagues');
       subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);

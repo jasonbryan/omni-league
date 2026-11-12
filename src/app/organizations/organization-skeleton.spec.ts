@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { expectBareCard } from '../ui/testing/card';
 import { OpenSeasonsSkeleton } from './organization-skeleton';
 import { OPEN_SEASONS_INTRO } from './season-status';
 
@@ -43,6 +44,10 @@ describe('OpenSeasonsSkeleton', () => {
 
   describe('each card', () => {
     const card = () => cards(render())[0];
+
+    it('is a bare helm card', () => {
+      expectBareCard(card(), 'flex flex-col p-5');
+    });
 
     it('drops gap-3 and keeps the card chrome', () => {
       expect(classes(card())).not.toContain('gap-3');
