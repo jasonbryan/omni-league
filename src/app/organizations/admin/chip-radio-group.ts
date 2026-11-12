@@ -46,7 +46,7 @@ export interface ChipOption {
         [name]="name()"
         [value]="value()"
         [attr.aria-labelledby]="name() + '-legend'"
-        (valueChange)="chosen.emit($any($event))"
+        (valueChange)="choose($event)"
       >
         <div class="flex flex-wrap gap-2">
           @for (option of options(); track option.key) {
@@ -104,6 +104,10 @@ export class ChipRadioGroup {
     ].filter((id) => id !== null);
     return ids.length > 0 ? ids.join(' ') : null;
   });
+
+  protected choose(key: string | null): void {
+    if (key !== null) this.chosen.emit(key);
+  }
 
   focus(): void {
     this.host.nativeElement.querySelector<HTMLInputElement>('brn-radio input')?.focus();

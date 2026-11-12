@@ -38,14 +38,13 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
   FORCED_COLORS_CHOICE_FOCUS,
 ].join(' ');
 
-// The chip drawn by the radio group's `brn-radio`, which holds the native input. Brain binds `data-checked="false"` on an
-// unchecked radio, so the filled chip is `data-[checked=true]:`: a bare `data-checked:` would fill every chip.
-// The helm radio class string comes first and there is no class merging, so the important margin and `w-auto` undo its top margin
-// and 1rem width (a plain margin utility sorts before the one it must beat), and the data variant beats its has-checked fill by
-// coming later in the stylesheet. The ring on keyboard focus comes from that string too; this adds the WebKit and forced-colours cases.
+// The chip drawn by the radio group's `brn-radio`, which holds the native input.
+// The helm radio classes come first and nothing merges classes: `mt-0!` beats their `mt-0.5`, which a plain zero margin sorts before,
+// and the fill is `data-[checked=true]:` so it matches the specificity of their `has-checked:` fill and comes later in the stylesheet
+// (spartan's `data-checked:` is a zero-specificity `:where()`). Their keyboard focus ring stays; this adds the WebKit and forced-colours cases.
 export const RADIO_CHIP_CLASSES = [
   CHIP_SHAPE,
-  'mt-0! w-auto cursor-pointer select-none not-data-[checked=true]:hover:bg-muted',
+  'mt-0! w-fit cursor-pointer select-none hover:bg-muted',
   'data-[checked=true]:border-foreground data-[checked=true]:bg-foreground data-[checked=true]:text-background',
   WEBKIT_RADIO_CHIP_FOCUS,
   'data-[checked=true]:forced-colors:forced-color-adjust-none data-[checked=true]:forced-colors:bg-[Highlight] data-[checked=true]:forced-colors:text-[HighlightText]',

@@ -164,10 +164,10 @@ describe('radio chip classes', () => {
   it('undoes the margin and the 1rem width of the radio classes it follows', () => {
     expect(RADIO_CLASSES).toContain('mt-0.5');
     expect(RADIO_CLASSES).toContain('size-4');
-    expect(radio).toEqual(expect.arrayContaining(['mt-0!', 'w-auto']));
+    expect(radio).toEqual(expect.arrayContaining(['mt-0!', 'w-fit']));
   });
 
-  it('fills the checked chip with data-[checked=true]:, because brain gives an unchecked radio data-checked="false"', () => {
+  it('fills the checked chip with data-[checked=true]:, which outranks the radio classes’ has-checked fill', () => {
     expect(radio).toEqual(
       expect.arrayContaining([
         'data-[checked=true]:border-foreground',
@@ -178,9 +178,9 @@ describe('radio chip classes', () => {
     expect(radio.filter((name) => name.startsWith('data-checked:'))).toEqual([]);
   });
 
-  it('hovers only an unchecked chip', () => {
-    expect(radio).toContain('not-data-[checked=true]:hover:bg-muted');
-    expect(radio).not.toContain('hover:bg-muted');
+  it('hovers with the muted fill, which the checked fill that follows it in the stylesheet overrides', () => {
+    expect(radio).toContain('hover:bg-muted');
+    expect(radio).not.toContain('not-data-[checked=true]:hover:bg-muted');
   });
 
   it('takes the focus ring on keyboard focus from the radio classes it follows', () => {
