@@ -51,26 +51,20 @@ export class HlmRadio<T = unknown> {
   readonly userClass = input('', { alias: 'class' });
   protected readonly _computedClass = computed(() => `${RADIO_CLASSES} ${this.userClass()}`);
 
-  /** Used to set the id on the underlying brn element. */
   readonly inputId = input<string | undefined>(undefined);
 
-  /** Used to set the aria-label attribute on the underlying brn element. */
   readonly ariaLabel = input<string | undefined>(undefined, { alias: 'aria-label' });
 
-  /** Used to set the aria-labelledby attribute on the underlying brn element. */
   readonly ariaLabelledby = input<string | undefined>(undefined, { alias: 'aria-labelledby' });
 
-  /** Used to set the aria-describedby attribute on the underlying brn element. */
   readonly ariaDescribedby = input<string | undefined>(undefined, { alias: 'aria-describedby' });
 
-  /** The value this radio button represents. */
   readonly value = input.required<T>();
 
   readonly required = input(false, { transform: booleanAttribute });
 
   readonly disabled = input(false, { transform: booleanAttribute });
 
-  /** Event emitted when the checked state of this radio button changes. */
   // eslint-disable-next-line @angular-eslint/no-output-native
   readonly change = output<BrnRadioChange<T>>();
 }
