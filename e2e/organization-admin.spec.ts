@@ -137,6 +137,7 @@ test.describe('the admin area: entry and navigation', () => {
         /Switch organization/,
         'Overview',
         /^Leagues\d*$/,
+        'Tournaments',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',
