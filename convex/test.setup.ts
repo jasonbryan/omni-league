@@ -42,6 +42,15 @@ export function tournamentProgramFields(organizationId: Id<'organizations'>, slu
   };
 }
 
+export function insertTournamentProgram(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  name: string,
+  slug: string,
+): Promise<Id<'programs'>> {
+  return ctx.db.insert('programs', { ...tournamentProgramFields(organizationId, slug), name });
+}
+
 export async function insertLeagueWithProgram(
   ctx: Pick<MutationCtx, 'db'>,
   league: Omit<Doc<'leagues'>, '_id' | '_creationTime' | 'programId'>,

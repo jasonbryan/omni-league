@@ -9,7 +9,7 @@ import { hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { insertTournamentProgram, modules } from './test.setup';
 
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
 
@@ -118,6 +118,15 @@ async function setup() {
       coed,
       sand,
       other,
+      gulf: await insertTournamentProgram(
+        ctx,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      ),
+      winter: await insertTournamentProgram(ctx, organizationA, 'Winter Classic', 'winter-classic'),
+      tournamentB: await insertTournamentProgram(ctx, organizationB, 'B Open', 'b-open'),
+      coedProgram: (await ctx.db.get('leagues', coed))!.programId,
       adminA: await person('admin-a', { organizationId: organizationA, role: 'orgAdmin' }),
       organizerA: await person('organizer-a', {
         organizationId: organizationA,
@@ -201,12 +210,14 @@ const invite = (
   email: string,
   role: Role = 'orgAdmin',
   leagueIds: Id<'leagues'>[] = [],
+  programIds?: Id<'programs'>[],
 ) =>
   s.asAdminA.action(api.invites.create, {
     organizationId: s.organizationA,
     email,
     role,
     leagueIds,
+    ...(programIds && { programIds }),
   });
 
 const allInvites = (s: Setup) => s.t.run((ctx) => ctx.db.query('invites').collect());
@@ -287,6 +298,93 @@ describe('invites.create', () => {
       /Not allowed/,
     );
     expect(await allInvites(s)).toEqual([]);
+  });
+
+  describe('with programs', () => {
+    test('stores a tournament-only league organizer invite, and a league invite keeps no programIds', async () => {
+      const s = await setup();
+      await invite(s, 'dana@example.com', 'leagueOrganizer', [], [s.gulf]);
+      await invite(s, 'eli@example.com', 'leagueOrganizer', [s.coed]);
+      const [tournamentOnly, leagueOnly] = await allInvites(s);
+      expect(tournamentOnly).toMatchObject({ leagueIds: [], programIds: [s.gulf] });
+      expect(leagueOnly.leagueIds).toEqual([s.coed]);
+      expect('programIds' in leagueOnly).toBe(false);
+    });
+
+    test('stores leagues and tournaments together, each once', async () => {
+      const s = await setup();
+      await invite(s, 'dana@example.com', 'leagueOrganizer', [s.coed], [s.gulf, s.winter, s.gulf]);
+      expect((await allInvites(s))[0]).toMatchObject({
+        leagueIds: [s.coed],
+        programIds: [s.gulf, s.winter],
+      });
+    });
+
+    test('refuses a program of another organization, one that does not exist, and a mix that holds one', async () => {
+      const s = await setup();
+      const gone = await s.t.run(async (ctx) => {
+        const id = await insertTournamentProgram(ctx, s.organizationA, 'Gone', 'gone');
+        await ctx.db.delete('programs', id);
+        return id;
+      });
+      for (const programIds of [[s.tournamentB], [gone], [s.gulf, s.tournamentB]]) {
+        await expect(invite(s, 'x@example.com', 'leagueOrganizer', [], programIds)).rejects.toThrow(
+          /Not allowed/,
+        );
+      }
+      expect(await allInvites(s)).toEqual([]);
+    });
+
+    test('refuses a program of type league, even one of the organization’s own leagues', async () => {
+      const s = await setup();
+      await expect(
+        invite(s, 'x@example.com', 'leagueOrganizer', [], [s.coedProgram]),
+      ).rejects.toThrow(/Not allowed/);
+      await expect(
+        invite(s, 'x@example.com', 'leagueOrganizer', [s.coed], [s.gulf, s.coedProgram]),
+      ).rejects.toThrow(/Not allowed/);
+      expect(await allInvites(s)).toEqual([]);
+    });
+
+    test('refuses an org admin invite that carries programs', async () => {
+      const s = await setup();
+      await expect(invite(s, 'x@example.com', 'orgAdmin', [], [s.gulf])).rejects.toThrow();
+      expect(await allInvites(s)).toEqual([]);
+    });
+
+    test('refuses a league organizer invite with neither a league nor a tournament', async () => {
+      const s = await setup();
+      await expect(invite(s, 'x@example.com', 'leagueOrganizer', [], [])).rejects.toMatchObject({
+        data: {
+          field: 'leagues',
+          code: 'leaguesEmpty',
+          message: INVITE_MESSAGES.assignmentEmpty,
+        },
+      });
+    });
+
+    test('only an org admin may assign: the unauthenticated, an organizer assigned to the tournament, a non-member, and another organization’s admin are refused', async () => {
+      const s = await setup();
+      await s.t.run(async (ctx) => {
+        const membership = (await ctx.db
+          .query('memberships')
+          .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', s.organizerA.userId))
+          .unique())!;
+        await ctx.db.patch('memberships', membership._id, { programIds: [s.gulf] });
+      });
+      const args = {
+        organizationId: s.organizationA,
+        email: 'dana@example.com',
+        role: 'leagueOrganizer' as const,
+        leagueIds: [],
+        programIds: [s.gulf],
+      };
+      await expect(s.t.action(api.invites.create, args)).rejects.toThrow(/Sign in required/);
+      await expect(s.asOrganizerA.action(api.invites.create, args)).rejects.toThrow(/Not allowed/);
+      await expect(s.asStranger.action(api.invites.create, args)).rejects.toThrow(/Not allowed/);
+      await expect(s.asAdminB.action(api.invites.create, args)).rejects.toThrow(/Not allowed/);
+      expect(await allInvites(s)).toEqual([]);
+    });
   });
 
   test('refuses an empty or malformed email', async () => {
@@ -450,8 +548,9 @@ async function revokedInvite(
   email: string,
   role: Role = 'orgAdmin',
   leagueIds: Id<'leagues'>[] = [],
+  programIds?: Id<'programs'>[],
 ) {
-  const created = await invite(s, email, role, leagueIds);
+  const created = await invite(s, email, role, leagueIds, programIds);
   await s.asAdminA.mutation(api.invites.revoke, { inviteId: created.inviteId });
   return created;
 }
@@ -605,6 +704,50 @@ describe('invites.restore', () => {
     await s.t.run((ctx) => ctx.db.patch('leagues', s.coed, { organizationId: s.organizationB }));
     await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'leaguesGone' } });
     expect((await allInvites(s))[0].status).toBe('revoked');
+  });
+
+  test('refuses an invite whose tournament no longer exists, with the leagues-gone message', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(
+      s,
+      'dana@example.com',
+      'leagueOrganizer',
+      [s.coed],
+      [s.gulf, s.winter],
+    );
+    await s.t.run((ctx) => ctx.db.delete('programs', s.winter));
+    const before = await allInvites(s);
+    await expect(restore(s, inviteId)).rejects.toMatchObject({
+      data: { code: 'leaguesGone', message: INVITE_MESSAGES.restoreLeaguesGone },
+    });
+    expect(await allInvites(s)).toEqual(before);
+  });
+
+  test('refuses an invite whose tournament moved to another organization', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(
+      s,
+      'dana@example.com',
+      'leagueOrganizer',
+      [],
+      [s.gulf],
+    );
+    await s.t.run((ctx) => ctx.db.patch('programs', s.gulf, { organizationId: s.organizationB }));
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'leaguesGone' } });
+    expect((await allInvites(s))[0].status).toBe('revoked');
+  });
+
+  test('a restored invite keeps its tournaments', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(
+      s,
+      'dana@example.com',
+      'leagueOrganizer',
+      [],
+      [s.gulf],
+    );
+    await restore(s, inviteId);
+    expect((await allInvites(s))[0]).toMatchObject({ status: 'pending', programIds: [s.gulf] });
   });
 
   test('refuses an invite that is pending or accepted', async () => {
@@ -810,6 +953,48 @@ describe('invites.listPending', () => {
     expect(text).not.toContain(await sha256Hex(first.token));
   });
 
+  test('lists the tournaments of an invite by name, only for an invite that has some', async () => {
+    const s = await setup();
+    const both = await invite(
+      s,
+      'dana@example.com',
+      'leagueOrganizer',
+      [s.coed],
+      [s.gulf, s.winter],
+    );
+    const only = await invite(s, 'eli@example.com', 'leagueOrganizer', [], [s.winter]);
+    const none = await invite(s, 'fran@example.com', 'leagueOrganizer', [s.coed]);
+    const rows = await s.asAdminA.query(api.invites.listPending, {
+      organizationId: s.organizationA,
+    });
+    const row = (inviteId: Id<'invites'>) => rows.find((r) => r.inviteId === inviteId)!;
+    expect(row(both.inviteId)).toMatchObject({
+      leagueNames: ['Coed 7v7'],
+      tournamentNames: ['Gulf Coast Beach Open', 'Winter Classic'],
+    });
+    expect(row(only.inviteId)).toMatchObject({
+      leagueNames: [],
+      tournamentNames: ['Winter Classic'],
+    });
+    expect('tournamentNames' in row(none.inviteId)).toBe(false);
+  });
+
+  test('leaves out a tournament that is gone, of another organization, or of type league', async () => {
+    const s = await setup();
+    const created = await invite(s, 'dana@example.com', 'leagueOrganizer', [], [s.gulf, s.winter]);
+    await s.t.run(async (ctx) => {
+      await ctx.db.delete('programs', s.winter);
+      const row = (await ctx.db.get('invites', created.inviteId))!;
+      await ctx.db.patch('invites', row._id, {
+        programIds: [...row.programIds!, s.tournamentB, s.coedProgram],
+      });
+    });
+    const [row] = await s.asAdminA.query(api.invites.listPending, {
+      organizationId: s.organizationA,
+    });
+    expect(row.tournamentNames).toEqual(['Gulf Coast Beach Open']);
+  });
+
   test('keeps an expired invite in the list', async () => {
     const s = await setup();
     await invite(s, 'dana@example.com');
@@ -868,6 +1053,26 @@ describe('memberships.listForOrganization', () => {
         isYou: false,
       },
     ]);
+  });
+
+  test('lists the tournaments a member runs by name, only for a member who has some', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const membership = (await ctx.db
+        .query('memberships')
+        .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', s.organizerA.userId))
+        .unique())!;
+      await ctx.db.patch('memberships', membership._id, {
+        programIds: [s.winter, s.gulf, s.tournamentB],
+      });
+    });
+    const rows = await s.asAdminA.query(api.memberships.listForOrganization, {
+      organizationId: s.organizationA,
+    });
+    const organizer = rows.find((row) => row.name === 'organizer-a')!;
+    expect(organizer.tournamentNames).toEqual(['Winter Classic', 'Gulf Coast Beach Open']);
+    expect(organizer.leagueNames).toEqual(['Coed 7v7']);
+    expect('tournamentNames' in rows.find((row) => row.name === 'admin-a')!).toBe(false);
   });
 
   test('gives a member whose auth user is deleted an empty email, and the others their own', async () => {

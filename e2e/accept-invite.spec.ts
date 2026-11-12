@@ -7,7 +7,8 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -35,6 +36,7 @@ async function seedInvite(
     email: string;
     role?: 'orgAdmin' | 'leagueOrganizer';
     leagueNames?: string[];
+    tournamentNames?: string[];
     expiresAt?: number;
   },
 ): Promise<string> {
@@ -45,6 +47,7 @@ async function seedInvite(
     email: options.email,
     role,
     leagueNames: role === 'orgAdmin' ? [] : (options.leagueNames ?? ['Coed 7v7 Rec']),
+    ...(options.tournamentNames && { tournamentNames: options.tournamentNames }),
     expiresAt: options.expiresAt ?? Date.now() + 12 * DAY,
     token,
   });
@@ -168,6 +171,64 @@ test.describe('Accept invite: a visitor with no account', () => {
 
     urls.expectNone(token);
     expect(page.url()).not.toContain(token);
+  });
+
+  test('an invite naming a tournament opens its management page when accepted, and the organizer publishes it', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seedOrganization();
+    const publicPath = await seedTournament(tenant, {
+      name: 'Gulf Coast Beach Open',
+      slug: 'gulf-coast-beach-open',
+      locations: ['Redfish Flats Fields'],
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(41),
+      registrationDeadline: dateFromToday(30),
+      status: 'draft',
+    });
+    const user = newUser('InviteeTournament');
+    await seedUser(user);
+    const token = await seedInvite(tenant, {
+      email: user.email,
+      leagueNames: [],
+      tournamentNames: ['Gulf Coast Beach Open'],
+    });
+    await openLink(page, token);
+    await expect(
+      main(page).getByText('You’re invited to run a tournament as a league organizer.'),
+    ).toBeVisible();
+    await expect(main(page).locator('dl dt')).toHaveText([
+      'Organization',
+      'Role',
+      'Tournament',
+      'Expires',
+    ]);
+    await expect(main(page).locator('dl')).toContainText('Gulf Coast Beach Open');
+    await screenshot(page, testInfo, 'tournament-invite-signed-out');
+    await expectAccessible(page);
+
+    await main(page).getByRole('link', { name: 'Sign in' }).click();
+    await signInWith(page, user);
+    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+    await main(page).getByRole('button', { name: 'Accept invite' }).click();
+    await expect(main(page)).toContainText('You’re a league organizer for Gulf Coast Beach Open.');
+    await screenshot(page, testInfo, 'tournament-invite-accepted');
+    await expectAccessible(page);
+
+    const open = main(page).getByRole('link', { name: 'Open Gulf Coast Beach Open' });
+    const managePath = `/app/organizations/${tenant.slug}/tournaments/gulf-coast-beach-open`;
+    await expect(open).toHaveAttribute('href', managePath);
+    await open.click();
+    await expect(page).toHaveURL(`${baseURL}${managePath}`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Gulf Coast Beach Open' }),
+    ).toBeVisible();
+
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+    await main(page).getByRole('button', { name: 'Publish' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Publish tournament' }).click();
+    await expect(main(page).getByRole('status').filter({ hasText: 'is published.' })).toBeVisible();
+    expect((await page.request.get(publicPath)).status()).toBe(200);
   });
 
   test('an org admin invite reads Org admin, has no League row, and makes the visitor an org admin', async ({
