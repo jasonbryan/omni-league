@@ -260,6 +260,34 @@ describe('customLevels.remove', () => {
     expect((await rows(s)).map((row) => row.name)).toEqual(['Gold']);
   });
 
+  test('refuses a level a league with no program row uses, as before the programs backfill', async () => {
+    const s = await setup();
+    const id = await withGold(s);
+    await s.t.run(async (ctx) => {
+      const location = (await ctx.db.query('locations').first())!;
+      const leagueId = await insertDraftLeague(ctx, s.organizationA, {
+        name: 'Gold league',
+        slug: 'gold-league',
+        sport: 'beachVolleyball',
+        locationIds: [location._id],
+        division: {
+          gender: 'coed',
+          playersPerSide: 4,
+          level: 'a',
+          customLevelId: id,
+          ageGroup: 'adult',
+        },
+      });
+      const league = (await ctx.db.get('leagues', leagueId))!;
+      await ctx.db.delete('programs', league.programId!);
+      await ctx.db.patch('leagues', leagueId, { programId: undefined });
+    });
+    expect(
+      await refusal(s.adminA.mutation(api.customLevels.remove, { customLevelId: id })),
+    ).toEqual({ field: 'name', code: 'inUse', message: 'A league or tournament uses Gold.' });
+    expect(await rows(s)).toHaveLength(1);
+  });
+
   test('refuses a level a tournament uses and keeps it, until the tournament no longer does', async () => {
     const s = await setup();
     const id = await withGold(s);
