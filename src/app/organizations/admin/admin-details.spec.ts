@@ -14,6 +14,7 @@ import {
   text,
 } from './testing/admin-harness';
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
+import { expectBareCard } from '../../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
@@ -83,6 +84,14 @@ describe('AdminDetails', () => {
       );
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Details | Coastal Bend Rec Club | Omni League',
+      );
+    });
+
+    it('draws the details panel in a bare helm card whose overflow clips the sticky footer', async () => {
+      await open();
+      expectBareCard(
+        page.querySelector('section[aria-labelledby="details-heading"]'),
+        'mt-6 max-w-xl overflow-clip',
       );
     });
 

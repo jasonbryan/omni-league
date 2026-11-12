@@ -15,6 +15,7 @@ import {
 } from './testing/league-harness';
 import { LeagueLanding } from './league-landing';
 import { expectBadgeSize } from '../../ui/testing/badge';
+import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -55,6 +56,15 @@ describe('LeaguePage', () => {
       );
       const headingBar = crumbRow.nextElementSibling as HTMLElement;
       expect(tokens(headingBar.className)).toEqual(expect.arrayContaining(['mt-1', 'h-8']));
+    });
+
+    it('draws the two panel placeholders as bare helm cards, as the panels they stand for', async () => {
+      o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
+      TestBed.tick();
+      expectBareCards(o.page.querySelector('app-league-loading')!, [
+        'overflow-hidden lg:col-span-2',
+        'overflow-hidden',
+      ]);
     });
 
     it('asks leagues.getOrganizerContext with both slugs, and no season data, once the token is accepted', async () => {
@@ -152,6 +162,17 @@ describe('LeaguePage', () => {
       await o.flush();
       expect(scrolled).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(page.querySelector('#name'));
+    });
+  });
+
+  describe('cards', () => {
+    it('draws the seasons, create season, and league details panels as bare helm cards', async () => {
+      await open(COED, []);
+      expectBareCards(page.querySelector('main')!, [
+        'overflow-hidden lg:col-span-2',
+        'overflow-clip',
+        'mt-4 max-w-2xl overflow-clip md:mt-6',
+      ]);
     });
   });
 
@@ -346,6 +367,11 @@ describe('LeaguePage', () => {
         'teams:listMine',
       ]);
       expect(page.textContent).not.toContain('Coed 7v7 Rec');
+    });
+
+    it('draws the message in a bare helm card', async () => {
+      await forbidden();
+      expectBareCards(page.querySelector('app-league-no-access')!, [MESSAGE_CARD_LAYOUT]);
     });
 
     it('sets the page title', async () => {

@@ -40,6 +40,7 @@ import {
   type PublishTarget,
 } from './publish-league-dialog';
 import { injectSectionJump } from './section-jump';
+import { HlmCard } from '../../ui/card';
 
 const FILL = 'bg-muted motion-safe:animate-pulse';
 const PULSE = `rounded-md ${FILL}`;
@@ -47,7 +48,15 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
 
 @Component({
   selector: 'app-admin-leagues',
-  imports: [AdminAlert, HlmBadge, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
+  imports: [
+    AdminAlert,
+    HlmBadge,
+    HlmCard,
+    LeagueCreateForm,
+    NgIcon,
+    PublishLeagueDialog,
+    RouterLink,
+  ],
   providers: [
     provideIcons({
       lucideCircleCheck,
@@ -85,7 +94,9 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="leagues-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
+          hlmCard
+          size="bare"
+          class="overflow-hidden lg:col-span-2"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -220,7 +231,9 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
           id="create-league"
           tabindex="-1"
           aria-labelledby="create-league-heading"
-          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 focus:outline-none"
+          hlmCard
+          size="bare"
+          class="overflow-clip focus:outline-none"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

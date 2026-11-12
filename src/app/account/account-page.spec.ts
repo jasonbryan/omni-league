@@ -9,6 +9,7 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountPage } from './account-page';
 
@@ -505,6 +506,14 @@ describe('AccountPage', () => {
       const link = panel?.querySelector('a');
       expect(link?.getAttribute('href')).toBe('/app/notifications');
       expect(text(link)).toBe('Manage notifications');
+    });
+
+    it('draws the panel in a bare helm card with its padding', async () => {
+      await show([SAND_SHARKS]);
+      expectBareCard(
+        main().querySelector('section[aria-labelledby="app-notifications-heading"]'),
+        'max-w-xl px-4 py-4 md:px-5 md:py-5',
+      );
     });
   });
 

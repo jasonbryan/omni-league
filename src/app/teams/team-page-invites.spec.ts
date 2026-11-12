@@ -4,6 +4,7 @@ import { INVITE_MESSAGES } from '../../../convex/lib/inviteInput';
 import { TEAM_INVITE_MESSAGES } from '../../../convex/lib/teamInviteInput';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -212,6 +213,20 @@ describe('TeamPage: invites', () => {
     await o.flush();
     expect(pendingSection()?.textContent).toContain('The pending invites could not be loaded.');
     expect(email()).not.toBeNull();
+  });
+
+  describe('cards', () => {
+    it('draws the pending list and the invite form as bare helm cards', async () => {
+      await open();
+      expectBareCard(pendingSection(), 'overflow-hidden');
+      expectBareCard(main().querySelector('#invite'), 'overflow-hidden');
+    });
+
+    it('draws the invite link as a bare helm card', async () => {
+      await open();
+      await createInvite();
+      expectBareCard(main().querySelector('#invite'), 'overflow-hidden');
+    });
   });
 
   describe('creating an invite', () => {

@@ -8,6 +8,7 @@ import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses, radiusClasses } from '../../ui/testing/radius-classes';
 import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import {
@@ -149,6 +150,13 @@ describe('AdminLeagues', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Leagues | Coastal Bend Rec Club | Omni League',
       );
+    });
+
+    it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {
+      await open([]);
+      const main = page.querySelector('main')!;
+      expectBareCards(main, ['overflow-hidden lg:col-span-2', 'overflow-clip focus:outline-none']);
+      expect(main.querySelector('#create-league')!.getAttribute('tabindex')).toBe('-1');
     });
 
     it('loading: placeholder rows and a polite status, with the create panel already there', async () => {

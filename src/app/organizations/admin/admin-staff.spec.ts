@@ -23,6 +23,7 @@ import {
 } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCards } from '../../ui/testing/card';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
@@ -765,6 +766,25 @@ describe('AdminStaff', () => {
         await o.flush();
         expect(document.activeElement).not.toBe(input('email'));
       });
+    });
+  });
+
+  describe('cards', () => {
+    it('draws the members, pending, and invite panels as bare helm cards, the invite panel still focusable and outline-free', async () => {
+      await openFull();
+      const main = page.querySelector('main')!;
+      expectBareCards(main, [
+        'overflow-hidden',
+        'overflow-hidden',
+        'overflow-hidden focus:outline-none',
+      ]);
+      expect(main.querySelector('#invite')!.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('draws the invite link panel as a bare helm card', async () => {
+      await openFull();
+      await createInvite();
+      expectBareCards(page.querySelector('#invite')!.parentElement!, ['overflow-hidden']);
     });
   });
 

@@ -14,6 +14,7 @@ import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 import { slotsOf } from '../ui/testing/helm-slots';
 
@@ -237,6 +238,11 @@ describe('NotificationsPage', () => {
     expect(text(page)).toContain(
       'This setting is for this device only. Turn notifications on in each browser or installed app where you want them. Signing out turns them off here.',
     );
+  });
+
+  it('draws the device panel in a bare helm card', async () => {
+    await open();
+    expectBareCard(panel(), 'mt-6 max-w-xl overflow-hidden');
   });
 
   describe('checking', () => {

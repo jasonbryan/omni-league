@@ -4,6 +4,7 @@ import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 
 const GET = 'teams:getForMember';
@@ -247,6 +248,11 @@ describe('TeamPage: minors', () => {
 
   describe('Add a minor', () => {
     const submit = () => button(addPanel()!, 'Add minor')!;
+
+    it('draws the panel as a bare helm card', async () => {
+      await open();
+      expectBareCard(addPanel(), 'overflow-hidden');
+    });
 
     it('is shown to anyone on the team, with its note and field', async () => {
       await open();

@@ -15,6 +15,7 @@ import { SeasonPage } from './season-page';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCards } from '../../ui/testing/card';
 import { slotsOf } from '../../ui/testing/helm-slots';
 
 const GET_VIEW = 'seasons:getOrganizerView';
@@ -120,6 +121,17 @@ describe('SeasonPage', () => {
       expect(text(o.page.querySelector('main [role="status"]'))).toBe('Loading the season.');
     });
 
+    it('draws the tile and panel placeholders as bare helm cards, the size and position of the cards they stand for', async () => {
+      o = await openAdmin(ROUTES, URL);
+      TestBed.tick();
+      expectBareCards(o.page.querySelector('app-season-loading')!, [
+        'px-3 py-3 md:px-4 md:py-4',
+        'px-3 py-3 md:px-4 md:py-4',
+        'overflow-hidden lg:col-span-2',
+        'overflow-hidden',
+      ]);
+    });
+
     it('asks the league and the season with the slugs, and the free agents only once both answer', async () => {
       o = await openAdmin(ROUTES, URL);
       o.acceptToken();
@@ -141,6 +153,18 @@ describe('SeasonPage', () => {
   describe('an org admin with teams and free agents', () => {
     beforeEach(async () => {
       await open(COED, VIEW, FREE_AGENTS);
+    });
+
+    it('draws the limits, tiles, and panels as bare helm cards', () => {
+      expectBareCards(page.querySelector('main')!, [
+        'mt-6 overflow-hidden',
+        'px-3 py-3 md:px-4 md:py-4',
+        'px-3 py-3 md:px-4 md:py-4',
+        'px-3 py-3 md:px-4 md:py-4',
+        'overflow-hidden lg:col-span-2',
+        'overflow-hidden',
+        'overflow-hidden lg:col-start-3 lg:row-span-2 lg:row-start-1',
+      ]);
     });
 
     it('shows the season header, a breadcrumb to the league, and the title', () => {

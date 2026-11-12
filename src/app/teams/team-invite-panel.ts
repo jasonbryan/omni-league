@@ -33,6 +33,7 @@ import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { HlmTextareaImports } from '../ui/textarea';
 import { TEAM_INVITE_FORM_ALERTS, TeamInviteForm } from './team-invite-form';
+import { HlmCard } from '../ui/card';
 
 interface CreatedInvite {
   email: string;
@@ -42,8 +43,7 @@ interface CreatedInvite {
 
 type CopyOutcome = 'copied' | 'blocked' | null;
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
@@ -52,6 +52,7 @@ const PANEL =
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmCard,
     HlmFieldImports,
     HlmInputImports,
     HlmSpinner,
@@ -73,7 +74,14 @@ const PANEL =
   host: { class: 'block' },
   template: `
     @if (created(); as invite) {
-      <section id="invite" #section aria-labelledby="invite-link-heading" class="${PANEL}">
+      <section
+        id="invite"
+        #section
+        aria-labelledby="invite-link-heading"
+        hlmCard
+        size="bare"
+        class="${PANEL}"
+      >
         <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
           <h2 #linkHeading id="invite-link-heading" tabindex="-1" class="rounded-sm font-semibold">
             Invite link ready
@@ -148,7 +156,14 @@ const PANEL =
         </div>
       </section>
     } @else {
-      <section id="invite" #section aria-labelledby="invite-heading" class="${PANEL}">
+      <section
+        id="invite"
+        #section
+        aria-labelledby="invite-heading"
+        hlmCard
+        size="bare"
+        class="${PANEL}"
+      >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
         >

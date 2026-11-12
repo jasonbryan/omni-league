@@ -6,6 +6,7 @@ import type { Id } from '../../../convex/_generated/dataModel';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { HlmBadge } from '../ui/badge';
 import { teamPath } from './team-paths';
+import { HlmCard } from '../ui/card';
 
 export interface SeasonTeamRow {
   teamId: Id<'teams'>;
@@ -13,8 +14,7 @@ export interface SeasonTeamRow {
   isViewerTeam: boolean;
 }
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
 
 export function seasonTeamsCount(shown: number, total: number): string {
@@ -24,12 +24,12 @@ export function seasonTeamsCount(shown: number, total: number): string {
 
 @Component({
   selector: 'app-season-teams-panel',
-  imports: [AdminAlert, HlmBadge, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmBadge, HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section aria-labelledby="season-teams-heading" class="${PANEL}">
+    <section aria-labelledby="season-teams-heading" hlmCard size="bare" class="${PANEL}">
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >

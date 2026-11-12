@@ -9,36 +9,7 @@ const uiDir = join(appDir, 'ui');
 
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
-const PENDING = [
-  'src/app/account/account-settings-page.ts',
-  'src/app/account/home-notifications.ts',
-  'src/app/notifications/notifications-page.ts',
-  'src/app/organizations/admin/admin-attention.ts',
-  'src/app/organizations/admin/admin-details.ts',
-  'src/app/organizations/admin/admin-leagues.ts',
-  'src/app/organizations/admin/admin-loading.ts',
-  'src/app/organizations/admin/admin-locations.ts',
-  'src/app/organizations/admin/admin-logo.ts',
-  'src/app/organizations/admin/admin-no-access.ts',
-  'src/app/organizations/admin/admin-open-seasons.ts',
-  'src/app/organizations/admin/admin-overview.ts',
-  'src/app/organizations/admin/admin-staff.ts',
-  'src/app/organizations/admin/staff-invite-panel.ts',
-  'src/app/organizations/league/league-loading.ts',
-  'src/app/organizations/league/league-management.ts',
-  'src/app/organizations/league/league-no-access.ts',
-  'src/app/organizations/season-management/season-limits.ts',
-  'src/app/organizations/season-management/season-loading.ts',
-  'src/app/organizations/season-management/season-management.ts',
-  'src/app/organizations/season-management/season-waitlist-panel.ts',
-  'src/app/teams/add-minor-panel.ts',
-  'src/app/teams/join-team-page.ts',
-  'src/app/teams/register-card.ts',
-  'src/app/teams/season-teams-panel.ts',
-  'src/app/teams/team-invite-panel.ts',
-  'src/app/teams/team-page.ts',
-  'src/app/teams/team-pending-invites.ts',
-];
+const PENDING = [];
 
 function* sourceFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -66,7 +37,7 @@ const withCardSurface = () =>
     .sort();
 
 describe('hand-written card surfaces', () => {
-  it('are absent outside src/app/ui, apart from the signed-in pages still to move', () => {
+  it('are absent outside src/app/ui', () => {
     assert.deepEqual(withCardSurface(), PENDING);
   });
 
