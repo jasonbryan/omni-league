@@ -3,7 +3,6 @@ import { radiusClasses } from './radius-classes';
 
 export type RadiusTally = Record<string, number>;
 
-/** Every filled box under `root` must be a skeleton that pulses only where motion is allowed, with the radius tallied. */
 export function expectSkeletonBoxes(root: ParentNode, tally: RadiusTally): void {
   const boxes = [...root.querySelectorAll('.bg-muted')];
   const counted: RadiusTally = {};
