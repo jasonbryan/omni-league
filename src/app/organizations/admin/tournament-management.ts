@@ -42,7 +42,6 @@ import { TournamentContext } from './tournament-context';
 import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
 
-/** The page's `TournamentContext` answers for the caller, so an organizer who is not assigned to the tournament gets the no-access view and no tournament data. */
 @Component({
   selector: 'app-tournament-management',
   imports: [

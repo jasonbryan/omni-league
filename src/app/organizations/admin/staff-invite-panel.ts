@@ -286,7 +286,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                       >
                       <p hlmFieldDescription id="role-organizer-description">
                         Runs only the
-                        {{ form.tournamentsOffered() ? 'leagues and tournaments' : 'leagues' }}
+                        {{ chosenFrom() }}
                         you choose.
                       </p>
                     </div>
@@ -332,7 +332,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                       @if (first) {
                         <p hlmFieldDescription id="leagues-description" class="-mt-1.5">
                           {{
-                            form.tournamentsOffered()
+                            groups().length > 1
                               ? 'Choose one or more leagues or tournaments.'
                               : 'Choose one or more.'
                           }}
@@ -474,6 +474,11 @@ export class StaffInvitePanel {
       });
     }
     return groups;
+  });
+
+  protected readonly chosenFrom = computed(() => {
+    const ids = this.groups().map((group) => group.id);
+    return ids.length > 1 ? 'leagues and tournaments' : (ids[0] ?? 'leagues');
   });
 
   protected readonly created = signal<CreatedInvite | null>(null);

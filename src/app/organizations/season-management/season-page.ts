@@ -42,7 +42,8 @@ import { seasonManagementPath } from './season-management-path';
               } @else {
                 <app-league-sidebar
                   [organization]="league.organization"
-                  [here]="{ kind: 'league', name: league.name, slug: league.slug }"
+                  [here]="league"
+                  hereKind="league"
                   current="true"
                 />
               }

@@ -35,6 +35,7 @@ import {
 } from '../../core/data/convex';
 import { injectNowAtDeadlines } from '../../core/now-at-deadlines';
 import { MainFocusRecord } from '../../core/replaced-focus';
+import { compareNames } from '../compare-names';
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { HlmSpinner } from '../../ui/spinner';
@@ -519,7 +520,10 @@ export class AdminStaff {
   );
 
   protected readonly tournamentChoices = computed(() =>
-    this.tournamentList.value()?.map(({ programId, name }) => ({ programId, name })),
+    this.tournamentList
+      .value()
+      ?.map(({ programId, name }) => ({ programId, name }))
+      .sort((x, y) => compareNames(x.name, y.name)),
   );
 
   protected readonly invitePath = computed(

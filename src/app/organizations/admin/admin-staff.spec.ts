@@ -1269,8 +1269,16 @@ describe('AdminStaff', () => {
       expect(input('role-organizer').disabled).toBe(false);
       expect(input('role-organizer').checked).toBe(true);
       expect(page.querySelector('#role-unavailable')).toBeNull();
-      expect(text(page.querySelector('#leagues-description'))).toBe(
-        'Choose one or more leagues or tournaments.',
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the tournaments you choose.',
+      );
+      expect(text(page.querySelector('#leagues-description'))).toBe('Choose one or more.');
+    });
+
+    it('lists the tournaments in name order, whatever order the server sends', async () => {
+      await openWithTournaments([TOURNAMENTS[1], TOURNAMENTS[0]]);
+      expect(labels(page.querySelector('fieldset#tournaments')!)).toEqual(
+        TOURNAMENTS.map((t) => t.name),
       );
     });
 

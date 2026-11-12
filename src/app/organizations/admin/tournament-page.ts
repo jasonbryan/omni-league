@@ -25,7 +25,8 @@ import { TournamentManagement } from './tournament-management';
           } @else {
             <app-league-sidebar
               [organization]="tournament.organization"
-              [here]="{ kind: 'tournament', name: tournament.name, slug: tournament.slug }"
+              [here]="tournament"
+              hereKind="tournament"
             />
           }
         </ng-template>

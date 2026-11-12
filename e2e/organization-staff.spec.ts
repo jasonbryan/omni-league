@@ -316,7 +316,7 @@ test.describe('Staff: inviting', () => {
 
 async function openStaffWithTournaments(page: Page, leagues = LEAGUES) {
   const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues });
-  // The picker lists the latest start first, as the Tournaments page does.
+  // Winter starts later, so only a name sort puts Gulf first.
   for (const [name, slug, startsIn] of [
     ['Gulf Coast Beach Open', 'gulf-coast-beach-open', 40],
     ['Winter Doubles Classic', 'winter-doubles-classic', 60],
@@ -348,7 +348,7 @@ test.describe('Staff: tournaments', () => {
     const tournaments = page.getByRole('group', { name: 'Tournaments' });
     await expect(tournaments.getByRole('checkbox')).toHaveCount(2);
     await expect(tournaments.getByRole('checkbox').first()).toHaveAccessibleName(
-      'Winter Doubles Classic',
+      'Gulf Coast Beach Open',
     );
     await expect(page.getByText('Runs only the leagues and tournaments you choose.')).toBeVisible();
     await screenshot(page, testInfo, 'staff-tournaments-picker');

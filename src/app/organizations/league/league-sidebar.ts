@@ -13,25 +13,17 @@ import {
   SIDEBAR_ROW,
   SIDEBAR_ROW_CURRENT,
 } from '../../shell/sidebar-classes';
+import { compareNames } from '../compare-names';
 import { initials } from '../initials';
 import { tournamentPath } from '../admin/tournament-path';
 import { leaguePath } from './league-path';
-
-const compareNames = (x: string, y: string) => {
-  const a = x.toLowerCase();
-  const b = y.toLowerCase();
-  return a < b ? -1 : a > b ? 1 : 0;
-};
 
 interface Named {
   name: string;
   slug: string;
 }
 
-/** The page the organizer is on: the sidebar keeps its row even when the organizer's list does not hold it. */
-export interface SidebarPage extends Named {
-  kind: 'league' | 'tournament';
-}
+export type SidebarKind = 'league' | 'tournament';
 
 function withPage(assigned: readonly Named[], page: Named | null): Named[] {
   return page === null || assigned.some((item) => item.slug === page.slug)
@@ -114,7 +106,9 @@ function withPage(assigned: readonly Named[], page: Named | null): Named[] {
 })
 export class LeagueSidebar {
   readonly organization = input.required<Named>();
-  readonly here = input.required<SidebarPage>();
+  /** `organizations.listMine` stops at `LIST_MINE_LEAGUES_LIMIT` reads and may not have answered yet, so the current page's row is added here. */
+  readonly here = input.required<Named>();
+  readonly hereKind = input.required<SidebarKind>();
   /** `true` on a page inside the league, such as a season's, where the league's row is not the page itself. */
   readonly current = input<'page' | 'true'>('page');
 
@@ -139,28 +133,29 @@ export class LeagueSidebar {
   protected readonly initials = computed(() => initials(this.organization().name));
   protected readonly leagues = computed(() => {
     const here = this.here();
+    const kind = this.hereKind();
     const org = this.organization().slug;
-    return withPage(this.mineHere()?.leagues ?? [], here.kind === 'league' ? here : null).map(
+    return withPage(this.mineHere()?.leagues ?? [], kind === 'league' ? here : null).map(
       (item) => ({
         name: item.name,
         slug: item.slug,
         path: leaguePath(org, item.slug),
-        isCurrent: here.kind === 'league' && item.slug === here.slug,
+        isCurrent: kind === 'league' && item.slug === here.slug,
       }),
     );
   });
   protected readonly tournaments = computed(() => {
     const here = this.here();
+    const kind = this.hereKind();
     const org = this.organization().slug;
-    return withPage(
-      this.mineHere()?.tournaments ?? [],
-      here.kind === 'tournament' ? here : null,
-    ).map((item) => ({
-      name: item.name,
-      slug: item.slug,
-      path: tournamentPath(org, item.slug),
-      isCurrent: here.kind === 'tournament' && item.slug === here.slug,
-    }));
+    return withPage(this.mineHere()?.tournaments ?? [], kind === 'tournament' ? here : null).map(
+      (item) => ({
+        name: item.name,
+        slug: item.slug,
+        path: tournamentPath(org, item.slug),
+        isCurrent: kind === 'tournament' && item.slug === here.slug,
+      }),
+    );
   });
   protected readonly navTopic = computed(() =>
     this.tournaments().length === 0
