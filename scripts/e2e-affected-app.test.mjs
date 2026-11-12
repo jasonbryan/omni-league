@@ -173,7 +173,6 @@ describe('the specs of the importers outside a hand rule', () => {
       'league-division-fields',
       'admin-alert',
       'button-classes',
-      'field-classes',
       'admin-sidebar',
       'admin-path',
       'league-form',

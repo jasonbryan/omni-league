@@ -29,9 +29,10 @@ import { ROSTER_SIZE_INPUT_MAX, SPORT_NAMES, type Sport } from '../../../../conv
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CustomLevelPanel, type AddedCustomLevel } from './custom-level-panel';
-import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
 import { FieldNoteText } from './field-note';
 import { LeagueDivision } from './league-division';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports, INPUT_CLASSES } from '../../ui/input';
 
 const CUSTOM_KEY_PREFIX = 'custom:';
 
@@ -53,7 +54,14 @@ export interface OwnCustomLevel {
 // Only an org admin may list or add custom levels, so a league organizer's form passes `canAddCustomLevel` false and the league's own level in `ownCustomLevel`.
 @Component({
   selector: 'app-league-division-fields',
-  imports: [ChipRadioGroup, CustomLevelPanel, FieldNoteText, NgIcon],
+  imports: [
+    ChipRadioGroup,
+    CustomLevelPanel,
+    FieldNoteText,
+    HlmFieldImports,
+    HlmInputImports,
+    NgIcon,
+  ],
   providers: [provideIcons({ lucideCircleAlert, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex flex-col gap-6' },
@@ -81,21 +89,17 @@ export interface OwnCustomLevel {
       />
       @if (minimumShown()) {
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
+          class="mt-4"
           [attr.data-matches-spartan-invalid]="errors().minimumRosterSize() ? 'true' : null"
-          [class]="fieldClass + ' mt-4'"
         >
-          <label [attr.for]="ids().minimum" data-slot="field-label" [class]="labelClass"
-            >Minimum roster size</label
-          >
+          <label hlmFieldLabel [attr.for]="ids().minimum">Minimum roster size</label>
           <input
+            hlmInput
             #minimum
             [id]="ids().minimum"
             type="number"
             inputmode="numeric"
-            data-slot="input"
             autocomplete="off"
             [value]="division().minimumText()"
             (input)="minimumTyped($event)"
@@ -110,25 +114,15 @@ export interface OwnCustomLevel {
             [attr.aria-invalid]="errors().minimumRosterSize() ? 'true' : null"
             [attr.data-invalid]="errors().minimumRosterSize() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="errors().minimumRosterSize() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p
-            data-slot="field-description"
-            [id]="ids().minimum + '-description'"
-            [class]="descriptionClass"
-          >
+          <p hlmFieldDescription [id]="ids().minimum + '-description'">
             Leave it blank to use the format’s own. Up to {{ rosterSizeMax }}.
           </p>
           @if (division().notes.minimumRosterSize(); as note) {
             <app-field-note [id]="ids().minimum + '-note'" [note]="note" />
           }
           @if (errors().minimumRosterSize(); as error) {
-            <div
-              role="alert"
-              data-slot="field-error"
-              [id]="ids().minimum + '-error'"
-              [class]="errorClass"
-            >
+            <div hlmFieldError [id]="ids().minimum + '-error'">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -170,16 +164,8 @@ export interface OwnCustomLevel {
         />
       }
     </div>
-    <div
-      role="group"
-      data-slot="field"
-      data-orientation="vertical"
-      [attr.data-matches-spartan-invalid]="errors().ageGroup() ? 'true' : null"
-      [class]="fieldClass"
-    >
-      <label [attr.for]="ids().ageGroup" data-slot="field-label" [class]="labelClass"
-        >Age group</label
-      >
+    <div hlmField [attr.data-matches-spartan-invalid]="errors().ageGroup() ? 'true' : null">
+      <label hlmFieldLabel [attr.for]="ids().ageGroup">Age group</label>
       <select
         #ageGroup
         [id]="ids().ageGroup"
@@ -191,7 +177,7 @@ export interface OwnCustomLevel {
         "
         [attr.aria-invalid]="errors().ageGroup() ? 'true' : null"
         [attr.data-matches-spartan-invalid]="errors().ageGroup() ? 'true' : null"
-        [class]="inputClass"
+        [class]="selectClass"
       >
         @for (group of ageGroups; track group.label) {
           <optgroup [label]="group.label">
@@ -203,23 +189,14 @@ export interface OwnCustomLevel {
           </optgroup>
         }
       </select>
-      <p
-        data-slot="field-description"
-        [id]="ids().ageGroup + '-description'"
-        [class]="descriptionClass"
-      >
+      <p hlmFieldDescription [id]="ids().ageGroup + '-description'">
         Adult unless the league is for an age bracket, such as 40+, or a youth group, such as U10.
       </p>
       @if (division().notes.ageGroup(); as note) {
         <app-field-note [id]="ids().ageGroup + '-note'" [note]="note" />
       }
       @if (errors().ageGroup(); as error) {
-        <div
-          role="alert"
-          data-slot="field-error"
-          [id]="ids().ageGroup + '-error'"
-          [class]="errorClass"
-        >
+        <div hlmFieldError [id]="ids().ageGroup + '-error'">
           <ng-icon name="lucideCircleAlert" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
           <span>{{ error }}</span>
         </div>
@@ -251,11 +228,7 @@ export class LeagueDivisionFields {
     { label: 'Youth', options: AGE_GROUPS.filter((group) => isYouth(group.key)) },
   ];
   protected readonly rosterSizeMax = ROSTER_SIZE_INPUT_MAX;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
+  protected readonly selectClass = INPUT_CLASSES;
 
   protected readonly ids = computed(() => {
     const prefix = this.idPrefix();
