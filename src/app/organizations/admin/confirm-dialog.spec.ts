@@ -69,6 +69,7 @@ describe('ConfirmDialog', () => {
   }
 
   const box = () => document.querySelector<HTMLElement>('[role="alertdialog"], [role="dialog"]')!;
+  const part = (slot: string) => box().querySelector<HTMLElement>(`[data-slot="${slot}"]`)!;
   const pressEscape = () =>
     box()
       .querySelector('[data-slot="alert-dialog-content"]')!
@@ -94,6 +95,48 @@ describe('ConfirmDialog', () => {
     expect(box().getAttribute('aria-labelledby')).toBe(
       box().querySelector('h2')!.getAttribute('id'),
     );
+  });
+
+  it('draws the content, header, media, title, description, and footer with the classes it had', async () => {
+    await open();
+    const sorted = (slot: string) => tokens(part(slot).className);
+    const content = part('alert-dialog-content');
+    expect(content.getAttribute('data-size')).toBe('default');
+    expect(content.getAttribute('data-state')).toBe('open');
+    expect(content.getAttribute('tabindex')).toBe('-1');
+    expect(sorted('alert-dialog-content')).toEqual(
+      tokens(
+        'group/alert-dialog-content grid w-[calc(100vw-2rem)] bg-popover text-popover-foreground ring-foreground/10 gap-4 rounded-xl p-4 ring-1 shadow-xl data-[size=default]:max-w-xs data-[size=default]:sm:max-w-sm',
+      ),
+    );
+    expect(sorted('alert-dialog-header')).toContain(
+      'has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr]',
+    );
+    expect(sorted('alert-dialog-media')).toEqual(
+      expect.arrayContaining(['bg-accent', 'text-accent-foreground', 'size-10']),
+    );
+    expect(sorted('alert-dialog-title')).toEqual(
+      expect.arrayContaining(['text-base', 'font-medium']),
+    );
+    expect(sorted('alert-dialog-description')).toEqual(
+      expect.arrayContaining([
+        'text-muted-foreground',
+        'text-sm',
+        'text-balance',
+        'md:text-pretty',
+      ]),
+    );
+    expect(sorted('alert-dialog-footer')).toEqual(
+      expect.arrayContaining(['bg-muted/50', '-mx-4', '-mb-4', 'border-t', 'flex-col-reverse']),
+    );
+    expect(content.querySelector('[data-slot="alert-dialog-header"]')!.children.length).toBe(3);
+  });
+
+  it('draws the scrim as the sheet’s foreground tint, with no blur', async () => {
+    await open();
+    const scrim = document.querySelector('.cdk-overlay-backdrop')!;
+    expect(scrim.classList).toContain('bg-foreground/50');
+    expect([...scrim.classList].some((name) => name.includes('backdrop-blur'))).toBe(false);
   });
 
   it('shows the heading, the projected description and the media icon', async () => {

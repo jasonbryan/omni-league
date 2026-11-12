@@ -9,7 +9,7 @@ import {
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideWifiOff } from '@ng-icons/lucide';
 import { injectOfflineCause, offlineTitle } from '../../core/data/convex';
-import { ALERT_DESCRIPTION, ALERT_DESTRUCTIVE, ALERT_TITLE } from './admin-alert';
+import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from '../../ui/alert';
 
 /**
  * Takes its title from the connection's cause, so it never disagrees with the offline note.
@@ -17,15 +17,15 @@ import { ALERT_DESCRIPTION, ALERT_DESTRUCTIVE, ALERT_TITLE } from './admin-alert
  */
 @Component({
   selector: 'app-admin-offline-alert',
-  imports: [NgIcon],
+  imports: [HlmAlert, HlmAlertDescription, HlmAlertTitle, NgIcon],
   providers: [provideIcons({ lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <div #box data-slot="alert" role="alert" tabindex="-1" [class]="classes">
+    <div #box hlmAlert variant="destructive" role="alert" tabindex="-1">
       <ng-icon name="lucideWifiOff" aria-hidden="true" />
-      <div data-slot="alert-title" [class]="titleClass">{{ title() }}</div>
-      <div data-slot="alert-description" [class]="descriptionClass">
+      <div hlmAlertTitle>{{ title() }}</div>
+      <div hlmAlertDescription>
         {{ description() }}
         <ng-content />
       </div>
@@ -39,9 +39,6 @@ export class AdminOfflineAlert {
   private readonly cause = injectOfflineCause();
 
   protected readonly title = computed(() => offlineTitle(this.cause()));
-  protected readonly classes = ALERT_DESTRUCTIVE;
-  protected readonly titleClass = ALERT_TITLE;
-  protected readonly descriptionClass = ALERT_DESCRIPTION;
 
   focus(): void {
     this.box().nativeElement.focus();

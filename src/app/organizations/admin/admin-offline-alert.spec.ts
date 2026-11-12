@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { lucideWifiOff } from '@ng-icons/lucide';
 import { CONVEX_CLIENT, ConvexConnection } from '../../core/data/convex';
 import { FakeConvexClient } from '../../core/data/convex/testing/fake-convex-client';
+import { expectAlertClasses, expectAlertSlots } from '../../ui/testing/alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 
 @Component({
@@ -62,6 +63,9 @@ describe('the admin offline alert', () => {
     expect(box.getAttribute('role')).toBe('alert');
     expect(box.className.split(' ')).toContain('text-destructive');
     expect(box.className).not.toContain('focus:outline-2');
+    expect(box.getAttribute('tabindex')).toBe('-1');
+    expectAlertClasses(box, 'destructive');
+    expectAlertSlots(box);
     const description = host.querySelector('[data-slot="alert-description"]')!;
     expect(description.textContent).toContain("Try again when you're connected.");
     expect(description.querySelector('a')?.textContent).toBe('Undo');

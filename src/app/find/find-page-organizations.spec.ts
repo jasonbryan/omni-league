@@ -8,6 +8,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { expectFindAlert } from '../ui/testing/alert';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { FindPage } from './find-page';
 import { COED_RESULTS } from './testing/find-data';
@@ -269,6 +270,7 @@ describe('FindPage organizations: states', () => {
 
     const alert = section(harness)!.querySelector('[role="alert"]')!;
     expect(text(alert)).toContain('The organizations could not be loaded.');
+    expectFindAlert(alert, 'mt-4');
     const retry = [...alert.querySelectorAll('a')].find((a) => text(a) === 'Try again')!;
     expect(retry.getAttribute('href')).toBe('/leagues?page=2');
     expect(section(harness)!.querySelector('ul')).toBeNull();
