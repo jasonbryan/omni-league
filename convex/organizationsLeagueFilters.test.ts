@@ -394,7 +394,7 @@ describe('seasons.listOpenForOrganization with division filters', () => {
             startDate: '2030-06-01',
             endDate: '2030-08-01',
             registrationDeadline: '2030-05-01',
-            playersPerSide: league.playersPerSide ?? 4,
+            playersPerSide: league.playersPerSide,
             minimumRosterSize: 4,
           },
           'published',

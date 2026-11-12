@@ -41,12 +41,12 @@ export function defaultDivision(sport: Sport): DivisionSeed {
   };
 }
 
-// Optional only because the `testing:` seeds fill in a default.
 export const leagueSeedValidator = v.object({
   name: v.string(),
   sport: sportValidator,
   locations: v.array(v.string()),
   status: v.optional(leagueStatusValidator),
+  // Optional only because the `testing:` seeds fill in a default.
   division: v.optional(divisionSeedValidator),
 });
 

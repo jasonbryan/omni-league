@@ -51,11 +51,6 @@ export interface SeasonInputError {
   message: string;
 }
 
-export interface LeagueFormatMissingError {
-  code: 'leagueFormatMissing';
-  message: string;
-}
-
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const DATE_LABELS: Record<SeasonDateField, string> = {

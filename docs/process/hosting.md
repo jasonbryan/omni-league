@@ -171,7 +171,7 @@ It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:de
 
 Either one stops the run at that row, and repeating it fails the same way. The owner reports it as a bug and does not repeat the run.
 
-The division fields, `searchText`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. When the dashboard shows a row without one, the owner stops the release and reports it: this backfill cannot repair it.
+The division fields, `searchText`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. If the production deploy fails schema validation on one of these fields, nothing is published; the owner stops the release and reports it, because this backfill cannot repair it.
 
 ## Web Push keys
 
