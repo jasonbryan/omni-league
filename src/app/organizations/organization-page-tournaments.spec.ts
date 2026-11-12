@@ -326,7 +326,7 @@ describe('the Tournaments section', () => {
         },
       });
       expect(rows(harness)).toHaveLength(4);
-      expect(text(section(harness)?.querySelector('nav'))).toContain('1–5 of 6');
+      expect(text(section(harness)?.querySelector('nav'))).toContain('1–4 of 6');
     });
 
     it('drops the control when the rows that remain fit one page', async () => {
@@ -357,6 +357,7 @@ describe('the Tournaments section', () => {
       expect(rows(harness)).toHaveLength(0);
       const nav = section(harness)?.querySelector('nav');
       expect(nav).not.toBeNull();
+      expect(text(nav)).toContain('0 of 6');
       const previous = [...(nav?.querySelectorAll('a') ?? [])].find((a) =>
         text(a).startsWith('Previous'),
       );
@@ -673,6 +674,44 @@ describe('the Registration open section with tournaments', () => {
       );
     });
 
+    it('rules off Registration open from the Leagues box when only a tournament shows', async () => {
+      const harness = await open(`${ORG}?gender=womens`);
+      await emit(harness, {
+        ...queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])),
+        'organizations:listPublicLeagues': { rows: [], page: 1, pageCount: 0, total: 0 },
+      });
+      const grid = openSection(harness)?.nextElementSibling;
+      expect(grid?.classList).toContain('border-t');
+    });
+
+    it('holds a section skeleton and the hero placeholder while the open cards load, once the organization has shown a card', async () => {
+      const harness = await open();
+      await emit(
+        harness,
+        queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN], openTournaments: [OPEN_ROW] }),
+      );
+      await harness.navigateByUrl(`${ORG}?gender=coed`);
+      await settle(harness);
+      const results = queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN] });
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_TOURNAMENTS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      expect(openSection(harness)?.querySelector('app-open-seasons-skeleton')).not.toBeNull();
+      expect(text(heroPlaceholder(harness))).toBe('Register for a tournament');
+    });
+
+    it('holds no skeleton for an organization with no league that has shown no card', async () => {
+      const harness = await open();
+      const results = queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN] });
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_TOURNAMENTS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      expect(openSection(harness)).toBeNull();
+      expect(heroPlaceholder(harness)).toBeNull();
+    });
+
     it('shows no section for such an organization when no tournament is open', async () => {
       const harness = await open();
       await emit(harness, queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN] }));
@@ -732,12 +771,15 @@ describe('the Registration open section with tournaments', () => {
     });
 
     it('keeps the label of the cards last seen across a sport with no open card', async () => {
-      const page = withTournaments([BEACH_OPEN], [OPEN_ROW]);
+      const soccerOpen = {
+        ...OPEN_ROW,
+        name: 'Soccer Open',
+        slug: 'soccer-open',
+        sportName: 'Soccer',
+      };
+      const page = withTournaments([BEACH_OPEN, SOCCER_CUP], [OPEN_ROW, soccerOpen]);
       const harness = await open();
-      await emit(harness, {
-        ...queryResults(page),
-        'seasons:listOpenForOrganization': [SEASON_ROW],
-      });
+      await emit(harness, queryResults(page));
       await harness.navigateByUrl(`${ORG}/sports/softball`);
       await settle(harness);
       await emit(harness, sportQueryResults(page, 'softball'));
@@ -750,7 +792,7 @@ describe('the Registration open section with tournaments', () => {
         subscription(name).emit(results[name]);
       }
       await settle(harness);
-      expect(text(heroPlaceholder(harness))).toBe('Register for a season');
+      expect(text(heroPlaceholder(harness))).toBe('Register for a tournament');
     });
 
     it('holds the season label when a season was among the cards last seen', async () => {

@@ -204,6 +204,16 @@ describe('OpenSeasonsSeen', () => {
       expect(seen.expectedKind(view('Soccer'))).toBe('tournament');
     });
 
+    it('knows whether the organization has shown a card', () => {
+      const seen = store();
+      expect(seen.hasShownCards(view())).toBe(false);
+      seen.record(view('Soccer'), [], 'season');
+      expect(seen.hasShownCards(view())).toBe(false);
+      seen.record(view('Soccer'), ['Soccer'], 'tournament');
+      expect(seen.hasShownCards(view())).toBe(true);
+      expect(seen.hasShownCards(view(undefined, NO_DIVISION_FILTERS, 'other-org'))).toBe(false);
+    });
+
     it('records nothing on the server', () => {
       const seen = store('server');
       seen.record(view(), ['Soccer'], 'tournament');

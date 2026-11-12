@@ -4,7 +4,6 @@ import { hasDivisionFilters, type DivisionFilters } from '../../../convex/lib/le
 
 export const UNSEEN_OPEN_SEASON_COUNT = 2;
 
-/** A card is a tournament's unless a season is among them, which the hero's label follows. */
 export type OpenCardKind = 'season' | 'tournament';
 
 export interface OpenSeasonsView {
@@ -44,6 +43,10 @@ export class OpenSeasonsSeen {
     this.kindByView.set(viewKey(view), kind);
     // A view with no card says nothing about the label the next one holds.
     if (sportNames.length > 0) this.latestKindByOrganization.set(view.slug, kind);
+  }
+
+  hasShownCards({ slug }: OpenSeasonsView): boolean {
+    return (this.latestCountByOrganization.get(slug) ?? 0) > 0;
   }
 
   expectedKind(view: OpenSeasonsView): OpenCardKind {

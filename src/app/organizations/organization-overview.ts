@@ -527,6 +527,7 @@ function rowId(
                     [page]="paging.page"
                     [pageCount]="paging.pageCount"
                     [total]="paging.total"
+                    [shown]="tournamentRows().length"
                     [path]="pagePath()"
                     fragment="tournaments"
                     [queryFor]="tournamentQueryFor()"
@@ -611,6 +612,7 @@ export class OrganizationOverview {
   readonly openTournaments = input<PublicOpenTournamentRows | undefined>(undefined);
   readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
   readonly expectedOpenKind = input<OpenCardKind>('season');
+  readonly openCardsShownBefore = input(false);
   readonly now = input.required<number>();
   readonly canManage = input(false);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
@@ -729,7 +731,8 @@ export class OrganizationOverview {
 
   // The chip row and the filter bar end in a rule of their own, so the sections below start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
-    !this.noMatches() && (!this.isEmpty() || !hasSportChoice(this.page().sports))
+    (this.registrationOpenShown() || !this.noMatches()) &&
+    (!this.isEmpty() || !hasSportChoice(this.page().sports))
       ? 'grid gap-x-12 border-t border-border lg:grid-cols-3'
       : 'grid gap-x-12 lg:grid-cols-3',
   );
@@ -818,9 +821,14 @@ export class OrganizationOverview {
     );
   });
 
-  protected readonly registrationOpenShown = computed(
-    () => this.seasonsListed() || (this.openCards()?.length ?? 0) > 0,
-  );
+  // With no season listed, the section holds its place while it loads only for an organization that has shown a card, so a card that arrives late does not push down what is below.
+  protected readonly registrationOpenShown = computed(() => {
+    if (this.seasonsListed()) return true;
+    const cards = this.openCards();
+    return cards === undefined
+      ? this.openCardsShownBefore() && this.expectedOpenSeasons() > 0
+      : cards.length > 0;
+  });
 
   protected readonly heroRegisterText = computed(() =>
     this.openCards()?.some((card) => card.kind === 'season')

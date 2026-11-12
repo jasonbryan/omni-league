@@ -102,6 +102,7 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [openTournaments]="openTournaments()"
           [expectedOpenSeasons]="expectedOpenSeasons()"
           [expectedOpenKind]="expectedOpenKind()"
+          [openCardsShownBefore]="openCardsShownBefore()"
           [now]="now()"
           [canManage]="viewerIsOrgAdmin.value() === true"
           [filters]="filters()"
@@ -317,6 +318,11 @@ export class OrganizationPage {
   protected readonly expectedOpenSeasons = computed(() => {
     const view = this.openSeasonsView();
     return view ? this.openSeasonsSeen.expectedCount(view) : UNSEEN_OPEN_SEASON_COUNT;
+  });
+
+  protected readonly openCardsShownBefore = computed(() => {
+    const view = this.openSeasonsView();
+    return view ? this.openSeasonsSeen.hasShownCards(view) : false;
   });
 
   protected readonly expectedOpenKind = computed(() => {
