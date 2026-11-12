@@ -312,7 +312,10 @@
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
             The shell renders at once (the session knows the user); the content shows a skeleton
-            with an <code>sr-only</code> status.
+            with an <code>sr-only</code> status. The skeleton leaves out the next-step block, which
+            most users never have. A tab that last showed a next step puts the block back above the
+            cards (state 5's block), and one that last showed the new-user state draws one card
+            where state 6 places its first.
           </p>
         </div>
         <div
@@ -2844,10 +2847,6 @@
             <p role="status" class="sr-only">Loading your teams.</p>
             <h1 class="text-2xl font-semibold tracking-tight md:text-3xl">Hi, Tasha</h1>
             <p class="mt-1 text-muted-foreground">Your teams and registrations.</p>
-            <span
-              aria-hidden="true"
-              class="block rounded-md bg-muted motion-safe:animate-pulse mt-6 h-28 w-full rounded-xl md:mt-8"
-            ></span>
             <div class="mt-8 md:mt-10">
               <span
                 aria-hidden="true"

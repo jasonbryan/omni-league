@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { appRoutes } from '../app.routes.app';
 import { AuthService } from '../core/auth/auth.service';
+import { ChangesInFlight } from '../core/changes-in-flight';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
@@ -12,6 +13,7 @@ import { expectBadge } from '../ui/testing/badge';
 import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountPage } from './account-page';
+import { HomeShape, type HomeShapeKind } from './home-shape';
 
 @Component({ template: 'home' })
 class Home {}
@@ -72,7 +74,7 @@ describe('AccountPage', () => {
   let harness: RouterTestingHarness;
   let page: HTMLElement;
 
-  async function open(now = NOW) {
+  async function open(now = NOW, remembered: HomeShapeKind | null = null) {
     vi.useFakeTimers({ toFake: ['Date'], now });
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
@@ -87,7 +89,14 @@ describe('AccountPage', () => {
       ],
     });
     auth.emitSession({ id: 's1' });
-    harness = await RouterTestingHarness.create('/app');
+    if (remembered === null) {
+      harness = await RouterTestingHarness.create('/app');
+    } else {
+      harness = await RouterTestingHarness.create();
+      await TestBed.inject(AuthService).isSignedIn();
+      TestBed.inject(HomeShape).record(remembered);
+      await harness.navigateByUrl('/app');
+    }
     page = harness.routeNativeElement!;
   }
 
@@ -550,6 +559,95 @@ describe('AccountPage', () => {
       expect(placeholders).toHaveLength(2);
     });
 
+    describe('shapes', () => {
+      const nextStepBlock = () => main().querySelector('[data-slot="home-skeleton-next-step"]');
+      const listHeading = () => main().querySelector('[data-slot="home-skeleton-heading"]');
+      const listCards = () => main().querySelectorAll('[data-slot="home-skeleton-card"]');
+      const newUserCard = () => main().querySelector('[data-slot="home-skeleton-new-user-card"]');
+
+      async function loadingWith(remembered: HomeShapeKind | null) {
+        await open(NOW, remembered);
+        accept();
+        harness.detectChanges();
+      }
+
+      it('is the list shape when nothing is remembered: the Your teams heading and two cards, with no next-step block', async () => {
+        await loadingWith(null);
+        expect(nextStepBlock()).toBeNull();
+        expect(listHeading()!.parentElement).toBe(
+          main().querySelector('app-home-skeleton > div')!.firstElementChild,
+        );
+        expect(listCards()).toHaveLength(2);
+        expect(newUserCard()).toBeNull();
+      });
+
+      it('keeps the shape it was created with when a change settles while it shows, so the page does not move', async () => {
+        await loadingWith('nextStep');
+        TestBed.inject(ChangesInFlight).begin()();
+        expect(TestBed.inject(HomeShape).current()).toBeNull();
+        harness.detectChanges();
+        expect(nextStepBlock()).not.toBeNull();
+      });
+
+      it('is the list shape when the remembered shape is list', async () => {
+        await loadingWith('list');
+        expect(nextStepBlock()).toBeNull();
+        expect(listCards()).toHaveLength(2);
+      });
+
+      it('puts the next-step block ahead of the heading and cards when the remembered shape is nextStep', async () => {
+        await loadingWith('nextStep');
+        const block = nextStepBlock();
+        expect(block).not.toBeNull();
+        expect(block!.compareDocumentPosition(listHeading()!)).toBe(
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+        expect(listCards()).toHaveLength(2);
+      });
+
+      it('is one card, with no heading and no next-step block, when the remembered shape is new', async () => {
+        await loadingWith('new');
+        expect(newUserCard()).not.toBeNull();
+        expect(main().querySelectorAll('[data-slot="home-skeleton-new-user-card"]')).toHaveLength(
+          1,
+        );
+        expect(listHeading()).toBeNull();
+        expect(listCards()).toHaveLength(0);
+        expect(nextStepBlock()).toBeNull();
+      });
+
+      it('reads the new-user subtitle under the new shape, so the card does not move when the line wraps', async () => {
+        await loadingWith('new');
+        expect(text(main().querySelector('p.text-muted-foreground'))).toBe(
+          'Your teams and registrations will show here.',
+        );
+      });
+
+      it.each(['nextStep', 'list'] as const)(
+        'reads the usual subtitle under the %s shape',
+        async (shape) => {
+          await loadingWith(shape);
+          expect(text(main().querySelector('p.text-muted-foreground'))).toBe(
+            'Your teams and registrations.',
+          );
+        },
+      );
+
+      it.each(['nextStep', 'list', 'new'] as const)(
+        'keeps the status, no link, and one radius class for the %s shape',
+        async (remembered) => {
+          await loadingWith(remembered);
+          expect(text(main().querySelector('[role="status"]'))).toBe(
+            'Loading your teams and registrations.',
+          );
+          expect(main().querySelector('a')).toBeNull();
+          const pieces = main().querySelectorAll('[class~="motion-safe:animate-pulse"]');
+          expect(pieces.length).toBeGreaterThan(0);
+          for (const radii of allRadiusClasses(pieces)) expect(radii).toHaveLength(1);
+        },
+      );
+    });
+
     it('draws every placeholder with one radius class', async () => {
       await open();
       accept();
@@ -590,6 +688,77 @@ describe('AccountPage', () => {
       expect(main().querySelector('[role="status"]')).toBeNull();
       expect(main().querySelector('[data-slot="home-skeleton-card"]')).toBeNull();
       expect(cards()).toHaveLength(2);
+    });
+  });
+
+  describe('the shape remembered for the next visit', () => {
+    const remembered = () => TestBed.inject(HomeShape).current();
+
+    async function leave() {
+      await harness.navigateByUrl('/');
+    }
+
+    it('is nextStep when the home left is ready with a next step', async () => {
+      await show([SAND_SHARKS, PAIR_OF_ACES]);
+      expect(remembered()).toBeNull();
+      await leave();
+      expect(remembered()).toBe('nextStep');
+    });
+
+    it('is list when the home left is ready with no next step', async () => {
+      await show([PAIR_OF_ACES]);
+      await leave();
+      expect(remembered()).toBe('list');
+    });
+
+    it('is list for a user whose only registration is a waiting free agent', async () => {
+      await show([], [], undefined, [WAITING]);
+      await leave();
+      expect(remembered()).toBe('list');
+    });
+
+    it('is new when the home left is the new-user state', async () => {
+      await show([]);
+      await leave();
+      expect(remembered()).toBe('new');
+    });
+
+    it('records nothing when the home is left while loading', async () => {
+      await open();
+      accept();
+      await leave();
+      expect(remembered()).toBeNull();
+    });
+
+    it('records nothing when the home is left while only part of it has loaded', async () => {
+      await open();
+      accept();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
+      }
+      await harness.fixture.whenStable();
+      await leave();
+      expect(remembered()).toBeNull();
+    });
+
+    it('records nothing when the home is left in the failed state', async () => {
+      await open();
+      accept();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'teams:listMine') subscription.fail(new Error('forced failure'));
+      }
+      await harness.fixture.whenStable();
+      expect(page.querySelector('main [role="alert"]')).not.toBeNull();
+      await leave();
+      expect(remembered()).toBeNull();
+    });
+
+    it('records nothing when the user is signed out by the time the home is destroyed', async () => {
+      await show([SAND_SHARKS]);
+      auth.emitSession(null);
+      await harness.fixture.whenStable();
+      await leave();
+      expect(remembered()).toBeNull();
     });
   });
 
