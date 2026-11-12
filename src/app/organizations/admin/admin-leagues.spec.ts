@@ -64,8 +64,12 @@ describe('AdminLeagues', () => {
   let o: Opened;
   let page: HTMLElement;
 
-  async function open(leagues?: unknown[], locations: unknown[] | null = COASTAL_LOCATIONS) {
-    o = await openAdmin(ROUTES, URL);
+  async function open(
+    leagues?: unknown[],
+    locations: unknown[] | null = COASTAL_LOCATIONS,
+    url = URL,
+  ) {
+    o = await openAdmin(ROUTES, url);
     page = o.page;
     o.acceptToken();
     o.subscription(GET_ADMIN_CONTEXT)!.emit(COASTAL);
@@ -608,6 +612,124 @@ describe('AdminLeagues', () => {
         const checkbox = shown.querySelector('[data-slot="skeleton-location"] > :first-child');
         expect(radiusClasses(checkbox)).toEqual(['rounded-sm']);
       });
+    });
+  });
+
+  describe('landing on #create-league', () => {
+    const LANDING_URL = `${URL}#create-league`;
+    let scrolled: Element[];
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+
+    beforeEach(() => {
+      scrolled = [];
+      Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+    });
+
+    afterEach(() => {
+      if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+      else delete (Element.prototype as Partial<Element>).scrollIntoView;
+      vi.restoreAllMocks();
+    });
+
+    const section = () => page.querySelector<HTMLElement>('#create-league')!;
+    const goToLocations = () => section().querySelector<HTMLAnchorElement>('a[href]')!;
+    const locationsAlert = () => section().querySelector<HTMLElement>('[data-slot="alert"]')!;
+
+    async function locationsArrive(locations: unknown[] = COASTAL_LOCATIONS) {
+      o.subscription(LIST_FOR_ADMIN)!.emit(locations);
+      await o.flush();
+    }
+
+    it('scrolls to the section and focuses Name when the page opens with locations', async () => {
+      await open(LEAGUES, COASTAL_LOCATIONS, LANDING_URL);
+      expect(scrolled).toEqual([section()]);
+      expect(document.activeElement).toBe(input('name'));
+    });
+
+    it('focuses "Go to Locations" when the organization has no locations', async () => {
+      await open(LEAGUES, [], LANDING_URL);
+      expect(scrolled).toEqual([section()]);
+      expect(document.activeElement).toBe(goToLocations());
+    });
+
+    it('focuses the alert when the locations could not be loaded', async () => {
+      await open(LEAGUES, null, LANDING_URL);
+      o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
+      await o.flush();
+      expect(scrolled).toEqual([section()]);
+      expect(document.activeElement).toBe(locationsAlert());
+    });
+
+    it('waits for the locations, moving neither focus nor scroll, then focuses Name', async () => {
+      await open(LEAGUES, null, LANDING_URL);
+      const before = document.activeElement;
+      expect(page.querySelector('[data-slot="create-league-skeleton"]')).not.toBeNull();
+      expect(document.activeElement).toBe(before);
+      expect(scrolled).toEqual([]);
+      await locationsArrive();
+      expect(document.activeElement).toBe(input('name'));
+      expect(scrolled).toEqual([section()]);
+    });
+
+    it('waits through the offline state, as it does while loading', async () => {
+      await open(LEAGUES, null, LANDING_URL);
+      const before = document.activeElement;
+      const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      await o.flush();
+      expect(document.activeElement).toBe(before);
+      expect(scrolled).toEqual([]);
+      onLine.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+      await locationsArrive();
+      expect(document.activeElement).toBe(input('name'));
+    });
+
+    it('does nothing without the fragment', async () => {
+      await open(LEAGUES, COASTAL_LOCATIONS);
+      expect(scrolled).toEqual([]);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('does nothing for another fragment', async () => {
+      await open(LEAGUES, COASTAL_LOCATIONS, `${URL}#details`);
+      expect(scrolled).toEqual([]);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('lands once: a later update of the leagues or the locations leaves focus where the user put it', async () => {
+      await open(LEAGUES, COASTAL_LOCATIONS, LANDING_URL);
+      expect(document.activeElement).toBe(input('name'));
+      const leagueLink = items()[0].querySelector<HTMLAnchorElement>('h3 a')!;
+      leagueLink.focus();
+      scrolled.length = 0;
+      o.subscription(LIST_LEAGUES)!.emit([...LEAGUES]);
+      o.subscription(LIST_FOR_ADMIN)!.emit([...COASTAL_LOCATIONS]);
+      await o.flush();
+      expect(document.activeElement).toBe(leagueLink);
+      expect(scrolled).toEqual([]);
+    });
+
+    it('a user scroll while the locations load cancels the landing', async () => {
+      await open(LEAGUES, null, LANDING_URL);
+      document.body.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+      const before = document.activeElement;
+      await locationsArrive();
+      expect(document.activeElement).toBe(before);
+      expect(scrolled).toEqual([]);
+    });
+
+    it('shows no field error on Name until the user leaves it', async () => {
+      await open(LEAGUES, COASTAL_LOCATIONS, LANDING_URL);
+      expect(document.activeElement).toBe(input('name'));
+      expect(error('name')).toBeNull();
+      await type('name', 'n'.repeat(101));
+      expect(error('name')).toBeNull();
+      input('name').dispatchEvent(new Event('blur'));
+      await o.harness.fixture.whenStable();
+      expect(error('name')).toBe('Use 100 characters or fewer. This name has 101.');
     });
   });
 

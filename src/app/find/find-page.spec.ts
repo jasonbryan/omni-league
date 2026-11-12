@@ -20,6 +20,7 @@ import {
   SATURDAY_6S_ROW,
   SUNDAY_4S_ROW,
 } from './testing/find-data';
+import { expectFindAlert } from '../ui/testing/alert';
 import { expectBadge } from '../ui/testing/badge';
 
 const QUERY = 'search:leagues';
@@ -477,6 +478,7 @@ describe('FindPage when the search fails', () => {
     const main = host(harness).querySelector('main')!;
     const alert = main.querySelector('[role="alert"]')!;
     expect(text(alert)).toContain('The search could not be completed.');
+    expectFindAlert(alert);
     const retry = alert.querySelector('a')!;
     expect(text(retry)).toBe('Try again');
     expect(retry.getAttribute('href')).toBe('/leagues?q=coed');

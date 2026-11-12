@@ -24,6 +24,7 @@ import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { HlmAlertImports } from '../ui/alert';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
@@ -70,6 +71,7 @@ type FormAlert = { title: string; description: string } | 'offline';
     HlmSpinner,
     MousePressKeepsFocus,
     FormField,
+    HlmAlertImports,
     HlmFieldImports,
     HlmInputImports,
     NgIcon,
@@ -100,26 +102,21 @@ type FormAlert = { title: string; description: string } | 'offline';
             @if (formAlert(); as alert) {
               <div
                 #alert
-                data-slot="alert"
+                hlmAlert
+                variant="destructive"
                 role="alert"
                 id="form-error"
                 tabindex="-1"
-                class="group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 mb-5"
+                class="mb-5"
               >
                 <ng-icon
                   [name]="alert === 'offline' ? 'lucideWifiOff' : 'lucideCircleAlert'"
                   aria-hidden="true"
                 />
-                <div
-                  data-slot="alert-title"
-                  class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
-                >
+                <div hlmAlertTitle>
                   {{ alert === 'offline' ? offlineTitle() : alert.title }}
                 </div>
-                <div
-                  data-slot="alert-description"
-                  class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
-                >
+                <div hlmAlertDescription>
                   {{ alert === 'offline' ? messages.offlineDescription : alert.description }}
                 </div>
               </div>

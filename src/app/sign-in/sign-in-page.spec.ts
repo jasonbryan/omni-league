@@ -9,6 +9,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignInPage } from './sign-in-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -395,6 +396,8 @@ describe('SignInPage', () => {
       expect(alert()?.getAttribute('tabindex')).toBe('-1');
       expect(alertTitle()).toBe('Email or password is incorrect.');
       expect(alertDescription()).toBe('Check both and try again.');
+      expectAlertSlots(alert());
+      expectAlertClasses(alert(), 'destructive', 'mb-5');
       expect(document.activeElement).toBe(alert());
       expect(url()).toBe('/sign-in');
       for (const id of ['email', 'password']) {

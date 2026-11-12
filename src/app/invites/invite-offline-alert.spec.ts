@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { InviteOfflineAlert } from './invite-offline-alert';
 
 @Component({
@@ -63,6 +64,9 @@ describe('the invite offline alert', () => {
     expect(host.querySelector('[data-slot="alert-description"]')?.textContent.trim()).toBe(
       "Try again when you're connected.",
     );
+    expect(box.getAttribute('tabindex')).toBe('-1');
+    expectAlertClasses(box, 'destructive', 'outline-offset-2 focus:outline-2 focus:outline-ring');
+    expectAlertSlots(box);
 
     fixture.componentInstance.alert().focus();
     expect(document.activeElement).toBe(box);
