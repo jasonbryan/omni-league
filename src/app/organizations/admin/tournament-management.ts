@@ -171,62 +171,56 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
                 <h2 id="details-heading" class="font-semibold">Details</h2>
               </div>
               <dl class="divide-y divide-border">
-                <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                  <ng-icon
-                    name="lucideCalendarDays"
-                    class="mt-0.5 shrink-0 text-base text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <dt class="text-sm text-muted-foreground">Dates</dt>
-                    <dd class="font-medium">{{ dates() }}</dd>
-                  </div>
+                <div class="px-4 py-3.5 md:px-5">
+                  <dt class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ng-icon
+                      name="lucideCalendarDays"
+                      class="shrink-0 text-base"
+                      aria-hidden="true"
+                    />Dates
+                  </dt>
+                  <dd class="mt-1 font-medium">{{ dates() }}</dd>
                 </div>
-                <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                  <ng-icon
-                    name="lucideCalendarClock"
-                    class="mt-0.5 shrink-0 text-base text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <dt class="text-sm text-muted-foreground">Registration closes</dt>
-                    <dd class="font-medium">{{ closes() }}</dd>
-                  </div>
+                <div class="px-4 py-3.5 md:px-5">
+                  <dt class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ng-icon
+                      name="lucideCalendarClock"
+                      class="shrink-0 text-base"
+                      aria-hidden="true"
+                    />Registration closes
+                  </dt>
+                  <dd class="mt-1 font-medium">{{ closes() }}</dd>
                 </div>
-                <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                  <ng-icon
-                    name="lucideUsers"
-                    class="mt-0.5 shrink-0 text-base text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <dt class="text-sm text-muted-foreground">Teams</dt>
-                    <dd class="font-medium">Up to {{ tournament.maximumTeams }} teams</dd>
-                    <dd class="text-sm text-muted-foreground">
-                      Teams of at least {{ tournament.minimumRosterSize }} players
-                    </dd>
-                  </div>
+                <div class="px-4 py-3.5 md:px-5">
+                  <dt class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ng-icon
+                      name="lucideUsers"
+                      class="shrink-0 text-base"
+                      aria-hidden="true"
+                    />Teams
+                  </dt>
+                  <dd class="mt-1 font-medium">Up to {{ tournament.maximumTeams }} teams</dd>
+                  <dd class="text-sm text-muted-foreground">
+                    Teams of at least {{ tournament.minimumRosterSize }} players
+                  </dd>
                 </div>
                 @if (tournament.locations.length) {
-                  <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                    <ng-icon
-                      name="lucideMapPin"
-                      class="mt-0.5 shrink-0 text-base text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <dt class="text-sm text-muted-foreground">
-                        {{ tournament.locations.length === 1 ? 'Location' : 'Locations' }}
-                      </dt>
-                      @for (location of tournament.locations; track location.name) {
-                        <dd>
-                          <span class="font-medium">{{ location.name }}</span>
-                          <span class="block text-sm text-muted-foreground">{{
-                            location.address
-                          }}</span>
-                        </dd>
-                      }
-                    </div>
+                  <div class="px-4 py-3.5 md:px-5">
+                    <dt class="flex items-center gap-2 text-sm text-muted-foreground">
+                      <ng-icon
+                        name="lucideMapPin"
+                        class="shrink-0 text-base"
+                        aria-hidden="true"
+                      />{{ tournament.locations.length === 1 ? 'Location' : 'Locations' }}
+                    </dt>
+                    @for (location of tournament.locations; track location.name) {
+                      <dd class="mt-1">
+                        <span class="font-medium">{{ location.name }}</span>
+                        <span class="block text-sm text-muted-foreground">{{
+                          location.address
+                        }}</span>
+                      </dd>
+                    }
                   </div>
                 }
               </dl>

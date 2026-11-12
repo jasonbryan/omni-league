@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -75,7 +75,7 @@ test.describe('Tournaments: creating a draft', () => {
 
     const status = form(page).getByRole('status').filter({ hasText: 'created' });
     await expect(status).toHaveText(
-      'Winter Doubles Classic created. It stays a draft until you publish it.',
+      'Winter Doubles Classic created. It stays a draft until you publish it.Open Winter Doubles Classic',
     );
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#maximum-teams')).toHaveValue('');
@@ -354,7 +354,7 @@ test.describe('Tournaments: the management page and Publish', () => {
     await expect(publishDialog(page)).toContainText('Publish Winter Doubles Classic?');
     await expect(publishDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, 'tournament-publish-dialog');
-    await expectAccessible(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await publishDialog(page).getByRole('button', { name: 'Cancel' }).click();
     await expect(publishDialog(page)).toHaveCount(0);
     await expect(publishButton(page)).toBeFocused();
@@ -395,23 +395,25 @@ test.describe('Tournaments: the management page and Publish', () => {
     await expect(
       page
         .getByRole('navigation', { name: 'Breadcrumb' })
-        .getByRole('link', { name: 'Tournaments' }),
+        .getByRole('link', { name: 'Tournaments', exact: true }),
     ).toHaveAttribute('href', `/app/organizations/${tenant.slug}/tournaments`);
   });
 
-  test('a row of the Tournaments list opens the tournament, and the sidebar keeps Tournaments current', async ({
-    page,
-  }) => {
-    const { tenant, managePath } = await managedBy(page, 'orgAdmin');
-    await page.goto(`/app/organizations/${tenant.slug}/tournaments`);
-    await rows(page).getByRole('link', { name: 'Winter Doubles Classic' }).click();
-    await expect(page).toHaveURL(managePath);
-    await expect(
-      page
-        .getByRole('navigation', { name: `${tenant.name} admin` })
-        .getByRole('link', { name: /^Tournaments/ }),
-    ).toHaveAttribute('aria-current', 'true');
-  });
+  test(
+    'a row of the Tournaments list opens the tournament, and the sidebar keeps Tournaments current',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tenant, managePath } = await managedBy(page, 'orgAdmin');
+      await page.goto(`/app/organizations/${tenant.slug}/tournaments`);
+      await rows(page).getByRole('link', { name: 'Winter Doubles Classic' }).click();
+      await expect(page).toHaveURL(managePath);
+      await expect(
+        page
+          .getByRole('navigation', { name: `${tenant.name} admin` })
+          .getByRole('link', { name: /^Tournaments/ }),
+      ).toHaveAttribute('aria-current', 'true');
+    },
+  );
 
   test('an unknown web address shows the not-found view', async ({ page }) => {
     const { tenant } = await managedBy(page, 'orgAdmin');
@@ -455,7 +457,7 @@ test.describe('Tournaments: the management page and Publish', () => {
       await expect(alert).toContainText('The tournament could not be published.');
       await expect(alert).toBeFocused();
       await screenshot(page, testInfo, 'tournament-publish-error');
-      await expectAccessible(page);
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
       expect((await page.request.get(publicPath)).status()).toBe(404);
     });
   });
