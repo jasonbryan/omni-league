@@ -342,7 +342,6 @@ test.describe('a radio chip and a filter chip', () => {
     );
   });
 
-  // Tab reaches the radio group, then the filter chip; Space chooses each.
   async function expectSameLookWhenFocused(page: Page): Promise<void> {
     const { radio, filter } = pair(page);
     const tab = tabKey(page);
