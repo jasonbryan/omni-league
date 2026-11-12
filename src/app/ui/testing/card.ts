@@ -16,3 +16,9 @@ export function expectBareCard(card: Element | null | undefined, layoutClasses: 
     sorted([...layoutClasses.split(/\s+/).filter(Boolean), ...SURFACE.split(' ')]),
   );
 }
+
+export function expectBareCards(root: ParentNode, layouts: readonly string[]): void {
+  const cards = [...root.querySelectorAll('[data-slot="card"]')];
+  expect(cards).toHaveLength(layouts.length);
+  cards.forEach((card, index) => expectBareCard(card, layouts[index]));
+}
