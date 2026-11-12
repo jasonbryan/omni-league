@@ -363,6 +363,18 @@ describe('the Tournaments section', () => {
       );
       expect(previous?.getAttribute('href')).toBe(`${ORG}#tournaments`);
     });
+
+    it('moves the range of a later page up with the rows that ended, and keeps the control', async () => {
+      const harness = await open(`${ORG}?tournamentsPage=2`);
+      await emit(harness, {
+        ...queryResults(withTournaments([])),
+        [TOURNAMENTS]: { rows: [live(6), ENDED], page: 2, pageCount: 2, total: 7 },
+      });
+      expect(rows(harness)).toHaveLength(1);
+      const nav = section(harness)?.querySelector('nav');
+      expect(text(nav)).toContain('6–6 of 6');
+      expect(text(nav)).toContain('Previous');
+    });
   });
 
   describe('with no upcoming tournament', () => {
