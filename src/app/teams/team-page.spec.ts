@@ -189,9 +189,6 @@ describe('TeamPage', () => {
     o.subscription(GET)!.fail(forbiddenError());
     await o.flush();
     expect(text(main().querySelector('h1'))).toBe('You can’t open this team page');
-    expect(text(main().querySelector('h1 ~ p'))).toBe(
-      'Only its players and the people who run it can see it.',
-    );
     expect(main().querySelector('a[href="/app"]')).not.toBeNull();
     expect(document.title).toBe('No access | Omni League');
     expect(text(main().querySelector('h1 + p'))).toBe(
