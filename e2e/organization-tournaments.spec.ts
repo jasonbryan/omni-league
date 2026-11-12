@@ -163,8 +163,6 @@ test.describe('Tournaments: creating a draft', () => {
 });
 
 test.describe('Tournaments: the failure states', () => {
-  test.use({ expectedConvexErrors: ['tournaments:create'] });
-
   test('a list that fails to load shows the alert and passes the axe helper', async ({
     page,
   }, testInfo) => {
@@ -174,21 +172,6 @@ test.describe('Tournaments: the failure states', () => {
     const alert = page.locator('section[aria-labelledby="tournaments-heading"] [role="alert"]');
     await expect(alert).toContainText('The tournaments could not be loaded.');
     await screenshot(page, testInfo, 'tournaments-load-error');
-    await expectAccessible(page);
-  });
-
-  test('a create the server fails keeps the input, and the alert passes the axe helper', async ({
-    page,
-  }, testInfo) => {
-    const { url } = await memberOf(page, 'orgAdmin');
-    await failMutation(page, 'tournaments:create');
-    await page.goto(url);
-    await fillValid(page, 'Winter Doubles Classic');
-    await submit(page).click();
-    const alert = form(page).getByRole('alert');
-    await expect(alert).toContainText('The tournament could not be created.');
-    await expect(page.locator('#name')).toHaveValue('Winter Doubles Classic');
-    await screenshot(page, testInfo, 'tournaments-create-error');
     await expectAccessible(page);
   });
 
@@ -209,6 +192,25 @@ test.describe('Tournaments: the failure states', () => {
     await screenshot(page, testInfo, 'tournaments-offline');
     await expectAccessible(page);
     await context.setOffline(false);
+  });
+});
+
+test.describe('Tournaments: a create the server fails', () => {
+  test.use({ expectedConvexErrors: ['tournaments:create'] });
+
+  test('a create the server fails keeps the input, and the alert passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { url } = await memberOf(page, 'orgAdmin');
+    await failMutation(page, 'tournaments:create');
+    await page.goto(url);
+    await fillValid(page, 'Winter Doubles Classic');
+    await submit(page).click();
+    const alert = form(page).getByRole('alert');
+    await expect(alert).toContainText('The tournament could not be created.');
+    await expect(page.locator('#name')).toHaveValue('Winter Doubles Classic');
+    await screenshot(page, testInfo, 'tournaments-create-error');
+    await expectAccessible(page);
   });
 });
 
