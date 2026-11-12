@@ -27,6 +27,7 @@ const SAVED_QUERY_NAMES = [
   'seasons:listPublic',
   'seasons:getPublicPage',
   'teams:listPublic',
+  'tournaments:getPublicPage',
   'search:leagues',
   'search:leaguesBySport',
   'search:organizations',

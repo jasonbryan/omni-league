@@ -58,6 +58,8 @@ const SPORT_VIEW = ['sport-view', 'cache-key'];
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
+// cache-key samples the tournament route.
+const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
@@ -89,6 +91,7 @@ export const ROUTE_SPECS = {
   'organizations/:orgSlug/sports/:sport': ['sport-view'],
   'organizations/:orgSlug/leagues/:leagueSlug': ['league-page', 'league-page-offline'],
   'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': ['season-page'],
+  'organizations/:orgSlug/tournaments/:tournamentSlug': ['tournament-page'],
   'sign-up': ['sign-up', 'auth-session', 'after-sign-in'],
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
   'invites/accept': ['accept-invite'],
@@ -116,6 +119,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/locations': ['organization-admin'],
   'app/organizations/:slug/leagues': ['organization-leagues'],
   'app/organizations/:slug/tournaments': ['organization-tournaments'],
+  'app/organizations/:slug/tournaments/:tournamentSlug': ['organization-tournaments'],
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
@@ -197,6 +201,7 @@ export const PUBLIC_QUERIES = [
   'seasons:getPublicPage',
   'seasons:listOpenForOrganization',
   'teams:listPublic',
+  'tournaments:getPublicPage',
 ];
 const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
 const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;
@@ -412,6 +417,7 @@ export const OFFLINE_QUERY_GROUP_SPECS = {
   ORGANIZATION_PAGE_QUERIES: ['organization-page', 'sport-view', 'organization-filters'],
   LEAGUE_PAGE_QUERIES: ['league-page'],
   SEASON_PAGE_QUERIES: ['season-page'],
+  TOURNAMENT_PAGE_QUERIES: ['tournament-page'],
   FIND_PAGE_QUERIES: ['find-a-league', 'find-organizations'],
 };
 
@@ -603,6 +609,11 @@ export const AREAS = [
     specs: [...SEASON_PAGE, ...TEAM_REGISTRATION],
   },
   {
+    name: 'public tournament page',
+    test: inDir('src/app/organizations/public-tournament/'),
+    specs: TOURNAMENT_PAGE,
+  },
+  {
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
@@ -708,7 +719,15 @@ export const AREAS = [
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
     // league-page.spec.ts and season-page.spec.ts assert the league and season pages' 404.
-    specs: ['not-found', 'organization-page', 'sport-view', 'league-page', 'season-page', ...ADMIN],
+    specs: [
+      'not-found',
+      'organization-page',
+      'sport-view',
+      'league-page',
+      'season-page',
+      'tournament-page',
+      ...ADMIN,
+    ],
   },
   {
     name: 'offline views',
@@ -721,6 +740,7 @@ export const AREAS = [
       'league-page',
       'league-page-offline',
       'season-page',
+      'tournament-page',
     ],
   },
   {
@@ -732,6 +752,7 @@ export const AREAS = [
       ...PUBLIC_PAGE,
       ...LEAGUE_PAGE,
       ...SEASON_PAGE,
+      ...TOURNAMENT_PAGE,
       ...SPORT_VIEW,
       'accept-invite',
       'install',
@@ -806,7 +827,14 @@ export const AREAS = [
     // found in the repo run with the page groups.
     name: 'convex public read helpers',
     test: named('convex/lib/', ['publicPage', 'publicLeague', 'publicSeason', 'publicList']),
-    specs: [...PUBLIC_PAGE, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW, ...FIND_PAGE],
+    specs: [
+      ...PUBLIC_PAGE,
+      ...LEAGUE_PAGE,
+      ...SEASON_PAGE,
+      ...TOURNAMENT_PAGE,
+      ...SPORT_VIEW,
+      ...FIND_PAGE,
+    ],
     derive: (_graph, root) => ({ extraSpecs: findPublicPageSpecs(root) }),
   },
   {
@@ -850,7 +878,7 @@ export const AREAS = [
   {
     name: 'convex tournaments',
     test: named('convex/', ['tournaments']),
-    specs: ['organization-tournaments'],
+    specs: ['organization-tournaments', ...TOURNAMENT_PAGE],
   },
   {
     name: 'convex search',
