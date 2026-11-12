@@ -40,9 +40,9 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
 
 // The chip drawn by the radio group's `brn-radio`, which holds the native input. Brain binds `data-checked="false"` on an
 // unchecked radio, so the filled chip is `data-[checked=true]:`: a bare `data-checked:` would fill every chip.
-// The helm radio class string comes first and there is no class merging, so `mt-0!` and `w-auto` undo its margin and 1rem width, the margin with `!` because `mt-0.5` is emitted after `mt-0`, and its
-// has-checked fill is overridden by the data variant, which the stylesheet emits later. The ring on keyboard focus comes from
-// that string too; this adds the WebKit and forced-colours cases.
+// The helm radio class string comes first and there is no class merging, so the important margin and `w-auto` undo its top margin
+// and 1rem width (a plain margin utility sorts before the one it must beat), and the data variant beats its has-checked fill by
+// coming later in the stylesheet. The ring on keyboard focus comes from that string too; this adds the WebKit and forced-colours cases.
 export const RADIO_CHIP_CLASSES = [
   CHIP_SHAPE,
   'mt-0! w-auto cursor-pointer select-none not-data-[checked=true]:hover:bg-muted',
