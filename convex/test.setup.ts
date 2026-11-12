@@ -42,7 +42,6 @@ export function tournamentProgramFields(organizationId: Id<'organizations'>, slu
   };
 }
 
-/** Inserts a league the way the tenant writers do, with the league-type program row it requires. */
 export async function insertLeagueWithProgram(
   ctx: Pick<MutationCtx, 'db'>,
   league: Omit<Doc<'leagues'>, '_id' | '_creationTime' | 'programId'>,

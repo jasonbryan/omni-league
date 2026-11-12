@@ -173,7 +173,7 @@ It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:de
 
 Each of these stops the run at that row, and repeating it fails the same way. The owner reports it as a bug and does not repeat the run.
 
-The division fields, `searchText`, `leagues.programId`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239, #334), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. The programs pass this function had for `leagues.programId` was removed with that requirement, because a league row without it cannot reach production: the tenant writers write each league with its program. If the production deploy fails schema validation on one of these fields, nothing is published; the owner stops the release and reports it, because this backfill cannot repair it.
+The division fields, `searchText`, `leagues.programId`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239, #334), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. If the production deploy fails schema validation on one of these fields, nothing is published; the owner stops the release and reports it, because this backfill cannot repair it.
 
 ## Web Push keys
 
