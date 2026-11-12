@@ -8,6 +8,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { RegisterFreeAgentPage } from './register-free-agent-page';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
@@ -145,6 +146,13 @@ describe('RegisterFreeAgentPage', () => {
       await open({ now: AFTER_DEADLINE });
       await answer(WAITING);
       expect(cardAlert()?.getAttribute('role')).toBe('status');
+      expect(cardAlert()?.getAttribute('tabindex')).toBe('-1');
+      expectAlertSlots(cardAlert());
+      expectAlertClasses(
+        cardAlert(),
+        'default',
+        'outline-offset-2 focus:outline-2 focus:outline-ring',
+      );
       expect(text(cardAlert())).toBe(
         'You’re registered as a free agent. An organizer will place you on a team. It will then appear under Your teams. Registered Oct 10, 2026.',
       );
@@ -161,6 +169,12 @@ describe('RegisterFreeAgentPage', () => {
         waitlist: { teamName: 'Late Lobsters', position: 2 },
       });
       expect(cardAlert()?.getAttribute('role')).toBe('status');
+      expectAlertSlots(cardAlert());
+      expectAlertClasses(
+        cardAlert(),
+        'default',
+        'outline-offset-2 focus:outline-2 focus:outline-ring',
+      );
       expect(text(cardAlert())).toBe(
         'You’re on the waitlist with Late Lobsters, position 2. While your team waits, you can’t also register as a free agent in this season.',
       );
@@ -173,6 +187,12 @@ describe('RegisterFreeAgentPage', () => {
     it('neither after the deadline: the closed state with the deadline and no form', async () => {
       await open({ now: AFTER_DEADLINE });
       await answer(SUMMER);
+      expectAlertSlots(cardAlert());
+      expectAlertClasses(
+        cardAlert(),
+        'default',
+        'outline-offset-2 focus:outline-2 focus:outline-ring',
+      );
       expect(text(cardAlert())).toBe(
         'Registration for this season is closed. It closed on May 23, 2027. To play on a team that has already registered, ask its captain for an invite.',
       );

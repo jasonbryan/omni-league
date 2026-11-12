@@ -57,9 +57,9 @@ describe('the invite alert kinds', () => {
     );
     const focusRing = 'outline-offset-2 focus:outline-2 focus:outline-ring';
     expectAlertClasses(error, 'destructive', focusRing);
-    expectAlertClasses(notice, 'neutral', focusRing);
-    expectAlertClasses(info, 'neutral', focusRing);
-    expectAlertClasses(full, 'neutral', focusRing);
+    expectAlertClasses(notice, 'default', focusRing);
+    expectAlertClasses(info, 'default', focusRing);
+    expectAlertClasses(full, 'default', focusRing);
     expectAlertSlots(error);
     expect(error.getAttribute('role')).toBe('alert');
     expect(error.getAttribute('tabindex')).toBe('-1');

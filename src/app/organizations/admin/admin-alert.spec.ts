@@ -76,10 +76,10 @@ describe('the admin alert as helm draws it', () => {
     );
     expect(boxes.map((box) => box.getAttribute('role'))).toEqual(['status', 'alert', 'note', null]);
     expect(boxes.map((box) => box.getAttribute('tabindex'))).toEqual(['-1', '-1', '-1', '-1']);
-    expectAlertClasses(boxes[0], 'neutral');
+    expectAlertClasses(boxes[0], 'default');
     expectAlertClasses(boxes[1], 'destructive');
-    expectAlertClasses(boxes[2], 'neutral');
-    expectAlertClasses(boxes[3], 'neutral');
+    expectAlertClasses(boxes[2], 'default');
+    expectAlertClasses(boxes[3], 'default');
     expectAlertSlots(boxes[0]);
     expectAlertSlots(boxes[1]);
     expectAlertSlots(boxes[2], false);
