@@ -1295,7 +1295,12 @@ describe('LeagueDetailsForm', () => {
       return { ...age, tag: 'select' };
     };
 
-    const shapes = (errors: { name?: boolean; format?: boolean; minimum?: boolean }) => [
+    const shapes = (errors: {
+      name?: boolean;
+      format?: boolean;
+      minimum?: boolean;
+      level?: boolean;
+    }) => [
       {
         tag: 'div',
         classes: [...STICKY_FOOTER_CLEARANCE.split(' '), 'flex', 'flex-col', 'gap-6'].sort(),
@@ -1345,6 +1350,7 @@ describe('LeagueDetailsForm', () => {
             shapeOf('field-error', { id: 'details-minimum-roster-size-error' }),
           ]
         : []),
+      ...(errors.level ? [shapeOf('field-error', { id: 'details-level-error' }, 'mt-2')] : []),
       fieldShape(),
       shapeOf('field-label', { for: 'details-age-group' }),
       select(),
@@ -1383,6 +1389,21 @@ describe('LeagueDetailsForm', () => {
       );
       await o.flush();
       expect(formShapes(form())).toEqual(shapes({ format: true }));
+    });
+
+    it('marks only Level when the server refuses it', async () => {
+      await open();
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'level',
+          code: 'levelInvalid',
+          message: LEAGUE_MESSAGES.levelInvalid,
+        }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes({ level: true }));
     });
   });
 });

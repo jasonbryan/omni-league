@@ -89,7 +89,6 @@ interface Parts {
   legends?: number;
   textareas?: number;
   horizontal?: number;
-  /** The slots a template writes itself, because helm has no part for them. */
   handWritten?: string[];
 }
 

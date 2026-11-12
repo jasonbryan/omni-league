@@ -468,7 +468,10 @@ describe('AdminLeagues: the Division group', () => {
       },
     });
 
-    const shapes = (errors: { format?: boolean; minimum?: boolean }, minimumShown = false) => [
+    const shapes = (
+      errors: { format?: boolean; minimum?: boolean; level?: boolean },
+      minimumShown = false,
+    ) => [
       ...(errors.format ? [shapeOf('field-error', { id: 'format-error' }, 'mt-2')] : []),
       ...(minimumShown
         ? [
@@ -497,6 +500,7 @@ describe('AdminLeagues: the Division group', () => {
               : []),
           ]
         : []),
+      ...(errors.level ? [shapeOf('field-error', { id: 'level-error' }, 'mt-2')] : []),
       fieldShape(),
       shapeOf('field-label', { for: 'age-group' }),
       ageGroup(),
@@ -515,6 +519,23 @@ describe('AdminLeagues: the Division group', () => {
       await choose('sport-beachVolleyball');
       await submit();
       expect(formShapes(fields())).toEqual(shapes({ format: true }));
+    });
+
+    it('draws the Level error under its chips when the server refuses the level', async () => {
+      await open();
+      await type('name', 'Sunday Reverse Coed 4s');
+      await choose('sport-beachVolleyball');
+      await choose('format-4');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'level',
+          code: 'levelInvalid',
+          message: 'Choose one of the levels listed.',
+        }),
+      );
+      await o.flush();
+      expect(formShapes(fields())).toEqual(shapes({ level: true }));
     });
 
     it('draws Minimum roster size as a number field with a numeric keyboard, valid and invalid', async () => {
