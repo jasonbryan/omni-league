@@ -32,6 +32,8 @@ import { seasonDates } from '../league/season-dates';
 import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
+import { ROW_TITLE_LINK } from './link-classes';
+import { tournamentPath } from './tournament-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { CreateFormLanding } from './create-form-landing';
 import { injectSectionJump } from './section-jump';
@@ -99,7 +101,11 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 @for (row of rows; track row.tournamentId) {
                   <li class="px-4 py-3.5 md:px-5">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                      <h3 class="me-1 font-medium">{{ row.name }}</h3>
+                      <h3 class="me-1 font-medium">
+                        <a [routerLink]="tournamentHref(row.slug)" [class]="rowLink">{{
+                          row.name
+                        }}</a>
+                      </h3>
                       @if (row.status === 'published') {
                         <span hlmBadge variant="default"
                           ><ng-icon
@@ -176,6 +182,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               <app-tournament-create-form
                 [organizationId]="organization.organizationId"
                 [organizationName]="organization.name"
+                [organizationSlug]="organization.slug"
                 [locations]="locations"
               />
             } @else {
@@ -241,6 +248,7 @@ export class AdminTournaments {
   protected readonly placeholders = [1, 2, 3];
   protected readonly skeletonFields = [1, 2, 3];
   protected readonly dates = seasonDates;
+  protected readonly rowLink = ROW_TITLE_LINK;
 
   private readonly list = injectQuery(api.tournaments.listForOrganization, () => {
     const organization = this.context.organization();
@@ -262,6 +270,9 @@ export class AdminTournaments {
   protected readonly createPath = computed(
     () => `${adminPath(this.context.slug(), 'tournaments')}#create-tournament`,
   );
+  protected tournamentHref(slug: string): string {
+    return tournamentPath(this.context.slug(), slug);
+  }
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
 
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');

@@ -4,6 +4,7 @@ import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
+  getTournamentPublicPageReturns,
   publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
@@ -52,6 +53,10 @@ const SEASON_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.teams.listPublic, publicTeamsValidator, 1),
 ];
 
+const TOURNAMENT_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.tournaments.getPublicPage, getTournamentPublicPageReturns, 1),
+];
+
 const FIND_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.search.leagues, searchLeaguesValidator, 1),
   savedQuery(api.search.leaguesBySport, searchLeaguesBySportValidator, 1),
@@ -66,5 +71,6 @@ export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   ...ORGANIZATION_PAGE_QUERIES,
   ...LEAGUE_PAGE_QUERIES,
   ...SEASON_PAGE_QUERIES,
+  ...TOURNAMENT_PAGE_QUERIES,
   ...FIND_PAGE_QUERIES,
 ];

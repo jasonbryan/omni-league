@@ -19,6 +19,7 @@ import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminTournaments } from './organizations/admin/admin-tournaments';
 import { AdminStaff } from './organizations/admin/admin-staff';
+import { TournamentManagement } from './organizations/admin/tournament-management';
 import { AdminDetails } from './organizations/admin/admin-details';
 import { SeasonPage } from './organizations/season-management/season-page';
 import { LeaguePage } from './organizations/league/league-page';
@@ -28,6 +29,7 @@ import { CreateOrganizationPage } from './organizations/create-organization-page
 import { OrganizationPage } from './organizations/organization-page';
 import { PublicLeaguePage } from './organizations/public-league/public-league-page';
 import { PublicSeasonPage } from './organizations/public-season/public-season-page';
+import { PublicTournamentPage } from './organizations/public-tournament/public-tournament-page';
 import { Placeholder } from './placeholder/placeholder';
 import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
@@ -53,7 +55,7 @@ function directives(value: string): Map<string, string | true> {
 }
 
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, organizations/:orgSlug/tournaments/:tournamentSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       {
@@ -112,6 +114,11 @@ describe('Route tables', () => {
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
       {
+        path: 'organizations/:orgSlug/tournaments/:tournamentSlug',
+        renderMode: RenderMode.Server,
+        headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+      },
+      {
         path: '**',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
@@ -142,7 +149,7 @@ describe('Route tables', () => {
     ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'teams/join', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, teams/join, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, the tournament page, sign-up, sign-in, invites/accept, teams/join, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'leagues',
@@ -150,6 +157,7 @@ describe('Route tables', () => {
       'organizations/:orgSlug/sports/:sport',
       'organizations/:orgSlug/leagues/:leagueSlug',
       'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+      'organizations/:orgSlug/tournaments/:tournamentSlug',
       'sign-up',
       'sign-in',
       'invites/accept',
@@ -193,6 +201,14 @@ describe('Route tables', () => {
     );
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(PublicSeasonPage);
+  });
+
+  it('organizations/:orgSlug/tournaments/:tournamentSlug lazy-loads the public tournament page', async () => {
+    const route = routes.find(
+      (r) => r.path === 'organizations/:orgSlug/tournaments/:tournamentSlug',
+    );
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(PublicTournamentPage);
   });
 
   it('the last client route is **, which lazy-loads the not-found page', async () => {
@@ -295,6 +311,7 @@ describe('Route tables', () => {
       'locations',
       'leagues',
       'tournaments',
+      'tournaments/:tournamentSlug',
       'staff',
       'details',
     ]);
@@ -303,8 +320,9 @@ describe('Route tables', () => {
     expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(await admin?.children?.[2]?.loadComponent?.()).toBe(AdminLeagues);
     expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminTournaments);
-    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(AdminStaff);
-    expect(await admin?.children?.[5]?.loadComponent?.()).toBe(AdminDetails);
+    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(TournamentManagement);
+    expect(await admin?.children?.[5]?.loadComponent?.()).toBe(AdminStaff);
+    expect(await admin?.children?.[6]?.loadComponent?.()).toBe(AdminDetails);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Home | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

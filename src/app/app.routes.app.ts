@@ -69,6 +69,11 @@ export const appRoutes: Routes = [
           import('./organizations/admin/admin-tournaments').then((m) => m.AdminTournaments),
       },
       {
+        path: 'tournaments/:tournamentSlug',
+        loadComponent: () =>
+          import('./organizations/admin/tournament-management').then((m) => m.TournamentManagement),
+      },
+      {
         path: 'staff',
         loadComponent: () => import('./organizations/admin/admin-staff').then((m) => m.AdminStaff),
       },

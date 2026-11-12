@@ -11,6 +11,7 @@ import {
 import { PublicLeagueSkeleton } from './public-league/public-league-skeleton';
 import type { PublicPageNames } from './public-league/public-page-names';
 import { PublicSeasonSkeleton } from './public-season/public-season-skeleton';
+import { PublicTournamentSkeleton } from './public-tournament/public-tournament-skeleton';
 
 const ROWS = '[data-testid="skeleton-breadcrumb-row"]';
 const rowCount = (root: Element) => root.querySelectorAll(ROWS).length;
@@ -41,6 +42,7 @@ describe('page skeletons', () => {
         {},
         { 'rounded-md': 16, 'rounded-full': 2, 'rounded-lg': 4 },
       ],
+      ['tournament', PublicTournamentSkeleton, {}, { 'rounded-md': 14, 'rounded-lg': 4 }],
       ['find', FindSkeleton, {}, { 'rounded-md': 7, 'rounded-xl': 3, 'rounded-full': 3 }],
     ];
 
@@ -86,6 +88,7 @@ describe('page skeletons', () => {
     ['organization', OrganizationSkeleton],
     ['league', PublicLeagueSkeleton],
     ['season', PublicSeasonSkeleton],
+    ['tournament', PublicTournamentSkeleton],
   ])(
     'the %s skeleton marks the page as loading, so the layout leaves out its footer',
     (_, skeleton) => {
@@ -123,6 +126,16 @@ describe('page skeletons', () => {
     });
   });
 
+  describe('tournament card', () => {
+    it('the tournament skeleton draws its registration card as a bare helm card', () => {
+      const fixture = TestBed.createComponent(PublicTournamentSkeleton);
+      fixture.detectChanges();
+      const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('[data-slot="card"]');
+      expect(cards).toHaveLength(1);
+      expectBareCard(cards[0], 'p-5 md:p-6');
+    });
+  });
+
   describe('breadcrumb rows', () => {
     const rowsOf = (skeleton: Type<unknown>) => {
       const fixture = TestBed.createComponent(skeleton);
@@ -133,6 +146,7 @@ describe('page skeletons', () => {
     it.each<[string, Type<unknown>, number]>([
       ['league', PublicLeagueSkeleton, 1],
       ['season', PublicSeasonSkeleton, 2],
+      ['tournament', PublicTournamentSkeleton, 1],
     ])(
       'the %s skeleton sets each row by the pointer and not by the width, as the breadcrumb link does',
       (_, skeleton, count) => {
