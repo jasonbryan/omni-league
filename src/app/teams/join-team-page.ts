@@ -22,7 +22,6 @@ import {
   lucideCircleCheck,
   lucideHouse,
   lucideLink2Off,
-  lucideLoaderCircle,
   lucideLogOut,
   lucideMailOpen,
 } from '@ng-icons/lucide';
@@ -61,6 +60,7 @@ import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Checkbox } from '../ui/checkbox';
+import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
 
@@ -150,6 +150,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
   imports: [
     Checkbox,
     FormField,
+    HlmSpinner,
     InviteAlert,
     InviteOfflineAlert,
     MinorNameErrorText,
@@ -168,7 +169,6 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
       lucideCircleCheck,
       lucideHouse,
       lucideLink2Off,
-      lucideLoaderCircle,
       lucideLogOut,
       lucideMailOpen,
     }),
@@ -586,12 +586,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                             [attr.aria-disabled]="accepting() || !online() ? 'true' : null"
                           >
                             @if (accepting()) {
-                              <ng-icon
-                                name="lucideLoaderCircle"
-                                class="motion-safe:animate-spin"
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                              />Accepting…
+                              <hlm-spinner data-icon="inline-start" />Accepting…
                             } @else {
                               <ng-icon
                                 name="lucideCheck"

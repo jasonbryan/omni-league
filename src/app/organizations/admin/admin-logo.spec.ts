@@ -8,6 +8,8 @@ import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { adminRoutes, COASTAL, GET_ADMIN_CONTEXT, openAdmin, text } from './testing/admin-harness';
+import { formShapes, shapeOf } from '../../ui/testing/form-shapes';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
 const URL = `/app/organizations/${COASTAL.slug}/details`;
@@ -114,6 +116,17 @@ describe('AdminDetails: the Logo section', () => {
       expect(fileInput().tabIndex).not.toBe(-1);
     });
 
+    it('draws the hint, and the error once a file is refused, with the helm description and error', async () => {
+      expect(formShapes(section())).toEqual([
+        shapeOf('field-description', { id: 'logo-hint' }, 'mt-3'),
+      ]);
+      await choose(file('image/svg+xml', 1024, 'logo.svg'));
+      expect(formShapes(section())).toEqual([
+        shapeOf('field-description', { id: 'logo-hint' }, 'mt-3'),
+        shapeOf('field-error', { id: 'logo-error' }, 'mt-2'),
+      ]);
+    });
+
     it('sends nothing for a file of the wrong type, and shows the message under the field', async () => {
       await choose(file('image/svg+xml', 1024, 'logo.svg'));
       expect(o.convex.calls).toEqual([]);
@@ -164,6 +177,7 @@ describe('AdminDetails: the Logo section', () => {
       await choose(file());
       expect(text(fileLabel())).toBe('Uploading…');
       expect(fileLabel().getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(fileLabel());
       expect(text(srStatus())).toBe('Uploading the logo.');
       await choose(file());
       expect(o.convex.calls).toHaveLength(1);
@@ -336,6 +350,7 @@ describe('AdminDetails: the Logo section', () => {
       ]);
       expect(text(dialogButton('Removing'))).toBe('Removing…');
       expect(dialogButton('Removing').getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(dialogButton('Removing'));
     });
 
     it('on success closes the dialog, shows "Logo removed." in a status that takes focus, and the initials once the query answers', async () => {

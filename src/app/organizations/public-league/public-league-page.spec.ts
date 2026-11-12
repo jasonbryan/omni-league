@@ -10,7 +10,8 @@ import {
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
-import { FULL_BADGE, OPEN_BADGE } from '../season-status';
+import { slotsOf } from '../../ui/testing/helm-slots';
+import { expectBadge } from '../../ui/testing/badge';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -30,7 +31,7 @@ const PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed
 
 let client: FakeConvexClient;
 
-async function open(url = PATH): Promise<RouterTestingHarness> {
+async function open(url = PATH, state?: Record<string, unknown>): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
@@ -41,7 +42,8 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
       { provide: CONVEX_CLIENT, useValue: client },
     ],
   });
-  const harness = await RouterTestingHarness.create(url);
+  const harness = await RouterTestingHarness.create(state === undefined ? url : undefined);
+  if (state !== undefined) await TestBed.inject(Router).navigateByUrl(url, { state });
   TestBed.tick();
   return harness;
 }
@@ -157,12 +159,109 @@ describe('PublicLeaguePage queries', () => {
   });
 });
 
+describe('PublicLeaguePage skeleton names', () => {
+  const NAMES = {
+    organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+    league: {
+      slug: 'sunday-reverse-coed-4s',
+      name: 'Sunday Reverse Coed 4s',
+      sportName: 'Beach volleyball',
+    },
+  };
+  const SKELETON = '[data-testid="league-skeleton"]';
+
+  async function loading(state?: Record<string, unknown>): Promise<HTMLElement> {
+    const harness = await open(PATH, state);
+    await settle(harness);
+    return host(harness).querySelector<HTMLElement>(SKELETON)!;
+  }
+
+  it('shows the names the navigation carried, in place of the bars, while the data is on its way', async () => {
+    const skeleton = await loading(NAMES);
+
+    expect(
+      [...skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb"] li > span')].map(text),
+    ).toEqual(['Gulf Coast Sport & Social', 'Beach volleyball']);
+    expect(text(skeleton.querySelector('[data-testid="skeleton-heading"]'))).toBe(
+      'Sunday Reverse Coed 4s',
+    );
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).toBeNull();
+  });
+
+  it.each([
+    ['another league’s slug', { ...NAMES, league: { ...NAMES.league, slug: 'saturday-coed-6s' } }],
+    [
+      'another organization’s slug',
+      { ...NAMES, organization: { ...NAMES.organization, slug: 'lakeshore-sand-league' } },
+    ],
+    ['a field that is not text', { ...NAMES, league: { ...NAMES.league, name: 4 } }],
+    ['the team page’s state', { registered: true }],
+  ])('shows the bars for %s', async (_, state) => {
+    const skeleton = await loading(state);
+
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')).toBeNull();
+    expect(text(skeleton.querySelector('[data-testid="skeleton-heading"]'))).toBe('');
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).not.toBeNull();
+  });
+
+  it('shows the bars when the navigation carried no state', async () => {
+    const skeleton = await loading();
+
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')).toBeNull();
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).not.toBeNull();
+  });
+
+  it('sets its breadcrumb and heading with the classes of the loaded ones, so both take the same height', async () => {
+    const harness = await open(PATH, NAMES);
+    await settle(harness);
+    const skeleton = host(harness).querySelector<HTMLElement>(SKELETON)!;
+    const placeholders = {
+      list: skeleton.querySelector('[data-testid="skeleton-breadcrumb"]')?.className,
+      heading: skeleton.querySelector('[data-testid="skeleton-heading"]')?.className,
+      crumbs: [...skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb"] li > span')].map(
+        (span) => span.className,
+      ),
+    };
+
+    emit();
+    await settle(harness);
+    const loaded = {
+      list: host(harness).querySelector('nav[aria-label="Breadcrumb"] ol')?.className,
+      heading: host(harness).querySelector('main h1')?.className,
+      crumbs: [...host(harness).querySelectorAll('nav[aria-label="Breadcrumb"] li > a')].map(
+        (link) => link.className,
+      ),
+    };
+
+    const classSet = (className: string | undefined) => new Set(className?.split(/\s+/));
+    expect(classSet(loaded.list)).toEqual(classSet(placeholders.list));
+    expect(placeholders.heading).toBe(loaded.heading);
+    for (const [i, className] of placeholders.crumbs.entries()) {
+      expect(loaded.crumbs[i]).toContain(className);
+    }
+  });
+});
+
 describe('PublicLeaguePage populated', () => {
   let harness: RouterTestingHarness;
   beforeEach(async () => {
     harness = await open();
     emit();
     await settle(harness);
+  });
+
+  it('renders helm breadcrumb, with no current-page item because the h1 names the league', () => {
+    const nav = host(harness).querySelector('main nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(nav)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+      'breadcrumb-link',
+    ]);
+    expect(nav?.querySelector('[aria-current]')).toBeNull();
   });
 
   it('renders the breadcrumb organization and sport, and the league as the only h1', () => {
@@ -411,6 +510,14 @@ describe('PublicLeaguePage populated', () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
+    expect(slotsOf(crumbs)).toEqual([
+      'breadcrumb',
+      'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
+      'breadcrumb-item',
+    ]);
     expect(text(crumbs)).toContain('Curling');
     expect([...(crumbs?.querySelectorAll('a') ?? [])].map(text)).not.toContain('Curling');
   });
@@ -459,7 +566,7 @@ describe('PublicLeaguePage with a full season whose registration is open', () =>
     expect(text(card(harness)?.querySelector('h3'))).toBe('Summer 2027');
     const badge = clockLine(harness)?.querySelector('[data-slot="badge"]');
     expect(text(badge)).toBe('Full');
-    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(badge, 'outline', 'fit');
     expect(text(clockLine(harness))).toBe('Full Waitlist open · closes May 23, 2027');
     expect(card(harness)?.querySelectorAll('[data-slot="badge"]')).toHaveLength(1);
     const register = card(harness)?.querySelector<HTMLAnchorElement>('a[data-slot="button"]');
@@ -474,10 +581,8 @@ describe('PublicLeaguePage with a full season whose registration is open', () =>
     const [room, full] = rows(harness);
     expect(statusOf(room)).toEqual(['Registration open', 'closes Aug 29, 2027']);
     expect(statusOf(full)).toEqual(['Full', 'waitlist open']);
-    const badgeOf = (row: Element) =>
-      row.querySelector('[data-slot="badge"]')?.className.split(' ').sort();
-    expect(badgeOf(room)).toEqual(OPEN_BADGE.split(' ').sort());
-    expect(badgeOf(full)).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(room.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
+    expectBadge(full.querySelector('[data-slot="badge"]'), 'outline', 'fit');
   });
 
   it('keeps Closes and no badge on the card of an open season with room', async () => {

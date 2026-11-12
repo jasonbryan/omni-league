@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { ConvexError } from 'convex/values';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   checkCustomLevelName,
@@ -35,8 +35,10 @@ import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports, INPUT_CLASSES } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface AddedCustomLevel {
   customLevelId: Id<'customLevels'>;
@@ -77,8 +79,16 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
 /** Sits inside the create form's `<form>`, so its buttons are `type="button"`. */
 @Component({
   selector: 'app-custom-level-panel',
-  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, NgIcon],
-  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
+  imports: [
+    HlmFieldImports,
+    HlmInputImports,
+    HlmSpinner,
+    MousePressKeepsFocus,
+    AdminAlert,
+    AdminOfflineAlert,
+    NgIcon,
+  ],
+  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -153,21 +163,13 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             />
           }
         }
-        <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
-          [attr.data-matches-spartan-invalid]="nameError() ? 'true' : null"
-          [class]="fieldClass"
-        >
-          <label for="custom-level-name" data-slot="field-label" [class]="labelClass"
-            >Custom level</label
-          >
+        <div hlmField [attr.data-matches-spartan-invalid]="nameError() ? 'true' : null">
+          <label hlmFieldLabel for="custom-level-name">Custom level</label>
           <input
+            hlmInput
             #nameInput
             id="custom-level-name"
             type="text"
-            data-slot="input"
             autocomplete="off"
             [value]="name()"
             (input)="nameTyped($event)"
@@ -180,23 +182,13 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             "
             [attr.aria-invalid]="nameError() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="nameError() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p
-            data-slot="field-description"
-            id="custom-level-name-description"
-            [class]="descriptionClass"
-          >
+          <p hlmFieldDescription id="custom-level-name-description">
             As your players know it, such as Gold or Social. Saved for all your
             {{ sportName() }} leagues.
           </p>
           @if (nameError(); as error) {
-            <div
-              role="alert"
-              data-slot="field-error"
-              id="custom-level-name-error"
-              [class]="errorClass"
-            >
+            <div hlmFieldError id="custom-level-name-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -206,16 +198,8 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             </div>
           }
         </div>
-        <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
-          [attr.data-matches-spartan-invalid]="standardError() ? 'true' : null"
-          [class]="fieldClass"
-        >
-          <label for="custom-level-maps" data-slot="field-label" [class]="labelClass"
-            >Filters as</label
-          >
+        <div hlmField [attr.data-matches-spartan-invalid]="standardError() ? 'true' : null">
+          <label hlmFieldLabel for="custom-level-maps">Filters as</label>
           <select
             #standardSelect
             id="custom-level-maps"
@@ -229,7 +213,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             "
             [attr.aria-invalid]="standardError() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="standardError() ? 'true' : null"
-            [class]="inputClass"
+            [class]="selectClass"
           >
             <option value="" [selected]="standard() === ''">Choose a standard level</option>
             @for (level of standardLevels(); track level) {
@@ -238,20 +222,11 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
               </option>
             }
           </select>
-          <p
-            data-slot="field-description"
-            id="custom-level-maps-description"
-            [class]="descriptionClass"
-          >
+          <p hlmFieldDescription id="custom-level-maps-description">
             Players who filter for this standard level find your league.
           </p>
           @if (standardError(); as error) {
-            <div
-              role="alert"
-              data-slot="field-error"
-              id="custom-level-maps-error"
-              [class]="errorClass"
-            >
+            <div hlmFieldError id="custom-level-maps-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -272,12 +247,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             (click)="add()"
           >
             @if (submitting()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Adding…
+              <hlm-spinner data-icon="inline-start" />Adding…
             } @else {
               Add level
             }
@@ -304,11 +274,7 @@ export class CustomLevelPanel {
 
   protected readonly online = injectOnline();
   protected readonly alerts = PANEL_ALERTS;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
+  protected readonly selectClass = INPUT_CLASSES;
   protected readonly addClass = `${PRIMARY_BUTTON} h-11 md:h-9`;
   protected readonly cancelClass = `${OUTLINE_BUTTON} h-11 md:h-9`;
 

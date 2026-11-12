@@ -12,6 +12,10 @@ import {
 } from '../league/testing/league-harness';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { SeasonPage } from './season-page';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { expectBadge } from '../../ui/testing/badge';
+import { slotsOf } from '../../ui/testing/helm-slots';
 
 const GET_VIEW = 'seasons:getOrganizerView';
 const LIST_FREE_AGENTS = 'freeAgents:listForOrganizer';
@@ -148,6 +152,15 @@ describe('SeasonPage', () => {
         ['Coed 7v7 Rec', `/app/organizations/${GULF.slug}/leagues/${COED.slug}`, null],
         ['Summer 2027', URL, 'page'],
       ]);
+      expect(slotsOf(page.querySelector('nav[aria-label="Breadcrumb"]'))).toEqual([
+        'breadcrumb',
+        'breadcrumb-list',
+        'breadcrumb-item',
+        'breadcrumb-link',
+        'breadcrumb-separator',
+        'breadcrumb-item',
+        'breadcrumb-page',
+      ]);
       const [leagueCrumb, seasonCrumb] = crumbs;
       expect(leagueCrumb?.classList.contains('underline')).toBe(true);
       expect(seasonCrumb?.classList.contains('underline')).toBe(false);
@@ -187,6 +200,7 @@ describe('SeasonPage', () => {
         'Below minimum',
         null,
       ]);
+      expectBadge(rows[1].querySelector('[data-slot="badge"]'), 'outline-destructive', 'default');
       expect(text(rows[1])).toContain('Captain: Captain of Dig Deep');
     });
 
@@ -472,6 +486,7 @@ describe('SeasonPage', () => {
       const busy = dialogButton('Placing');
       expect(text(busy)).toBe('Placing…');
       expect(busy.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(busy);
       expect(dialogButton('Cancel').getAttribute('aria-disabled')).toBe('true');
       o.convex.calls[0].resolve(null);
       await o.flush();
@@ -560,6 +575,54 @@ describe('SeasonPage', () => {
         'Player 0 is still waiting.',
       );
     });
+
+    describe('the field markup the helm directives draw', () => {
+      const TEAMS = [
+        ['tm_block', 'Block Party'],
+        ['tm_dig', 'Dig Deep'],
+        ['tm_sharks', 'Sand Sharks'],
+      ] as const;
+
+      const expected = (unchosen: boolean) => [
+        shapeOf('field-set', {
+          id: 'place-team',
+          ...(unchosen ? { 'aria-describedby': 'place-team-error' } : {}),
+        }),
+        shapeOf('field-legend', { 'data-variant': 'label' }),
+        ...TEAMS.flatMap(([teamId]) => [
+          fieldShape(false, 'horizontal'),
+          shapeOf('field-content'),
+          shapeOf('field-label', { for: `place-team-${teamId}` }),
+          shapeOf('field-description', { id: `place-team-${teamId}-description` }),
+        ]),
+        ...(unchosen ? [shapeOf('field-error', { id: 'place-team-error' })] : []),
+      ];
+
+      it('draws the same elements, class sets, and attributes with no team chosen yet', async () => {
+        await openDialog();
+        expect(formShapes(dialog()!)).toEqual(expected(false));
+      });
+
+      it('marks the Team field set as described by its error when no team was chosen', async () => {
+        await openDialog();
+        dialogButton('Place on team').click();
+        await o.flush();
+        expect(formShapes(dialog()!)).toEqual(expected(true));
+      });
+
+      it('keeps each radio named and tied to its label and description', async () => {
+        await openDialog();
+        expect(
+          radios().map((radio) => [radio.id, radio.name, radio.getAttribute('aria-describedby')]),
+        ).toEqual(
+          TEAMS.map(([teamId]) => [
+            `place-team-${teamId}`,
+            'place-team',
+            `place-team-${teamId}-description`,
+          ]),
+        );
+      });
+    });
   });
 
   describe('maximum teams', () => {
@@ -634,6 +697,10 @@ describe('SeasonPage', () => {
       await edit('6');
       await save();
       expect(calls()).toEqual([[SET_MAX, { seasonId: 'se_summer27', maxTeams: 6 }]]);
+      const pending = page.querySelector('app-limit-edit-form button[type="submit"]');
+      expect(text(pending)).toBe('Saving…');
+      expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve(null);
       await o.flush();
       const status = page.querySelector<HTMLElement>(
@@ -685,6 +752,81 @@ describe('SeasonPage', () => {
         'The limit could not be saved. Check your connection and try again.',
       );
       expect(document.activeElement).toBe(alert);
+    });
+
+    describe('the field markup the helm directives draw', () => {
+      const expected = (invalid: boolean) => [
+        shapeOf('field-group', {}, 'mt-3'),
+        fieldShape(invalid),
+        shapeOf('field-label', { for: 'edit-maximum-teams' }),
+        inputShape(
+          'edit-maximum-teams',
+          {
+            name: 'form.value',
+            type: 'text',
+            inputmode: 'numeric',
+            autocomplete: 'off',
+            'aria-describedby': invalid
+              ? 'edit-maximum-teams-description edit-maximum-teams-error'
+              : 'edit-maximum-teams-description',
+          },
+          invalid,
+        ),
+        shapeOf('field-description', { id: 'edit-maximum-teams-description' }),
+        ...(invalid ? [shapeOf('field-error', { id: 'edit-maximum-teams-error' })] : []),
+      ];
+      const limitForm = () => page.querySelector('app-limit-edit-form')!;
+
+      it('draws the same elements, class sets, and attributes when valid', async () => {
+        await open(COED, VIEW, FREE_AGENTS);
+        await edit('6');
+        expect(formShapes(limitForm())).toEqual(expected(false));
+      });
+
+      it('marks the limit invalid and ties its error to the input after a submit', async () => {
+        await open(COED, VIEW, FREE_AGENTS);
+        await edit('7.5');
+        await save();
+        expect(formShapes(limitForm())).toEqual(expected(true));
+      });
+
+      it('marks the limit invalid when the server refuses it', async () => {
+        await open(COED, VIEW, FREE_AGENTS);
+        await edit('2');
+        await save();
+        o.convex.calls[0].reject(
+          new ConvexError({ field: 'maxTeams', code: 'maxTeamsBelowCount', message: 'No.' }),
+        );
+        await o.flush();
+        expect(formShapes(limitForm())).toEqual(expected(true));
+      });
+    });
+
+    describe('offline', () => {
+      afterEach(() => vi.restoreAllMocks());
+
+      it('the button looks disabled but stays focusable; a press shows the offline alert, sends nothing, and keeps the typed limit', async () => {
+        await open(COED, VIEW, FREE_AGENTS);
+        await edit('6');
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+        window.dispatchEvent(new Event('offline'));
+        TestBed.tick();
+        await o.harness.fixture.whenStable();
+        const button = page.querySelector<HTMLButtonElement>(
+          'app-limit-edit-form button[type="submit"]',
+        )!;
+        expect(button.getAttribute('aria-disabled')).toBe('true');
+        expect(button.classList.contains('opacity-50')).toBe(true);
+        expect(button.hasAttribute('disabled')).toBe(false);
+        await save();
+        const alert = page.querySelector<HTMLElement>('app-limit-edit-form [role="alert"]')!;
+        expect(text(alert)).toBe(
+          "You're offline. Nothing was sent. Your limit is still here. Try again when you’re connected.",
+        );
+        expect(document.activeElement).toBe(alert);
+        expect(calls()).toEqual([]);
+        expect(field()?.value).toBe('6');
+      });
     });
   });
 
@@ -854,6 +996,7 @@ describe('SeasonPage', () => {
       const pending = [...page.querySelectorAll('#waitlist button')][0];
       expect(text(pending)).toBe('Promoting… Late Lobsters');
       expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
       o.convex.calls[0].resolve({ teamId: 'tm_late', teamCount: 4, maxTeams: 5 });
       await o.flush();
       const status = page.querySelector<HTMLElement>(

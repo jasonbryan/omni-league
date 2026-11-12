@@ -9,6 +9,7 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { radiusClasses } from '../ui/testing/radius-classes';
 import { RegisterTeamPage } from './register-team-page';
+import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -311,6 +312,7 @@ describe('RegisterTeamPage', () => {
         { ...SLUGS, name: ' Late   Lobsters ' },
       ]);
       expect(text(page.querySelector('button[type="submit"]'))).toBe('Joining the waitlist…');
+      expectPendingSpinner(page.querySelector('button[type="submit"]'));
       expect(text(page.querySelector('form > p[role="status"]'))).toBe('Joining the waitlist.');
       registers()[0].resolve({ status: 'waitlisted', position: 1 });
       await flush();
@@ -356,6 +358,7 @@ describe('RegisterTeamPage', () => {
       const button = page.querySelector('button[type="submit"]');
       expect(text(button)).toBe('Registering team…');
       expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
       expect(text(page.querySelector('form > p[role="status"]'))).toBe('Registering the team.');
       registers()[0].resolve({ status: 'registered', teamId: 'team_sharks' });
       await flush();

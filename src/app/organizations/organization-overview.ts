@@ -40,6 +40,7 @@ import {
   type PublicOrganizationHeader,
   type PublicSport,
 } from './organization-path';
+import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
@@ -51,6 +52,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
+import { HlmBadge } from '../ui/badge';
 import {
   OUTLINE_BUTTON,
   OUTLINE_BUTTON_LARGE,
@@ -58,13 +60,12 @@ import {
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
+import { publicPageNames } from './public-league/public-page-names';
 import {
   closesText,
-  FULL_BADGE,
   FULL_BADGE_TEXT,
   OPEN_SEASONS_INTRO,
   leagueSeasonStatus,
-  OPEN_BADGE,
 } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
@@ -87,6 +88,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
 @Component({
   selector: 'app-organization-overview',
   imports: [
+    HlmBadge,
     LeagueFilters,
     NgIcon,
     OpenSeasonsSkeleton,
@@ -221,9 +223,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                       class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
                     >
                       <p class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <span data-slot="badge" [class]="openBadge">{{ card.sportName }}</span>
+                        <span hlmBadge variant="secondary" size="fit">{{ card.sportName }}</span>
                         @if (card.full) {
-                          <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                          <span hlmBadge variant="outline" size="fit">{{ fullBadgeText }}</span>
                         }
                       </p>
                       <h3 class="mt-3 text-lg font-semibold tracking-tight">
@@ -286,7 +288,10 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
               }
             } @else {
               <p role="status" class="sr-only">Loading the open seasons.</p>
-              <app-open-seasons-skeleton />
+              <app-open-seasons-skeleton
+                [count]="expectedOpenSeasons()"
+                [noOpenText]="noOpenText()"
+              />
             }
           </section>
         }
@@ -370,6 +375,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           <h3 class="font-medium">
                             <a
                               [routerLink]="league.href"
+                              [state]="league.names"
                               class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
                               >{{ league.name }}</a
                             >
@@ -380,8 +386,8 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ league.where }}</p>
                           @if (league.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              @if (status.badge) {
-                                <span data-slot="badge" [class]="status.badgeClass">{{
+                              @if (status.badge && status.badgeVariant; as variant) {
+                                <span hlmBadge size="fit" [variant]="variant">{{
                                   status.badge
                                 }}</span>
                               }
@@ -495,6 +501,7 @@ export class OrganizationOverview {
   readonly leaguesBusy = input(false);
   readonly locationsBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
+  readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
   readonly now = input.required<number>();
   readonly canManage = input(false);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
@@ -509,8 +516,6 @@ export class OrganizationOverview {
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
   protected readonly removeButton = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-normal! py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
-  protected readonly openBadge = OPEN_BADGE;
-  protected readonly fullBadge = FULL_BADGE;
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
   protected readonly openSeasonsIntro = OPEN_SEASONS_INTRO;
 
@@ -654,6 +659,7 @@ export class OrganizationOverview {
         id: rowId('league', this.leaguePaging(), i),
         name: league.name,
         href: publicLeaguePath(this.page().slug, league.slug),
+        names: publicPageNames({ organization: this.page(), league }),
         divisionLabel: league.divisionLabel,
         where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
         status,

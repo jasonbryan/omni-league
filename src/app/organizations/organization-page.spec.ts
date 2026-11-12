@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { Title } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { By, Title } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { AuthService } from '../core/auth/auth.service';
 import { CONVEX_CLIENT } from '../core/data/convex';
@@ -179,6 +179,19 @@ describe('OrganizationPage', () => {
       ]);
       expect(rows.map((row) => text(row.querySelector('h3')))).toEqual(
         GULF_COAST.leagues.map((league) => league.name),
+      );
+    });
+
+    it('gives each league row’s link the organization, league, and sport names as navigation state, for the league page’s skeleton', () => {
+      const links = harness.fixture.debugElement.queryAll(
+        By.css('section[aria-labelledby="leagues-heading"] li h3 a'),
+      );
+
+      expect(links.map((link) => link.injector.get(RouterLink).state)).toEqual(
+        GULF_COAST.leagues.map((league) => ({
+          organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+          league: { slug: league.slug, name: league.name, sportName: league.sportName },
+        })),
       );
     });
 

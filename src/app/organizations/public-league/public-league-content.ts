@@ -23,16 +23,16 @@ import {
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { HlmBadge } from '../../ui/badge';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
-import { FULL_BADGE, FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
+import { FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
+import { CRUMB_BOX, CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
-
-const CRUMB_LINK =
-  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -40,7 +40,7 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-public-league-content',
-  imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -55,29 +55,27 @@ function plural(count: number, noun: string): string {
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
-      <nav aria-label="Breadcrumb">
-        <ol role="list" class="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
-          <li>
-            <a [routerLink]="organizationHref()" class="${CRUMB_LINK}">{{
+      <nav hlmBreadcrumb aria-label="Breadcrumb">
+        <ol hlmBreadcrumbList class="${CRUMB_LIST}">
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbLink [link]="organizationHref()" class="${CRUMB_LINK}">{{
               view().league.organization.name
             }}</a>
           </li>
-          <li aria-hidden="true">
-            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
-          </li>
-          <li>
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
             <!-- A sport the organization no longer lists has no view to link to. -->
             @if (sportHref(); as sportHref) {
-              <a [routerLink]="sportHref" class="${CRUMB_LINK}">{{ view().league.sportName }}</a>
-            } @else {
-              <span class="inline-flex items-center font-medium pointer-coarse:min-h-11">{{
+              <a hlmBreadcrumbLink [link]="sportHref" class="${CRUMB_LINK}">{{
                 view().league.sportName
-              }}</span>
+              }}</a>
+            } @else {
+              <span class="${CRUMB_BOX}">{{ view().league.sportName }}</span>
             }
           </li>
         </ol>
       </nav>
-      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-balance md:mt-6 md:text-5xl">
+      <h1 class="${LEAGUE_HEADING}">
         {{ view().league.name }}
       </h1>
       @if (view().league.divisionLabel; as divisionLabel) {
@@ -132,7 +130,7 @@ function plural(count: number, noun: string): string {
                         aria-hidden="true"
                       />
                       @if (card.full) {
-                        <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                        <span hlmBadge variant="outline" size="fit">{{ fullBadgeText }}</span>
                       }
                       {{ card.closesText }}
                     </li>
@@ -193,7 +191,7 @@ function plural(count: number, noun: string): string {
                         </p>
                         @if (season.status; as status) {
                           <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span data-slot="badge" [class]="status.badgeClass">{{
+                            <span hlmBadge size="fit" [variant]="status.badgeVariant">{{
                               status.badge
                             }}</span>
                             @if (status.note) {
@@ -294,7 +292,6 @@ export class PublicLeagueContent {
   readonly savedAt = input<number | undefined>(undefined);
 
   protected readonly registerButton = PRIMARY_BUTTON_LARGE;
-  protected readonly fullBadge = FULL_BADGE;
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
 
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');

@@ -11,6 +11,8 @@ import {
   openAdmin,
   text,
 } from './testing/admin-harness';
+import { formShapes, shapeOf } from '../../ui/testing/form-shapes';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
@@ -240,6 +242,7 @@ describe('The custom level panel in the create form', () => {
       await press(buttonNamed('Add level'));
       expect(text(buttonNamed('Adding'))).toBe('Adding…');
       expect(buttonNamed('Adding').getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(buttonNamed('Adding'));
     });
 
     it('shows a server refusal under the name and keeps what was entered', async () => {
@@ -430,6 +433,75 @@ describe('The custom level panel in the create form', () => {
         'Intermediate',
         'Competitive',
       ]);
+    });
+  });
+  describe('the field markup the helm directives draw', () => {
+    const invalidControl = { 'aria-invalid': 'true', 'data-matches-spartan-invalid': 'true' };
+
+    const shapes = (errors: { name?: boolean; standard?: boolean }) => [
+      shapeOf('field', {
+        'data-orientation': 'vertical',
+        ...(errors.name ? { 'data-matches-spartan-invalid': 'true' } : {}),
+      }),
+      shapeOf('field-label', { for: 'custom-level-name' }),
+      shapeOf('input', {
+        id: 'custom-level-name',
+        type: 'text',
+        autocomplete: 'off',
+        'aria-describedby': errors.name
+          ? 'custom-level-name-description custom-level-name-error'
+          : 'custom-level-name-description',
+        ...(errors.name ? invalidControl : {}),
+      }),
+      shapeOf('field-description', { id: 'custom-level-name-description' }),
+      ...(errors.name ? [shapeOf('field-error', { id: 'custom-level-name-error' })] : []),
+      shapeOf('field', {
+        'data-orientation': 'vertical',
+        ...(errors.standard ? { 'data-matches-spartan-invalid': 'true' } : {}),
+      }),
+      shapeOf('field-label', { for: 'custom-level-maps' }),
+      {
+        ...shapeOf('input', {
+          id: 'custom-level-maps',
+          'aria-describedby': errors.standard
+            ? 'custom-level-maps-description custom-level-maps-error'
+            : 'custom-level-maps-description',
+          ...(errors.standard ? invalidControl : {}),
+        }),
+        tag: 'select',
+      },
+      shapeOf('field-description', { id: 'custom-level-maps-description' }),
+      ...(errors.standard ? [shapeOf('field-error', { id: 'custom-level-maps-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when empty', async () => {
+      await withBeachVolleyball();
+      await press(toggle());
+      expect(formShapes(panel()!)).toEqual(shapes({}));
+    });
+
+    it('marks Custom level and Filters as invalid and ties each error to its field after an empty add', async () => {
+      await withBeachVolleyball();
+      await press(toggle());
+      await press(buttonNamed('Add level'));
+      expect(formShapes(panel()!)).toEqual(shapes({ name: true, standard: true }));
+    });
+
+    it('marks only Custom level when the server refuses the name', async () => {
+      await withBeachVolleyball();
+      await press(toggle());
+      await type('custom-level-name', 'Gold');
+      await pick('a');
+      await press(buttonNamed('Add level'));
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'duplicate',
+          message: 'Gold is already a custom level for beach volleyball.',
+        }),
+      );
+      await o.flush();
+      expect(formShapes(panel()!)).toEqual(shapes({ name: true }));
     });
   });
 });

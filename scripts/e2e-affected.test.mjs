@@ -8,6 +8,7 @@ import {
   ALWAYS,
   AREAS,
   SESSION,
+  buildImportGraph,
   deriveSessionSpecs,
   findUnmappedMockupReads,
   formatOutputs,
@@ -654,6 +655,30 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
       assert.deepEqual(specsFor([file]), want());
     });
   }
+});
+
+describe('selectSpecs: a prebuilt import graph', () => {
+  it('selects the same specs as a call that builds its own graph', () => {
+    const graph = buildImportGraph(repoRoot);
+    for (const file of [
+      'src/app/find/find-page.ts',
+      'src/app/organizations/admin/admin-overview.ts',
+      'src/app/core/auth/auth.service.ts',
+    ]) {
+      assert.deepEqual(specsFor([file], { ...pr, graph }), specsFor([file]));
+    }
+  });
+
+  it('reads the given graph instead of building one', () => {
+    const graph = buildImportGraph(repoRoot);
+    const selection = selectSpecs(['src/app/find/find-page.ts'], {
+      ...pr,
+      sessionSpecs,
+      graph,
+      warn: () => {},
+    });
+    assert.equal(selection.scope, 'affected');
+  });
 });
 
 describe('selectSpecs: the full suite', () => {

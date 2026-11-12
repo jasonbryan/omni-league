@@ -5,6 +5,7 @@ import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, failedRequests, test } from './support/fixtures';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
+import { expectSpinnerAtButtonStart } from './support/pending-spinner';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
@@ -486,6 +487,7 @@ test.describe('sign-in', () => {
       await submit(page).click();
       const busy = page.getByRole('button', { name: 'Signing in…' });
       await expect(busy).toHaveAttribute('aria-disabled', 'true');
+      await expectSpinnerAtButtonStart(busy);
       await expect(page.getByRole('status').filter({ hasText: 'Signing in.' })).toHaveCount(1);
       await screenshot(page, testInfo, '63-sign-in-submitting');
       await busy.click({ force: true });

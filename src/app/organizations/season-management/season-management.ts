@@ -14,7 +14,6 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
   lucideCalendarDays,
-  lucideChevronRight,
   lucideCircleCheck,
   lucideCircleDashed,
   lucideListOrdered,
@@ -28,19 +27,15 @@ import {
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { sportName } from '../../../../convex/lib/sports';
 import { teamPath } from '../../teams/team-paths';
+import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { AdminAlert } from '../admin/admin-alert';
 import type { AlertText } from '../admin/alert-text';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
-import {
-  BADGE_DEFAULT,
-  BADGE_OUTLINE,
-  BADGE_OUTLINE_DESTRUCTIVE,
-  BADGE_SECONDARY,
-} from '../admin/field-classes';
+import { HlmBadge } from '../../ui/badge';
 import { formatDay } from '../admin/format-day';
 import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { CAP_NOTE } from '../admin/note-classes';
-import { CURRENT_CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
+import { CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
 import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-agent-dialog';
@@ -84,6 +79,8 @@ function localDay(ms: number): string {
   selector: 'app-season-management',
   imports: [
     AdminAlert,
+    HlmBadge,
+    HlmBreadcrumbImports,
     NgIcon,
     PlaceFreeAgentDialog,
     RouterLink,
@@ -94,7 +91,6 @@ function localDay(ms: number): string {
     provideIcons({
       lucideCalendarClock,
       lucideCalendarDays,
-      lucideChevronRight,
       lucideCircleCheck,
       lucideCircleDashed,
       lucideListOrdered,
@@ -114,25 +110,16 @@ function localDay(ms: number): string {
   template: `
     @if (league(); as league) {
       @if (season(); as season) {
-        <nav aria-label="Breadcrumb">
-          <ol
-            role="list"
-            class="flex flex-nowrap items-center gap-x-1.5 text-sm whitespace-nowrap text-muted-foreground"
-          >
-            <li [class]="nameCrumb">
-              <a [routerLink]="leagueHref()" [class]="leagueCrumbLink"
+        <nav hlmBreadcrumb aria-label="Breadcrumb">
+          <ol hlmBreadcrumbList class="flex-nowrap gap-x-1.5 whitespace-nowrap">
+            <li hlmBreadcrumbItem [class]="nameCrumb">
+              <a hlmBreadcrumbLink [link]="leagueHref()" [class]="leagueCrumbLink"
                 ><span class="truncate">{{ league.name }}</span></a
               >
             </li>
-            <li aria-hidden="true" class="shrink-0">
-              <ng-icon
-                name="lucideChevronRight"
-                class="translate-y-0.5 text-sm"
-                aria-hidden="true"
-              />
-            </li>
-            <li class="flex min-w-16 shrink-100">
-              <a [routerLink]="seasonHref()" aria-current="page" [class]="currentCrumbLink"
+            <li hlmBreadcrumbSeparator class="shrink-0"></li>
+            <li hlmBreadcrumbItem class="flex min-w-16 shrink-100">
+              <a hlmBreadcrumbPage [link]="seasonHref()" [class]="crumbLink"
                 ><span class="truncate">{{ season.name }}</span></a
               >
             </li>
@@ -143,7 +130,7 @@ function localDay(ms: number): string {
         </h1>
         <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
           @if (season.status === 'published') {
-            <span data-slot="badge" data-variant="default" [class]="defaultBadge"
+            <span hlmBadge variant="default"
               ><ng-icon
                 name="lucideCircleCheck"
                 data-icon="inline-start"
@@ -151,7 +138,7 @@ function localDay(ms: number): string {
               />Published</span
             >
           } @else {
-            <span data-slot="badge" data-variant="outline" [class]="outlineBadge"
+            <span hlmBadge variant="outline"
               ><ng-icon
                 name="lucideCircleDashed"
                 data-icon="inline-start"
@@ -159,9 +146,7 @@ function localDay(ms: number): string {
               />Draft</span
             >
           }
-          <span data-slot="badge" data-variant="secondary" [class]="secondaryBadge">{{
-            sport()
-          }}</span>
+          <span hlmBadge variant="secondary">{{ sport() }}</span>
         </div>
         <div class="mt-2 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-4">
           <p [class]="line">
@@ -238,7 +223,7 @@ function localDay(ms: number): string {
                           <a [routerLink]="team.path" [class]="rowLink">{{ team.name }}</a>
                         </h3>
                         @if (team.lines.belowMinimum) {
-                          <span data-slot="badge" data-variant="outline" [class]="belowMinimumBadge"
+                          <span hlmBadge variant="outline-destructive"
                             ><ng-icon
                               name="lucideTriangleAlert"
                               data-icon="inline-start"
@@ -433,12 +418,8 @@ export class SeasonManagement {
   });
 
   protected readonly leagueCrumbLink = LEAGUE_CRUMB_LINK;
-  protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
+  protected readonly crumbLink = CRUMB_LINK;
   protected readonly nameCrumb = NAME_CRUMB;
-  protected readonly defaultBadge = BADGE_DEFAULT;
-  protected readonly outlineBadge = BADGE_OUTLINE;
-  protected readonly secondaryBadge = BADGE_SECONDARY;
-  protected readonly belowMinimumBadge = BADGE_OUTLINE_DESTRUCTIVE;
   protected readonly line = LINE;
   protected readonly lineIcon = LINE_ICON;
   protected readonly panel = PANEL;

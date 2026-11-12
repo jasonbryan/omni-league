@@ -7,8 +7,8 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
-import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { expectBadge } from '../ui/testing/badge';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountPage } from './account-page';
 
@@ -266,7 +266,7 @@ describe('AccountPage', () => {
       expect(badges.map(text)).toEqual(['Captain', 'Player', 'Guardian', undefined]);
       expect(badges[0]?.querySelector('ng-icon')?.getAttribute('name')).toBe('lucideCrown');
       expect(badges[1]?.querySelector('ng-icon')).toBeNull();
-      expect([...badges[0]!.classList].sort()).toEqual(BADGE_SECONDARY.split(' ').sort());
+      expectBadge(badges[0], 'secondary', 'default');
       expect(text(cards()[3])).not.toContain('coach');
     });
 

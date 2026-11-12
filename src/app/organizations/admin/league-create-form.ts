@@ -14,13 +14,7 @@ import {
 import { FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideCheck,
-  lucideCircleAlert,
-  lucideLoaderCircle,
-  lucidePlus,
-  lucideSparkles,
-} from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucidePlus, lucideSparkles } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
@@ -35,24 +29,15 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_CONTENT,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  FIELD_HORIZONTAL,
-  FIELD_SET,
-  INPUT,
-  LABEL,
-  LEGEND,
-} from './field-classes';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields } from './league-division-fields';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 
 export interface LeagueLocationChoice {
   locationId: Id<'locations'>;
@@ -62,12 +47,16 @@ export interface LeagueLocationChoice {
 @Component({
   selector: 'app-league-create-form',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
     Checkbox,
     ChipRadioGroup,
     FormField,
+    HlmFieldImports,
+    HlmFieldSetImports,
+    HlmInputImports,
     LeagueDivisionFields,
     NgIcon,
     RouterLink,
@@ -80,7 +69,6 @@ export interface LeagueLocationChoice {
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
-      lucideLoaderCircle,
       lucidePlus,
       lucideSparkles,
     }),
@@ -117,21 +105,18 @@ export interface LeagueLocationChoice {
       <p id="create-league-note" class="mb-5 text-sm text-muted-foreground">
         New leagues start as drafts, which only your staff see.
       </p>
-      <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
+      <div hlmFieldGroup [class]="clearanceClass">
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="form.errors.name() ? 'true' : null"
           [attr.data-invalid]="form.errors.name() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="name" data-slot="field-label" [class]="labelClass">Name</label>
+          <label hlmFieldLabel for="name">Name</label>
           <input
+            hlmInput
             #name
             id="name"
             type="text"
-            data-slot="input"
             autocomplete="off"
             [formField]="form.fields.name"
             (blur)="form.left('name')"
@@ -140,13 +125,12 @@ export interface LeagueLocationChoice {
             [attr.aria-invalid]="form.errors.name() ? 'true' : null"
             [attr.data-invalid]="form.errors.name() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.name() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="name-description" [class]="descriptionClass">
+          <p hlmFieldDescription id="name-description">
             The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
           @if (form.errors.name(); as error) {
-            <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
+            <div hlmFieldError id="name-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -157,19 +141,16 @@ export interface LeagueLocationChoice {
           }
         </div>
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           [attr.data-invalid]="form.errors.slug() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="slug" data-slot="field-label" [class]="labelClass">Web address</label>
+          <label hlmFieldLabel for="slug">Web address</label>
           <input
+            hlmInput
             #slug
             id="slug"
             type="text"
-            data-slot="input"
             autocomplete="off"
             spellcheck="false"
             autocapitalize="none"
@@ -180,9 +161,8 @@ export interface LeagueLocationChoice {
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="slug-description" [class]="descriptionClass">
+          <p hlmFieldDescription id="slug-description">
             3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
             {{ organizationName() }}. Its public page will be at
             <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
@@ -192,7 +172,7 @@ export interface LeagueLocationChoice {
             [reserveRoom]="form.slugStatusReservesRoom()"
           />
           @if (form.errors.slug(); as error) {
-            <div role="alert" data-slot="field-error" id="slug-error" [class]="errorClass">
+            <div hlmFieldError id="slug-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -260,8 +240,8 @@ export interface LeagueLocationChoice {
           }
         </fieldset>
         <fieldset
+          hlmFieldSet
           id="locations"
-          data-slot="field-set"
           [attr.aria-describedby]="
             form.errors.locations()
               ? 'locations-description locations-error'
@@ -269,30 +249,17 @@ export interface LeagueLocationChoice {
           "
           [attr.data-invalid]="form.errors.locations() ? 'true' : null"
           (focusout)="form.leftGroup('locations', $event)"
-          [class]="fieldSetClass"
         >
-          <legend
-            data-slot="field-legend"
-            data-variant="label"
-            [class]="legendClass + (form.errors.locations() ? ' text-destructive' : '')"
-          >
+          <legend hlmFieldLegend variant="label" [class.text-destructive]="form.errors.locations()">
             Locations
           </legend>
-          <p
-            data-slot="field-description"
-            id="locations-description"
-            [class]="descriptionClass + ' -mt-1.5'"
-          >
-            Choose one or more.
-          </p>
+          <p hlmFieldDescription id="locations-description" class="-mt-1.5">Choose one or more.</p>
           <div data-slot="checkbox-group" class="grid gap-3">
             @for (location of locations(); track location.locationId; let i = $index) {
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="horizontal"
+                hlmField
+                orientation="horizontal"
                 [attr.data-matches-spartan-invalid]="form.errors.locations() ? 'true' : null"
-                [class]="fieldHorizontalClass"
               >
                 <app-checkbox
                   [controlId]="'location-' + (i + 1)"
@@ -300,19 +267,16 @@ export interface LeagueLocationChoice {
                   (checkedChange)="toggleLocation(location.locationId, $event)"
                   [showInvalid]="!!form.errors.locations()"
                 />
-                <div data-slot="field-content" [class]="contentClass">
-                  <label
-                    [attr.for]="'location-' + (i + 1)"
-                    data-slot="field-label"
-                    [class]="labelClass"
-                    >{{ location.name }}</label
-                  >
+                <div hlmFieldContent>
+                  <label hlmFieldLabel [attr.for]="'location-' + (i + 1)">{{
+                    location.name
+                  }}</label>
                 </div>
               </div>
             }
           </div>
           @if (form.errors.locations(); as error) {
-            <div role="alert" data-slot="field-error" id="locations-error" [class]="errorClass">
+            <div hlmFieldError id="locations-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -354,12 +318,7 @@ export interface LeagueLocationChoice {
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
         >
           @if (form.submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Creating league…
+            <hlm-spinner data-icon="inline-start" />Creating league…
           } @else {
             <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
             league
@@ -398,16 +357,6 @@ export class LeagueCreateForm {
     (key) => ({ key, label: SPORT_NAMES[key] }),
   );
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
-  protected readonly contentClass = FIELD_CONTENT;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
   protected readonly createdClass = CREATED_STATUS;

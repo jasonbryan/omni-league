@@ -20,6 +20,7 @@ import {
 } from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
+import { slotsOf } from '../ui/testing/helm-slots';
 import {
   at,
   COED_RESULTS,
@@ -180,6 +181,9 @@ describe('FindPage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('CANARYabc');
     expect(html).not.toContain('ott=');
+    expect(
+      slotsOf(body.querySelector('nav[aria-label="Organizations pages"]')).slice(0, 4),
+    ).toEqual(['pagination', 'pagination-content', 'pagination-item', 'pagination-link']);
   });
 
   it.each(['?page=0', '?page=abc', '?page=2&page=3'])(

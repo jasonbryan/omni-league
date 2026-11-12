@@ -18,7 +18,6 @@ import {
   lucideCircleAlert,
   lucideCopy,
   lucideLink,
-  lucideLoaderCircle,
   lucideUserPlus,
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -28,26 +27,15 @@ import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_CONTENT,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  FIELD_HORIZONTAL,
-  FIELD_SET,
-  INPUT,
-  LABEL,
-  LEGEND,
-  RADIO_EDGE,
-  RADIO_INDICATOR,
-  RADIO_INPUT,
-  RADIO_ITEM,
-} from './field-classes';
+import { RADIO_EDGE, RADIO_INDICATOR, RADIO_INPUT, RADIO_ITEM } from './field-classes';
 import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form';
 import { formatDay } from './format-day';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { RevealOnFocus } from '../../core/forms/reveal-on-focus';
+import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
+import { HlmTextareaImports } from '../../ui/textarea';
 
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
@@ -62,19 +50,21 @@ interface CreatedInvite {
 
 type CopyOutcome = 'copied' | 'blocked' | null;
 
-const TEXTAREA =
-  'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
-
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-staff-invite-panel',
   imports: [
+    HlmSpinner,
     MousePressKeepsFocus,
     RevealOnFocus,
     AdminAlert,
     AdminOfflineAlert,
     Checkbox,
     FormField,
+    HlmFieldImports,
+    HlmFieldSetImports,
+    HlmInputImports,
+    HlmTextareaImports,
     NgIcon,
   ],
   providers: [
@@ -83,7 +73,6 @@ const TEXTAREA =
       lucideCircleAlert,
       lucideCopy,
       lucideLink,
-      lucideLoaderCircle,
       lucideUserPlus,
     }),
   ],
@@ -114,27 +103,17 @@ const TEXTAREA =
             description="If it’s lost, revoke the invite and create a new one."
             class="mt-4"
           />
-          <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
-            [class]="fieldClass + ' mt-5'"
-          >
-            <label
-              for="invite-link"
-              data-slot="field-label"
-              class="flex items-center select-none gap-2 text-sm font-medium leading-snug w-fit"
-              >Invite link</label
-            >
+          <div hlmField class="mt-5">
+            <label hlmFieldLabel for="invite-link">Invite link</label>
             <textarea
+              hlmTextarea
               id="invite-link"
               appRevealOnFocus
               readonly
               rows="3"
               spellcheck="false"
               aria-describedby="copy-status"
-              data-slot="textarea"
-              [class]="textareaClass"
+              class="resize-none font-mono break-all"
               [value]="invite.link"
             ></textarea>
           </div>
@@ -215,21 +194,18 @@ const TEXTAREA =
             <p id="invite-note" class="mb-5 text-sm text-muted-foreground">
               Omni League doesn’t email invites yet. You’ll get a link to send them yourself.
             </p>
-            <div data-slot="field-group" [class]="fieldGroupClass">
+            <div hlmFieldGroup>
               <div
-                role="group"
-                data-slot="field"
-                data-orientation="vertical"
+                hlmField
                 [attr.data-matches-spartan-invalid]="form.errors.email() ? 'true' : null"
                 [attr.data-invalid]="form.errors.email() ? 'true' : null"
-                [class]="fieldClass"
               >
-                <label for="email" data-slot="field-label" [class]="labelClass">Email</label>
+                <label hlmFieldLabel for="email">Email</label>
                 <input
+                  hlmInput
                   #email
                   id="email"
                   type="email"
-                  data-slot="input"
                   autocomplete="off"
                   spellcheck="false"
                   autocapitalize="none"
@@ -241,13 +217,12 @@ const TEXTAREA =
                   [attr.aria-invalid]="form.errors.email() ? 'true' : null"
                   [attr.data-invalid]="form.errors.email() ? 'true' : null"
                   [attr.data-matches-spartan-invalid]="form.errors.email() ? 'true' : null"
-                  [class]="inputClass"
                 />
-                <p data-slot="field-description" id="email-description" [class]="descriptionClass">
+                <p hlmFieldDescription id="email-description">
                   Only an account with this email address can accept the invite.
                 </p>
                 @if (form.errors.email(); as error) {
-                  <div role="alert" data-slot="field-error" id="email-error" [class]="errorClass">
+                  <div hlmFieldError id="email-error">
                     <ng-icon
                       name="lucideCircleAlert"
                       class="mt-0.5 shrink-0 text-base"
@@ -257,17 +232,10 @@ const TEXTAREA =
                   </div>
                 }
               </div>
-              <fieldset id="role" data-slot="field-set" [class]="fieldSetClass">
-                <legend data-slot="field-legend" data-variant="label" [class]="legendClass">
-                  Role
-                </legend>
+              <fieldset hlmFieldSet id="role">
+                <legend hlmFieldLegend variant="label">Role</legend>
                 <div data-slot="radio-group" class="grid gap-3">
-                  <div
-                    role="group"
-                    data-slot="field"
-                    data-orientation="horizontal"
-                    [class]="fieldHorizontalClass"
-                  >
+                  <div hlmField orientation="horizontal">
                     <span
                       data-slot="radio-group-item"
                       [attr.data-checked]="form.role() === 'leagueOrganizer' ? 'true' : null"
@@ -291,29 +259,19 @@ const TEXTAREA =
                         [class]="radioIndicatorClass"
                       ></span
                     ></span>
-                    <div data-slot="field-content" [class]="contentClass">
+                    <div hlmFieldContent>
                       <label
+                        hlmFieldLabel
                         for="role-organizer"
-                        data-slot="field-label"
-                        [class]="labelClass"
                         [class.opacity-50]="!form.canChooseOrganizer()"
                         >League organizer</label
                       >
-                      <p
-                        data-slot="field-description"
-                        id="role-organizer-description"
-                        [class]="descriptionClass"
-                      >
+                      <p hlmFieldDescription id="role-organizer-description">
                         Runs only the leagues you choose.
                       </p>
                     </div>
                   </div>
-                  <div
-                    role="group"
-                    data-slot="field"
-                    data-orientation="horizontal"
-                    [class]="fieldHorizontalClass"
-                  >
+                  <div hlmField orientation="horizontal">
                     <span
                       data-slot="radio-group-item"
                       [attr.data-checked]="form.role() === 'orgAdmin' ? 'true' : null"
@@ -331,30 +289,24 @@ const TEXTAREA =
                         [class]="radioIndicatorClass"
                       ></span
                     ></span>
-                    <div data-slot="field-content" [class]="contentClass">
-                      <label for="role-admin" data-slot="field-label" [class]="labelClass"
-                        >Org admin</label
-                      >
-                      <p
-                        data-slot="field-description"
-                        id="role-admin-description"
-                        [class]="descriptionClass"
-                      >
+                    <div hlmFieldContent>
+                      <label hlmFieldLabel for="role-admin">Org admin</label>
+                      <p hlmFieldDescription id="role-admin-description">
                         Manages everything in {{ organizationName() }}, including staff.
                       </p>
                     </div>
                   </div>
                 </div>
                 @if (!form.canChooseOrganizer()) {
-                  <p data-slot="field-description" id="role-unavailable" [class]="descriptionClass">
+                  <p hlmFieldDescription id="role-unavailable">
                     Create a league first to invite a league organizer.
                   </p>
                 }
               </fieldset>
               @if (form.role() === 'leagueOrganizer') {
                 <fieldset
+                  hlmFieldSet
                   id="leagues"
-                  data-slot="field-set"
                   [attr.aria-describedby]="
                     form.errors.leagues()
                       ? 'leagues-description leagues-error'
@@ -362,30 +314,23 @@ const TEXTAREA =
                   "
                   [attr.data-invalid]="form.errors.leagues() ? 'true' : null"
                   (focusout)="form.leftGroup('leagues', $event)"
-                  [class]="fieldSetClass"
                 >
                   <legend
-                    data-slot="field-legend"
-                    data-variant="label"
-                    [class]="legendClass + (form.errors.leagues() ? ' text-destructive' : '')"
+                    hlmFieldLegend
+                    variant="label"
+                    [class.text-destructive]="form.errors.leagues()"
                   >
                     Leagues
                   </legend>
-                  <p
-                    data-slot="field-description"
-                    id="leagues-description"
-                    [class]="descriptionClass + ' -mt-1.5'"
-                  >
+                  <p hlmFieldDescription id="leagues-description" class="-mt-1.5">
                     Choose one or more.
                   </p>
                   <div data-slot="checkbox-group" class="grid gap-3">
                     @for (league of leagues; track league.leagueId; let i = $index) {
                       <div
-                        role="group"
-                        data-slot="field"
-                        data-orientation="horizontal"
+                        hlmField
+                        orientation="horizontal"
                         [attr.data-matches-spartan-invalid]="form.errors.leagues() ? 'true' : null"
-                        [class]="fieldHorizontalClass"
                       >
                         <app-checkbox
                           [controlId]="'league-' + (i + 1)"
@@ -393,24 +338,16 @@ const TEXTAREA =
                           (checkedChange)="form.toggleLeague(league.leagueId, $event)"
                           [showInvalid]="!!form.errors.leagues()"
                         />
-                        <div data-slot="field-content" [class]="contentClass">
-                          <label
-                            [attr.for]="'league-' + (i + 1)"
-                            data-slot="field-label"
-                            [class]="labelClass"
-                            >{{ league.name }}</label
-                          >
+                        <div hlmFieldContent>
+                          <label hlmFieldLabel [attr.for]="'league-' + (i + 1)">{{
+                            league.name
+                          }}</label>
                         </div>
                       </div>
                     }
                   </div>
                   @if (form.errors.leagues(); as error) {
-                    <div
-                      role="alert"
-                      data-slot="field-error"
-                      id="leagues-error"
-                      [class]="errorClass"
-                    >
+                    <div hlmFieldError id="leagues-error">
                       <ng-icon
                         name="lucideCircleAlert"
                         class="mt-0.5 shrink-0 text-base"
@@ -432,12 +369,7 @@ const TEXTAREA =
               [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
             >
               @if (form.submitting()) {
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="motion-safe:animate-spin"
-                  data-icon="inline-start"
-                  aria-hidden="true"
-                />Creating invite link…
+                <hlm-spinner data-icon="inline-start" />Creating invite link…
               } @else {
                 <ng-icon name="lucideLink" data-icon="inline-start" aria-hidden="true" />Create
                 invite link
@@ -477,21 +409,10 @@ export class StaffInvitePanel {
   protected readonly form = new InviteForm(() => (this.leagues() ?? []).map((l) => l.leagueId));
   protected readonly alerts = INVITE_FORM_ALERTS;
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
-  protected readonly contentClass = FIELD_CONTENT;
   protected readonly radioItemClass = RADIO_ITEM;
   protected readonly radioEdgeClass = RADIO_EDGE;
   protected readonly radioInputClass = RADIO_INPUT;
   protected readonly radioIndicatorClass = RADIO_INDICATOR;
-  protected readonly textareaClass = TEXTAREA;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;

@@ -14,6 +14,15 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import {
+  fieldShape,
+  formShapes,
+  inputShape,
+  shapeOf,
+  type FormShape,
+} from '../../ui/testing/form-shapes';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { expectBadge } from '../../ui/testing/badge';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
@@ -254,7 +263,7 @@ describe('AdminStaff', () => {
       expect(text(members()[2].querySelectorAll('p')[1])).toBe(
         'League organizer for Sunday Reverse Coed 4s, Thursday Night Coed 2s',
       );
-      expect(members()[0].querySelector('[data-variant="secondary"]')).not.toBeNull();
+      expectBadge(members()[0].querySelector('[data-slot="badge"]'), 'secondary', 'default');
       expect(text(members()[0].querySelector('[aria-hidden="true"]'))).toBe('LH');
     });
 
@@ -882,6 +891,116 @@ describe('AdminStaff', () => {
     });
   });
 
+  describe('the field markup the helm directives draw', () => {
+    const horizontal = (invalid = false) => ({
+      ...fieldShape(false, 'horizontal'),
+      attributes: {
+        ...fieldShape(false, 'horizontal').attributes,
+        ...(invalid ? { 'data-matches-spartan-invalid': 'true' } : {}),
+      },
+    });
+
+    const radio = (id: string, labelClasses = ''): FormShape[] => [
+      horizontal(),
+      shapeOf('field-content'),
+      shapeOf('field-label', { for: id }, labelClasses),
+      shapeOf('field-description', { id: `${id}-description` }),
+    ];
+
+    const shapes = (errors: { email?: boolean; leagues?: boolean }, leagueCount = 4) => [
+      shapeOf('field-group'),
+      fieldShape(!!errors.email),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          type: 'email',
+          autocomplete: 'off',
+          'aria-describedby': errors.email ? 'email-description email-error' : 'email-description',
+        },
+        !!errors.email,
+      ),
+      shapeOf('field-description', { id: 'email-description' }),
+      ...(errors.email ? [shapeOf('field-error', { id: 'email-error' })] : []),
+      shapeOf('field-set', { id: 'role' }),
+      shapeOf('field-legend', { 'data-variant': 'label' }),
+      ...radio('role-organizer'),
+      ...radio('role-admin'),
+      shapeOf('field-set', {
+        id: 'leagues',
+        'aria-describedby': errors.leagues
+          ? 'leagues-description leagues-error'
+          : 'leagues-description',
+        ...(errors.leagues ? { 'data-invalid': 'true' } : {}),
+      }),
+      shapeOf(
+        'field-legend',
+        { 'data-variant': 'label' },
+        errors.leagues ? 'text-destructive' : '',
+      ),
+      shapeOf('field-description', { id: 'leagues-description' }, '-mt-1.5'),
+      ...Array.from({ length: leagueCount }, (_, i) => [
+        horizontal(!!errors.leagues),
+        shapeOf('field-content'),
+        shapeOf('field-label', { for: `league-${i + 1}` }),
+      ]).flat(),
+      ...(errors.leagues ? [shapeOf('field-error', { id: 'leagues-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await openFull();
+      expect(formShapes(form())).toEqual(shapes({}));
+    });
+
+    it('marks Email and Leagues invalid and ties each error to its field after an empty submit', async () => {
+      await openFull();
+      await submit();
+      expect(formShapes(form())).toEqual(shapes({ email: true, leagues: true }));
+    });
+
+    it('marks only Email when the server says the account is already staff', async () => {
+      await openFull();
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'email',
+          code: 'alreadyMember',
+          message: INVITE_MESSAGES.alreadyMember('jordan.mills@example.com'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes({ email: true }));
+    });
+
+    it('dims the League organizer label while no league exists, and shows why', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [] });
+      expect(formShapes(form()).slice(5)).toEqual([
+        shapeOf('field-set', { id: 'role' }),
+        shapeOf('field-legend', { 'data-variant': 'label' }),
+        ...radio('role-organizer', 'opacity-50'),
+        ...radio('role-admin'),
+        shapeOf('field-description', { id: 'role-unavailable' }),
+      ]);
+    });
+
+    it('draws the invite link with a vertical field, the helm label, and the textarea', async () => {
+      await openFull();
+      await createInvite();
+      const link = page.querySelector('#invite')!;
+      expect(formShapes(link)).toEqual([
+        shapeOf('field', { 'data-orientation': 'vertical' }, 'mt-5'),
+        shapeOf('field-label', { for: 'invite-link' }),
+        shapeOf(
+          'textarea',
+          { id: 'invite-link', readonly: '', 'aria-describedby': 'copy-status' },
+          'resize-none font-mono break-all',
+        ),
+      ]);
+      expect(linkBox().getAttribute('spellcheck')).toBe('false');
+    });
+  });
+
   describe('validation (state 5)', () => {
     it('an empty email shows "Enter their email address." on Email, focuses it, and sends nothing', async () => {
       await openFull();
@@ -1040,6 +1159,7 @@ describe('AdminStaff', () => {
       expect(text(submitButton())).toBe('Creating invite link…');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       expect(submitButton().disabled).toBe(false);
+      expectPendingSpinner(submitButton());
       expect(text(page.querySelector('#invite form p[role="status"].sr-only'))).toBe(
         'Creating the invite link.',
       );
@@ -1436,6 +1556,7 @@ describe('AdminStaff', () => {
       expect(text(revokeButton(0))).toBe('Revoking…');
       expect(revokeButton(0).getAttribute('aria-disabled')).toBe('true');
       expect(revokeButton(0).hasAttribute('disabled')).toBe(false);
+      expectPendingSpinner(revokeButton(0));
       expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
       expect(text(revokeButton(1))).toBe('Revoke the invite to r.castillo@example.com');
       expect(revokeButton(1).getAttribute('aria-disabled')).toBe('true');
@@ -1655,6 +1776,7 @@ describe('AdminStaff', () => {
       expect(text(pendingUndo)).toBe('Undoing…');
       expect(pendingUndo.getAttribute('aria-disabled')).toBe('true');
       expect(pendingUndo.hasAttribute('disabled')).toBe(false);
+      expectPendingSpinner(pendingUndo);
       await pressUndo();
       expect(o.convex.calls).toHaveLength(2);
     });

@@ -14,7 +14,7 @@ import {
   CHIP_CHOICE_LABEL_CLASSES,
   CHIP_CHOICE_WRAPPER_CLASSES,
 } from '../../ui/chip/chip-classes';
-import { FIELD_ERROR } from './field-classes';
+import { HlmFieldImports } from '../../ui/field';
 import { FieldNoteText, type FieldNote } from './field-note';
 
 export interface ChipOption {
@@ -24,7 +24,7 @@ export interface ChipOption {
 
 @Component({
   selector: 'app-chip-radio-group',
-  imports: [FieldNoteText, NgIcon],
+  imports: [FieldNoteText, HlmFieldImports, NgIcon],
   providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -61,7 +61,7 @@ export interface ChipOption {
         <app-field-note [id]="name() + '-note'" [note]="shownNote" class="mt-2" />
       }
       @if (error(); as message) {
-        <div role="alert" [id]="name() + '-error'" [class]="errorClass + ' mt-2'">
+        <div hlmFieldError [id]="name() + '-error'" class="mt-2">
           <ng-icon name="lucideCircleAlert" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
           <span>{{ message }}</span>
         </div>
@@ -85,7 +85,6 @@ export class ChipRadioGroup {
   protected readonly chipClass = CHIP_CHOICE_LABEL_CLASSES;
   protected readonly descriptionClass =
     'mt-2 text-muted-foreground text-start text-sm leading-normal font-normal';
-  protected readonly errorClass = FIELD_ERROR;
 
   private readonly radios = viewChildren<ElementRef<HTMLInputElement>>('radio');
 

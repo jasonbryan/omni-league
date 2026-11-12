@@ -16,7 +16,7 @@ import {
 } from '@angular/core';
 import { FormField, form } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle } from '@ng-icons/lucide';
+import { lucideCircleAlert } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError, injectOnline } from '../../core/data/convex';
@@ -25,7 +25,9 @@ import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
-import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
+import { HlmFieldImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
+import { HlmSpinner } from '../../ui/spinner';
 import { LIMIT_ALERTS } from './limit-text';
 
 type FormAlert = 'offline' | 'failed';
@@ -50,8 +52,17 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
 
 @Component({
   selector: 'app-limit-edit-form',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle })],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    FormField,
+    HlmFieldImports,
+    HlmInputImports,
+    HlmSpinner,
+    MousePressKeepsFocus,
+    NgIcon,
+  ],
+  providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -79,24 +90,19 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
           />
         }
       }
-      <div data-slot="field-group" [class]="fieldGroupClass + ' mt-3'">
+      <div hlmFieldGroup class="mt-3">
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
           [attr.data-invalid]="error() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label [for]="ids().input" data-slot="field-label" [class]="labelClass">{{
-            spec().label
-          }}</label>
+          <label hlmFieldLabel [for]="ids().input">{{ spec().label }}</label>
           <input
+            hlmInput
             #field
             [id]="ids().input"
             type="text"
             inputmode="numeric"
-            data-slot="input"
             autocomplete="off"
             [formField]="fields.value"
             (blur)="shown.left()"
@@ -106,13 +112,12 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
             [attr.aria-invalid]="error() ? 'true' : null"
             [attr.data-invalid]="error() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" [id]="ids().description" [class]="descriptionClass">
+          <p hlmFieldDescription [id]="ids().description">
             {{ spec().description }}
           </p>
           @if (error(); as error) {
-            <div role="alert" data-slot="field-error" [id]="ids().error" [class]="errorClass">
+            <div hlmFieldError [id]="ids().error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -133,12 +138,7 @@ function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | n
           [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
         >
           @if (submitting()) {
-            <ng-icon
-              name="lucideLoaderCircle"
-              class="motion-safe:animate-spin"
-              data-icon="inline-start"
-              aria-hidden="true"
-            />Saving…
+            <hlm-spinner data-icon="inline-start" />Saving…
           } @else {
             Save changes
           }
@@ -179,12 +179,6 @@ export class LimitEditForm implements OnInit {
   });
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
 
   private readonly model = signal({ value: '' });
   protected readonly fields = form(this.model);
