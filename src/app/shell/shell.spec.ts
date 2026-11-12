@@ -6,6 +6,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { hlm } from '../ui/utils';
 import { LOAD_SHELL_SHEET, Shell } from './shell';
 import { skipLinkHref } from './skip-link';
@@ -245,6 +246,15 @@ describe('Shell', () => {
       expect(host(harness).querySelector('nav')).toBeNull();
       expect(column(harness).querySelector('[role="status"]')?.textContent).toContain('Loading');
       expect(column(harness).querySelector('app-account-row')).not.toBeNull();
+    });
+
+    it('draws the loading skeleton through the skeleton, with the mark rounded-lg, the bars rounded-md, and the account avatar rounded-full', async () => {
+      const harness = await render(PendingTestPage);
+      expectSkeletonBoxes(column(harness), {
+        'rounded-lg': 1,
+        'rounded-md': 8,
+        'rounded-full': 1,
+      });
     });
 
     it('shapes the loading skeleton as the loaded sidebar: a head with a mark and two bars, 4 rows, and the account row', async () => {

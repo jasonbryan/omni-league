@@ -7,6 +7,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { AccountRow } from './account-row';
 
 @Component({
@@ -94,6 +95,11 @@ describe('AccountRow', () => {
     await authenticated();
     expect(row(page).querySelector('a')).toBeNull();
     expect(bar(page).querySelector('a')).toBeNull();
+  });
+
+  it('draws every skeleton box through the skeleton', async () => {
+    const page = await open();
+    expectSkeletonBoxes(page, { 'rounded-full': 2, 'rounded-md': 2 });
   });
 
   it('draws the skeleton avatar rounded-full and the sidebar text bars rounded-md', async () => {

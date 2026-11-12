@@ -20,10 +20,11 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { LocationRow } from './location-row';
 import { HlmCard } from '../../ui/card';
+import { HlmSkeleton } from '../../ui/skeleton';
 
 @Component({
   selector: 'app-admin-locations',
-  imports: [AddLocationForm, AdminAlert, HlmCard, LocationRow, NgIcon],
+  imports: [AddLocationForm, AdminAlert, HlmCard, HlmSkeleton, LocationRow, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideMapPinOff, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -99,18 +100,17 @@ import { HlmCard } from '../../ui/card';
             <div aria-hidden="true" class="divide-y divide-border">
               @for (placeholder of placeholders; track placeholder) {
                 <div class="flex gap-3 px-4 py-3.5 md:px-5">
-                  <div
-                    aria-hidden="true"
-                    class="bg-muted motion-safe:animate-pulse size-9 shrink-0 rounded-lg"
-                  ></div>
+                  <div hlmSkeleton aria-hidden="true" class="size-9 shrink-0 rounded-lg"></div>
                   <div class="flex-1">
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-48 max-w-full"
+                      class="rounded-md h-4 w-48 max-w-full"
                     ></div>
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-64 max-w-full"
+                      class="rounded-md mt-2 h-3.5 w-64 max-w-full"
                     ></div>
                   </div>
                 </div>

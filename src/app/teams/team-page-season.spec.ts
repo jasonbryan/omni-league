@@ -6,6 +6,7 @@ import { seasonTeamsCount } from './season-teams-panel';
 import { TeamPage } from './team-page';
 import { expectBadge } from '../ui/testing/badge';
 import { expectBareCard } from '../ui/testing/card';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 
 const GET = 'teams:getForMember';
 const LIST = 'teams:listForSeasonMember';
@@ -98,6 +99,11 @@ describe('TeamPage: rosters in a season', () => {
     await open({ ...PARTY, viewerCanManage: true, viewerTeamName: null });
     expect(main().querySelector('[data-testid="viewer-note"]')).toBeNull();
     expect(main().textContent).toContain('You’re an organizer of Sunday Reverse Coed 4s');
+  });
+
+  it('draws the season’s teams placeholder through the skeleton, rounded-md', async () => {
+    await open(PARTY);
+    expectSkeletonBoxes(seasonPanel()!, { 'rounded-md': 3 });
   });
 
   it('lists the season’s teams with this team current and the viewer’s team marked', async () => {

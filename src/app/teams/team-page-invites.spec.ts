@@ -6,6 +6,7 @@ import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
@@ -126,6 +127,11 @@ describe('TeamPage: invites', () => {
     o.convex.calls[0].resolve({ inviteId: 'ti_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
     await o.flush();
   }
+
+  it('while the pending list loads, every placeholder is drawn through the skeleton', async () => {
+    await open(SHARKS, null);
+    expectSkeletonBoxes(pendingSection()!, { 'rounded-lg': 2, 'rounded-md': 4 });
+  });
 
   it('while the pending list loads, each row mark is rounded-lg and its text bars are rounded-md', async () => {
     await open(SHARKS, null);

@@ -1,6 +1,7 @@
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { expectBareCards } from '../../ui/testing/card';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminOverview } from './admin-overview';
 import {
@@ -77,6 +78,13 @@ describe('AdminOverview', () => {
   });
 
   describe('the header', () => {
+    it('draws the counts placeholder through the skeleton, rounded-md', async () => {
+      const { page } = await open();
+      expectSkeletonBoxes(page.querySelector('[data-slot="overview-counts"]')!, {
+        'rounded-md': 1,
+      });
+    });
+
     const summary = (page: HTMLElement) => page.querySelector('[data-slot="overview-counts"]');
     const links = (page: HTMLElement) =>
       [...summary(page)!.querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]);
@@ -428,6 +436,11 @@ describe('AdminOverview', () => {
       expect(section(page).querySelector('ul')).toBeNull();
     });
 
+    it('draws the loading rows through the skeleton, each with its own radius', async () => {
+      const { page } = await openWith(undefined);
+      expectSkeletonBoxes(section(page), { 'rounded-lg': 4, 'rounded-md': 4 });
+    });
+
     it('draws a skeleton with a status for the loading section and no count', async () => {
       const { page } = await openWith(undefined);
       expect(text(section(page).querySelector('[role="status"]'))).toBe(
@@ -533,6 +546,11 @@ describe('AdminOverview', () => {
         'No season is open for registration.',
       ]);
       expect(section(page).querySelector('ul')).toBeNull();
+    });
+
+    it('draws the loading rows through the skeleton, rounded-md', async () => {
+      const { page } = await openWith(undefined);
+      expectSkeletonBoxes(section(page), { 'rounded-md': 4 });
     });
 
     it('draws a skeleton with a status while loading, and no empty text', async () => {

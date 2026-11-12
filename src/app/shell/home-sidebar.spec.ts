@@ -5,6 +5,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { HomeSidebar } from './home-sidebar';
 
 interface Mine {
@@ -143,6 +144,11 @@ describe('HomeSidebar', () => {
     for (const link of page.querySelectorAll('a')) {
       expect(link.className).toMatch(/(^|\s)(pointer-coarse:)?min-h-11(\s|$)/);
     }
+  });
+
+  it('draws the loading placeholder through the skeleton, rounded-lg', async () => {
+    const page = await open('/app');
+    expectSkeletonBoxes(page, { 'rounded-lg': 1 });
   });
 
   it('shows a loading status, and no group, while the lists load', async () => {

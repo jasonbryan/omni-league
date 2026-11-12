@@ -26,6 +26,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
 import { MainFocusRecord } from '../core/replaced-focus';
+import { SKELETON_CLASSES } from '../ui/skeleton';
 import { AccountRow } from './account-row';
 import { HomeSidebar } from './home-sidebar';
 import { OfflineNote } from './offline-note';
@@ -102,16 +103,16 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
             <div data-slot="sidebar-head-skeleton" class="flex min-h-11 items-center gap-3 p-2">
               <div
                 data-slot="sidebar-mark-skeleton"
-                [class]="'size-9 shrink-0 rounded-lg ' + pulse"
+                class="${SKELETON_CLASSES} size-9 shrink-0 rounded-lg"
               ></div>
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 <div
                   data-slot="sidebar-text-skeleton"
-                  [class]="'h-3.5 w-36 rounded-md ' + pulse"
+                  class="${SKELETON_CLASSES} h-3.5 w-36 rounded-md"
                 ></div>
                 <div
                   data-slot="sidebar-text-skeleton"
-                  [class]="'h-3 w-20 rounded-md ' + pulse"
+                  class="${SKELETON_CLASSES} h-3 w-20 rounded-md"
                 ></div>
               </div>
             </div>
@@ -121,7 +122,11 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
                   data-slot="sidebar-row-skeleton"
                   class="flex min-h-9 items-center px-3 pointer-coarse:min-h-11"
                 >
-                  <div [class]="'h-5 rounded-md ' + width + ' ' + pulse"></div>
+                  <div
+                    data-slot="skeleton"
+                    class="${SKELETON_CLASSES} h-5 rounded-md"
+                    [class]="width"
+                  ></div>
                 </div>
               }
             </div>
@@ -151,7 +156,6 @@ export class Shell {
   protected readonly title = computed(
     () => this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
   );
-  protected readonly pulse = 'bg-muted motion-safe:animate-pulse';
   protected readonly rowWidths = ['w-28', 'w-24', 'w-24', 'w-20'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
