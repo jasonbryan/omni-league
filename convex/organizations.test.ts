@@ -14,7 +14,12 @@ import {
 import { insertPendingInvite } from './lib/inviteWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 import schema from './schema';
-import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
+import {
+  insertLeagueWithProgram,
+  modules,
+  leagueRequiredFields,
+  organizationListFields,
+} from './test.setup';
 import organizationsSource from './organizations.ts?raw';
 
 const BEACH = {
@@ -1440,7 +1445,7 @@ describe('organizations:listPublicLeagues with a sport', () => {
         name: 'Old',
         slug: 'old',
       });
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'L'),
         organizationId,
         name: 'L',
@@ -1524,7 +1529,7 @@ describe('organizations.getAttention', () => {
       const ids: Id<'leagues'>[] = [];
       for (const name of names) {
         ids.push(
-          await ctx.db.insert('leagues', {
+          await insertLeagueWithProgram(ctx, {
             ...leagueRequiredFields('soccer', name),
             organizationId,
             name,

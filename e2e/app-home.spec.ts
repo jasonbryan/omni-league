@@ -10,6 +10,7 @@ import { homeHeading } from './support/home';
 import { expectLinkHeights, pointerOf } from './support/link-heights';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
+import { expectOnScreen } from './support/sticky-footer';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -144,7 +145,10 @@ test.describe('/app: a user with teams', () => {
     await expect(nextStep(page).getByRole('link')).toHaveAccessibleName(
       'Invite players to Sand Sharks',
     );
-    await expect(nextStep(page).getByRole('link')).toHaveAttribute('href', `/app/teams/${sharks}`);
+    await expect(nextStep(page).getByRole('link')).toHaveAttribute(
+      'href',
+      `/app/teams/${sharks}#invite`,
+    );
 
     await expect(teams(page).getByRole('heading', { level: 2 })).toHaveText('Your teams');
     await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText([
@@ -201,15 +205,17 @@ test.describe('/app: a user with teams', () => {
     await expect(sidebar(page).locator('[aria-current]')).toHaveCount(1);
   });
 
-  test('Invite players goes to the team page', async ({ page }) => {
+  test('Invite players opens the team page at its invite form', async ({ page }) => {
     const user = tasha();
     await signUp(page, user);
     const { sharks } = await seedTashasTeams(user);
     await openHome(page, 'Hi, Tasha');
 
     await nextStep(page).getByRole('link', { name: 'Invite players to Sand Sharks' }).click();
-    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}`);
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
     await expect(page.getByRole('heading', { level: 1, name: 'Sand Sharks' })).toBeVisible();
+    await expect(page.locator('#email')).toBeFocused();
+    await expectOnScreen(page, page.locator('#invite'));
   });
 
   test('a team name opens its team page', async ({ page }) => {
@@ -447,6 +453,35 @@ test.describe('/app: while the teams load', () => {
   });
 });
 
+test.describe('/app: the slim bar', () => {
+  test.skip(({ isMobile }) => !isMobile, 'the slim bar shows below 1024px only');
+
+  test('reads Home on one 56px line while the teams load and once they have', async ({ page }) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedTashasTeams(user);
+    const bar = page.locator('header');
+    const title = bar.locator('p');
+    const held = await holdQueries(page, ['teams:listMine']);
+    await page.goto('/app');
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(main(page).getByRole('status')).toBeVisible();
+    await expect(title).toHaveText('Home');
+    const loadingHeight = (await bar.boundingBox())!.height;
+
+    held.release();
+    await expect(teams(page)).toBeVisible();
+    await expect(title).toHaveText('Home');
+    expect((await bar.boundingBox())!.height).toBe(56);
+    expect(loadingHeight).toBe(56);
+    const lineHeight = await title.evaluate((element) =>
+      parseFloat(getComputedStyle(element).lineHeight),
+    );
+    expect((await title.boundingBox())!.height).toBeLessThanOrEqual(lineHeight);
+    await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+  });
+});
+
 test.describe('/app: the teams cannot be loaded', () => {
   test('shows an alert with Try again in place of the cards, and the cards return once the answer succeeds', async ({
     page,
@@ -505,7 +540,7 @@ test.describe('/app: keyboard, touch, and live changes', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(nextStep(page).getByRole('link')).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}`);
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
   });
 
   test('links and the button are 44px tall on touch screens and keep their size with a mouse', async ({

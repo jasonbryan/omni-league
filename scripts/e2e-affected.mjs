@@ -642,6 +642,20 @@ export const AREAS = [
     specs: [...ADMIN, ...LEAGUE_MANAGEMENT],
   },
   {
+    // The arming and cancelling of the Leagues and Tournaments create-form landing, the league management landing's
+    // twin, and the team page's #invite landing, which the home's Invite players link and team arrival focus reach.
+    name: 'fragment-landing',
+    test: named('src/app/core/', ['fragment-landing']),
+    specs: [
+      ...ADMIN,
+      ...LEAGUE_MANAGEMENT,
+      ...TEAM_INVITES,
+      ...TEAM_JOIN,
+      ...TEAM_REGISTRATION,
+      'app-home',
+    ],
+  },
+  {
     // Every form shares this field-error rule and the mouse-press directive: sign-up, sign-in, create
     // organization, the admin forms (locations, leagues, staff invites), and the season and league forms.
     name: 'form helper',

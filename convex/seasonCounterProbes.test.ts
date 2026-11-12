@@ -95,6 +95,7 @@ async function dropCounter(t: T, row: Doc<'leagues'>): Promise<void> {
     await ctx.db.replace('leagues', row._id, {
       ...leagueRequiredFields(row.sport, row.name),
       organizationId: row.organizationId,
+      programId: row.programId,
       name: row.name,
       slug: row.slug,
       sport: row.sport,

@@ -86,8 +86,8 @@ describe('TeamPage: invites', () => {
     vi.restoreAllMocks();
   });
 
-  async function open(team: object = SHARKS, pending: object | null = PENDING) {
-    o = await openAdmin(ROUTES, URL);
+  async function open(team: object = SHARKS, pending: object | null = PENDING, url = URL) {
+    o = await openAdmin(ROUTES, url);
     o.acceptToken();
     await o.flush();
     o.subscription(GET)!.emit(team);
@@ -219,6 +219,63 @@ describe('TeamPage: invites', () => {
     await o.flush();
     expect(pendingSection()?.textContent).toContain('The pending invites could not be loaded.');
     expect(email()).not.toBeNull();
+  });
+
+  describe('the invite jump and the #invite landing', () => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+    let scrolled: ReturnType<typeof vi.fn<() => void>>;
+
+    beforeEach(() => {
+      // jsdom has no scrollIntoView.
+      scrolled = vi.fn<() => void>();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+    afterEach(() => {
+      if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+      else delete (Element.prototype as Partial<Element>).scrollIntoView;
+    });
+
+    const jump = () =>
+      [...main().querySelectorAll<HTMLAnchorElement>('a')].find(
+        (a) => text(a) === 'Invite players',
+      )!;
+
+    it('the Invite players link scrolls to the invite form and focuses the email field, as the landing does', async () => {
+      await open();
+      jump().click();
+      expect(scrolled.mock.contexts).toEqual([email().closest('section')]);
+      expect(document.activeElement).toBe(email());
+    });
+
+    it('opened at #invite, lands on the form once the pending list has answered', async () => {
+      await open(SHARKS, null, `${URL}#invite`);
+      expect(scrolled).not.toHaveBeenCalled();
+      o.subscription(LIST_PENDING)!.emit(PENDING);
+      await o.flush();
+      expect(scrolled.mock.contexts).toEqual([email().closest('section')]);
+      expect(document.activeElement).toBe(email());
+    });
+
+    it('a pending list that changes after the landing neither scrolls nor moves focus', async () => {
+      await open(SHARKS, PENDING, `${URL}#invite`);
+      scrolled.mockClear();
+      (document.activeElement as HTMLElement).blur();
+      o.subscription(LIST_PENDING)!.emit({ rows: PENDING.rows.slice(0, 1), total: 1 });
+      await o.flush();
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(email());
+    });
+
+    it('a member who cannot manage the team opened at #invite gets no scroll and no focus change', async () => {
+      await open(
+        { ...SHARKS, viewerIsCaptain: false, viewerCanManage: false },
+        null,
+        `${URL}#invite`,
+      );
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(email());
+      expect(main().contains(document.activeElement)).toBe(false);
+    });
   });
 
   describe('cards', () => {
