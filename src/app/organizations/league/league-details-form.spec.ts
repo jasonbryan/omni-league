@@ -419,17 +419,6 @@ describe('LeagueDetailsForm', () => {
       });
     });
 
-    it('sends only the league name as the baseline for a league without a division', async () => {
-      await open({ ...SUNDAY, division: undefined });
-      await typeName('Sunday Sand');
-      await choose('format', '6');
-      await submit();
-      expect(o.convex.calls[0].args).toMatchObject({
-        expected: { name: 'Sunday Reverse Coed 4s' },
-      });
-      expect(o.convex.calls[0].args).not.toHaveProperty('expected.playersPerSide');
-    });
-
     it('says League details saved. with Undo, and keeps the values in the form', async () => {
       await open();
       await typeName('Sunday Sand');
@@ -564,16 +553,6 @@ describe('LeagueDetailsForm', () => {
     it('is gone once the league shows neither the saved values nor the earlier ones', async () => {
       await saved();
       o.subscription(GET_ORGANIZER_CONTEXT)!.emit({ ...SUNDAY, name: 'Renamed by someone else' });
-      await o.flush();
-      expect(text(status())).toContain('League details saved.');
-      expect(undoButton()).toBeUndefined();
-    });
-
-    it('is not offered for a league that had no division before the save', async () => {
-      await open();
-      await typeName('Sunday Sand');
-      await submit();
-      o.convex.calls[0].resolve({ ...EARLIER, league: { name: 'Sunday Reverse Coed 4s' } });
       await o.flush();
       expect(text(status())).toContain('League details saved.');
       expect(undoButton()).toBeUndefined();

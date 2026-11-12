@@ -8,7 +8,7 @@ import {
 import type { Sport, SportCounts } from '../../../convex/lib/sports';
 import { divisionFilterQuery, type FilterParam, type LeagueFacet } from './division-filters';
 
-/** The facets query leaves out a league with no division values, so with no filter the count is the total, not the number of facets. */
+/** The facets query returns at most `PUBLIC_LIST_MAX_ROWS` leagues, so with no filter the count is the total, not the number of facets. */
 export function draftLeagueCount(
   facets: readonly LeagueFacet[] | undefined,
   draft: DivisionFilters,

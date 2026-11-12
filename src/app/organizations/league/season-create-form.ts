@@ -15,7 +15,6 @@ import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCircleAlert, lucideGlobe, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { injectSlugAvailability } from '../../core/forms/slug-availability';
@@ -34,8 +33,6 @@ import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
 import { HlmInputImports } from '../../ui/input';
 import { HlmSpinner } from '../../ui/spinner';
-
-const NOT_SET = 'Not set yet';
 
 export interface CreatedSeason {
   seasonId: Id<'seasons'>;
@@ -369,14 +366,6 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           </div>
         </fieldset>
       </div>
-      @if (divisionMissing()) {
-        <app-admin-alert
-          #leagueAlert
-          kind="error"
-          [title]="leagueFormatMissingMessage"
-          class="mt-5"
-        />
-      }
       <div appStickyFooter>
         <div role="status" data-slot="created-status">
           @if (created(); as season) {
@@ -447,7 +436,7 @@ export class SeasonCreateForm {
   readonly leagueName = input.required<string>();
   readonly organizationSlug = input.required<string>();
   readonly leagueSlug = input.required<string>();
-  readonly division = input<OrganizerLeague['division']>();
+  readonly division = input.required<OrganizerLeague['division']>();
   readonly detailsHref = input.required<string>();
   readonly detailsOpened = output<MouseEvent>();
   readonly leaguePublished = input.required<boolean>();
@@ -458,8 +447,8 @@ export class SeasonCreateForm {
 
   protected readonly online = injectOnline();
   private readonly minimumRosterSize = computed(() => {
-    const division = this.division();
-    return division ? (division.minimumRosterSize ?? division.playersPerSide) : undefined;
+    const { minimumRosterSize, playersPerSide } = this.division();
+    return minimumRosterSize ?? playersPerSide;
   });
   private readonly webAddress = injectSlugAvailability({
     query: api.seasons.isSlugAvailable,
@@ -473,22 +462,17 @@ export class SeasonCreateForm {
   protected readonly addressSlug = computed(() => this.form.model().slug || 'your-address');
   protected readonly alerts = SEASON_FORM_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
-  protected readonly leagueFormatMissingMessage = SEASON_MESSAGES.leagueFormatMissing;
 
   protected readonly fromLeague = computed(() => {
-    const division = this.division();
-    if (!division) return { division: NOT_SET, minimum: NOT_SET };
-    const { playersPerSide, minimumRosterSize } = division;
+    const { label, playersPerSide, minimumRosterSize } = this.division();
     const raised = minimumRosterSize !== undefined && minimumRosterSize > playersPerSide;
     return {
-      division: division.label,
+      division: label,
       minimum: raised
         ? `${minimumRosterSize} players, raised for this league`
         : `${playersPerSide} players, set by the ${formatLabel(playersPerSide)} format`,
     };
   });
-
-  protected readonly divisionMissing = computed(() => !this.division());
 
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
@@ -506,7 +490,6 @@ export class SeasonCreateForm {
   });
 
   private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
-  private readonly leagueAlert = viewChild<AdminAlert>('leagueAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
   protected describedBy(
@@ -557,8 +540,6 @@ export class SeasonCreateForm {
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusField(outcome.focus));
-    } else if ('leagueFormatMissing' in outcome) {
-      this.focusAfterRender(() => this.leagueAlert()?.focus());
     } else {
       this.focusAfterRender(() => this.failureAlert()?.focus());
     }
