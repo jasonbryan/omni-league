@@ -4,7 +4,7 @@ import type { Doc } from './_generated/dataModel';
 import { internalAction, internalMutation, type MutationCtx } from './_generated/server';
 import { recountPendingInvites } from './lib/inviteWrites';
 import { recountMemberships } from './lib/memberships';
-import { recountTeams, recountWaiting } from './lib/rosterWrites';
+import { BACKFILL_TEAM_COUNT_SCAN_LIMIT, recountTeams, recountWaiting } from './lib/rosterWrites';
 import {
   BACKFILL_SCAN_LIMIT,
   backfillOrganizationTenantFields,
@@ -13,7 +13,7 @@ import {
   sortName,
 } from './lib/tenantWrites';
 
-// Unguarded by environment, unlike `seed:demo`, because the deployer runs it on production.
+// Unguarded by environment, unlike `seed:demo`, because it runs on production.
 
 const phaseValidator = v.union(
   v.literal('locations'),
@@ -64,11 +64,9 @@ function noneBackfilled(): Backfilled {
 }
 
 /** A recount that stops at the scan limit is short, so the run fails and the row keeps no counter. */
-function exactCount(counted: number, what: string): number {
-  if (counted >= BACKFILL_SCAN_LIMIT) {
-    throw new Error(
-      `${what} reaches the scan limit of ${BACKFILL_SCAN_LIMIT}, so its count would be short`,
-    );
+function exactCount(counted: number, scanLimit: number, what: string): number {
+  if (counted >= scanLimit) {
+    throw new Error(`${what} reaches the scan limit of ${scanLimit}, so its count would be short`);
   }
   return counted;
 }
@@ -83,6 +81,7 @@ async function backfillOrganization(
   if (organization.staffCount === undefined) {
     const staffCount = exactCount(
       await recountMemberships(ctx, organizationId),
+      BACKFILL_SCAN_LIMIT,
       `Memberships of organization ${organization.slug}`,
     );
     await ctx.db.patch('organizations', organizationId, { staffCount });
@@ -91,6 +90,7 @@ async function backfillOrganization(
   if (organization.pendingInviteCount === undefined) {
     const pendingInviteCount = exactCount(
       await recountPendingInvites(ctx, organizationId),
+      BACKFILL_SCAN_LIMIT,
       `Pending invites of organization ${organization.slug}`,
     );
     await ctx.db.patch('organizations', organizationId, { pendingInviteCount });
@@ -99,6 +99,7 @@ async function backfillOrganization(
   if (organization.draftLeagueCount === undefined) {
     const draftLeagueCount = exactCount(
       await recountDraftLeagues(ctx, organizationId),
+      BACKFILL_SCAN_LIMIT,
       `Draft leagues of organization ${organization.slug}`,
     );
     await ctx.db.patch('organizations', organizationId, { draftLeagueCount });
@@ -126,6 +127,7 @@ async function backfillLeague(
       league.publishedSeasonCount ??
       exactCount(
         await recountPublishedSeasons(ctx, league._id),
+        BACKFILL_SCAN_LIMIT,
         `Published seasons of league ${league.slug}`,
       ),
   });
@@ -140,6 +142,7 @@ async function backfillSeason(
   if (season.teamCount === undefined) {
     const teamCount = exactCount(
       await recountTeams(ctx, season._id),
+      BACKFILL_TEAM_COUNT_SCAN_LIMIT,
       `Teams of season ${season.slug}`,
     );
     await ctx.db.patch('seasons', season._id, { teamCount });
@@ -148,6 +151,7 @@ async function backfillSeason(
   if (season.waitlistCount === undefined) {
     const waitlistCount = exactCount(
       await recountWaiting(ctx, season._id),
+      BACKFILL_TEAM_COUNT_SCAN_LIMIT,
       `Waiting entries of season ${season.slug}`,
     );
     await ctx.db.patch('seasons', season._id, { waitlistCount });

@@ -42,8 +42,7 @@ const SEASON = {
   minimumRosterSize: 6,
 };
 
-/** Rows exactly as they were stored before any counter, sort field, or status existed. */
-async function insertLegacyTenant(
+async function insertTenantWithoutCounters(
   t: T,
   slug: string,
   shape: { published?: number; draft?: number; unstatused?: number } = {},
@@ -162,6 +161,13 @@ async function insertStaffAndInvites(
   });
 }
 
+async function expectCountersUnset(t: T, organizationId: Id<'organizations'>) {
+  const organization = await t.run((ctx) => ctx.db.get('organizations', organizationId));
+  expect(organization?.leagueCount).toBeUndefined();
+  expect(organization?.locationCount).toBeUndefined();
+  expect(organization?.sportLeagueCounts).toBeUndefined();
+}
+
 async function snapshot(t: T) {
   return t.run(async (ctx) => ({
     organizations: await ctx.db.query('organizations').collect(),
@@ -180,7 +186,11 @@ describe('the release backfill', () => {
 
   test('sets every counter on rows written before the counters existed', async () => {
     const t = setup();
-    const tenant = await insertLegacyTenant(t, 'legacy', { published: 2, draft: 1, unstatused: 1 });
+    const tenant = await insertTenantWithoutCounters(t, 'legacy', {
+      published: 2,
+      draft: 1,
+      unstatused: 1,
+    });
     await insertStaffAndInvites(t, tenant.organizationId, { staff: 3, pending: 2, revoked: 1 });
     const full = await insertLegacySeasonWithTeams(t, tenant, {
       status: 'published',
@@ -227,10 +237,9 @@ describe('the release backfill', () => {
       'alpha field',
       'beta field',
     ]);
-    // Only the first league has seasons.
-    const [firstLeagueId] = tenant.leagueIds;
+    const [leagueWithSeasons] = tenant.leagueIds;
     const byId = new Map(after.leagues.map((league) => [league._id, league]));
-    expect(byId.get(firstLeagueId)).toMatchObject({
+    expect(byId.get(leagueWithSeasons)).toMatchObject({
       status: 'published',
       publishedSeasonCount: 1,
     });
@@ -245,7 +254,7 @@ describe('the release backfill', () => {
 
   test('runs on a deployment that is not a preview or staging one', async () => {
     const t = setup();
-    await insertLegacyTenant(t, 'prod-like', { published: 1 });
+    await insertTenantWithoutCounters(t, 'prod-like', { published: 1 });
     await expect(t.action(internal.releaseBackfill.run, {})).resolves.toMatchObject({
       backfilled: { organizations: 1 },
     });
@@ -253,7 +262,7 @@ describe('the release backfill', () => {
 
   test('changes nothing on a second run', async () => {
     const t = setup();
-    const tenant = await insertLegacyTenant(t, 'again', { published: 2, draft: 1 });
+    const tenant = await insertTenantWithoutCounters(t, 'again', { published: 2, draft: 1 });
     await insertStaffAndInvites(t, tenant.organizationId, { staff: 2, pending: 1, revoked: 0 });
     await insertLegacySeasonWithTeams(t, tenant, { status: 'published', teams: 2, waiting: 1 });
     await t.action(internal.releaseBackfill.run, {});
@@ -267,7 +276,7 @@ describe('the release backfill', () => {
 
   test('leaves a counter that is already set alone and sets the ones that are not', async () => {
     const t = setup();
-    const tenant = await insertLegacyTenant(t, 'partial', { published: 1, draft: 1 });
+    const tenant = await insertTenantWithoutCounters(t, 'partial', { published: 1, draft: 1 });
     await insertStaffAndInvites(t, tenant.organizationId, { staff: 2, pending: 1, revoked: 0 });
     await t.run(async (ctx) => {
       await ctx.db.patch('organizations', tenant.organizationId, {
@@ -297,7 +306,7 @@ describe('the release backfill', () => {
 
   test('picks up where an interrupted run stopped', async () => {
     const t = setup();
-    const tenant = await insertLegacyTenant(t, 'interrupted', { published: 1 });
+    const tenant = await insertTenantWithoutCounters(t, 'interrupted', { published: 1 });
     await insertLegacySeasonWithTeams(t, tenant, { status: 'published', teams: 1, waiting: 0 });
     const firstBatch = await t.mutation(internal.releaseBackfill.backfillBatch, {
       phase: 'locations',
@@ -331,7 +340,8 @@ describe('the release backfill', () => {
     test('a batch handles at most its batch size and returns a cursor for the rest', async () => {
       const t = setup();
       const count = BATCH_SIZE.organizations + 1;
-      for (let i = 0; i < count; i++) await insertLegacyTenant(t, `many-${i}`, { published: 1 });
+      for (let i = 0; i < count; i++)
+        await insertTenantWithoutCounters(t, `many-${i}`, { published: 1 });
 
       const first = await t.mutation(internal.releaseBackfill.backfillBatch, {
         phase: 'organizations',
@@ -353,7 +363,7 @@ describe('the release backfill', () => {
       const organizations = BATCH_SIZE.organizations * 2 + 1;
       const tenants = [];
       for (let i = 0; i < organizations; i++) {
-        tenants.push(await insertLegacyTenant(t, `bulk-${i}`, { published: 1, draft: 1 }));
+        tenants.push(await insertTenantWithoutCounters(t, `bulk-${i}`, { published: 1, draft: 1 }));
       }
       const first = tenants[0];
       const seasons = BATCH_SIZE.seasons + 1;
@@ -393,9 +403,76 @@ describe('the release backfill', () => {
       expect(unset).toBe(0);
     });
 
+    test('an organization with as many locations as the scan limit fails the run and keeps its counters unset', async () => {
+      const t = setup();
+      const { organizationId } = await insertTenantWithoutCounters(t, 'many-locations', {
+        published: 1,
+      });
+      await t.run(async (ctx) => {
+        for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
+          await ctx.db.insert('locations', {
+            organizationId,
+            name: `Field ${i}`,
+            address: '3 Main St',
+          });
+        }
+      });
+
+      await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(
+        /cannot be recounted in one change/,
+      );
+      await expectCountersUnset(t, organizationId);
+    });
+
+    test('an organization with as many leagues as the scan limit fails the run and keeps its counters unset', async () => {
+      const t = setup();
+      const { organizationId } = await insertTenantWithoutCounters(t, 'many-leagues');
+      await t.run(async (ctx) => {
+        for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
+          await ctx.db.insert('leagues', {
+            organizationId,
+            name: `League ${i}`,
+            slug: `league-${i}`,
+            sport: 'soccer',
+            locationIds: [],
+            status: 'published',
+            publishedSeasonCount: 0,
+            sortName: `league ${i}`,
+          });
+        }
+      });
+
+      await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(
+        /cannot be recounted in one change/,
+      );
+      await expectCountersUnset(t, organizationId);
+    });
+
+    test('an organization with as many sport location rows as the scan limit fails the run and keeps its counters unset', async () => {
+      const t = setup();
+      const { organizationId, locationIds } = await insertTenantWithoutCounters(t, 'many-rows', {
+        published: 1,
+      });
+      await t.run(async (ctx) => {
+        for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
+          await ctx.db.insert('sportLocations', {
+            organizationId,
+            sport: 'soccer',
+            locationId: locationIds[0],
+            leagueCount: i,
+          });
+        }
+      });
+
+      await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(
+        /cannot be recounted in one change/,
+      );
+      await expectCountersUnset(t, organizationId);
+    });
+
     test('an organization at the scan limit fails the run instead of getting a short count', async () => {
       const t = setup();
-      const { organizationId } = await insertLegacyTenant(t, 'huge');
+      const { organizationId } = await insertTenantWithoutCounters(t, 'huge');
       await t.run(async (ctx) => {
         for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
           await ctx.db.insert('invites', {

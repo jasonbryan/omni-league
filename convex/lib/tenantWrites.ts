@@ -917,6 +917,11 @@ export async function backfillOrganizationTenantFields(
       q.eq('organizationId', organizationId),
     )
     .take(BACKFILL_SCAN_LIMIT);
+  if (existingRows.length >= BACKFILL_SCAN_LIMIT) {
+    throw new Error(
+      `Organization ${JSON.stringify(organization.slug)} has ${BACKFILL_SCAN_LIMIT} or more sport location rows, so its counters cannot be recounted in one change`,
+    );
+  }
   for (const row of existingRows) await ctx.db.delete('sportLocations', row._id);
   const sportLeagueCounts: SportCounts = {};
   const sportLocationCounts: SportCounts = {};
