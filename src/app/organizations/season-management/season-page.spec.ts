@@ -588,7 +588,7 @@ describe('SeasonPage', () => {
           id: 'place-team',
           ...(unchosen ? { 'aria-describedby': 'place-team-error' } : {}),
         }),
-        shapeOf('field-legend', { 'data-variant': 'label' }),
+        shapeOf('field-legend', { id: 'place-team-legend', 'data-variant': 'label' }),
         ...TEAMS.flatMap(([teamId]) => [
           fieldShape(false, 'horizontal'),
           shapeOf('field-content'),

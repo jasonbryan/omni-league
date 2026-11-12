@@ -108,7 +108,6 @@ const ADMIN_FORMS: Record<string, Parts> = {
   },
   'src/app/organizations/admin/staff-invite-panel.ts': {
     inputs: 1,
-    nativeInputs: 2,
     fields: 5,
     labels: 5,
     descriptions: 5,
@@ -137,7 +136,6 @@ const ADMIN_FORMS: Record<string, Parts> = {
     errors: 1,
   },
   'src/app/organizations/season-management/place-free-agent-dialog.ts': {
-    nativeInputs: 1,
     fields: 1,
     labels: 1,
     descriptions: 1,
