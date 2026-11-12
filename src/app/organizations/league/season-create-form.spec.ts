@@ -17,6 +17,13 @@ import {
   LIST_FOR_ORGANIZER,
   SEASONS,
 } from './testing/league-harness';
+import {
+  INVALID_ATTRIBUTES,
+  type FormShape,
+  formShapes,
+  inputShape,
+  shapeOf,
+} from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const tokens = (value: string) => value.split(' ').sort();
@@ -216,6 +223,157 @@ describe('SeasonCreateForm', () => {
       await type('slug', 'my-own');
       await type('name', 'Something else');
       expect(input('slug').value).toBe('my-own');
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    type Id =
+      | 'name'
+      | 'slug'
+      | 'start-date'
+      | 'end-date'
+      | 'registration-deadline'
+      | 'maximum-teams'
+      | 'maximum-roster-size';
+    type Errors = Partial<Record<Id, boolean>>;
+
+    const DEADLINE_SPAN = 'sm:max-lg:col-span-2';
+
+    function unit(
+      id: Id,
+      errors: Errors,
+      input: Record<string, string>,
+      description: string | null,
+    ): FormShape[] {
+      const invalid = !!errors[id];
+      const described = [description, invalid ? `${id}-error` : null].filter(Boolean).join(' ');
+      return [
+        shapeOf(
+          'field',
+          { 'data-orientation': 'vertical', ...(invalid ? INVALID_ATTRIBUTES : {}) },
+          id === 'registration-deadline' ? DEADLINE_SPAN : '',
+        ),
+        shapeOf('field-label', { for: id }),
+        inputShape(
+          id,
+          {
+            autocomplete: 'off',
+            ...(described ? { 'aria-describedby': described } : {}),
+            ...input,
+          },
+          invalid,
+        ),
+        ...(description ? [shapeOf('field-description', { id: description })] : []),
+        ...(invalid ? [shapeOf('field-error', { id: `${id}-error` })] : []),
+      ];
+    }
+
+    const expected = (errors: Errors = {}) => [
+      shapeOf('field-group', {}, STICKY_FOOTER_CLEARANCE),
+      ...unit('name', errors, { type: 'text', name: 'form.name' }, 'name-description'),
+      ...unit('slug', errors, { type: 'text', name: 'form.slug' }, 'slug-description'),
+      ...unit('start-date', errors, { type: 'date', name: 'form.startDate' }, null),
+      ...unit('end-date', errors, { type: 'date', name: 'form.endDate' }, 'end-date-description'),
+      ...unit(
+        'registration-deadline',
+        errors,
+        { type: 'date', name: 'form.registrationDeadline' },
+        'registration-deadline-description',
+      ),
+      shapeOf('field-set', { id: 'limits', 'aria-describedby': 'limits-description' }),
+      shapeOf('field-legend', { 'data-variant': 'label' }),
+      shapeOf('field-description', { id: 'limits-description' }),
+      ...unit(
+        'maximum-teams',
+        errors,
+        { type: 'text', inputmode: 'numeric', name: 'form.maxTeams' },
+        'maximum-teams-description',
+      ),
+      ...unit(
+        'maximum-roster-size',
+        errors,
+        { type: 'text', inputmode: 'numeric', name: 'form.maxRosterSize' },
+        'maximum-roster-size-description',
+      ),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(form())).toEqual(expected());
+    });
+
+    it('marks each empty required field invalid and ties its error to its input after a submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(form())).toEqual(
+        expected({
+          name: true,
+          slug: true,
+          'start-date': true,
+          'end-date': true,
+          'registration-deadline': true,
+        }),
+      );
+    });
+
+    it('marks a date refused by the rules invalid, with the deadline keeping its column span', async () => {
+      await open();
+      await type('name', 'Spring 2028');
+      await type('start-date', '2028-03-01');
+      await type('end-date', '2028-02-23');
+      await type('registration-deadline', '2028-03-01');
+      await submit();
+      expect(formShapes(form())).toEqual(
+        expected({ 'end-date': true, 'registration-deadline': true }),
+      );
+    });
+
+    it('marks both limits invalid when their values are out of range', async () => {
+      await open();
+      await fill();
+      await type('maximum-teams', '1');
+      await type('maximum-roster-size', '100');
+      await submit();
+      expect(formShapes(form())).toEqual(
+        expected({ 'maximum-teams': true, 'maximum-roster-size': true }),
+      );
+    });
+
+    it('marks only Web address when the server says the address is taken', async () => {
+      await open();
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: SEASON_MESSAGES.slugTaken('fall-2026'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(expected({ slug: true }));
+    });
+
+    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+      await open();
+      await submit();
+      const field = input('slug').closest('[data-slot="field"]')!;
+      expect(
+        [...field.children].map(
+          (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
+        ),
+      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      expect(
+        field.querySelector('[data-slot="field-description"] app-web-address-preview'),
+      ).not.toBeNull();
+      expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
+    });
+
+    it('describes the Web address by its description, and by its error once one shows', async () => {
+      await open();
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description');
+      await submit();
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
     });
   });
 
