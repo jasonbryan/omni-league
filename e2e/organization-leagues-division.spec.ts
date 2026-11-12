@@ -41,7 +41,8 @@ const chip = (page: Page, name: string) =>
   form(page)
     .locator('label')
     .filter({ has: page.getByRole('radio', { name, exact: true }) });
-const chipFace = (page: Page, name: string) => chip(page, name).locator('span');
+const chipFace = (page: Page, name: string) =>
+  radio(page, name).locator('xpath=ancestor::brn-radio');
 const focusRingStyle = (face: Locator) => face.evaluate((el) => getComputedStyle(el).outlineStyle);
 
 test.describe('Leagues: the division', () => {
@@ -237,10 +238,48 @@ test.describe('Leagues: the division chips', () => {
     await expect(format).toHaveAccessibleDescription(
       /Choose a format\. Players filter leagues by it\.$/,
     );
-    await expect(radio(page, '2v2')).toHaveAttribute('aria-invalid', 'true');
+    for (const chipName of ['2v2', '3v3']) {
+      await expect(radio(page, chipName)).toHaveAttribute('aria-describedby', 'format-error');
+      await expect(radio(page, chipName)).not.toHaveAttribute('aria-invalid');
+    }
     await expect(
       form(page).getByRole('alert').filter({ hasText: 'Choose a format' }),
     ).toBeVisible();
+  });
+
+  test('each chip group is a radiogroup named by its legend, holding one radio per chip', async ({
+    page,
+  }) => {
+    await openLeagues(page);
+    await chip(page, 'Beach volleyball').click();
+    const counts = { Sport: 3, Gender: 3, Format: 5, Level: 6 };
+    for (const [legend, count] of Object.entries(counts)) {
+      const group = form(page).getByRole('radiogroup', { name: legend, exact: true });
+      await expect(group).toHaveCount(1);
+      await expect(group.getByRole('radio')).toHaveCount(count);
+    }
+    await expect(form(page).getByRole('radiogroup')).toHaveCount(Object.keys(counts).length);
+  });
+
+  test('pressing the text of a chip chooses it', async ({ page }) => {
+    await openLeagues(page);
+    const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    const textCentre = await chip(page, 'Soccer').evaluate((label) => {
+      label.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const range = document.createRange();
+      range.selectNodeContents(
+        [...label.querySelectorAll('*')]
+          .flatMap((element) => [...element.childNodes])
+          .find(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim() === 'Soccer',
+          )!,
+      );
+      const box = range.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    });
+    if (coarse) await page.touchscreen.tap(textCentre.x, textCentre.y);
+    else await page.mouse.click(textCentre.x, textCentre.y);
+    await expect(radio(page, 'Soccer')).toBeChecked();
   });
 
   test('a name left before the sport is chosen fills in once the sport is chosen', async ({
