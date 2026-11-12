@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import type { TestConvex } from 'convex-test';
+import { defaultDivision } from './lib/tenantWrites';
 import type schema from './schema';
+import type { Sport } from './lib/sports';
 // The docs' "./**/!(*.*.*)*.*s" pattern matches nothing on Vite 8.
 export const modules = import.meta.glob(['./**/*.{js,ts}', '!./**/*.*.{js,ts}']);
 
@@ -14,4 +16,12 @@ export async function setTeamCounts(
       if (count) await ctx.db.patch('seasons', season._id, count);
     }
   });
+}
+
+export function organizationListFields(name: string) {
+  return { sortName: name.toLowerCase(), hasPublishedLeague: false };
+}
+
+export function leagueRequiredFields(sport: Sport, name: string) {
+  return { ...defaultDivision(sport), searchText: name };
 }

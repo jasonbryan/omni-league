@@ -7,6 +7,7 @@ import {
   insertOrganization,
   insertTenant,
   publishLeague,
+  defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -33,7 +34,12 @@ describe('the fields the organizations list reads', () => {
     const row = await t.run(async (ctx) => {
       const id = await insertOrganization(ctx, { name: 'Gulf', slug: 'gulf' });
       await insertLocation(ctx, id, { name: 'Courts', address: '1 Rd' });
-      await insertLeague(ctx, id, { name: 'Coed 4s', sport: 'soccer', locations: ['Courts'] });
+      await insertLeague(ctx, id, {
+        name: 'Coed 4s',
+        sport: 'soccer',
+        locations: ['Courts'],
+        division: defaultDivision('soccer'),
+      });
       return ctx.db.get('organizations', id);
     });
     expect(row?.hasPublishedLeague).toBe(true);
@@ -45,7 +51,15 @@ describe('the fields the organizations list reads', () => {
       const id = await insertTenant(ctx, {
         organization: { name: 'Gulf', slug: 'gulf' },
         locations: [{ name: 'Courts', address: '1 Rd' }],
-        leagues: [{ name: 'Coed 4s', sport: 'soccer', locations: ['Courts'], status: 'draft' }],
+        leagues: [
+          {
+            name: 'Coed 4s',
+            sport: 'soccer',
+            locations: ['Courts'],
+            status: 'draft',
+            division: defaultDivision('soccer'),
+          },
+        ],
       });
       const draft = await ctx.db
         .query('leagues')

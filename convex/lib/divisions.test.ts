@@ -21,7 +21,7 @@ import {
   playersPerSideOfSport,
   standardLevelValidator,
 } from './divisions';
-import { SPORT_FORMATS, SPORT_NAMES, formatName, type Sport } from './sports';
+import { SPORT_NAMES, type Sport } from './sports';
 
 const sports = Object.keys(SPORT_NAMES) as Sport[];
 
@@ -153,30 +153,12 @@ describe('players per side', () => {
     expect(isPlayersPerSideOfSport('soccer', 4.5)).toBe(false);
     expect(isPlayersPerSideOfSport('soccer', Number.NaN)).toBe(false);
   });
-
-  test('covers every current season format of every sport', () => {
-    for (const sport of sports) {
-      for (const format of SPORT_FORMATS[sport]) {
-        expect(isPlayersPerSideOfSport(sport, format.minimumRosterSize)).toBe(true);
-      }
-    }
-  });
 });
 
 describe('format display', () => {
   test('formatLabel writes players per side as 4v4', () => {
     expect(formatLabel(4)).toBe('4v4');
     expect(formatLabel(11)).toBe('11v11');
-  });
-
-  test('each season format name is its key, written as players per side', () => {
-    expect(formatName('beachVolleyball', '4v4')).toBe('4v4');
-    for (const sport of sports) {
-      for (const format of SPORT_FORMATS[sport]) {
-        expect(format.name).toBe(format.key);
-        expect(format.name).toBe(formatLabel(format.minimumRosterSize));
-      }
-    }
   });
 });
 

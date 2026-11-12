@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Gender, StandardLevel, AgeGroup } from './lib/divisions';
-import { insertTenant, sortName, type Tenant } from './lib/tenantWrites';
+import { defaultDivision, insertTenant, sortName, type Tenant } from './lib/tenantWrites';
 import type { Sport } from './lib/sports';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
@@ -96,6 +96,7 @@ async function insertBulk(t: Tester, rows: Bulk[]) {
         sport: row.sport ?? 'soccer',
         locationIds: [],
         status: row.status ?? 'published',
+        ...defaultDivision(row.sport ?? 'soccer'),
         ...(row.gender && { gender: row.gender }),
         ...(row.level && { level: row.level }),
         ...(row.ageGroup && { ageGroup: row.ageGroup }),
@@ -183,11 +184,14 @@ describe('search.leaguesBySport', () => {
     ]);
   });
 
-  test('gives a league with no division values an empty facet, so the facets count the leagues', async () => {
+  test('gives every league a facet of its division values, so the facets count the leagues', async () => {
     const t = await setup([]);
     await insertBulk(t, [{ name: 'Girls', gender: 'womens' }, { name: 'Plain' }]);
     const result = await t.query(api.search.leaguesBySport, { sport: 'soccer', page: 1 });
-    expect(result.facets).toEqual([{ gender: 'womens' }, {}]);
+    expect(result.facets).toEqual([
+      { gender: 'womens', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+      { gender: 'coed', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+    ]);
   });
 
   test('returns pages of 5, and page 1 for a page out of range', async () => {
@@ -306,11 +310,14 @@ describe('search.leagues with a sport and division filters', () => {
     expect(result.facets).toHaveLength(SEARCH_SCAN_LIMIT);
   });
 
-  test('returns every match as a facet, also a league with no division values', async () => {
+  test('returns every match as a facet', async () => {
     const t = await setup([]);
     await insertBulk(t, [{ name: 'Alpha one' }, { name: 'Alpha two', gender: 'mens' }]);
     const result = await t.query(api.search.leagues, { q: 'alpha' });
-    expect(result.facets).toEqual([{}, { gender: 'mens' }]);
+    expect(result.facets).toEqual([
+      { gender: 'coed', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+      { gender: 'mens', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+    ]);
   });
 
   test('says no more when the division filters leave fewer than the limit', async () => {
@@ -380,7 +387,9 @@ describe('search.leagues suggestions with a sport and division filters', () => {
     });
     expect(result.rows).toEqual([]);
     expect(result.suggestions).toBeUndefined();
-    expect(result.facets).toEqual([{ gender: 'mens' }]);
+    expect(result.facets).toEqual([
+      { gender: 'mens', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+    ]);
   });
 });
 

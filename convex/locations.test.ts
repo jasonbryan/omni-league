@@ -4,9 +4,9 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { insertLocation, insertTenant } from './lib/tenantWrites';
+import { insertLocation, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, organizationListFields } from './test.setup';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -26,7 +26,14 @@ async function setup() {
         { name: 'bravo Beach', address: '2 Bravo St' },
         { name: 'Alpha Field', address: '1 Alpha St' },
       ],
-      leagues: [{ name: 'Sand 2s', sport: 'beachVolleyball', locations: ['bravo Beach'] }],
+      leagues: [
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['bravo Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
@@ -117,7 +124,11 @@ describe('locations.listForAdmin', () => {
   test('returns [] for an organization with no locations, and never another organization’s rows', async () => {
     const s = await setup();
     const empty = await s.t.run((ctx) =>
-      ctx.db.insert('organizations', { name: 'Empty', slug: 'empty-org' }),
+      ctx.db.insert('organizations', {
+        ...organizationListFields('Empty'),
+        name: 'Empty',
+        slug: 'empty-org',
+      }),
     );
     const admin = s.t.withIdentity(identity('empty-admin'));
     await s.t.run(async (ctx) => {

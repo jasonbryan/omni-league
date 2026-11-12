@@ -68,10 +68,13 @@ export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
 
 export interface CurrentLeague {
   name: string;
-  division: OrganizerLeague['division'];
+  division: OrganizerLeague['division'] | undefined;
 }
 
-export function savedDetails(name: string, division: OrganizerLeague['division']): SavedDetails {
+export function savedDetails(
+  name: string,
+  division: OrganizerLeague['division'] | undefined,
+): SavedDetails {
   return {
     name,
     division: division && {

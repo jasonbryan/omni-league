@@ -48,9 +48,7 @@ import type { Sport } from './lib/sports';
 import {
   backfilledValidator,
   backfillDraftLeagueCounts,
-  backfillDivisionFields,
   backfillTenantFields,
-  divisionBackfilledValidator,
   findCustomLevel,
   insertCustomLevel,
   insertLeague,
@@ -58,10 +56,6 @@ import {
   insertSeason,
   insertTenant,
   seasonSlugTaken,
-  updateLeague,
-  updateOrganizationCityState,
-  type DemoDivision,
-  type LeagueDivision,
   type DivisionSeed,
   type NewSeason,
   type Tenant,
@@ -77,7 +71,6 @@ function division(
 }
 
 // Insert-only: never rename or remove an entry, or the seed inserts it again next to the old one.
-// The one exception is `DEMO_LEAGUE_RENAMES`, which renames the row in place.
 export const DEMO: readonly Tenant[] = [
   {
     organization: {
@@ -490,42 +483,6 @@ const DEMO_CUSTOM_LEVELS: readonly {
   },
 ];
 
-const DEMO_DIVISIONS: readonly DemoDivision[] = DEMO.flatMap((tenant) =>
-  tenant.leagues.flatMap((league) =>
-    league.division
-      ? [
-          {
-            organizationSlug: tenant.organization.slug,
-            leagueName: league.name,
-            division: league.division,
-          },
-        ]
-      : [],
-  ),
-);
-
-// A reused staging holds these demo leagues under their earlier names; see `renameDemoLeagues`.
-const DEMO_LEAGUE_RENAMES: readonly (readonly [from: string, to: string])[] = [
-  ["Men's Over-30 11v11", 'Men Over-30 11v11'],
-  ["Women's Sunday 11v11", 'Women Sunday 11v11'],
-  ["Men's Modified Fast-Pitch", 'Men Modified Fast-Pitch'],
-  ["Tuesday Women's 2s", 'Tuesday Women 2s'],
-  ["Competitive Men's 4s", 'Competitive Men 4s'],
-  ["Men's D Division Slow-Pitch", 'Men D Division Slow-Pitch'],
-  ["Competitive Men's 2s", 'Competitive Men 2s'],
-  ["Competitive Men's Fast-Pitch", 'Competitive Men Fast-Pitch'],
-  ["Men's 11v11 Competitive", 'Men 11v11 Competitive'],
-  ["Men's Over-40 7v7", 'Men Over-40 7v7'],
-  ["Sunday Men's Over-50 Slow-Pitch", 'Sunday Men Over-50 Slow-Pitch'],
-  ["Sunday Women's 2s", 'Sunday Women 2s'],
-  ["Thursday Men's 4s", 'Thursday Men 4s'],
-  ["Tuesday Open Men's 2s", 'Tuesday Open Men 2s'],
-  ["Wednesday Women's 4s", 'Wednesday Women 4s'],
-  ["Women's 7v7 Intermediate", 'Women 7v7 Intermediate'],
-  ["Women's A 6s", 'Women A 6s'],
-  ["Women's Modified Fast-Pitch", 'Women Modified Fast-Pitch'],
-];
-
 // Insert-only: a published season under the slug of an existing draft would never be inserted, so
 // the published seasons have slugs of their own.
 export const DEMO_SEASONS: readonly {
@@ -662,7 +619,6 @@ const resultValidator = v.object({
   seasons: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
-    ...divisionBackfilledValidator.fields,
     teamCounts: v.number(),
     pendingInviteCounts: v.number(),
     waitlistCounts: v.number(),
@@ -670,7 +626,6 @@ const resultValidator = v.object({
     staffInviteCounts: v.number(),
     draftLeagueCounts: v.number(),
   }),
-  updated: v.object({ organizations: v.number(), leagues: v.number() }),
 });
 
 // Refuses to write on production, even when run from the dashboard or the CLI.
@@ -686,24 +641,18 @@ function assertPreviewDeployment(): void {
 async function ensureOrganization(
   ctx: MutationCtx,
   tenant: Tenant,
-): Promise<{ id: Id<'organizations'>; inserted: boolean; updated: boolean }> {
-  const { slug, cityState } = tenant.organization;
+): Promise<{ id: Id<'organizations'>; inserted: boolean }> {
   const existing = await ctx.db
     .query('organizations')
-    .withIndex('by_slug', (q) => q.eq('slug', slug))
+    .withIndex('by_slug', (q) => q.eq('slug', tenant.organization.slug))
     .unique();
-  if (existing) {
-    // The one update to an existing row, for a reused staging; it changes nothing once set.
-    const updated = existing.cityState === undefined && cityState !== undefined;
-    if (updated) await updateOrganizationCityState(ctx, existing._id, cityState);
-    return { id: existing._id, inserted: false, updated };
-  }
+  if (existing) return { id: existing._id, inserted: false };
   const id = await insertTenant(ctx, {
     organization: tenant.organization,
     locations: [],
     leagues: [],
   });
-  return { id, inserted: true, updated: false };
+  return { id, inserted: true };
 }
 
 async function findLeagueByName(
@@ -717,42 +666,6 @@ async function findLeagueByName(
       q.eq('organizationId', organizationId).eq('name', name),
     )
     .first();
-}
-
-function storedDivision(league: Doc<'leagues'>): LeagueDivision | undefined {
-  const { gender, playersPerSide, level, customLevelId, ageGroup, minimumRosterSize } = league;
-  if (gender === undefined || playersPerSide === undefined || level === undefined) return undefined;
-  if (ageGroup === undefined) return undefined;
-  return {
-    gender,
-    playersPerSide,
-    level,
-    ageGroup,
-    ...(customLevelId !== undefined && { customLevelId }),
-    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
-  };
-}
-
-/** Runs before the insert loop, so the loop finds each league by its new name instead of inserting it again. */
-async function renameDemoLeagues(ctx: MutationCtx): Promise<number> {
-  let renamed = 0;
-  for (const tenant of DEMO) {
-    const organization = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', (q) => q.eq('slug', tenant.organization.slug))
-      .unique();
-    if (!organization) continue;
-    for (const [from, to] of DEMO_LEAGUE_RENAMES) {
-      if (!tenant.leagues.some((league) => league.name === to)) continue;
-      const earlier = await findLeagueByName(ctx, organization._id, from);
-      if (!earlier || (await findLeagueByName(ctx, organization._id, to))) continue;
-      const division = storedDivision(earlier);
-      if (!division) continue;
-      await updateLeague(ctx, earlier, { name: to, division });
-      renamed++;
-    }
-  }
-  return renamed;
 }
 
 async function ensureCustomLevels(
@@ -776,20 +689,8 @@ export const insertDemoData = internalMutation({
   handler: async (ctx) => {
     assertPreviewDeployment();
     const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-    const updated = { organizations: 0, leagues: 0 };
-    // Existing organizations get their custom levels first, so a demo league can name its level.
-    for (const tenant of DEMO) {
-      const slug = tenant.organization.slug;
-      const existing = await ctx.db
-        .query('organizations')
-        .withIndex('by_slug', (q) => q.eq('slug', slug))
-        .unique();
-      if (existing) inserted.customLevels += await ensureCustomLevels(ctx, existing._id, slug);
-    }
-    const divisionBackfilled = await backfillDivisionFields(ctx, DEMO_DIVISIONS);
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
-      ...divisionBackfilled,
       teamCounts: await backfillSeasonTeamCounts(ctx),
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
       waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
@@ -797,12 +698,10 @@ export const insertDemoData = internalMutation({
       staffInviteCounts: await backfillPendingInviteCounts(ctx),
       draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
     };
-    updated.leagues = await renameDemoLeagues(ctx);
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
       if (organization.inserted) inserted.organizations++;
-      if (organization.updated) updated.organizations++;
 
       for (const location of tenant.locations) {
         const existing = await ctx.db
@@ -848,7 +747,7 @@ export const insertDemoData = internalMutation({
       await insertSeason(ctx, found.league, runSeason(demo, today), 'published');
       inserted.seasons++;
     }
-    return { ...inserted, backfilled, updated };
+    return { ...inserted, backfilled };
   },
 });
 

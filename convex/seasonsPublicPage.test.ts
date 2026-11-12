@@ -3,9 +3,9 @@ import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields } from './test.setup';
 
 const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
 
@@ -29,15 +29,38 @@ async function setup() {
         { name: 'Beta Courts', address: '2 Beta St' },
       ],
       leagues: [
-        { name: 'Sand 4s', sport: 'beachVolleyball', locations: ['Beta Courts', 'Alpha Field'] },
-        { name: 'Draft League', sport: 'soccer', locations: ['Alpha Field'], status: 'draft' },
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
+        {
+          name: 'Sand 4s',
+          sport: 'beachVolleyball',
+          locations: ['Beta Courts', 'Alpha Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Sand 4s', sport: 'beachVolleyball', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Sand 4s',
+          sport: 'beachVolleyball',
+          locations: ['B Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const orgIds = new Map(
       (await ctx.db.query('organizations').collect()).map((o) => [o.slug, o._id]),
@@ -95,6 +118,7 @@ describe('seasons.getPublicPage', () => {
         name: 'Sand 4s',
         slug: 'sand-4s',
         sportName: 'Beach volleyball',
+        divisionLabel: 'Coed · 2v2 · Rec',
         locationNames: ['Beta Courts', 'Alpha Field'],
         locations: [
           { name: 'Beta Courts', address: '2 Beta St' },
@@ -126,21 +150,10 @@ describe('seasons.getPublicPage', () => {
     expect(JSON.stringify(page)).not.toMatch(/_id|_creationTime|Id"|status|Count/i);
   });
 
-  test('carries the league division label once the league has a division', async () => {
+  test('carries the league division label', async () => {
     const t = await setup();
-    expect((await get(t, 'org-a', 'sand-4s', 'summer-2027'))?.league.divisionLabel).toBeUndefined();
-    await t.run(async (ctx) => {
-      const league = (await ctx.db.query('leagues').collect()).find(
-        (candidate) => candidate.slug === 'sand-4s' && candidate.name === 'Sand 4s',
-      )!;
-      await ctx.db.patch('leagues', league._id, {
-        gender: 'coed',
-        playersPerSide: 4,
-        level: 'rec',
-      });
-    });
     expect((await get(t, 'org-a', 'sand-4s', 'summer-2027'))?.league.divisionLabel).toBe(
-      'Coed · 4v4 · Rec',
+      'Coed · 2v2 · Rec',
     );
   });
 
@@ -161,6 +174,7 @@ describe('seasons.getPublicPage', () => {
         (candidate) => candidate.slug === 'coed-7v7',
       )!;
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
         name: league.name,
         slug: league.slug,

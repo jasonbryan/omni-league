@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
 import { modules, setTeamCounts } from './test.setup';
@@ -39,6 +39,7 @@ async function setup() {
           sport: 'soccer',
           locations: ['North Beach Sand Courts'],
           status: 'draft',
+          division: defaultDivision('soccer'),
         },
       ],
     });
@@ -50,6 +51,7 @@ async function setup() {
           name: 'Saturday Coed 6s',
           sport: 'beachVolleyball',
           locations: ['Driftwood Beach Courts'],
+          division: defaultDivision('beachVolleyball'),
         },
       ],
     });
@@ -70,6 +72,7 @@ async function insertBulk(t: Awaited<ReturnType<typeof setup>>, count: number, w
         name: `Bulk ${i} ${words}`,
         slug: `bulk-${i}`,
         sport: 'softball',
+        ...defaultDivision('softball'),
         locationIds: [],
         status: 'published',
         searchText: `Bulk ${i} ${words}`,
@@ -219,6 +222,7 @@ describe('search.leagues', () => {
           name: `Bulk ${i}`,
           slug: `bulk-${i}`,
           sport: 'softball',
+          ...defaultDivision('softball'),
           locationIds: [],
           status: 'published',
           searchText: `Bulk ${i} zebra`,
@@ -243,6 +247,7 @@ describe('search.leagues', () => {
           name: `Bulk ${i}`,
           slug: `bulk-${i}`,
           sport: 'softball',
+          ...defaultDivision('softball'),
           locationIds: [],
           status: 'published',
           searchText: `Bulk ${i} zebra`,

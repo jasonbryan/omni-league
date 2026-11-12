@@ -7,7 +7,7 @@ import { BACKFILL_TEAM_COUNT_SCAN_LIMIT } from './lib/rosterWrites';
 import { BACKFILL_SCAN_LIMIT } from './lib/tenantWrites';
 import { BATCH_SIZE } from './releaseBackfill';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
 
 type T = ReturnType<typeof setup>;
 
@@ -40,6 +40,7 @@ const SEASON = {
   startDate: '2030-06-01',
   endDate: '2030-08-01',
   registrationDeadline: '2030-05-01',
+  playersPerSide: 6,
   minimumRosterSize: 6,
 };
 
@@ -50,6 +51,7 @@ async function insertTenantWithoutCounters(
 ) {
   return t.run(async (ctx) => {
     const organizationId = await ctx.db.insert('organizations', {
+      ...organizationListFields(`Org ${slug}`),
       name: `Org ${slug}`,
       slug,
     });
@@ -62,6 +64,7 @@ async function insertTenantWithoutCounters(
     const leagueIds: Id<'leagues'>[] = [];
     const league = async (name: string, status?: 'draft' | 'published') =>
       ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', name),
         organizationId,
         name,
         slug: name.toLowerCase().replaceAll(' ', '-'),
@@ -223,8 +226,6 @@ describe('the release backfill', () => {
       sportLocations: await ctx.db.query('sportLocations').collect(),
     }));
     expect(after.organization).toMatchObject({
-      sortName: 'org legacy',
-      hasPublishedLeague: true,
       leagueCount: 3,
       draftLeagueCount: 1,
       locationCount: 2,
@@ -281,8 +282,6 @@ describe('the release backfill', () => {
     await insertStaffAndInvites(t, tenant.organizationId, { staff: 2, pending: 1, revoked: 0 });
     await t.run(async (ctx) => {
       await ctx.db.patch('organizations', tenant.organizationId, {
-        sortName: 'org partial',
-        hasPublishedLeague: true,
         leagueCount: 99,
         locationCount: 98,
         sportLeagueCounts: { soccer: 97 },
@@ -431,6 +430,7 @@ describe('the release backfill', () => {
       await t.run(async (ctx) => {
         for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
           await ctx.db.insert('leagues', {
+            ...leagueRequiredFields('soccer', `League ${i}`),
             organizationId,
             name: `League ${i}`,
             slug: `league-${i}`,

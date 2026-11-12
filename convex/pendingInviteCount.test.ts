@@ -8,7 +8,7 @@ import { PENDING_INVITES_LIMIT } from './invites';
 import { INVITE_LIFETIME_MS, INVITE_RESTORE_WINDOW_MS } from './lib/inviteInput';
 import { insertPendingInvite, setInviteStatus } from './lib/inviteWrites';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertTenant } from './lib/tenantWrites';
+import { insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -40,7 +40,14 @@ async function setup() {
     const organizationA = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
