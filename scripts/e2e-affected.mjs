@@ -30,6 +30,7 @@ const ADMIN = [
     'organization-leagues-custom-level',
     'organization-leagues-division',
     'organization-leagues-mockup',
+    'organization-tournaments',
     'shell-sheet',
     'navigation-focus',
   ]),
@@ -114,6 +115,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
   'app/organizations/:slug/leagues': ['organization-leagues'],
+  'app/organizations/:slug/tournaments': ['organization-tournaments'],
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
@@ -830,6 +832,11 @@ export const AREAS = [
       ...SPORT_VIEW,
       ...LEAGUE_MANAGEMENT,
     ],
+  },
+  {
+    name: 'convex tournaments',
+    test: named('convex/', ['tournaments']),
+    specs: ['organization-tournaments'],
   },
   {
     name: 'convex search',

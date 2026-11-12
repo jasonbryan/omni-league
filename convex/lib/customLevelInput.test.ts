@@ -96,7 +96,7 @@ describe('the messages only the server needs', () => {
     expect(CUSTOM_LEVEL_MESSAGES.duplicate('Gold', 'beachVolleyball')).toBe(
       'Gold is already a custom level for beach volleyball.',
     );
-    expect(CUSTOM_LEVEL_MESSAGES.inUse('Gold')).toBe('A league uses Gold.');
+    expect(CUSTOM_LEVEL_MESSAGES.inUse('Gold')).toBe('A league or tournament uses Gold.');
     expect(CUSTOM_LEVEL_MESSAGES.limit('softball')).toBe(
       'You can have at most 20 custom levels for softball.',
     );

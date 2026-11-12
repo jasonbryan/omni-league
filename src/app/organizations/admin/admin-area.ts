@@ -4,7 +4,7 @@ import { NotFoundView } from '../../not-found/not-found-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
 import { Shell, ShellSidebar } from '../../shell';
 import { AdminContext } from './admin-context';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { adminPath } from './admin-path';
 import { AdminLoading } from './admin-loading';
 import { AdminNoAccess } from './admin-no-access';
@@ -23,7 +23,7 @@ import { AdminSidebar } from './admin-sidebar';
     Shell,
     ShellSidebar,
   ],
-  providers: [AdminContext, CreateLeagueLanding],
+  providers: [AdminContext, CreateFormLanding],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell [sidebarPending]="context.state() === 'loading'">
@@ -59,6 +59,6 @@ export class AdminArea {
 
   constructor() {
     // Providers are created on first use; the landing must listen from the arrival, not from when the area is ready.
-    inject(CreateLeagueLanding);
+    inject(CreateFormLanding);
   }
 }

@@ -185,7 +185,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
           />
           <p hlmFieldDescription id="custom-level-name-description">
             As your players know it, such as Gold or Social. Saved for all your
-            {{ sportName() }} leagues.
+            {{ sportName() }} {{ levelUses() }}.
           </p>
           @if (nameError(); as error) {
             <div hlmFieldError id="custom-level-name-error">
@@ -223,7 +223,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             }
           </select>
           <p hlmFieldDescription id="custom-level-maps-description">
-            Players who filter for this standard level find your league.
+            Players who filter for this standard level find your {{ program() }}.
           </p>
           @if (standardError(); as error) {
             <div hlmFieldError id="custom-level-maps-error">
@@ -268,6 +268,7 @@ export class CustomLevelPanel {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly sport = input.required<Sport>();
+  readonly program = input<'league' | 'tournament'>('league');
 
   readonly added = output<AddedCustomLevel>();
   readonly undone = output<Id<'customLevels'>>();
@@ -289,6 +290,9 @@ export class CustomLevelPanel {
   protected readonly status = signal<Status | null>(null);
 
   protected readonly sportName = computed(() => SPORT_NAMES[this.sport()].toLowerCase());
+  protected readonly levelUses = computed(() =>
+    this.program() === 'league' ? 'leagues' : 'leagues and tournaments',
+  );
   protected readonly standardLevels = computed(() => levelsOfSport(this.sport()));
 
   private readonly clientErrors = {
