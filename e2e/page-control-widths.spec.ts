@@ -115,7 +115,12 @@ const elementsPastRightEdge = (page: Page) =>
       .map((element) => `${element.tagName.toLowerCase()} ${element.textContent?.slice(0, 30)}`);
   });
 
-async function open(page: Page, consoleGuard: { hydrated: boolean }, path: string, width: number) {
+async function openAtWidth(
+  page: Page,
+  consoleGuard: { hydrated: boolean },
+  path: string,
+  width: number,
+) {
   await page.setViewportSize({ width, height: 800 });
   await page.goto(path);
   await expect.poll(() => consoleGuard.hydrated).toBe(true);
@@ -147,7 +152,7 @@ test.describe('the page control at each width', () => {
       for (const width of WIDTHS) {
         for (const current of [1, 3]) {
           const where = `${width}px, page ${current}`;
-          await open(page, consoleGuard, `${path}?page=${current}`, width);
+          await openAtWidth(page, consoleGuard, `${path}?page=${current}`, width);
           const nav = page.getByRole('navigation', { name: label });
           await expect(nav, where).toBeVisible();
           const box = await nav.locator('ul').boundingBox();
@@ -176,7 +181,7 @@ test.describe('the page control at each width', () => {
     }) => {
       const { label, path } = targets[index];
       for (const width of WIDTHS) {
-        await open(page, consoleGuard, path, width);
+        await openAtWidth(page, consoleGuard, path, width);
         const nav = page.getByRole('navigation', { name: label });
         const next = nav.getByRole('link', { name: 'Next page' });
         await next.focus();
@@ -201,9 +206,9 @@ test.describe('the page control at each width', () => {
       }
       return widths;
     };
-    await open(page, consoleGuard, `${path}?page=3`, 639);
+    await openAtWidth(page, consoleGuard, `${path}?page=3`, 639);
     expect(await visibleGapWidths()).toEqual([16, 16]);
-    await open(page, consoleGuard, `${path}?page=3`, 640);
+    await openAtWidth(page, consoleGuard, `${path}?page=3`, 640);
     expect(await visibleGapWidths()).toEqual([32]);
   });
 
@@ -213,7 +218,7 @@ test.describe('the page control at each width', () => {
       consoleGuard,
     }) => {
       await freezeOrganizations(page);
-      await open(page, consoleGuard, findPath, width);
+      await openAtWidth(page, consoleGuard, findPath, width);
       const nav = page.getByRole('navigation', { name: 'Organizations pages' });
       await expect(nav).toBeVisible();
       expect(await elementsPastRightEdge(page)).toEqual([]);
@@ -234,7 +239,7 @@ test.describe('the page control at each width', () => {
       consoleGuard,
     }) => {
       for (const index of [0, 2]) {
-        await open(page, consoleGuard, `${targets[index].path}?page=3`, width);
+        await openAtWidth(page, consoleGuard, `${targets[index].path}?page=3`, width);
         await expectAccessible(page);
       }
     });
