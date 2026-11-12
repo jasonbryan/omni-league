@@ -214,6 +214,31 @@ test.describe('Staff: inviting', () => {
     },
   );
 
+  test('Role is one radiogroup named by its legend; Tab enters it at the chosen option, arrow keys move and choose, and Tab leaves it', async ({
+    page,
+  }) => {
+    await openStaff(page);
+    const group = page.getByRole('radiogroup', { name: 'Role' });
+    const organizer = group.getByRole('radio', { name: 'League organizer' });
+    const admin = group.getByRole('radio', { name: 'Org admin' });
+    await expect(group.getByRole('radio')).toHaveCount(2);
+    await page.locator('#email').focus();
+    await page.keyboard.press(tabKey(page));
+    await expect(organizer).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(admin).toBeFocused();
+    await expect(admin).toBeChecked();
+    await expect(page.getByRole('group', { name: 'Leagues' })).toHaveCount(0);
+    await page.keyboard.press('ArrowUp');
+    await expect(organizer).toBeFocused();
+    await expect(organizer).toBeChecked();
+    await expect(page.getByRole('group', { name: 'Leagues' })).toBeVisible();
+    await page.keyboard.press(tabKey(page));
+    await expect(page.getByRole('checkbox', { name: 'Coed 7v7 Rec' })).toBeFocused();
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(organizer).toBeFocused();
+  });
+
   test('an org admin invite lists as Org admin and carries no leagues', async ({ page }) => {
     await openStaff(page);
     await invite(page, 'boss@example.com');
@@ -305,6 +330,31 @@ test.describe('Staff: no leagues', () => {
     await page.locator('#email').fill('boss@example.com');
     await createButton(page).click();
     await expect(page.getByRole('heading', { name: 'Invite link ready' })).toBeFocused();
+  });
+});
+
+test.describe('Staff: no leagues, by keyboard', () => {
+  test('arrow keys skip the unavailable League organizer, and Tab lands on Org admin and then leaves the group', async ({
+    page,
+  }) => {
+    await openStaff(page, { locations: LOCATIONS });
+    const group = page.getByRole('radiogroup', { name: 'Role' });
+    const organizer = group.getByRole('radio', { name: 'League organizer' });
+    const admin = group.getByRole('radio', { name: 'Org admin' });
+    await expect(organizer).toHaveAccessibleDescription(
+      'Runs only the leagues you choose. Create a league first to invite a league organizer.',
+    );
+    await page.locator('#email').focus();
+    await page.keyboard.press(tabKey(page));
+    await expect(admin).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(admin).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(admin).toBeFocused();
+    await expect(admin).toBeChecked();
+    await expect(organizer).not.toBeChecked();
+    await page.keyboard.press(tabKey(page));
+    await expect(createButton(page)).toBeFocused();
   });
 });
 

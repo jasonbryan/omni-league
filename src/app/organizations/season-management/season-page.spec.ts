@@ -588,7 +588,7 @@ describe('SeasonPage', () => {
           id: 'place-team',
           ...(unchosen ? { 'aria-describedby': 'place-team-error' } : {}),
         }),
-        shapeOf('field-legend', { 'data-variant': 'label' }),
+        shapeOf('field-legend', { id: 'place-team-legend', 'data-variant': 'label' }),
         ...TEAMS.flatMap(([teamId]) => [
           fieldShape(false, 'horizontal'),
           shapeOf('field-content'),
@@ -608,6 +608,35 @@ describe('SeasonPage', () => {
         dialogButton('Place on team').click();
         await o.flush();
         expect(formShapes(dialog()!)).toEqual(expected(true));
+      });
+
+      const circles = () => [...dialog()!.querySelectorAll('brn-radio')];
+
+      it('draws one radiogroup named by the Team legend, with a brn-radio per team', async () => {
+        await openDialog();
+        const groups = dialog()!.querySelectorAll('[role="radiogroup"]');
+        expect(groups).toHaveLength(1);
+        const legend = dialog()!.querySelector('legend')!;
+        expect(legend.id).not.toBe('');
+        expect(groups[0].getAttribute('aria-labelledby')).toBe(legend.id);
+        expect([...groups[0].querySelectorAll('brn-radio')].map((radio) => radio.id)).toEqual(
+          TEAMS.map(([teamId]) => `place-team-${teamId}-radio`),
+        );
+      });
+
+      it('shows the invalid edge on every radio while no team is chosen after Place on team, and clears it on a choice', async () => {
+        await openDialog();
+        const edges = () => circles().map((el) => el.classList.contains('border-destructive'));
+        expect(edges()).toEqual([false, false, false]);
+        dialogButton('Place on team').click();
+        await o.flush();
+        expect(edges()).toEqual([true, true, true]);
+        expect(dialog()!.querySelector('[role="radiogroup"]')!.hasAttribute('aria-invalid')).toBe(
+          false,
+        );
+        radios()[1].click();
+        await o.flush();
+        expect(edges()).toEqual([false, false, false]);
       });
 
       it('keeps each radio named and tied to its label and description', async () => {

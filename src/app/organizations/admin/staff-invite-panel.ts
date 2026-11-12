@@ -27,13 +27,13 @@ import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { RADIO_EDGE, RADIO_INDICATOR, RADIO_INPUT, RADIO_ITEM } from './field-classes';
 import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form';
 import { formatDay } from './format-day';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { RevealOnFocus } from '../../core/forms/reveal-on-focus';
 import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
 import { HlmInputImports } from '../../ui/input';
+import { HlmRadioGroupImports } from '../../ui/radio-group';
 import { HlmSpinner } from '../../ui/spinner';
 import { HlmTextareaImports } from '../../ui/textarea';
 
@@ -64,6 +64,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
     HlmFieldImports,
     HlmFieldSetImports,
     HlmInputImports,
+    HlmRadioGroupImports,
     HlmTextareaImports,
     NgIcon,
   ],
@@ -233,32 +234,26 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                 }
               </div>
               <fieldset hlmFieldSet id="role">
-                <legend hlmFieldLegend variant="label">Role</legend>
-                <div data-slot="radio-group" class="grid gap-3">
+                <legend hlmFieldLegend id="role-legend" variant="label">Role</legend>
+                <hlm-radio-group
+                  name="role"
+                  aria-labelledby="role-legend"
+                  [value]="form.role()"
+                  (valueChange)="form.chosenRole.set($event)"
+                >
                   <div hlmField orientation="horizontal">
-                    <span
-                      data-slot="radio-group-item"
-                      [attr.data-checked]="form.role() === 'leagueOrganizer' ? 'true' : null"
-                      [class]="radioItemClass + ' ' + radioEdgeClass"
-                      [class.opacity-50]="!form.canChooseOrganizer()"
-                      ><input
-                        type="radio"
-                        id="role-organizer"
-                        name="role"
-                        value="leagueOrganizer"
-                        [checked]="form.role() === 'leagueOrganizer'"
-                        [disabled]="!form.canChooseOrganizer()"
-                        [attr.aria-describedby]="
-                          form.canChooseOrganizer()
-                            ? 'role-organizer-description'
-                            : 'role-organizer-description role-unavailable'
-                        "
-                        (change)="form.chosenRole.set('leagueOrganizer')"
-                        [class]="radioInputClass" /><span
-                        aria-hidden="true"
-                        [class]="radioIndicatorClass"
-                      ></span
-                    ></span>
+                    <hlm-radio
+                      inputId="role-organizer"
+                      value="leagueOrganizer"
+                      [disabled]="!form.canChooseOrganizer()"
+                      [aria-describedby]="
+                        form.canChooseOrganizer()
+                          ? 'role-organizer-description'
+                          : 'role-organizer-description role-unavailable'
+                      "
+                    >
+                      <hlm-radio-indicator />
+                    </hlm-radio>
                     <div hlmFieldContent>
                       <label
                         hlmFieldLabel
@@ -272,23 +267,13 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                     </div>
                   </div>
                   <div hlmField orientation="horizontal">
-                    <span
-                      data-slot="radio-group-item"
-                      [attr.data-checked]="form.role() === 'orgAdmin' ? 'true' : null"
-                      [class]="radioItemClass + ' ' + radioEdgeClass"
-                      ><input
-                        type="radio"
-                        id="role-admin"
-                        name="role"
-                        value="orgAdmin"
-                        [checked]="form.role() === 'orgAdmin'"
-                        aria-describedby="role-admin-description"
-                        (change)="form.chosenRole.set('orgAdmin')"
-                        [class]="radioInputClass" /><span
-                        aria-hidden="true"
-                        [class]="radioIndicatorClass"
-                      ></span
-                    ></span>
+                    <hlm-radio
+                      inputId="role-admin"
+                      value="orgAdmin"
+                      aria-describedby="role-admin-description"
+                    >
+                      <hlm-radio-indicator />
+                    </hlm-radio>
                     <div hlmFieldContent>
                       <label hlmFieldLabel for="role-admin">Org admin</label>
                       <p hlmFieldDescription id="role-admin-description">
@@ -296,7 +281,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                       </p>
                     </div>
                   </div>
-                </div>
+                </hlm-radio-group>
                 @if (!form.canChooseOrganizer()) {
                   <p hlmFieldDescription id="role-unavailable">
                     Create a league first to invite a league organizer.
@@ -409,10 +394,6 @@ export class StaffInvitePanel {
   protected readonly form = new InviteForm(() => (this.leagues() ?? []).map((l) => l.leagueId));
   protected readonly alerts = INVITE_FORM_ALERTS;
 
-  protected readonly radioItemClass = RADIO_ITEM;
-  protected readonly radioEdgeClass = RADIO_EDGE;
-  protected readonly radioInputClass = RADIO_INPUT;
-  protected readonly radioIndicatorClass = RADIO_INDICATOR;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;
