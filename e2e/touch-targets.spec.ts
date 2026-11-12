@@ -364,30 +364,28 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
         },
       ],
     });
-    await Promise.all([
-      signUp(page, admin),
-      seedBatch({
-        tenant: args,
-        accounts: [...captains, waiting],
-        memberships: [{ email: admin.email, role: 'orgAdmin' }],
-        seasons: [
-          {
-            leagueSlug: PLACE_LEAGUE_SLUG,
-            name: 'Summer Open',
-            slug: PLACE_SEASON_SLUG,
-            startDate: dateFromToday(40),
-            endDate: dateFromToday(100),
-            registrationDeadline: dateFromToday(20),
-          },
-        ],
-        teams: ['Block Party', 'Dig Deep'].map((name, i) => ({
-          ...league,
-          name,
-          captainEmail: captains[i].email,
-        })),
-        freeAgents: [{ ...league, email: waiting.email }],
-      }),
-    ]);
+    await signUp(page, admin);
+    await seedBatch({
+      tenant: args,
+      accounts: [...captains, waiting],
+      memberships: [{ email: admin.email, role: 'orgAdmin' }],
+      seasons: [
+        {
+          leagueSlug: PLACE_LEAGUE_SLUG,
+          name: 'Summer Open',
+          slug: PLACE_SEASON_SLUG,
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(100),
+          registrationDeadline: dateFromToday(20),
+        },
+      ],
+      teams: ['Block Party', 'Dig Deep'].map((name, i) => ({
+        ...league,
+        name,
+        captainEmail: captains[i].email,
+      })),
+      freeAgents: [{ ...league, email: waiting.email }],
+    });
     await visit(
       page,
       `/app/organizations/${tenant.slug}/leagues/${PLACE_LEAGUE_SLUG}/seasons/${PLACE_SEASON_SLUG}`,

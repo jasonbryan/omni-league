@@ -232,6 +232,7 @@ test.describe('Staff: inviting', () => {
     await page.keyboard.press('ArrowUp');
     await expect(organizer).toBeFocused();
     await expect(organizer).toBeChecked();
+    await expect(page.getByRole('group', { name: 'Leagues' })).toBeVisible();
     await page.keyboard.press(tabKey(page));
     await expect(page.getByRole('checkbox', { name: 'Coed 7v7 Rec' })).toBeFocused();
     await page.keyboard.press(`Shift+${tabKey(page)}`);
