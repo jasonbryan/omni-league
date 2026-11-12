@@ -87,60 +87,62 @@ export interface OwnCustomLevel {
         [error]="errors().format()"
         (chosen)="chooseFormat($event)"
       />
-      @if (minimumShown()) {
-        <div
-          hlmField
-          class="mt-4"
-          [attr.data-matches-spartan-invalid]="errors().minimumRosterSize() ? 'true' : null"
-        >
-          <label hlmFieldLabel [attr.for]="ids().minimum">Minimum roster size</label>
-          <input
-            hlmInput
-            #minimum
-            [id]="ids().minimum"
-            type="number"
-            inputmode="numeric"
-            autocomplete="off"
-            [value]="division().minimumText()"
-            (input)="minimumTyped($event)"
-            (blur)="minimumLeft.emit()"
-            [attr.aria-describedby]="
-              describedBy(
-                ids().minimum,
-                division().notes.minimumRosterSize(),
-                errors().minimumRosterSize()
-              )
-            "
-            [attr.aria-invalid]="errors().minimumRosterSize() ? 'true' : null"
-            [attr.data-invalid]="errors().minimumRosterSize() ? 'true' : null"
+      @if (minimumRosterSizeEditable()) {
+        @if (minimumShown()) {
+          <div
+            hlmField
+            class="mt-4"
             [attr.data-matches-spartan-invalid]="errors().minimumRosterSize() ? 'true' : null"
-          />
-          <p hlmFieldDescription [id]="ids().minimum + '-description'">
-            Leave it blank to use the format’s own. Up to {{ rosterSizeMax }}.
-          </p>
-          @if (division().notes.minimumRosterSize(); as note) {
-            <app-field-note [id]="ids().minimum + '-note'" [note]="note" />
-          }
-          @if (errors().minimumRosterSize(); as error) {
-            <div hlmFieldError [id]="ids().minimum + '-error'">
-              <ng-icon
-                name="lucideCircleAlert"
-                class="mt-0.5 shrink-0 text-base"
-                aria-hidden="true"
-              />
-              <span>{{ error }}</span>
-            </div>
-          }
-        </div>
-      } @else {
-        <button
-          type="button"
-          class="mt-3 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
-          (click)="openMinimum()"
-        >
-          <ng-icon name="lucidePlus" class="text-base" aria-hidden="true" />Raise the minimum roster
-          size
-        </button>
+          >
+            <label hlmFieldLabel [attr.for]="ids().minimum">Minimum roster size</label>
+            <input
+              hlmInput
+              #minimum
+              [id]="ids().minimum"
+              type="number"
+              inputmode="numeric"
+              autocomplete="off"
+              [value]="division().minimumText()"
+              (input)="minimumTyped($event)"
+              (blur)="minimumLeft.emit()"
+              [attr.aria-describedby]="
+                describedBy(
+                  ids().minimum,
+                  division().notes.minimumRosterSize(),
+                  errors().minimumRosterSize()
+                )
+              "
+              [attr.aria-invalid]="errors().minimumRosterSize() ? 'true' : null"
+              [attr.data-invalid]="errors().minimumRosterSize() ? 'true' : null"
+              [attr.data-matches-spartan-invalid]="errors().minimumRosterSize() ? 'true' : null"
+            />
+            <p hlmFieldDescription [id]="ids().minimum + '-description'">
+              Leave it blank to use the format’s own. Up to {{ rosterSizeMax }}.
+            </p>
+            @if (division().notes.minimumRosterSize(); as note) {
+              <app-field-note [id]="ids().minimum + '-note'" [note]="note" />
+            }
+            @if (errors().minimumRosterSize(); as error) {
+              <div hlmFieldError [id]="ids().minimum + '-error'">
+                <ng-icon
+                  name="lucideCircleAlert"
+                  class="mt-0.5 shrink-0 text-base"
+                  aria-hidden="true"
+                />
+                <span>{{ error }}</span>
+              </div>
+            }
+          </div>
+        } @else {
+          <button
+            type="button"
+            class="mt-3 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
+            (click)="openMinimum()"
+          >
+            <ng-icon name="lucidePlus" class="text-base" aria-hidden="true" />Raise the minimum
+            roster size
+          </button>
+        }
       }
     </div>
     <div>
@@ -159,6 +161,7 @@ export interface OwnCustomLevel {
         <app-custom-level-panel
           [organizationId]="organizationId()"
           [sport]="sport()"
+          [program]="program()"
           (added)="customLevelAdded($event)"
           (undone)="division().undoCustomLevel($event)"
         />
@@ -190,7 +193,8 @@ export interface OwnCustomLevel {
         }
       </select>
       <p hlmFieldDescription [id]="ids().ageGroup + '-description'">
-        Adult unless the league is for an age bracket, such as 40+, or a youth group, such as U10.
+        Adult unless the {{ program() }} is for an age bracket, such as 40+, or a youth group, such
+        as U10.
       </p>
       @if (division().notes.ageGroup(); as note) {
         <app-field-note [id]="ids().ageGroup + '-note'" [note]="note" />
@@ -212,6 +216,9 @@ export class LeagueDivisionFields {
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly errors = input.required<DivisionErrors>();
   readonly formatDescription = input.required<string>();
+  readonly program = input<'league' | 'tournament'>('league');
+  /** A tournament's minimum roster size is its format's, so its form leaves the field out. */
+  readonly minimumRosterSizeEditable = input(true);
   readonly canAddCustomLevel = input(true);
   readonly ownCustomLevel = input<OwnCustomLevel | null>(null);
   /** Ids are page-wide: a page holding another form with the same fields gives this one a prefix. */

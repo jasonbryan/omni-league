@@ -7,6 +7,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../../core/auth/testing/f
 import { CONVEX_CLIENT } from '../../core/data/convex';
 import { FakeConvexClient } from '../../core/data/convex/testing/fake-convex-client';
 import {
+  SIDEBAR_GROUP_LABEL,
   SIDEBAR_ICON,
   SIDEBAR_ICON_CURRENT,
   SIDEBAR_ROW,
@@ -88,20 +89,30 @@ describe('AdminSidebar', () => {
     expect(text(head.querySelector('.truncate'))).toBe('Coastal Bend Rec Club');
   });
 
-  it('lists Overview, Leagues, Locations, Staff, and Details, then View public page, in two lists', async () => {
+  it('lists Overview, a Programs group of Leagues and Tournaments, then Locations, Staff, and Details, then View public page', async () => {
     const { host } = await render(BASE);
     const lists = [...host.querySelectorAll('nav ul')];
-    expect(lists).toHaveLength(2);
+    expect(lists).toHaveLength(4);
     for (const list of lists) expect(list.getAttribute('role')).toBe('list');
-    expect(links(lists[0])).toEqual([
-      ['Overview', BASE],
+    expect(links(lists[0])).toEqual([['Overview', BASE]]);
+    expect(links(lists[1])).toEqual([
       ['Leagues', `${BASE}/leagues`],
+      ['Tournaments', `${BASE}/tournaments`],
+    ]);
+    expect(links(lists[2])).toEqual([
       ['Locations', `${BASE}/locations`],
       ['Staff', `${BASE}/staff`],
       ['Details', `${BASE}/details`],
     ]);
-    expect(links(lists[1])).toEqual([['View public page', `/organizations/${COASTAL.slug}`]]);
-    expect(lists[1].classList.contains('border-t')).toBe(true);
+    expect(links(lists[3])).toEqual([['View public page', `/organizations/${COASTAL.slug}`]]);
+    expect(lists[3].classList.contains('border-t')).toBe(true);
+  });
+
+  it('names the Programs group with a visible label and the list it holds', async () => {
+    const { host } = await render(BASE);
+    const group = host.querySelector('ul[aria-label="Programs"]')!;
+    expect(text(group.previousElementSibling)).toBe('Programs');
+    expect(classes(group.previousElementSibling!)).toEqual(tokens(SIDEBAR_GROUP_LABEL));
   });
 
   it('has no "Your organizations" link, because the head goes there', async () => {
@@ -134,13 +145,17 @@ describe('AdminSidebar', () => {
       await answer(DRAFT_COUNT, 2);
       await answer(LIST_LOCATIONS, COASTAL_LOCATIONS);
       await answer(STAFF_COUNT, 4);
-      const counts = [...host.querySelectorAll('nav ul:first-of-type li')].map((li) => [
-        text(li.querySelector('a span.flex-1')),
-        text(li.querySelector('.tabular-nums')) ?? null,
-      ]);
+      const counts = [...host.querySelectorAll('nav ul')]
+        .slice(0, -1)
+        .flatMap((list) => [...list.querySelectorAll('li')])
+        .map((li) => [
+          text(li.querySelector('a span.flex-1')),
+          text(li.querySelector('.tabular-nums')) ?? null,
+        ]);
       expect(counts).toEqual([
         ['Overview', null],
         ['Leagues', '5'],
+        ['Tournaments', null],
         ['Locations', '3'],
         ['Staff', '4'],
         ['Details', null],
@@ -213,6 +228,26 @@ describe('AdminSidebar', () => {
     expect(text(current[0])).toBe('Leagues');
     expect(current[0].getAttribute('href')).toBe(`${BASE}/leagues`);
     expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+  });
+
+  it('keeps the Leagues link at its URL with aria-current="page" now that it sits in the group', async () => {
+    const { host } = await render(`${BASE}/leagues`);
+    const leagues = host.querySelector('ul[aria-label="Programs"] a[href$="/leagues"]')!;
+    expect(leagues.getAttribute('href')).toBe(`${BASE}/leagues`);
+    expect(leagues.getAttribute('aria-current')).toBe('page');
+    expect(host.querySelectorAll('[aria-current]')).toHaveLength(1);
+  });
+
+  it('marks Tournaments current on the tournaments path, and ignores a query string and a fragment', async () => {
+    const { host } = await render(`${BASE}/tournaments?x=1#create-tournament`);
+    const current = host.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Tournaments');
+    expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+    expect(text(host.querySelector(`a[href="${BASE}/leagues"]`))).toBe('Leagues');
+    expect(host.querySelector(`a[href="${BASE}/leagues"]`)!.hasAttribute('aria-current')).toBe(
+      false,
+    );
   });
 
   it('marks Staff current on the staff path, and ignores a query string and a fragment', async () => {
