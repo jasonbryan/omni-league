@@ -6,7 +6,7 @@ import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { FORBIDDEN_CODE } from './lib/forbidden';
 import { addRosterEntry, removeRosterEntry } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -45,14 +45,32 @@ async function setup() {
           locations: ['Alpha Beach'],
           division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
         },
-        { name: 'Mens 2s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
-        { name: 'Draft 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'], status: 'draft' },
+        {
+          name: 'Mens 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          status: 'draft',
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const b = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Beach', address: '9 B St' }],
-      leagues: [{ name: 'Coed 4s', sport: 'beachVolleyball', locations: ['B Beach'] }],
+      leagues: [
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['B Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const league = async (organizationId: Id<'organizations'>, slug: string) =>
       (await ctx.db

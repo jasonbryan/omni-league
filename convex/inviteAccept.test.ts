@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
-import { insertTenant } from './lib/tenantWrites';
+import { insertTenant, defaultDivision } from './lib/tenantWrites';
 import { requireLeagueOrganizer, requireOrgAdmin } from './lib/access';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -40,14 +40,31 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Alpha Field'] },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Other Sand', sport: 'beachVolleyball', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Other Sand',
+          sport: 'beachVolleyball',
+          locations: ['B Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const leagueIn = async (organizationId: Id<'organizations'>, name: string) =>
       (await ctx.db

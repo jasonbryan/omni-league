@@ -27,15 +27,16 @@ import {
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatLabel, isPlayersPerSideOfSport, playersPerSideOfSport } from './lib/divisions';
-import type { Sport } from './lib/sports';
+import { formatLabel, isPlayersPerSideOfSport } from './lib/divisions';
 import {
   insertLeague,
   insertSeason,
   insertTenant,
   leagueSeedValidator,
   tenantValidator,
+  defaultDivision,
   type LeagueSeed,
+  type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
@@ -169,20 +170,8 @@ export const resetFilesBatch = internalMutation({
   },
 });
 
-function withDivision(league: LeagueSeed): LeagueSeed {
-  return {
-    ...league,
-    division: league.division ?? {
-      gender: 'coed',
-      playersPerSide: smallestPlayersPerSide(league.sport),
-      level: 'rec',
-      ageGroup: 'adult',
-    },
-  };
-}
-
-function smallestPlayersPerSide(sport: Sport): number {
-  return playersPerSideOfSport(sport)[0];
+function withDivision(league: LeagueSeedInput): LeagueSeed {
+  return { ...league, division: league.division ?? defaultDivision(league.sport) };
 }
 
 const seedUserValidator = v.object({ name: v.string(), email: v.string(), password: v.string() });
@@ -400,8 +389,7 @@ function withPlayersPerSide<S extends { playersPerSide?: number | undefined }>(
   league: Doc<'leagues'>,
   season: S,
 ): Omit<S, 'playersPerSide'> & { playersPerSide: number } {
-  const playersPerSide =
-    season.playersPerSide ?? league.playersPerSide ?? smallestPlayersPerSide(league.sport);
+  const playersPerSide = season.playersPerSide ?? league.playersPerSide;
   if (!isPlayersPerSideOfSport(league.sport, playersPerSide)) {
     throw new Error(
       `${formatLabel(playersPerSide)} is not a format of ${league.sport}, the sport of league ${league.slug}`,

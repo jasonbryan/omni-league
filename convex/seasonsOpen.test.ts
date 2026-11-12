@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules, setTeamCounts } from './test.setup';
 
@@ -38,14 +38,32 @@ async function setup() {
           locations: ['Alpha Field', 'Beta Field'],
           division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
         },
-        { name: 'Slow Pitch', sport: 'softball', locations: ['Beta Field'] },
-        { name: 'Draft League', sport: 'soccer', locations: ['Alpha Field'], status: 'draft' },
+        {
+          name: 'Slow Pitch',
+          sport: 'softball',
+          locations: ['Beta Field'],
+          division: defaultDivision('softball'),
+        },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['B Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
   });
   return t;
@@ -124,11 +142,11 @@ describe('seasons.listOpenForOrganization', () => {
     });
   });
 
-  test('leaves out the division label of a league that has none', async () => {
+  test('carries the division label of the league', async () => {
     const t = await setup();
     await add(t, 'org-a', 'slow-pitch', [season('summer-2030', '2030-05-19')]);
     const [row] = await open(t);
-    expect(row?.league).not.toHaveProperty('divisionLabel');
+    expect(row?.league.divisionLabel).toBe('Coed · 9v9 · Rec');
   });
 
   test('never returns a draft season or a season of a draft league', async () => {

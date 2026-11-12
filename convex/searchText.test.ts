@@ -13,9 +13,10 @@ import {
   updateLeague,
   updateLocation,
   updateOrganizationCityState,
+  defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields } from './test.setup';
 
 const DIVISION = { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' } as const;
 
@@ -50,7 +51,13 @@ async function setup() {
             ageGroup: 'adult',
           },
         },
-        { name: 'Soccer Draft', sport: 'soccer', locations: ['Harbor Fields'], status: 'draft' },
+        {
+          name: 'Soccer Draft',
+          sport: 'soccer',
+          locations: ['Harbor Fields'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     const other = await insertTenant(ctx, {
@@ -61,6 +68,7 @@ async function setup() {
           name: 'Saturday Coed 6s',
           sport: 'beachVolleyball',
           locations: ['North Beach Sand Courts'],
+          division: defaultDivision('beachVolleyball'),
         },
       ],
     });
@@ -111,7 +119,7 @@ describe('searchText upkeep', () => {
       'wednesday-coed-slow-pitch':
         'Wednesday Coed Slow-Pitch Softball Men 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields North Beach Sand Courts Corpus Christi, TX',
       'soccer-draft':
-        'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+        'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     });
   });
 
@@ -121,11 +129,18 @@ describe('searchText upkeep', () => {
       insertTenant(ctx, {
         organization: { name: 'Bare Org', slug: 'bare' },
         locations: [{ name: 'Field', address: '1 St' }],
-        leagues: [{ name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Field'] }],
+        leagues: [
+          {
+            name: 'Sand 2s',
+            sport: 'beachVolleyball',
+            locations: ['Field'],
+            division: defaultDivision('beachVolleyball'),
+          },
+        ],
       }),
     );
     expect(await searchTexts(t, organizationId)).toEqual({
-      'sand-2s': 'Sand 2s Beach volleyball Bare Org Field',
+      'sand-2s': 'Sand 2s Beach volleyball Coed 2v2 Rec Bare Org Field',
     });
   });
 
@@ -153,10 +168,11 @@ describe('searchText upkeep', () => {
         name: 'Late Add',
         sport: 'soccer',
         locations: ['Harbor Fields'],
+        division: defaultDivision('soccer'),
       }),
     );
     expect((await searchTexts(t, organizationId))['late-add']).toBe(
-      'Late Add Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+      'Late Add Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
   });
 
@@ -174,11 +190,11 @@ describe('searchText upkeep', () => {
       'Wednesday Coed Slow-Pitch Softball Men 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields South Shore Courts Corpus Christi, TX',
     );
     expect(texts['soccer-draft']).toBe(
-      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+      'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
     expect(await searchTexts(t, other)).toEqual({
       'saturday-coed-6s':
-        'Saturday Coed 6s Beach volleyball Lakeshore Sand League North Beach Sand Courts Chicago, IL',
+        'Saturday Coed 6s Beach volleyball Coed 2v2 Rec Lakeshore Sand League North Beach Sand Courts Chicago, IL',
     });
   });
 
@@ -201,7 +217,7 @@ describe('searchText upkeep', () => {
 
     await t.run((ctx) => updateOrganizationCityState(ctx, organizationId, null));
     expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
-      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields',
+      'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields',
     );
     expect(Object.values(await searchTexts(t, other))[0]).toContain('Chicago, IL');
   });
@@ -226,22 +242,21 @@ describe('searchText upkeep', () => {
     );
   });
 
-  test('publishing a league that has no text yet sets it', async () => {
+  test('publishing a league rewrites its text from the row', async () => {
     const { t, organizationId } = await setup();
     const draft = await leagueSlugged(t, organizationId, 'soccer-draft');
     await t.run((ctx) =>
       ctx.db.patch('leagues', draft._id, {
-        searchText: undefined,
+        searchText: 'stale',
         gender: 'womens',
         playersPerSide: 11,
         level: 'competitive',
         ageGroup: 'over30',
       }),
     );
-    const bare: Doc<'leagues'> = await leagueSlugged(t, organizationId, 'soccer-draft');
-    expect(bare.searchText).toBeUndefined();
+    const stale: Doc<'leagues'> = await leagueSlugged(t, organizationId, 'soccer-draft');
 
-    await t.run((ctx) => publishLeague(ctx, bare));
+    await t.run((ctx) => publishLeague(ctx, stale));
     const published = await leagueSlugged(t, organizationId, 'soccer-draft');
     expect(published.status).toBe('published');
     expect(published.searchText).toBe(
@@ -259,7 +274,7 @@ describe('searchText upkeep', () => {
     );
     await t.run((ctx) => updateOrganizationCityState(ctx, organizationId, 'Galveston, TX'));
     expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
-      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Galveston, TX',
+      'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Galveston, TX',
     );
   });
 
@@ -269,6 +284,7 @@ describe('searchText upkeep', () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < MAX_LEAGUES_SEARCH_UPDATED; i++) {
         await ctx.db.insert('leagues', {
+          ...leagueRequiredFields('soccer', `Bulk ${String(i).padStart(3, '0')}`),
           organizationId,
           name: `Bulk ${String(i).padStart(3, '0')}`,
           slug: `bulk-${i}`,
@@ -288,8 +304,6 @@ describe('searchText upkeep', () => {
 });
 
 describe('searchText sport and division words', () => {
-  const wordsOf = (text: string | undefined) => (text ?? '').split(' ');
-
   test('a division change rewrites the words, and undoing it puts the old ones back', async () => {
     const { t, organizationId } = await setup();
     const league = await leagueSlugged(t, organizationId, 'sunday-reverse-coed-4s');
@@ -310,7 +324,7 @@ describe('searchText sport and division words', () => {
     );
   });
 
-  test('undoing a change on a league that had no division leaves the sport name only', async () => {
+  test('undoing a change puts the earlier division words back', async () => {
     const { t, organizationId } = await setup();
     const league = await leagueSlugged(t, organizationId, 'soccer-draft');
     const earlier = await t.run((ctx) =>
@@ -325,17 +339,8 @@ describe('searchText sport and division words', () => {
     const changed = await leagueSlugged(t, organizationId, 'soccer-draft');
     await t.run((ctx) => restoreLeague(ctx, changed, earlier));
     expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
-      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+      'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
-  });
-
-  test('a league with no division holds its sport name and no division words', async () => {
-    const { t, organizationId } = await setup();
-    const words = wordsOf((await searchTexts(t, organizationId))['soccer-draft']);
-    expect(words).toContain('Soccer');
-    expect(words).not.toContain('Coed');
-    expect(words).not.toContain('mens');
-    expect(words.some((word) => /^\d+v\d+$/.test(word))).toBe(false);
   });
 
   test('a youth womens league holds Girls and its age group, not Womens', async () => {
@@ -489,7 +494,7 @@ describe('searchText sport and division words', () => {
     const changed = await leagueSlugged(t, organizationId, 'soccer-draft');
     await t.run((ctx) => restoreLeague(ctx, changed, earlier));
     expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
-      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+      'Soccer Draft Soccer Coed 4v4 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
   });
 });

@@ -6,7 +6,7 @@ import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 import { FREE_AGENTS_LIST_MINE_LIMIT } from './freeAgents';
 import { insertFreeAgent, insertPlacedFreeAgent, insertTeamWithCaptain } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { defaultDivision, insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -48,15 +48,30 @@ async function setup() {
       organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Alpha Beach'] },
-        { name: 'Sunday Reverse Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
+        {
+          name: 'Coed 7v7 Rec',
+          sport: 'soccer',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Sunday Reverse Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const riverbend = await insertTenant(ctx, {
       organization: { name: 'Riverbend Softball Association', slug: 'riverbend' },
       locations: [{ name: 'River Park', address: '9 River Rd' }],
       leagues: [
-        { name: 'Wednesday Coed Slow-Pitch', sport: 'softball', locations: ['River Park'] },
+        {
+          name: 'Wednesday Coed Slow-Pitch',
+          sport: 'softball',
+          locations: ['River Park'],
+          division: defaultDivision('softball'),
+        },
       ],
     });
     const sevens = await leagueOf(ctx, gulf, 'coed-7v7-rec');

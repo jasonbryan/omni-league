@@ -10,9 +10,10 @@ import {
   insertCustomLevel,
   insertLeague,
   insertTenant,
+  defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -32,12 +33,26 @@ async function setup() {
         { name: 'bravo Beach', address: '2 Bravo St' },
         { name: 'Alpha Field', address: '1 Alpha St' },
       ],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Sand 2s', sport: 'beachVolleyball', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['B Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const locationIn = async (organizationId: Id<'organizations'>, name: string) =>
       (await ctx.db
@@ -668,6 +683,7 @@ describe('leagues.listForAdmin', () => {
         sportName: 'Soccer',
         status: 'published',
         locationNames: ['Alpha Field'],
+        divisionLabel: 'Coed · 4v4 · Rec',
       },
     ]);
   });
@@ -679,6 +695,7 @@ describe('leagues.listForAdmin', () => {
         name: 'Crossed',
         sport: 'soccer',
         locations: [],
+        division: defaultDivision('soccer'),
       });
       await ctx.db.patch('leagues', leagueId, { locationIds: [s.alpha, s.bField] });
     });
@@ -696,7 +713,11 @@ describe('leagues.listForAdmin', () => {
     });
     expect(rows.map((row) => row.name)).toEqual(['Sand 2s']);
     const empty = await s.t.run(async (ctx) => {
-      const organizationId = await ctx.db.insert('organizations', { name: 'E', slug: 'e-org' });
+      const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('E'),
+        name: 'E',
+        slug: 'e-org',
+      });
       const userId = await ctx.db.insert('users', {
         authUserId: 'empty-admin',
         name: 'x',
@@ -717,7 +738,7 @@ describe('leagues.listForAdmin', () => {
     ).resolves.toEqual([]);
   });
 
-  test('returns each league’s divisionLabel, and none for a league without a division', async () => {
+  test('returns each league’s divisionLabel', async () => {
     const s = await setup();
     await s.t.run(async (ctx) => {
       const { leagueId } = await insertLeague(ctx, s.organizationA, {
@@ -738,16 +759,16 @@ describe('leagues.listForAdmin', () => {
       organizationId: s.organizationA,
     });
     expect(rows.map((row) => [row.name, row.divisionLabel])).toEqual([
-      ['Coed 7v7', undefined],
+      ['Coed 7v7', 'Coed · 4v4 · Rec'],
       ['Youth Girls', 'Girls · 7v7 · Competitive · U12'],
     ]);
-    expect(rows[0]).not.toHaveProperty('divisionLabel');
   });
 
   test('a league row with no status is listed as a draft, never as published', async () => {
     const s = await setup();
     await s.t.run((ctx) =>
       ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'Legacy'),
         organizationId: s.organizationA,
         name: 'Legacy',
         slug: 'legacy',
@@ -785,6 +806,7 @@ describe('drafts stay off the public page', () => {
           slug: 'coed-7v7',
           sportName: 'Soccer',
           locationNames: ['Alpha Field'],
+          divisionLabel: 'Coed · 4v4 · Rec',
           seasons: [],
         },
       ],
@@ -856,6 +878,7 @@ describe('tenantWrites league slugs and status', () => {
           name,
           sport: 'soccer',
           locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
         });
         made.push(slug);
       }
@@ -874,12 +897,14 @@ describe('tenantWrites league slugs and status', () => {
         sport: 'softball',
         locations: ['bravo Beach'],
         status: 'published',
+        division: defaultDivision('softball'),
       });
       await insertLeague(ctx, s.organizationA, {
         name: 'Draft Seed',
         sport: 'softball',
         locations: ['bravo Beach'],
         status: 'draft',
+        division: defaultDivision('softball'),
       });
     });
     const organization = await s.t.run((ctx) => ctx.db.get('organizations', s.organizationA));
@@ -901,7 +926,11 @@ describe('tenantWrites league slugs and status', () => {
   test('the backfill sets published on a league without a status, and recounts only published leagues', async () => {
     const t = convexTest(schema, modules);
     const ids = await t.run(async (ctx) => {
-      const organizationId = await ctx.db.insert('organizations', { name: 'Old', slug: 'old-org' });
+      const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('Old'),
+        name: 'Old',
+        slug: 'old-org',
+      });
       const locationId = await ctx.db.insert('locations', {
         organizationId,
         name: 'Field',
@@ -909,6 +938,7 @@ describe('tenantWrites league slugs and status', () => {
         sortName: 'field',
       });
       const legacy = await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'Legacy'),
         organizationId,
         name: 'Legacy',
         slug: 'legacy',
@@ -917,6 +947,7 @@ describe('tenantWrites league slugs and status', () => {
         sortName: 'legacy',
       });
       await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'Fresh Draft'),
         organizationId,
         name: 'Fresh Draft',
         slug: 'fresh-draft',
@@ -980,6 +1011,7 @@ describe('league edge cases', () => {
             name,
             sport: 'soccer',
             locations: ['Alpha Field'],
+            division: defaultDivision('soccer'),
           })
         ).slug;
       }
@@ -988,6 +1020,7 @@ describe('league edge cases', () => {
           name: 'New',
           sport: 'soccer',
           locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
         })
       ).slug;
       return made;
@@ -1009,12 +1042,14 @@ describe('league edge cases', () => {
           name: `Soft ${n}`,
           sport: 'softball',
           locations: ['bravo Beach'],
+          division: defaultDivision('softball'),
         });
         await insertLeague(ctx, s.organizationA, {
           name: `Soft ${n} draft`,
           sport: 'softball',
           locations: ['bravo Beach'],
           status: 'draft',
+          division: defaultDivision('softball'),
         });
       }
     });

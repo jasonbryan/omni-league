@@ -118,18 +118,6 @@ describe('insertLeague with a division', () => {
     expect(rows[1]).toMatchObject({ ...division, minimumRosterSize: 12 });
   });
 
-  test('writes no division on a league inserted without one', async () => {
-    const t = setup();
-    const row = await t.run(async (ctx) => {
-      const organizationId = await insertTenant(ctx, TENANT);
-      await insertLeague(ctx, organizationId, league);
-      return (await ctx.db.query('leagues').collect())[0];
-    });
-    for (const field of ['gender', 'playersPerSide', 'level', 'ageGroup', 'customLevelId']) {
-      expect(row).not.toHaveProperty(field);
-    }
-  });
-
   test('links the custom level named by the seed, found through the by_customLevelId index', async () => {
     const t = setup();
     const result = await t.run(async (ctx) => {

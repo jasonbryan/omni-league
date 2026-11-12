@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
+import { formatLabel } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { registrationIsOpen, seasonPhase } from './lib/registration';
@@ -10,10 +11,10 @@ import { searchWords } from './lib/searchQuery';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { sportName } from './lib/sports';
-import { insertLeague, insertLocation, insertTenant } from './lib/tenantWrites';
+import { insertLeague, insertLocation, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import * as seed from './seed';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
 
 function setup() {
   return convexTest(schema, modules);
@@ -26,8 +27,6 @@ const NONE = {
   organizations: 0,
   locations: 0,
   leagues: 0,
-  seasons: 0,
-  leagueDivisions: 0,
   teamCounts: 0,
   pendingInviteCounts: 0,
   waitlistCounts: 0,
@@ -36,7 +35,7 @@ const NONE = {
   draftLeagueCounts: 0,
 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0, leagues: 0 } };
+const FULL = { ...ROWS, backfilled: NONE };
 
 async function counts(t: T) {
   return t.run(async (ctx) => ({
@@ -124,6 +123,7 @@ async function sportStored(t: T) {
 async function insertRaw(t: T): Promise<void> {
   await t.run(async (ctx) => {
     const organizationId = await ctx.db.insert('organizations', {
+      ...organizationListFields('Old Club'),
       name: 'Old Club',
       slug: 'old-club',
     });
@@ -134,6 +134,7 @@ async function insertRaw(t: T): Promise<void> {
     });
     await ctx.db.insert('locations', { organizationId, name: 'Other Field', address: '2 Road' });
     await ctx.db.insert('leagues', {
+      ...leagueRequiredFields('softball', 'Beta League'),
       organizationId,
       name: 'Beta League',
       slug: 'beta-league',
@@ -141,6 +142,7 @@ async function insertRaw(t: T): Promise<void> {
       locationIds: [],
     });
     await ctx.db.insert('leagues', {
+      ...leagueRequiredFields('soccer', 'alpha League'),
       organizationId,
       name: 'alpha League',
       slug: 'alpha-league',
@@ -327,7 +329,6 @@ describe('seed:demo', () => {
       ...NO_ROWS,
       seasons: 1,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(after).toHaveLength(7);
@@ -357,7 +358,6 @@ describe('seed:demo', () => {
       ...NO_ROWS,
       seasons: 3,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(after).toHaveLength(7);
@@ -375,7 +375,6 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(settled);
   });
@@ -586,7 +585,6 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -607,21 +605,29 @@ describe('seed:demo', () => {
           },
         ],
         leagues: [
-          { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Bayside Athletic Complex'] },
+          {
+            name: 'Coed 7v7 Rec',
+            sport: 'soccer',
+            locations: ['Bayside Athletic Complex'],
+            division: defaultDivision('soccer'),
+          },
           {
             name: 'Men Over-30 11v11',
             sport: 'soccer',
             locations: ['Bayside Athletic Complex'],
+            division: defaultDivision('soccer'),
           },
           {
             name: 'Sunday Reverse Coed 4s',
             sport: 'beachVolleyball',
             locations: ['North Beach Sand Courts'],
+            division: defaultDivision('beachVolleyball'),
           },
           {
             name: 'Thursday Night Coed 2s',
             sport: 'beachVolleyball',
             locations: ['North Beach Sand Courts'],
+            division: defaultDivision('beachVolleyball'),
           },
         ],
       }),
@@ -634,36 +640,18 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
-      backfilled: { ...NONE, leagues: 4, leagueDivisions: 4 },
-      updated: { organizations: 1, leagues: 0 },
+      backfilled: NONE,
     });
 
     const after = await snapshot(t);
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
-    const DIVISION = ['gender', 'playersPerSide', 'level', 'ageGroup'] as const;
-    // The City, state the seed sets on this organization is part of each league's search text.
-    const withoutBackfill = (league: Doc<'leagues'>) => ({
-      ...league,
-      publishedSeasonCount: 0,
-      searchText: undefined,
-      ...Object.fromEntries(DIVISION.map((field) => [field, undefined])),
-    });
-    expect(after.leagues.slice(0, before.leagues.length).map(withoutBackfill)).toEqual(
-      before.leagues.map(withoutBackfill),
+    const withoutSeasonCount = (league: Doc<'leagues'>) => ({ ...league, publishedSeasonCount: 0 });
+    expect(after.leagues.slice(0, before.leagues.length).map(withoutSeasonCount)).toEqual(
+      before.leagues.map(withoutSeasonCount),
     );
-    for (const league of after.leagues.slice(0, before.leagues.length)) {
-      expect(league.searchText).toMatch(/^.+ Gulf Coast Sport & Social .+ Corpus Christi, TX$/);
-    }
-    expect(after.leagues.find((league) => league.name === 'Sunday Reverse Coed 4s')).toMatchObject({
-      gender: 'coed',
-      playersPerSide: 4,
-      level: 'bb',
-      ageGroup: 'adult',
-    });
     const gulf = after.organizations.find((organization) => organization._id === gulfId);
     expect(gulf).toEqual({
       ...before.organizations[0],
-      cityState: 'Corpus Christi, TX',
       leagueCount: 5,
       locationCount: 3,
       sportLeagueCounts: { beachVolleyball: 2, soccer: 2, softball: 1 },
@@ -692,7 +680,12 @@ describe('seed:demo', () => {
           { name: 'Larkspur Turf Center', address: '455 Larkspur Mesa Dr, Lakewood, CO 80228' },
         ],
         leagues: [
-          { name: 'Coed 6v6 Indoor', sport: 'soccer', locations: ['Larkspur Turf Center'] },
+          {
+            name: 'Coed 6v6 Indoor',
+            sport: 'soccer',
+            locations: ['Larkspur Turf Center'],
+            division: defaultDivision('soccer'),
+          },
         ],
       });
       await insertLocation(ctx, id, {
@@ -703,6 +696,7 @@ describe('seed:demo', () => {
         name: 'Monday Coed Slow-Pitch',
         sport: 'softball',
         locations: ['Bluebird Softball Complex'],
+        division: defaultDivision('softball'),
       });
     });
     await t.mutation(internal.testing.addLeague, {
@@ -752,7 +746,12 @@ describe('seed:demo', () => {
           { name: 'Bayside Athletic Complex', address: '1 Existing Way, Springfield, IL 62701' },
         ],
         leagues: [
-          { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Bayside Athletic Complex'] },
+          {
+            name: 'Coed 7v7 Rec',
+            sport: 'soccer',
+            locations: ['Bayside Athletic Complex'],
+            division: defaultDivision('soccer'),
+          },
         ],
       }),
     );
@@ -760,21 +759,13 @@ describe('seed:demo', () => {
 
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
-      backfilled: { ...NONE, leagues: 1, leagueDivisions: 1 },
-      updated: { organizations: 0, leagues: 0 },
+      backfilled: NONE,
     });
 
     const after = await snapshot(t);
     expect(after.organizations[0]).toEqual(before.organizations[0]);
     expect(after.locations[0]).toEqual(before.locations[0]);
-    expect(after.leagues[0]).toEqual({
-      ...before.leagues[0],
-      searchText: 'Coed 7v7 Rec Soccer Coed 7v7 Rec Existing Club Bayside Athletic Complex',
-      gender: 'coed',
-      playersPerSide: 7,
-      level: 'rec',
-      ageGroup: 'adult',
-    });
+    expect(after.leagues[0]).toEqual(before.leagues[0]);
     expect(await counts(t)).toEqual({
       organizations: ROWS.organizations + 1,
       locations: ROWS.locations + 1,
@@ -789,6 +780,7 @@ describe('seed:demo', () => {
     await insertRaw(t);
     await t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('Lakeshore Sand League'),
         name: 'Lakeshore Sand League',
         slug: 'lakeshore-sand-league',
       });
@@ -809,8 +801,6 @@ describe('seed:demo', () => {
         organizations: 2,
         locations: 3,
         leagues: 2,
-        seasons: 0,
-        leagueDivisions: 2,
         teamCounts: 0,
         pendingInviteCounts: 0,
         waitlistCounts: 0,
@@ -818,7 +808,6 @@ describe('seed:demo', () => {
         staffInviteCounts: 2,
         draftLeagueCounts: 2,
       },
-      updated: { organizations: 1, leagues: 0 },
     });
 
     const { organizations, locations, leagues } = await snapshot(t);
@@ -898,7 +887,6 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -907,6 +895,7 @@ describe('seed:demo', () => {
     const t = setup();
     await t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('Mid Club'),
         name: 'Mid Club',
         slug: 'mid-club',
         leagueCount: 3,
@@ -930,6 +919,7 @@ describe('seed:demo', () => {
         ['Three', 'softball', [b]],
       ] as const) {
         await ctx.db.insert('leagues', {
+          ...leagueRequiredFields(sport, name),
           organizationId,
           name,
           slug: name.toLowerCase(),
@@ -946,12 +936,10 @@ describe('seed:demo', () => {
         ...NONE,
         organizations: 1,
         leagues: 3,
-        leagueDivisions: 3,
         staffCounts: 1,
         staffInviteCounts: 1,
         draftLeagueCounts: 1,
       },
-      updated: { organizations: 0, leagues: 0 },
     });
     expect((await sportStored(t))['mid-club']).toEqual({
       leagues: { soccer: 2, softball: 1 },
@@ -965,7 +953,6 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -1065,9 +1052,9 @@ describe('seed:demo league search text', () => {
       return Promise.all(
         leagues.map(async (league) => ({
           name: league.name,
-          words: searchWords(league.searchText ?? ''),
+          words: searchWords(league.searchText),
           sport: searchWords(sportName(league.sport)),
-          label: searchWords((await leagueDivisionLabel(ctx, league)) ?? ''),
+          label: searchWords(await leagueDivisionLabel(ctx, league)),
         })),
       );
     });
@@ -1132,8 +1119,6 @@ describe('seed:demo backfill against a recount', () => {
       organizations: 1,
       locations: 2,
       leagues: 2,
-      seasons: 0,
-      leagueDivisions: 2,
       teamCounts: 0,
       pendingInviteCounts: 0,
       waitlistCounts: 0,
@@ -1180,7 +1165,6 @@ describe('seed:demo backfill against a recount', () => {
       await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
         ...NO_ROWS,
         backfilled: NONE,
-        updated: { organizations: 0, leagues: 0 },
       });
       await expectCountersMatchRecount(t);
     }
@@ -1194,13 +1178,18 @@ describe('seed:demo and league status', () => {
   test('a legacy league without a status becomes published before the recount, a draft stays out of it, and a second run changes nothing', async () => {
     const t = setup();
     await t.run(async (ctx) => {
-      const bare = await ctx.db.insert('organizations', { name: 'Bare Club', slug: 'bare-club' });
+      const bare = await ctx.db.insert('organizations', {
+        ...organizationListFields('Bare Club'),
+        name: 'Bare Club',
+        slug: 'bare-club',
+      });
       const field = await ctx.db.insert('locations', {
         organizationId: bare,
         name: 'Bare Field',
         address: '1 Road',
       });
       await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'Legacy One'),
         organizationId: bare,
         name: 'Legacy One',
         slug: 'legacy-one',
@@ -1208,6 +1197,7 @@ describe('seed:demo and league status', () => {
         locationIds: [field],
       });
       await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('softball', 'Legacy Draft'),
         organizationId: bare,
         name: 'Legacy Draft',
         slug: 'legacy-draft',
@@ -1216,6 +1206,7 @@ describe('seed:demo and league status', () => {
         status: 'draft',
       });
       const counted = await ctx.db.insert('organizations', {
+        ...organizationListFields('Counted Club'),
         name: 'Counted Club',
         slug: 'counted-club',
         leagueCount: 1,
@@ -1230,6 +1221,7 @@ describe('seed:demo and league status', () => {
         sortName: 'counted field',
       });
       await ctx.db.insert('leagues', {
+        ...leagueRequiredFields('soccer', 'Counted League'),
         organizationId: counted,
         name: 'Counted League',
         slug: 'counted-league',
@@ -1274,7 +1266,6 @@ describe('seed:demo and league status', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -1392,8 +1383,146 @@ describe('seed:demo seasons dated from the run', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await seasonsOf(t, 'current-season')).toEqual(first);
+  });
+});
+
+const DEMO_CITY_STATES: Readonly<Record<string, string>> = {
+  'gulf-coast-sport-social': 'Corpus Christi, TX',
+  'port-aransas-beach-volleyball-club': 'Port Aransas, TX',
+  'front-range-rec-sports': 'Denver, CO',
+  'lakeshore-sand-league': 'Chicago, IL',
+  'saguaro-valley-softball': 'Phoenix, AZ',
+  'rockport-sand-volleyball': 'Rockport, TX',
+  'confluence-sport-social': 'Sacramento, CA',
+};
+
+describe('seed:demo divisions on an empty deployment', () => {
+  test('inserts each demo organization with its City, state', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const rows = await t.run((ctx) => ctx.db.query('organizations').collect());
+    expect(Object.fromEntries(rows.map((row) => [row.slug, row.cityState ?? null]))).toEqual(
+      DEMO_CITY_STATES,
+    );
+  });
+
+  test('gives every demo league its division, and the custom level to the league that uses it', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+
+    const stored = await t.run(async (ctx) => {
+      const organizations = await ctx.db.query('organizations').collect();
+      const leagues = await ctx.db.query('leagues').collect();
+      return leagues.map((league) => ({
+        organization: organizations.find((o) => o._id === league.organizationId)!.slug,
+        league,
+      }));
+    });
+    const demoLeagues = seed.DEMO.flatMap((tenant) =>
+      tenant.leagues.map((league) => ({ organization: tenant.organization.slug, league })),
+    );
+    expect(stored).toHaveLength(demoLeagues.length);
+    for (const { organization, league } of demoLeagues) {
+      const row = stored.find(
+        (entry) => entry.organization === organization && entry.league.name === league.name,
+      )?.league;
+      expect(row, league.name).toMatchObject({
+        gender: league.division.gender,
+        playersPerSide: league.division.playersPerSide,
+        level: league.division.level,
+        ageGroup: league.division.ageGroup,
+      });
+    }
+
+    const levels = await t.run((ctx) => ctx.db.query('customLevels').collect());
+    expect(levels).toEqual([
+      expect.objectContaining({ name: 'D', standardLevel: 'rec', sport: 'softball' }),
+    ]);
+    const used = stored.filter((entry) => entry.league.customLevelId !== undefined);
+    expect(used.map((entry) => [entry.organization, entry.league.name])).toEqual([
+      ['saguaro-valley-softball', 'Men D Division Slow-Pitch'],
+    ]);
+    expect(used[0].league.customLevelId).toBe(levels[0]._id);
+    expect(levels[0].organizationId).toBe(used[0].league.organizationId);
+  });
+
+  test('raises the minimum roster size of Coed 6v6 Indoor to 8 and adds the youth league U10 Girls Fall Rec', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { leagues, frontRange } = await t.run(async (ctx) => ({
+      leagues: await ctx.db.query('leagues').collect(),
+      frontRange: await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'front-range-rec-sports'))
+        .unique(),
+    }));
+    expect(
+      leagues.find(
+        (league) => league.name === 'Coed 6v6 Indoor' && league.organizationId === frontRange?._id,
+      ),
+    ).toMatchObject({
+      playersPerSide: 6,
+      minimumRosterSize: 8,
+    });
+    const youth = leagues.find((league) => league.name === 'U10 Girls Fall Rec');
+    expect(youth).toMatchObject({
+      gender: 'womens',
+      playersPerSide: 7,
+      level: 'rec',
+      ageGroup: 'u10',
+      sport: 'soccer',
+    });
+    const location = await t.run((ctx) => ctx.db.get('locations', youth!.locationIds[0]));
+    expect(location?.name).toBe('Cottonwood Creek Fields');
+    expect(leagues.filter((league) => league.minimumRosterSize !== undefined)).toHaveLength(1);
+  });
+
+  test('adds the youth league U10 Girls Select, a second one at a different location, so the youth filters list two', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { leagues, frontRange } = await t.run(async (ctx) => ({
+      leagues: await ctx.db.query('leagues').collect(),
+      frontRange: await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'front-range-rec-sports'))
+        .unique(),
+    }));
+    const select = leagues.find((league) => league.name === 'U10 Girls Select');
+    expect(select).toMatchObject({
+      organizationId: frontRange?._id,
+      gender: 'womens',
+      playersPerSide: 7,
+      level: 'competitive',
+      ageGroup: 'u10',
+      sport: 'soccer',
+      status: 'published',
+    });
+    const location = await t.run((ctx) => ctx.db.get('locations', select!.locationIds[0]));
+    expect(location?.name).toBe('Larkspur Turf Center');
+    const youth = leagues.filter(
+      (league) => league.sport === 'soccer' && league.ageGroup === 'u10',
+    );
+    expect(youth.map((league) => league.name).sort()).toEqual([
+      'U10 Girls Fall Rec',
+      'U10 Girls Select',
+    ]);
+  });
+
+  test('the demo seasons store players per side and no format', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const seasons = await t.run((ctx) => ctx.db.query('seasons').collect());
+    expect(seasons.map((row) => formatLabel(row.playersPerSide)).sort()).toEqual([
+      '2v2',
+      '4v4',
+      '4v4',
+      '4v4',
+      '7v7',
+      '7v7',
+      '7v7',
+    ]);
+    for (const row of seasons) expect(row).not.toHaveProperty('format');
   });
 });

@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { insertSeason, insertTenant, publishSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, publishSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -33,15 +33,38 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Alpha Field'] },
-        { name: 'Draft Softball', sport: 'softball', locations: ['Alpha Field'], status: 'draft' },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft Softball',
+          sport: 'softball',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('softball'),
+        },
       ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['B Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const league = async (organizationId: Id<'organizations'>, slug: string) =>
       (await ctx.db
