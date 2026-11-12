@@ -10,6 +10,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { YourOrganizations, organizationInitials } from './your-organizations';
 
@@ -344,10 +345,15 @@ describe('YourOrganizations', () => {
     await harness.fixture.whenStable();
     expect(section.querySelector('[role="status"]')).toBeNull();
     const alert = section.querySelector('[role="alert"]');
-    expect(text(alert)).toBe(
-      'Your organizations could not be loaded. Check your connection and try again.',
+    expect(text(alert?.querySelector('[data-slot="alert-title"]'))).toBe(
+      'Your organizations could not be loaded.',
+    );
+    expect(text(alert?.querySelector('[data-slot="alert-description"]'))).toBe(
+      'Check your connection and try again.',
     );
     expect(alert?.textContent).not.toContain('Server Error');
+    expectAlertSlots(alert);
+    expectAlertClasses(alert, 'destructive', 'mb-5');
   });
 });
 

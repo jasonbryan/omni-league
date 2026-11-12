@@ -38,17 +38,13 @@ import {
 } from '../core/data/convex';
 import { injectNow } from '../core/now';
 import { NotFoundView } from '../not-found/not-found-view';
-import {
-  AdminAlert,
-  ALERT_DESCRIPTION,
-  ALERT_NEUTRAL,
-  ALERT_TITLE,
-} from '../organizations/admin/admin-alert';
+import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import { formatDay } from '../organizations/admin/format-day';
 import { publicSeasonPath } from '../organizations/public-league/public-league-path';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
+import { HlmAlertImports } from '../ui/alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmSpinner } from '../ui/spinner';
 import { RegisterCard, RegisterSkeleton } from './register-card';
@@ -108,6 +104,7 @@ function refusalOf(failure: unknown): Refusal | null {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
+    HlmAlertImports,
     HlmSpinner,
     NgIcon,
     NotFoundView,
@@ -153,16 +150,16 @@ function refusalOf(failure: unknown): Refusal | null {
                   @if (season.team; as team) {
                     <div
                       #cardAlert
-                      data-slot="alert"
+                      hlmAlert
                       [attr.role]="refusal() ? 'alert' : 'status'"
                       tabindex="-1"
-                      [class]="cardAlertClass"
+                      class="outline-offset-2 focus:outline-2 focus:outline-ring"
                     >
                       <ng-icon name="lucideUsers" aria-hidden="true" />
-                      <div data-slot="alert-title" [class]="alertTitle">
+                      <div hlmAlertTitle>
                         {{ messages.onTeamTitle(team.name) }}
                       </div>
-                      <div data-slot="alert-description" [class]="alertDescription">
+                      <div hlmAlertDescription>
                         {{ messages.onTeamDescription }}
                       </div>
                     </div>
@@ -179,16 +176,16 @@ function refusalOf(failure: unknown): Refusal | null {
                   @if (waitlistPlace(); as waitlist) {
                     <div
                       #cardAlert
-                      data-slot="alert"
+                      hlmAlert
                       [attr.role]="refusal() ? 'alert' : 'status'"
                       tabindex="-1"
-                      [class]="cardAlertClass"
+                      class="outline-offset-2 focus:outline-2 focus:outline-ring"
                     >
                       <ng-icon name="lucideListOrdered" aria-hidden="true" />
-                      <div data-slot="alert-title" [class]="alertTitle">
+                      <div hlmAlertTitle>
                         {{ messages.waitlistedTitle(waitlist.teamName, waitlist.position) }}
                       </div>
-                      <div data-slot="alert-description" [class]="alertDescription">
+                      <div hlmAlertDescription>
                         {{ messages.waitlistedDescription }}
                       </div>
                     </div>
@@ -207,16 +204,16 @@ function refusalOf(failure: unknown): Refusal | null {
                 @case ('waiting') {
                   <div
                     #cardAlert
-                    data-slot="alert"
+                    hlmAlert
                     role="status"
                     tabindex="-1"
-                    [class]="cardAlertClass"
+                    class="outline-offset-2 focus:outline-2 focus:outline-ring"
                   >
                     <ng-icon name="lucideHourglass" aria-hidden="true" />
-                    <div data-slot="alert-title" [class]="alertTitle">
+                    <div hlmAlertTitle>
                       {{ messages.waitingTitle }}
                     </div>
-                    <div data-slot="alert-description" [class]="alertDescription">
+                    <div hlmAlertDescription>
                       {{ waitingLine() }}
                     </div>
                   </div>
@@ -234,16 +231,16 @@ function refusalOf(failure: unknown): Refusal | null {
                 @case ('closed') {
                   <div
                     #cardAlert
-                    data-slot="alert"
+                    hlmAlert
                     [attr.role]="refusal() ? 'alert' : 'status'"
                     tabindex="-1"
-                    [class]="cardAlertClass"
+                    class="outline-offset-2 focus:outline-2 focus:outline-ring"
                   >
                     <ng-icon name="lucideCalendarX" aria-hidden="true" />
-                    <div data-slot="alert-title" [class]="alertTitle">
+                    <div hlmAlertTitle>
                       {{ messages.closedTitle }}
                     </div>
-                    <div data-slot="alert-description" [class]="alertDescription">
+                    <div hlmAlertDescription>
                       {{ closedLine() }}
                     </div>
                   </div>
@@ -322,9 +319,6 @@ export class RegisterFreeAgentPage {
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   // The ring shows on the status that takes focus after a press, because the pressed button has gone.
-  protected readonly cardAlertClass = `${ALERT_NEUTRAL} outline-offset-2 focus:outline-2 focus:outline-ring`;
-  protected readonly alertTitle = ALERT_TITLE;
-  protected readonly alertDescription = ALERT_DESCRIPTION;
   protected readonly online = injectOnline();
   private readonly now = injectNow();
 
