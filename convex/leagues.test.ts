@@ -14,6 +14,7 @@ import {
 } from './lib/tenantWrites';
 import schema from './schema';
 import {
+  insertLeagueWithProgram,
   modules,
   leagueRequiredFields,
   organizationListFields,
@@ -851,7 +852,7 @@ describe('leagues.listForAdmin', () => {
   test('a league row with no status is listed as a draft, never as published', async () => {
     const s = await setup();
     await s.t.run((ctx) =>
-      ctx.db.insert('leagues', {
+      insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'Legacy'),
         organizationId: s.organizationA,
         name: 'Legacy',
@@ -1021,7 +1022,7 @@ describe('tenantWrites league slugs and status', () => {
         address: '1 Road',
         sortName: 'field',
       });
-      const legacy = await ctx.db.insert('leagues', {
+      const legacy = await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'Legacy'),
         organizationId,
         name: 'Legacy',
@@ -1030,7 +1031,7 @@ describe('tenantWrites league slugs and status', () => {
         locationIds: [locationId],
         sortName: 'legacy',
       });
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'Fresh Draft'),
         organizationId,
         name: 'Fresh Draft',

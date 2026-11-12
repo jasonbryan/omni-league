@@ -146,6 +146,7 @@ describe('leagues.publishedSeasonCount: the writers', () => {
       await ctx.db.replace('leagues', league._id, {
         ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,
@@ -272,6 +273,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       await ctx.db.replace('leagues', league._id, {
         ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,
@@ -321,6 +323,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       await ctx.db.replace('leagues', league._id, {
         ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,

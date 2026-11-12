@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import schema from '../schema';
-import { leagueRequiredFields, modules, tournamentProgramFields } from '../test.setup';
+import { modules, tournamentProgramFields } from '../test.setup';
 import {
   defaultDivision,
   insertCustomLevel,
@@ -66,8 +66,7 @@ function mirrored(league: Doc<'leagues'>) {
 
 async function programOfLeague(ctx: MutationCtx, leagueId: Id<'leagues'>) {
   const league = (await ctx.db.get('leagues', leagueId))!;
-  expect(league.programId, 'the league points to its program').toBeDefined();
-  const program = (await ctx.db.get('programs', league.programId!))!;
+  const program = (await ctx.db.get('programs', league.programId))!;
   const { _id, _creationTime, ...fields } = program;
   void _id;
   void _creationTime;
@@ -147,7 +146,7 @@ describe('insertLeague', () => {
       expect(programs.filter((program) => program.organizationId === b)).toHaveLength(1);
       for (const league of await ctx.db.query('leagues').collect()) {
         await expectProgramMatches(ctx, league._id);
-        expect((await ctx.db.get('programs', league.programId!))?.organizationId, league.name).toBe(
+        expect((await ctx.db.get('programs', league.programId))?.organizationId, league.name).toBe(
           league.organizationId,
         );
       }
@@ -389,54 +388,6 @@ describe('publishLeague', () => {
       await publishLeague(ctx, (await ctx.db.get('leagues', leagueId))!);
       expect(await ctx.db.query('programs').collect()).toEqual(before);
     });
-  });
-});
-
-describe('a league written before programs existed', () => {
-  async function legacyLeague(ctx: MutationCtx, organizationId: Id<'organizations'>) {
-    const locationId = (await ctx.db.query('locations').first())!._id;
-    return ctx.db.insert('leagues', {
-      ...leagueRequiredFields('soccer', 'Legacy'),
-      organizationId,
-      name: 'Legacy',
-      slug: 'legacy',
-      sport: 'soccer',
-      locationIds: [locationId],
-      sortName: 'legacy',
-      status: 'draft',
-      publishedSeasonCount: 0,
-    });
-  }
-
-  test('gets its program from the next write that changes the league, once', async () => {
-    const t = setup();
-    await t.run(async (ctx) => {
-      const organizationId = await insertTenant(ctx, TENANT);
-      const leagueId = await legacyLeague(ctx, organizationId);
-
-      await updateLeague(ctx, (await ctx.db.get('leagues', leagueId))!, {
-        name: 'Legacy Renamed',
-        division: defaultDivision('soccer'),
-      });
-      await publishLeague(ctx, (await ctx.db.get('leagues', leagueId))!);
-
-      expect(await ctx.db.query('programs').collect()).toHaveLength(1);
-      await expectProgramMatches(ctx, leagueId);
-      expect((await programOfLeague(ctx, leagueId)).program.status).toBe('published');
-    });
-  });
-
-  test('is refused a program whose slug another program of the organization holds, writing none', async () => {
-    const t = setup();
-    await expect(
-      t.run(async (ctx) => {
-        const organizationId = await insertTenant(ctx, TENANT);
-        const leagueId = await legacyLeague(ctx, organizationId);
-        await ctx.db.insert('programs', tournamentProgramFields(organizationId, 'legacy'));
-        await publishLeague(ctx, (await ctx.db.get('leagues', leagueId))!);
-      }),
-    ).rejects.toThrow(/slug "legacy" is held by another program/);
-    expect(await t.run((ctx) => ctx.db.query('programs').collect())).toEqual([]);
   });
 });
 
