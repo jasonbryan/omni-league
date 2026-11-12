@@ -163,6 +163,8 @@ test.describe('Tournaments: creating a draft', () => {
 });
 
 test.describe('Tournaments: the failure states', () => {
+  test.use({ expectedConvexErrors: ['tournaments:create'] });
+
   test('a list that fails to load shows the alert and passes the axe helper', async ({
     page,
   }, testInfo) => {
