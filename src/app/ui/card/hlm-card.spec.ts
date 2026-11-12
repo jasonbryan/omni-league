@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { CARD_CLASSES, FLOATING_CARD_CLASSES } from './card-classes';
-import type { HlmCardSize } from './hlm-card';
+import { FLOATING_CARD_CLASSES } from './card-classes';
+import { CARD_CLASSES, type HlmCardSize } from './hlm-card';
 import { HlmCard } from './index';
 
 @Component({

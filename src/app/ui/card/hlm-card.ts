@@ -1,7 +1,9 @@
 import { computed, Directive, input } from '@angular/core';
-import { CARD_CLASSES } from './card-classes';
 
 export type HlmCardSize = 'bare' | 'default' | 'lg';
+
+export const CARD_CLASSES =
+  'group/card rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
 
 const STACKED_CLASSES = `${CARD_CLASSES} flex flex-col gap-4 overflow-hidden py-(--card-spacing) text-sm [--card-spacing:--spacing(5)] data-[size=lg]:[--card-spacing:--spacing(6)]`;
 
@@ -20,8 +22,8 @@ const SIZES: Readonly<Record<HlmCardSize, string>> = {
 // - a 16px gap between its children, and a `lg` size with 24px spacing for the cards that stand alone on a page;
 // - a `bare` size, the surface only, with no flex, gap, overflow, padding, or text size, for cards that lay out
 //   their own sections: with no `tailwind-merge`, a page cannot take those off the other sizes;
-// - `card-classes.ts` exports the `bare` surface and a `shadow-lg` one for the update prompt, which loads
-//   with the first page and so cannot import this directive;
+// - `card-classes.ts` exports a `shadow-lg` surface for the update prompt, which loads with the first page
+//   and so cannot import this directive;
 // - no header, title, description, content, or action parts, which no page draws yet;
 // - no `HlmCardConfig` token: the size defaults to `default`.
 @Directive({
