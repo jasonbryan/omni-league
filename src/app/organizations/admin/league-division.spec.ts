@@ -348,7 +348,7 @@ describe('LeagueDivision: values saved by someone else', () => {
     expect(division.edited()).toEqual(new Set(['gender', 'format', 'level']));
   });
 
-  it('measures a league with no division against the defaults', () => {
+  it('measures a new league against the defaults', () => {
     const division = new LeagueDivision();
     division.clear();
     expect(division.edited()).toEqual(new Set());
@@ -542,7 +542,7 @@ describe('LeagueDivision: notes on a field another organizer changed', () => {
     expect(shown(division)).toEqual({});
   });
 
-  it('clears every note when the league has no division', () => {
+  it('clears every note for a new league', () => {
     const division = loaded();
     division.chooseFormat(2);
     division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });

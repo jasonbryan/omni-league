@@ -541,7 +541,6 @@ describe('SeasonCreateForm', () => {
       page.querySelector<HTMLElement>('section[aria-labelledby="from-league-heading"]')!;
     const division = () => text(block().querySelector('[data-slot="season-division"]'));
     const minimum = () => text(block().querySelector('[data-slot="season-minimum"]'));
-    const NO_DIVISION = { ...COED, division: undefined };
 
     it('shows the league’s division and the minimum its format sets, read-only', async () => {
       await open();
@@ -568,12 +567,6 @@ describe('SeasonCreateForm', () => {
     it('says the format sets the minimum when the league states the same number', async () => {
       await open({ ...COED, division: { ...COED.division, minimumRosterSize: 7 } });
       expect(minimum()).toBe('7 players, set by the 7v7 format');
-    });
-
-    it('says Not set yet for a league with no division', async () => {
-      await open(NO_DIVISION);
-      expect(division()).toBe('Not set yet');
-      expect(minimum()).toBe('Not set yet');
     });
 
     it('links to the league details and keeps the published seasons note', async () => {
@@ -661,51 +654,6 @@ describe('SeasonCreateForm', () => {
         expect(calls()).toEqual([]);
       },
     );
-
-    describe('a league with no format yet', () => {
-      const refuse = () =>
-        o.convex.calls[0].reject(
-          new ConvexError({
-            code: 'leagueFormatMissing',
-            message: SEASON_MESSAGES.leagueFormatMissing,
-          }),
-        );
-
-      const alert = () => form().querySelector<HTMLElement>('[role="alert"][data-slot="alert"]');
-
-      it('shows the message above the action and the details link before anything is pressed', async () => {
-        await open(NO_DIVISION);
-        expect(text(alert())).toBe('Set this league’s format in its details first.');
-        expect(
-          alert()!.compareDocumentPosition(submitButton()) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
-        expect(block().querySelector('a')!.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
-      });
-
-      it('shows no message for a league that has a division', async () => {
-        await open();
-        expect(alert()).toBeNull();
-      });
-
-      it('focuses the message when the server refuses, and keeps the input', async () => {
-        await open(NO_DIVISION);
-        await fill();
-        await submit();
-        refuse();
-        await o.flush();
-        expect(document.activeElement).toBe(alert());
-        expect(input('name').value).toBe('Fall 2026');
-        expect(form().querySelectorAll('[data-slot="field-error"]')).toHaveLength(0);
-      });
-
-      it('goes away once the league has a division', async () => {
-        await open(NO_DIVISION);
-        o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
-        await o.flush();
-        expect(alert()).toBeNull();
-        expect(division()).toBe('Coed · 7v7 · Rec');
-      });
-    });
   });
 
   describe('sending', () => {
