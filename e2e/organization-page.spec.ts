@@ -1,4 +1,4 @@
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
@@ -1094,11 +1094,17 @@ type SportChip = 'All sports' | 'Soccer' | 'Softball';
 const HEADING_TOLERANCE_PX = 4;
 const OPEN_SEASONS_QUERY = 'seasons:listOpenForOrganization';
 const OPEN_SOCCER_SEASONS = 3;
+const NO_OPEN_SOFTBALL_TEXT =
+  'No softball season is open for registration right now. Each league below shows its next season once it is published.';
 
-async function threeOpenSoccerSeasonsTenant(): Promise<Tenant> {
+// Wraps the title at 1280px beside the Register button and fits on one line without it.
+const LONG_ORGANIZATION_NAME = 'Lakeshore Sand League Club';
+const BUTTON_WIDTH_TOLERANCE_PX = 1;
+
+async function threeOpenSoccerSeasonsTenant(name = 'E2E Open Seasons'): Promise<Tenant> {
   const tenant = await seedTenant({
-    // A longer name wraps the hero title at 1280px only while the hero's button takes its width, which moves Leagues for another reason.
-    name: 'E2E Open Seasons',
+    // The default name stays short: with nothing seen yet the guess is two cards, so a longer name would still unwrap the title on a view with no open season.
+    name,
     locations: [
       { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
       { name: 'Beta Diamond', address: '2 Beta Road, Corpus Christi, TX 78412' },
@@ -1135,6 +1141,17 @@ test.describe('organization page: the open-season skeleton follows the views alr
       .evaluate((heading) => heading.getBoundingClientRect().top + window.scrollY);
   const skeleton = (page: Page) => page.locator('#registration-open app-open-seasons-skeleton');
   const loadedCards = (page: Page) => page.locator('#registration-open > ul > li');
+  const heroPlaceholder = (page: Page) =>
+    page.locator('[data-hero-actions] > span[aria-hidden="true"]');
+  const heroRegister = (page: Page) =>
+    page.locator('[data-hero-actions] > a[href$="#registration-open"]');
+  const titleLines = (page: Page) =>
+    page
+      .locator('main h1')
+      .evaluate((h1) =>
+        Math.round(h1.getBoundingClientRect().height / parseFloat(getComputedStyle(h1).lineHeight)),
+      );
+  const boxWidth = async (element: Locator) => (await element.boundingBox())?.width ?? 0;
 
   async function openChip(page: Page, chip: SportChip): Promise<void> {
     await chipLink(page, chip).click();
@@ -1145,13 +1162,31 @@ test.describe('organization page: the open-season skeleton follows the views alr
     page: Page,
     consoleGuard: { hydrated: boolean },
     hops: readonly SportChip[],
-    shown: { cards: number; noOpenText?: string },
+    shown: {
+      cards: number;
+      noOpenText?: string;
+      hero: 'no placeholder' | 'placeholder as wide as the button';
+      longName?: boolean;
+      /** Only where the actions sit beside the title. */
+      titleWrapsBesideButton?: boolean;
+    },
   ): Promise<void> {
-    const tenant = await threeOpenSoccerSeasonsTenant();
+    const tenant = await threeOpenSoccerSeasonsTenant(
+      shown.longName ? LONG_ORGANIZATION_NAME : undefined,
+    );
     const held = await holdQueries(page, [OPEN_SEASONS_QUERY], { holdFromStart: false });
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
     await expect(loadedCards(page)).toHaveCount(OPEN_SOCCER_SEASONS);
+    if (shown.titleWrapsBesideButton) {
+      expect(await titleLines(page), 'the title beside the Register button').toBe(2);
+      await openChip(page, 'Softball');
+      await expect(skeleton(page)).toHaveCount(0);
+      await expect(heroRegister(page)).toHaveCount(0);
+      expect(await titleLines(page), 'the title with no button').toBe(1);
+      await openChip(page, 'All sports');
+      await expect(loadedCards(page)).toHaveCount(OPEN_SOCCER_SEASONS);
+    }
     for (const chip of hops.slice(0, -1)) {
       await openChip(page, chip);
       await expect(skeleton(page)).toHaveCount(0);
@@ -1172,12 +1207,23 @@ test.describe('organization page: the open-season skeleton follows the views alr
     if (shown.noOpenText !== undefined) {
       await expect(skeleton(page)).toHaveText(shown.noOpenText);
     }
+    const placeholders = await heroPlaceholder(page).count();
+    const placeholderWidth = placeholders === 1 ? await boxWidth(heroPlaceholder(page)) : 0;
     const before = await headingTop(page);
     expect(before).toBeGreaterThan(0);
 
     held.release();
     await expect(skeleton(page)).toHaveCount(0);
     expect(Math.abs((await headingTop(page)) - before)).toBeLessThanOrEqual(HEADING_TOLERANCE_PX);
+    if (shown.hero === 'no placeholder') {
+      expect(placeholders, 'placeholders in the hero while the answer is held').toBe(0);
+    } else {
+      expect(placeholders, 'placeholders in the hero while the answer is held').toBe(1);
+      await expect(heroRegister(page)).toBeVisible();
+      expect(Math.abs((await boxWidth(heroRegister(page))) - placeholderWidth)).toBeLessThanOrEqual(
+        BUTTON_WIDTH_TOLERANCE_PX,
+      );
+    }
   }
 
   test('browser: from All sports to a sport with no open season, the skeleton is the no-open line and Leagues stays', async ({
@@ -1190,8 +1236,36 @@ test.describe('organization page: the open-season skeleton follows the views alr
     );
     await expectLeaguesStaysAfter(page, consoleGuard, ['Softball'], {
       cards: 0,
-      noOpenText:
-        'No softball season is open for registration right now. Each league below shows its next season once it is published.',
+      noOpenText: NO_OPEN_SOFTBALL_TEXT,
+      hero: 'no placeholder',
+    });
+  });
+
+  test('browser: with a long name, from All sports to a sport with no open season, the hero shows no placeholder and Leagues stays', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(
+      !['chromium-desktop', 'chromium-mobile'].includes(testInfo.project.name),
+      'one Chromium project per pointer',
+    );
+    await expectLeaguesStaysAfter(page, consoleGuard, ['Softball'], {
+      cards: 0,
+      noOpenText: NO_OPEN_SOFTBALL_TEXT,
+      hero: 'no placeholder',
+      longName: true,
+      titleWrapsBesideButton: isDesktop(testInfo),
+    });
+  });
+
+  test('browser: at 1280px, from All sports to Softball and on to Soccer, the placeholder is as wide as the Register button', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'the 360px case is the Soccer paths below');
+    await expectLeaguesStaysAfter(page, consoleGuard, ['Softball', 'Soccer'], {
+      cards: OPEN_SOCCER_SEASONS,
+      hero: 'placeholder as wide as the button',
     });
   });
 
@@ -1206,7 +1280,10 @@ test.describe('organization page: the open-season skeleton follows the views alr
       consoleGuard,
     }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-mobile', 'the case is measured at 360px touch');
-      await expectLeaguesStaysAfter(page, consoleGuard, hops, { cards: OPEN_SOCCER_SEASONS });
+      await expectLeaguesStaysAfter(page, consoleGuard, hops, {
+        cards: OPEN_SOCCER_SEASONS,
+        hero: 'placeholder as wide as the button',
+      });
     });
   }
 });
