@@ -9,7 +9,6 @@ export interface TeamForNextStep {
   registrationDeadline: string;
   minimumRosterSize: number;
   rosterCount: number;
-  /** Set for a tournament team. */
   tournamentName?: string | undefined;
 }
 

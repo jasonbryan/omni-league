@@ -138,8 +138,7 @@ export interface TeamPageNavigationState {
                 You can&rsquo;t open this team page
               </h1>
               <p class="mt-3 text-balance text-muted-foreground">
-                Only the players on teams in its season and the league&rsquo;s organizers can see
-                it. If you were removed from the team, ask the captain to invite you again.
+                Only its players and the people who run it can see it.
               </p>
               <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
                 ><ng-icon name="lucideArrowLeft" data-icon="inline-start" aria-hidden="true" />Go to
@@ -221,10 +220,7 @@ export interface TeamPageNavigationState {
                         name="lucideShieldCheck"
                         class="mt-0.5 shrink-0 text-base"
                         aria-hidden="true"
-                      /><span
-                        >You&rsquo;re an organizer of {{ organizerOf() }}, so you can manage this
-                        team&rsquo;s roster.</span
-                      >
+                      /><span>{{ organizerLine() }}</span>
                     </p>
                   } @else if (viewerNote(); as note) {
                     <p
@@ -572,9 +568,10 @@ export class TeamPage {
       ? 'You’re the captain.'
       : 'You’re the captain. You invite players and manage the roster.',
   );
-  protected readonly organizerOf = computed(() => {
+  protected readonly organizerLine = computed(() => {
     const team = this.team();
-    return team?.tournament ? team.organization.name : this.leagueName();
+    if (team?.tournament) return `You’re an organizer of ${team.organization.name}.`;
+    return `You’re an organizer of ${this.leagueName()}, so you can manage this team’s roster.`;
   });
   protected readonly seasonName = computed(() => this.team()?.season?.name ?? '');
   protected readonly leagueName = computed(() => this.team()?.league?.name ?? '');

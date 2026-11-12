@@ -104,7 +104,7 @@ describe('TeamPage: a tournament team', () => {
     expect(document.activeElement).toBe(status);
   });
 
-  it('tells an organization admin on no roster that they can manage the team', async () => {
+  it('tells an organization admin on no roster they are an organizer, without offering to manage the roster', async () => {
     await open({
       ...CRABS,
       viewerIsCaptain: false,
@@ -112,6 +112,9 @@ describe('TeamPage: a tournament team', () => {
       viewerTeamName: null,
       roster: [{ ...CRABS.roster[0], isViewer: false }],
     });
-    expect(main().textContent).toContain('You’re an organizer of Gulf Coast Sport & Social');
+    expect([...main().querySelectorAll('h1 ~ p')].map(text)).toContain(
+      'You’re an organizer of Gulf Coast Sport & Social.',
+    );
+    expect(main().textContent).not.toContain('manage this team');
   });
 });

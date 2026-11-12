@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { FORBIDDEN_CODE } from './lib/forbidden';
-import { addMinorEntry, addRosterEntry } from './lib/rosterWrites';
+import { addMinorEntry, addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
 import {
   defaultDivision,
   insertDraftTournament,
@@ -256,15 +256,9 @@ describe('teams.registerForTournament', () => {
     await register(s, 'captain', 'Sand Crabs');
     await register(s, 'captain', 'Sand Crabs', { ...SLUGS, tournamentSlug: 'second-open' });
     await s.t.run(async (ctx) => {
-      await ctx.db.insert('teams', {
-        organizationId: (await ctx.db.get('tournaments', s.gulf))!.organizationId,
-        leagueId: (await ctx.db.get('seasons', s.season))!.leagueId,
-        seasonId: s.season,
+      await insertTeamWithCaptain(ctx, (await ctx.db.get('seasons', s.season))!, {
         name: 'Season Crabs',
-        sortName: 'season crabs',
         captainUserId: s.player,
-        rosterCount: 0,
-        createdAt: 1,
       });
     });
     await register(s, 'player', 'Beach Boys');
@@ -409,7 +403,7 @@ describe('the published and open rules', () => {
     });
   });
 
-  test('a season team does not count toward a tournament’s places', async () => {
+  test('a team counts only toward its own tournament’s places', async () => {
     vi.useFakeTimers({ now: OPEN_NOW });
     const s = await setup();
     await register(s, 'captain', 'One', { ...SLUGS, tournamentSlug: 'tiny-open' });
@@ -543,8 +537,10 @@ describe('teams.getForMember for a tournament team', () => {
       viewerOnTeam: true,
       roster: [expect.objectContaining({ name: 'Name captain', isCaptain: true, isViewer: true })],
     });
-    expect(team).not.toHaveProperty('season');
-    expect(team).not.toHaveProperty('league');
+    expect(team).toMatchObject({
+      season: { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+      league: { name: 'Org A', slug: 'org-a' },
+    });
     expect(team).not.toHaveProperty('maxRosterSize');
   });
 

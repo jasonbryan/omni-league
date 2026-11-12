@@ -240,7 +240,7 @@ const rosterRowValidator = v.object({
 const teamForMemberValidator = v.object({
   name: v.string(),
   organization: v.object({ name: v.string(), slug: v.string() }),
-  /** A season team's `league` and `season`, or a tournament team's `tournament`. */
+  /** A tournament team's `season` and `league` are stand-ins for the previous frontend; `tournament` marks the team. */
   league: v.optional(v.object({ name: v.string(), slug: v.string() })),
   season: v.optional(v.object({ name: v.string(), slug: v.string() })),
   tournament: v.optional(v.object({ name: v.string(), slug: v.string() })),
@@ -288,6 +288,9 @@ async function tournamentTeamForMember(
     name: team.name,
     organization: { name: organization.name, slug: organization.slug },
     tournament: { name: program.name, slug: program.slug },
+    // The previous frontend reads `season` and `league` without a check, so a tournament team answers with stand-ins.
+    season: { name: program.name, slug: program.slug },
+    league: { name: organization.name, slug: organization.slug },
     minimumRosterSize: tournament.minimumRosterSize,
     rosterCount: team.rosterCount,
     roster: await rosterOf(ctx, team, reader, viewerCanManage),
