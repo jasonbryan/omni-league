@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { expectBareCards } from '../ui/testing/card';
+import { routerLinkState } from '../ui/testing/router-link-state';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { RegisterCard, RegisterSkeleton, rosterRange } from './register-card';
 import type { RegistrationAnswer } from './register-team-state';
@@ -38,6 +39,19 @@ describe('the registration cards', () => {
     fixture.componentRef.setInput('seasonHref', '/seasons/summer-2027');
     fixture.detectChanges();
     expectBareCards(fixture.nativeElement as HTMLElement, ['mt-3 overflow-hidden']);
+  });
+
+  it('sets no navigation state on its link to the season page', () => {
+    const fixture = TestBed.createComponent(RegisterCard);
+    fixture.componentRef.setInput('season', SEASON);
+    fixture.componentRef.setInput('kicker', 'Register a team');
+    fixture.componentRef.setInput('seasonHref', '/seasons/summer-2027');
+    fixture.detectChanges();
+    const link = (fixture.nativeElement as HTMLElement).querySelector(
+      'a[href="/seasons/summer-2027"]',
+    );
+
+    expect(routerLinkState(fixture, link)).toBeUndefined();
   });
 
   it('draws the loading placeholder as a bare helm card, with its test id kept', () => {

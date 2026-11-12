@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import type { TestConvex } from 'convex-test';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
+import type { MutationCtx } from './_generated/server';
 import { defaultDivision } from './lib/tenantWrites';
 import type schema from './schema';
 import type { Sport } from './lib/sports';
@@ -39,4 +40,28 @@ export function tournamentProgramFields(organizationId: Id<'organizations'>, slu
     status: 'published' as const,
     locationIds: [],
   };
+}
+
+export async function insertLeagueWithProgram(
+  ctx: Pick<MutationCtx, 'db'>,
+  league: Omit<Doc<'leagues'>, '_id' | '_creationTime' | 'programId'>,
+): Promise<Id<'leagues'>> {
+  const programId = await ctx.db.insert('programs', {
+    organizationId: league.organizationId,
+    type: 'league',
+    name: league.name,
+    sortName: league.name.toLowerCase(),
+    slug: league.slug,
+    sport: league.sport,
+    status: league.status ?? 'published',
+    locationIds: league.locationIds,
+    gender: league.gender,
+    playersPerSide: league.playersPerSide,
+    level: league.level,
+    customLevelId: league.customLevelId,
+    ageGroup: league.ageGroup,
+  });
+  const leagueId = await ctx.db.insert('leagues', { ...league, programId });
+  await ctx.db.patch('programs', programId, { leagueId });
+  return leagueId;
 }

@@ -7,7 +7,7 @@ import { defaultDivision, insertTenant, sortName, type Tenant } from './lib/tena
 import type { Sport } from './lib/sports';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
-import { modules } from './test.setup';
+import { insertLeagueWithProgram, modules } from './test.setup';
 
 const LOCATION = 'Cottonwood Creek Fields';
 
@@ -88,7 +88,7 @@ async function insertBulk(t: Tester, rows: Bulk[]) {
       .withIndex('by_slug', (q) => q.eq('slug', 'front-range'))
       .unique())!;
     for (const row of rows) {
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         organizationId: organization._id,
         name: row.name,
         slug: row.name.toLowerCase().replace(/\s+/g, '-'),

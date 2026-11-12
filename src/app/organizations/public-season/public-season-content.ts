@@ -38,8 +38,10 @@ import { registerFreeAgentPath, registerTeamPath, teamPath } from '../../teams/t
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
+import { CRUMB_LIST } from '../public-league/public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
 import { publicPageNames } from '../public-league/public-page-names';
+import { SEASON_CRUMB_LINK, SEASON_HEADING } from '../public-league/public-season-header-classes';
 import {
   registrationCard,
   teamCard,
@@ -50,8 +52,6 @@ import { BADGE_TEXT, FULL_BADGE_TEXT } from '../season-status';
 import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
-const CRUMB_LINK =
-  'inline-flex items-center rounded-md font-medium hover:underline pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const REGISTRATION_CARD = 'p-5 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
 /**
@@ -101,7 +101,7 @@ const FACT_ICON =
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">
       <nav hlmBreadcrumb aria-label="Breadcrumb">
-        <ol hlmBreadcrumbList class="flex-wrap gap-x-1.5">
+        <ol hlmBreadcrumbList class="${CRUMB_LIST}">
           <li hlmBreadcrumbItem>
             <a hlmBreadcrumbLink [link]="organizationHref()" [class]="crumbLink">{{
               season().organization.name
@@ -131,7 +131,7 @@ const FACT_ICON =
           }}</span>
         }
       </div>
-      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-5xl">
+      <h1 class="${SEASON_HEADING}">
         {{ season().league.name }}&nbsp;&middot; {{ season().name }}
       </h1>
       @if (savedAt(); as savedAt) {
@@ -221,6 +221,7 @@ const FACT_ICON =
                     @if (card.next; as next) {
                       <a
                         [routerLink]="nextHref(next.slug)"
+                        [state]="nextNames()"
                         data-slot="button"
                         [class]="seeSeasonButton"
                         >See {{ next.name
@@ -438,7 +439,7 @@ export class PublicSeasonContent {
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
   protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
-  protected readonly crumbLink = CRUMB_LINK;
+  protected readonly crumbLink = SEASON_CRUMB_LINK;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -515,6 +516,13 @@ export class PublicSeasonContent {
   protected readonly leagueNames = computed(() =>
     publicPageNames({ organization: this.season().organization, league: this.season().league }),
   );
+  protected readonly nextNames = computed(() => {
+    const card = this.card();
+    const next = card?.kind === 'closed' ? card.next : undefined;
+    if (!next) return undefined;
+    const { organization, league } = this.season();
+    return publicPageNames({ organization, league, season: next });
+  });
   protected readonly seasonHref = computed(() =>
     publicSeasonPath(
       this.season().organization.slug,
