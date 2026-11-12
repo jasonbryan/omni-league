@@ -672,17 +672,17 @@ describe('leagues.update with expected values', () => {
     expect((await stored(s)).league).toMatchObject({ name: 'Renamed', playersPerSide: 4 });
   });
 
-  test('refuses an expected that names only the league, as a tab of the previous release sends for a league with no division', async () => {
+  test('refuses an expected that names only the league at argument validation, changing nothing', async () => {
     const s = await setup();
     const before = await stored(s);
-    const data = await refusal(
+    await expect(
       s.organizer.mutation(api.leagues.update, {
         ...sundayArgs(s),
         name: 'Typed by organizer',
+        // @ts-expect-error the expected details require the four division fields
         expected: { name: 'Sunday Reverse Coed 4s' },
       }),
-    );
-    expect(data).toMatchObject({ field: 'name', code: 'changedSince' });
+    ).rejects.toThrow(/Validator|validator/);
     expect(await stored(s)).toEqual(before);
   });
 
