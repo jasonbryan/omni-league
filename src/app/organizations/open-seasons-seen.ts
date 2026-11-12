@@ -42,7 +42,8 @@ export class OpenSeasonsSeen {
     this.sportNamesByView.set(viewKey(view), sportNames);
     this.latestCountByOrganization.set(view.slug, sportNames.length);
     this.kindByView.set(viewKey(view), kind);
-    this.latestKindByOrganization.set(view.slug, kind);
+    // A view with no card says nothing about the label the next one holds.
+    if (sportNames.length > 0) this.latestKindByOrganization.set(view.slug, kind);
   }
 
   expectedKind(view: OpenSeasonsView): OpenCardKind {

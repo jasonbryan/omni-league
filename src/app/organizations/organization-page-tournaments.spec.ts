@@ -731,6 +731,28 @@ describe('the Registration open section with tournaments', () => {
       expect(text(heroPlaceholder(harness))).toBe('Register for a tournament');
     });
 
+    it('keeps the label of the cards last seen across a sport with no open card', async () => {
+      const page = withTournaments([BEACH_OPEN], [OPEN_ROW]);
+      const harness = await open();
+      await emit(harness, {
+        ...queryResults(page),
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      await harness.navigateByUrl(`${ORG}/sports/softball`);
+      await settle(harness);
+      await emit(harness, sportQueryResults(page, 'softball'));
+      await harness.navigateByUrl(`${ORG}/sports/soccer`);
+      await settle(harness);
+      const results = sportQueryResults(page, 'soccer');
+      for (const name of Object.keys(results).filter(
+        (key) => key !== OPEN_TOURNAMENTS && key !== 'seasons:listOpenForOrganization',
+      )) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      expect(text(heroPlaceholder(harness))).toBe('Register for a season');
+    });
+
     it('holds the season label when a season was among the cards last seen', async () => {
       const harness = await loadingAfter({
         ...queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])),

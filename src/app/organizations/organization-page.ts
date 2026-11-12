@@ -416,7 +416,7 @@ export class OrganizationPage {
             ...seasons.map((season) => season.league.sportName),
             ...tournaments.map((tournament) => tournament.sportName),
           ],
-          seasons.length > 0 ? 'season' : 'tournament',
+          seasons.length === 0 && tournaments.length > 0 ? 'tournament' : 'season',
         );
       }
     });

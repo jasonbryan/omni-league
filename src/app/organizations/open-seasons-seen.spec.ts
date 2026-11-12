@@ -196,6 +196,14 @@ describe('OpenSeasonsSeen', () => {
       expect(seen.expectedKind(view())).toBe('season');
     });
 
+    it('keeps the kind of the last view that had a card when a view with none is recorded', () => {
+      const seen = store();
+      seen.record(view(), ['Soccer'], 'tournament');
+      seen.record(view('Softball'), [], 'season');
+      expect(seen.expectedKind(view('Softball'))).toBe('season');
+      expect(seen.expectedKind(view('Soccer'))).toBe('tournament');
+    });
+
     it('records nothing on the server', () => {
       const seen = store('server');
       seen.record(view(), ['Soccer'], 'tournament');
