@@ -381,6 +381,26 @@ test.describe('Tournaments: the management page and Publish', () => {
     await expect(page.locator('#registration')).toContainText('Registration open · closes');
   });
 
+  test('the Publish dialog traps Tab and Shift+Tab, and Escape closes it and returns focus to Publish', async ({
+    page,
+  }) => {
+    const { managePath, publicPath } = await managedBy(page, 'orgAdmin');
+    await page.goto(managePath);
+    await publishButton(page).click();
+    await expect(publishDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    const focusIsInDialog = () =>
+      page.evaluate(() => !!document.activeElement?.closest('[role="alertdialog"]'));
+    for (const key of ['Tab', 'Tab', 'Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab']) {
+      await page.keyboard.press(key);
+      expect(await focusIsInDialog()).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(publishDialog(page)).toHaveCount(0);
+    await expect(publishButton(page)).toBeFocused();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+  });
+
   test('a tournament created on the Tournaments page opens from its status', async ({ page }) => {
     const { tenant, url } = await memberOf(page, 'orgAdmin');
     await page.goto(url);
