@@ -22,7 +22,7 @@ function targetOfFragment(fragment: string | null): LandingTarget | null {
   }
 }
 
-function pathOf(url: string): string {
+export function pathOf(url: string): string {
   const end = url.search(/[?#]/);
   return end === -1 ? url : url.slice(0, end);
 }

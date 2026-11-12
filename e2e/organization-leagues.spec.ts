@@ -18,6 +18,7 @@ import {
   expectWhollyAboveFooter,
   expectAtMostTwoLines,
   expectStatusOnTopOfButtonInStaticFooter,
+  expectOnScreen,
   expectVisibleInFooter,
   footerHeight,
   PHONE,
@@ -58,6 +59,7 @@ async function memberOf(page: Page, role: Role | null, seed: TenantSeed = {}) {
 }
 
 const main = (page: Page) => page.getByRole('main');
+const headerTitle = (page: Page) => page.locator('header p.truncate');
 const form = (page: Page) => page.locator('#create-league form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft league/ });
 const leagueRows = (page: Page) => page.locator('#leagues-list > li');
@@ -339,7 +341,6 @@ test.describe('Leagues: creating a draft', () => {
 
     const jump = (page: Page) => main(page).getByRole('link', { name: 'Create a league' });
     const section = (page: Page) => page.locator('#create-league');
-    const headerTitle = (page: Page) => page.locator('header p.truncate');
     const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
 
     async function pressWithLocationsHeld(page: Page) {
@@ -403,6 +404,264 @@ test.describe('Leagues: creating a draft', () => {
       });
     });
   });
+});
+
+test.describe('Leagues: landing on #create-league', () => {
+  const name = (page: Page) => page.locator('#name');
+  const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+  // A wheel gesture can still scroll the page after the event, so the offset is read once it stops changing.
+  const GESTURE_SETTLE_MS = 600;
+  const settledScrollY = (page: Page) =>
+    page.evaluate(async (settleMs) => {
+      let last = -1;
+      while (window.scrollY !== last) {
+        last = window.scrollY;
+        await new Promise((resolve) => setTimeout(resolve, settleMs));
+      }
+      return last;
+    }, GESTURE_SETTLE_MS);
+  const expectFocusOnPageOrMain = async (page: Page) =>
+    expect
+      .poll(() =>
+        page.evaluate(
+          () => document.activeElement === document.body || document.activeElement?.id === 'main',
+        ),
+      )
+      .toBe(true);
+  const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 1024;
+  const LEAGUES = ['Coed 7v7 Rec', 'Sunday Reverse Coed 4s', 'Wednesday Coed Slow-Pitch'].map(
+    (league) => ({ name: league, sport: 'soccer' as const, locations: [LOCATIONS[0].name] }),
+  );
+
+  test('opened directly, lands on Name, on screen, and passes axe', async ({ page }, testInfo) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    await page.goto(`${base}/leagues#create-league`);
+    await expect(leagueRows(page)).toHaveCount(3);
+    await expect(name(page)).toBeFocused();
+    await expectOnScreen(page, name(page));
+    await expect(page.locator('#name-error')).toHaveCount(0);
+    await screenshot(page, testInfo, '635-create-league-landing');
+    await expectAccessible(page);
+  });
+
+  test('without the fragment, scrolls nowhere and leaves focus on <main>', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    await page.goto(`${base}/leagues`);
+    await expect(form(page)).toBeVisible();
+    await expectFocusOnPageOrMain(page);
+    expect(await scrollY(page)).toBe(0);
+  });
+
+  test('with the locations held, shows the skeleton with focus on <main>, then lands on Name', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    const held = await holdQueries(page, ['locations:listForAdmin']);
+    await page.goto(`${base}/leagues#create-league`);
+    await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expectFocusOnPageOrMain(page);
+    held.release();
+    await expect(name(page)).toBeFocused();
+    await expectOnScreen(page, name(page));
+  });
+
+  test('an organization with no locations lands on "Go to Locations", on screen', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues#create-league`);
+    const link = page.locator('#create-league').getByRole('link', { name: 'Go to Locations' });
+    await expect(link).toBeFocused();
+    await expectOnScreen(page, link);
+  });
+
+  test('locations that could not be loaded land on the alert, on screen', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await failFirstAnswer(page, 'locations:listForAdmin');
+    await page.goto(`${base}/leagues#create-league`);
+    const alert = page.getByRole('alert').filter({ hasText: 'The locations could not be loaded.' });
+    await expect(alert).toBeFocused();
+    await expectOnScreen(page, alert);
+  });
+
+  test.describe('with the admin context held', () => {
+    async function openHeld(page: Page) {
+      const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+      const held = await holdQueries(page, ['organizations:getAdminContext']);
+      await page.goto(`${base}/leagues#create-league`);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      return held;
+    }
+
+    async function expectStaysWhereTheUserLeftIt(page: Page, held: { release: () => void }) {
+      const focused = await page.evaluateHandle(() => document.activeElement);
+      const before = await settledScrollY(page);
+      held.release();
+      await expect(leagueRows(page)).toHaveCount(3);
+      await expect(form(page)).toBeVisible();
+      expect(await page.evaluate((element) => document.activeElement === element, focused)).toBe(
+        true,
+      );
+      expect(await scrollY(page)).toBe(before);
+      await expect(name(page)).not.toBeFocused();
+    }
+
+    test('Page Down cancels the landing', async ({ page }) => {
+      const held = await openHeld(page);
+      await page.keyboard.press('PageDown');
+      await expectStaysWhereTheUserLeftIt(page, held);
+    });
+
+    test('a real mouse wheel cancels the landing', async ({ page, browserName }) => {
+      test.skip(browserName !== 'chromium', 'the wheel is sent through the Chromium protocol');
+      const held = await openHeld(page);
+      await page.evaluate(() => {
+        (window as unknown as { wheels: number }).wheels = 0;
+        document.addEventListener(
+          'wheel',
+          () => (window as unknown as { wheels: number }).wheels++,
+          { capture: true, passive: true },
+        );
+      });
+      const session = await page.context().newCDPSession(page);
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: 100,
+        y: 300,
+        deltaX: 0,
+        deltaY: 200,
+      });
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { wheels: number }).wheels))
+        .toBeGreaterThan(0);
+      await expectStaysWhereTheUserLeftIt(page, held);
+    });
+  });
+
+  test.describe('with the locations held', () => {
+    for (const [gesture, act] of [
+      ['Page Down', (page: Page) => page.keyboard.press('PageDown')],
+      ['the mouse wheel', (page: Page) => page.mouse.wheel(0, 200)],
+    ] as const) {
+      test(`${gesture} cancels the landing`, async ({ page }) => {
+        const { base } = await memberOf(page, 'orgAdmin', {
+          locations: LOCATIONS,
+          leagues: LEAGUES,
+        });
+        const held = await holdQueries(page, ['locations:listForAdmin']);
+        await page.goto(`${base}/leagues#create-league`);
+        await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await act(page);
+        const focused = await page.evaluateHandle(() => document.activeElement);
+        const before = await settledScrollY(page);
+        held.release();
+        await expect(form(page)).toBeVisible();
+        await expect(name(page)).not.toBeFocused();
+        expect(await page.evaluate((element) => document.activeElement === element, focused)).toBe(
+          true,
+        );
+        expect(await scrollY(page)).toBe(before);
+      });
+    }
+  });
+
+  test.describe('with the locations held, on a phone', () => {
+    test.beforeEach(({ page }) => {
+      test.skip(!isPhone(page), 'a tap on the header title needs the touch layout');
+    });
+
+    async function openHeld(page: Page) {
+      const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+      const held = await holdQueries(page, ['locations:listForAdmin']);
+      await page.goto(`${base}/leagues#create-league`);
+      await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      return held;
+    }
+
+    test('a tap on the header title cancels the landing', async ({ page }) => {
+      const held = await openHeld(page);
+      await headerTitle(page).tap();
+      const focused = await page.evaluateHandle(() => document.activeElement);
+      const before = await scrollY(page);
+      held.release();
+      await expect(form(page)).toBeVisible();
+      await expect(name(page)).not.toBeFocused();
+      expect(await page.evaluate((element) => document.activeElement === element, focused)).toBe(
+        true,
+      );
+      expect(await scrollY(page)).toBe(before);
+    });
+
+    test('a tap on the h1 text keeps the landing', async ({ page }) => {
+      const held = await openHeld(page);
+      await main(page).getByRole('heading', { level: 1, name: 'Leagues' }).tap();
+      held.release();
+      await expect(name(page)).toBeFocused();
+    });
+  });
+
+  test('lands once: a later live update leaves focus where the user put it', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await page.goto(`${base}/leagues`);
+    const opened = await page.context().newPage();
+    await opened.setViewportSize(page.viewportSize()!);
+    await opened.goto(`${base}/leagues#create-league`);
+    await expect(name(opened)).toBeFocused();
+
+    await opened.locator('#slug').focus();
+    await createDraft(page, {
+      name: 'Live Draft',
+      sport: 'Soccer',
+      locations: [LOCATIONS[0].name],
+    });
+    await expect(leagueRows(opened)).toHaveCount(1);
+    await expect(opened.locator('#slug')).toBeFocused();
+  });
+
+  test('Back from a league page lands on Name again', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    await page.goto(`${base}/leagues#create-league`);
+    await expect(name(page)).toBeFocused();
+
+    await leagueRows(page).first().getByRole('link').first().click();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
+
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues#create-league`);
+    await expect(leagueRows(page)).toHaveCount(3);
+    await expect(name(page)).toBeFocused();
+    await expectOnScreen(page, name(page));
+  });
+
+  for (const [label, role] of [
+    ['a league organizer', 'leagueOrganizer'],
+    ['a signed-in user with no membership', null],
+  ] as const) {
+    test(`${label} sees the no-access view with focus on <main> and no scroll`, async ({
+      page,
+    }) => {
+      const user = newUser('Outsider');
+      await signUp(page, user);
+      const tenant = await seedTenant({ name: 'E2E Closed', locations: LOCATIONS });
+      if (role) {
+        await convexRun('testing:addMembership', {
+          organizationSlug: tenant.slug,
+          email: user.email,
+          role,
+        });
+      }
+      await page.goto(`/app/organizations/${tenant.slug}/leagues#create-league`);
+      await expect(
+        main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+      ).toBeVisible();
+      await expectFocusOnPageOrMain(page);
+      await expect(page.locator('#create-league')).toHaveCount(0);
+      expect(await scrollY(page)).toBe(0);
+    });
+  }
 });
 
 test.describe('Leagues: Create while the request is held', () => {
@@ -841,7 +1100,7 @@ test.describe('Overview: the league count and the checklist', () => {
       ]);
     }
     await setup.getByRole('link', { name: 'Create a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}${base}/leagues`);
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues#create-league`);
   });
 
   test('with only drafts the tile reads 2 and 2 drafts and the list stays; with published leagues it reads the published count and the list is hidden', async ({
