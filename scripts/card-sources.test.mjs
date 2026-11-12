@@ -9,7 +9,6 @@ const uiDir = join(appDir, 'ui');
 
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
-// The signed-in pages whose cards still carry the surface classes.
 const PENDING = [
   'src/app/account/account-page.ts',
   'src/app/account/account-settings-page.ts',
