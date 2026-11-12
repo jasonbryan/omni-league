@@ -14,8 +14,6 @@ const HLM_ALERTS_BY_FILE: Record<string, number> = {
   'sign-in/sign-in-page.ts': 1,
   'sign-up/sign-up-page.ts': 1,
   'organizations/create-organization-page.ts': 1,
-  'account/your-organizations.ts': 1,
-  'account/your-teams.ts': 1,
   'find/find-content.ts': 1,
   'find/find-organizations.ts': 1,
   'teams/register-free-agent-page.ts': 4,

@@ -7,11 +7,11 @@ import { expect, test } from './support/fixtures';
 import { seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { homeHeading } from './support/home';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const LEAGUE = 'Sunday Reverse Coed 4s';
-const PLAYER_NEXT_STEP = 'Ask your league organizer for an invite or registration link';
 const LOCATION = { name: 'Redfish Flats Fields', address: '880 Redfish Flats Ln, Rockport, TX' };
 
 const organization = () =>
@@ -136,7 +136,7 @@ test.describe('after sign-in', () => {
       const { tokens } = await signInFrom(page, user, '/', 'top-bar');
 
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+      await expect(homeHeading(page)).toBeVisible();
       await tokens;
     });
 
@@ -186,7 +186,14 @@ test.describe('after sign-in', () => {
       await tokens;
     }
 
-    test('an org admin sees their organization with a way to manage it', async ({ page }) => {
+    const sidebarLink = (page: Page, name: string) =>
+      page
+        .getByRole('navigation', { name: 'Your account', includeHidden: true })
+        .getByRole('link', { name, exact: true, includeHidden: true });
+
+    test('an org admin on no team finds their organization in the sidebar, not the page, and is not asked to run a league', async ({
+      page,
+    }) => {
       const tenant: Tenant = await organization();
       const user = await seedUser(newUser('Admin'));
       await convexRun('testing:addMembership', {
@@ -197,17 +204,20 @@ test.describe('after sign-in', () => {
 
       await landOnApp(page, user);
 
-      const row = page
-        .getByRole('listitem')
-        .filter({ has: page.getByRole('heading', { name: tenant.name }) });
-      await expect(row.getByRole('link', { name: /^Manage/ })).toHaveAttribute(
+      await expect(sidebarLink(page, tenant.name)).toHaveAttribute(
         'href',
         `/app/organizations/${tenant.slug}`,
       );
+      const main = page.getByRole('main');
+      await expect(main).toContainText("You're not on a team yet");
+      await expect(main).not.toContainText(tenant.name);
+      await expect(main).not.toContainText('Run a league?');
       await expectAccessible(page);
     });
 
-    test('a league organizer sees their assigned league', async ({ page }) => {
+    test('a league organizer finds their first assigned league in the sidebar', async ({
+      page,
+    }) => {
       const tenant = await organization();
       const user = await seedUser(newUser('Organizer'));
       await convexRun('testing:addLeagueOrganizer', {
@@ -218,22 +228,27 @@ test.describe('after sign-in', () => {
 
       await landOnApp(page, user);
 
-      await expect(page.getByRole('link', { name: LEAGUE })).toHaveAttribute(
+      await expect(sidebarLink(page, tenant.name)).toHaveAttribute(
         'href',
         `/app/organizations/${tenant.slug}/leagues/sunday-reverse-coed-4s`,
       );
       await expectAccessible(page);
     });
 
-    test('a player with no organization is told how to join a league and can create an organization', async ({
+    test('a player with no team or organization is told how to find a league and can create an organization', async ({
       page,
     }) => {
       const user = await seedUser(newUser('Player'));
 
       await landOnApp(page, user);
 
-      await expect(page.getByRole('main')).toContainText(PLAYER_NEXT_STEP);
-      await expect(page.getByRole('link', { name: 'Create an organization' })).toBeVisible();
+      const main = page.getByRole('main');
+      await expect(main).toContainText("You're not on a team yet");
+      await expect(main.getByRole('link', { name: 'Find a league' })).toHaveAttribute(
+        'href',
+        '/leagues',
+      );
+      await expect(main.getByRole('link', { name: 'Create an organization' })).toBeVisible();
       await expectAccessible(page);
     });
   });

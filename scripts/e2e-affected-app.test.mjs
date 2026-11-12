@@ -79,7 +79,7 @@ describe('the league management page specs', () => {
   const OPEN_THE_PAGE = [
     'after-sign-in',
     'accept-invite',
-    'app-leagues',
+    'app-home',
     'organization-leagues',
     'touch-targets',
     'validate-on-blur',

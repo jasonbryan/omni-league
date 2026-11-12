@@ -10,6 +10,7 @@ import { accountByEmail, newUser, seedUser, type TestUser } from './support/user
 import { screenshot } from './support/screenshot';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import { topBarFind } from './support/top-bar-find';
+import { homeHeading } from './support/home';
 
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
@@ -331,7 +332,7 @@ test.describe('sign-up', () => {
 
     await expect(page).toHaveURL(`${baseURL}/app`);
     await expect(page).toHaveTitle('Home | Omni League');
-    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
     await expect(page.getByRole('link', { name: `Account settings: ${user.name}` })).toBeVisible();
     if (!remoteBaseUrl) {
       const account = await accountByEmail(user.email);
@@ -347,10 +348,11 @@ test.describe('sign-up', () => {
           : [
               'a[href="/"]',
               'nav[aria-label="Your account"] a[href="/app"]',
+              'nav[aria-label="Your account"] a[href="/leagues"]',
               'a[href="/app/account"]',
             ]),
-        'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
+        'main a[href="/app/organizations/new"]',
         'main a[href="/app/notifications"]',
       ],
     });
@@ -377,7 +379,7 @@ test.describe('sign-up', () => {
   test('returnTo=//evil.example/x lands on /app', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, newUser('Return'), '/sign-up?returnTo=%2F%2Fevil.example%2Fx');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
   });
 
   for (const raw of [
@@ -396,12 +398,12 @@ test.describe('sign-up', () => {
         const tokens = tokensSettled(page);
         await signUp(page, newUser('Variant'), `/sign-up${query}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+        await expect(homeHeading(page)).toBeVisible();
         await tokens;
 
         await page.goto(`/sign-up${query}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+        await expect(homeHeading(page)).toBeVisible();
       },
     );
   }

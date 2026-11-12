@@ -59,12 +59,13 @@ describe('AccountSettingsPage', () => {
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Account settings');
 
     accepted();
-    // The page's own query, the account row and the slim bar's initials, and the home sidebar's organizations.
+    // The page's own query, the account row and the slim bar's initials, and the home sidebar's organizations and teams.
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
       ['users:me', {}],
       ['users:me', {}],
       ['users:me', {}],
       ['organizations:listMine', {}],
+      ['teams:listMine', {}],
     ]);
   });
 

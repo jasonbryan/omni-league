@@ -114,6 +114,11 @@ describe('teams.listMine', () => {
         leagueName: 'Sunday Reverse Coed 4s',
         organizationName: 'Gulf Coast Sport & Social',
         role: 'captain',
+        seasonStartDate: '2030-06-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 1,
       },
       {
         teamId: s.rattlers,
@@ -122,6 +127,30 @@ describe('teams.listMine', () => {
         leagueName: 'Wednesday Coed Slow-Pitch',
         organizationName: 'Riverbend Softball Association',
         role: 'player',
+        seasonStartDate: '2030-03-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 2,
+      },
+    ]);
+  });
+
+  test('each caller gets only their own rows, with the season dates and roster progress', async () => {
+    const s = await setup();
+    expect(await listMineAs(s, 'y')).toEqual([
+      {
+        teamId: s.blockParty,
+        teamName: 'Block Party',
+        seasonName: 'Summer 2030',
+        leagueName: 'Sunday Reverse Coed 4s',
+        organizationName: 'Gulf Coast Sport & Social',
+        role: 'captain',
+        seasonStartDate: '2030-06-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 1,
       },
     ]);
   });

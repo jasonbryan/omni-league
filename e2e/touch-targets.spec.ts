@@ -6,10 +6,13 @@ import { convexRun } from './support/convex';
 import { LIST_PAGE_SIZE } from '../src/app/core/list-page';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { HOME_HEADING } from './support/home';
+import { seedBatch } from './support/seed-batch';
 import { signUp } from './support/session';
 import {
   dateFromToday,
   numberedLocations,
+  newTenant,
   numberedSeasons,
   type SeasonSeed,
   seedSeasons,
@@ -39,6 +42,8 @@ const LEAGUES: NonNullable<TenantSeed['leagues']> = LEAGUE_NAMES.map((name) => (
 }));
 const FIRST_LEAGUE = 'league-01-sand-2s';
 const SEASONS = numberedSeasons(ROWS);
+const PLACE_LEAGUE_SLUG = 'sunday-reverse-coed-4s';
+const PLACE_SEASON_SLUG = 'summer-open';
 
 interface Measured {
   undersized: string[];
@@ -280,10 +285,11 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     ]);
   });
 
-  test('Your organizations and the Overview of an empty organization', async ({ page }) => {
+  test('the home of a user with organizations and the Overview of an empty organization', async ({
+    page,
+  }) => {
     const user = newUser('Admin');
-    // A league organizer row with its league link, and an empty organization whose Overview shows
-    // the next-step links.
+    // The empty organization's Overview shows the Get set up checklist.
     const [, admin, organizing, empty] = await Promise.all([
       signUp(page, user),
       seedTenant(ONE_LEAGUE_TENANT),
@@ -299,11 +305,40 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
         leagueSlugs: [FIRST_LEAGUE],
       }),
     ]);
-    await measureRoute(page, ['/app', 'Home'], async () => {
-      await expect(page.getByRole('link', { name: `Manage ${admin.name}` })).toBeVisible();
-      await expect(page.getByRole('link', { name: LEAGUE_NAMES[0] })).toBeVisible();
+    await measureRoute(page, ['/app', HOME_HEADING], async () => {
+      await expect(
+        page.getByRole('main').getByRole('link', { name: 'Find a league' }),
+      ).toBeVisible();
     });
     await measureRoute(page, [`/app/organizations/${empty.slug}`, 'Overview']);
+  });
+
+  test('the home next step and team card links', async ({ page }) => {
+    const user = newUser('Captain');
+    const [, tenant] = await Promise.all([signUp(page, user), seedTenant(ONE_LEAGUE_TENANT)]);
+    await seedSeasons(tenant, FIRST_LEAGUE, [
+      {
+        name: 'Summer 2099',
+        slug: 'summer-2099',
+        startDate: '2099-06-06',
+        endDate: '2099-08-29',
+        registrationDeadline: dateFromToday(10),
+      },
+    ]);
+    await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: FIRST_LEAGUE,
+      seasonSlug: 'summer-2099',
+      name: 'Sand Sharks',
+      captainEmail: user.email,
+    });
+    await measureRoute(page, ['/app', HOME_HEADING], async () => {
+      const main = page.getByRole('main');
+      await expect(main.getByRole('link', { name: 'Invite players to Sand Sharks' })).toBeVisible();
+      await expect(main.getByRole('heading', { level: 3 }).getByRole('link')).toHaveText([
+        'Sand Sharks',
+      ]);
+    });
   });
 
   test('the admin Overview, Locations, and Details pages and the menu sheet', async ({ page }) => {
@@ -341,6 +376,56 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     await expect(page.getByRole('radio')).toHaveCount(2);
     await expect(page.getByRole('checkbox', { name: LEAGUE_NAMES[0] })).toBeVisible();
     expect(await expectRows(page)).toBe(3);
+  });
+
+  test('the Team rows of the place free agent dialog', async ({ page }) => {
+    const admin = newUser('Admin');
+    const captains = [newUser('Captain'), newUser('Captain')];
+    const waiting = newUser('Waiting');
+    const league = { leagueSlug: PLACE_LEAGUE_SLUG, seasonSlug: PLACE_SEASON_SLUG };
+    const { tenant, args } = newTenant({
+      name: 'E2E Touch',
+      locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: 'Sunday Reverse Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+        },
+      ],
+    });
+    await signUp(page, admin);
+    await seedBatch({
+      tenant: args,
+      accounts: [...captains, waiting],
+      memberships: [{ email: admin.email, role: 'orgAdmin' }],
+      seasons: [
+        {
+          leagueSlug: PLACE_LEAGUE_SLUG,
+          name: 'Summer Open',
+          slug: PLACE_SEASON_SLUG,
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(100),
+          registrationDeadline: dateFromToday(20),
+        },
+      ],
+      teams: ['Block Party', 'Dig Deep'].map((name, i) => ({
+        ...league,
+        name,
+        captainEmail: captains[i].email,
+      })),
+      freeAgents: [{ ...league, email: waiting.email }],
+    });
+    await visit(
+      page,
+      `/app/organizations/${tenant.slug}/leagues/${PLACE_LEAGUE_SLUG}/seasons/${PLACE_SEASON_SLUG}`,
+      'Summer Open',
+    );
+    await page.getByRole('button', { name: `Place on team: ${waiting.name}` }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('radio')).toHaveCount(2);
+    expect(await expectRows(page)).toBe(2);
   });
 
   test('the admin league page and its menu sheet', async ({ page }) => {
@@ -419,9 +504,13 @@ test.describe('desktop: controls keep their sizes', () => {
     await expectSelectSize(page.locator('#details-age-group'), 36);
     await page.getByRole('button', { name: 'Add a custom level' }).click();
     await expectSelectSize(page.locator('#custom-level-maps'), 36);
-    await visit(page, '/app', 'Home');
-    expect(await heightOf(page.getByRole('link', { name: `Manage ${tenant.name}` }))).toBeLessThan(
-      TARGET,
-    );
+    await visit(page, '/app', HOME_HEADING);
+    expect(
+      await heightOf(
+        page
+          .getByRole('navigation', { name: 'Your account' })
+          .getByRole('link', { name: tenant.name }),
+      ),
+    ).toBeLessThan(TARGET);
   });
 });

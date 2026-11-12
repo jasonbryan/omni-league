@@ -23,6 +23,7 @@ const ROUTES = adminRoutes(AdminArea, [
 ]);
 const OVERVIEW = `/app/organizations/${COASTAL.slug}`;
 const LIST_MINE = 'organizations:listMine';
+const LIST_MY_TEAMS = 'teams:listMine';
 // The account row and the slim bar's initials each ask for it.
 const ACCOUNT = [ME, ME];
 
@@ -145,6 +146,7 @@ describe('AdminArea', () => {
         GET_ADMIN_CONTEXT,
         ...ACCOUNT,
         LIST_MINE,
+        LIST_MY_TEAMS,
       ]);
     });
 
@@ -179,6 +181,7 @@ describe('AdminArea', () => {
         GET_ADMIN_CONTEXT,
         ...ACCOUNT,
         LIST_MINE,
+        LIST_MY_TEAMS,
       ]);
     });
   });
