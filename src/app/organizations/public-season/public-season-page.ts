@@ -1,6 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  linkedSignal,
+  untracked,
+} from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectOnline, injectQuery, skipToken } from '../../core/data/convex';
@@ -15,6 +22,7 @@ import { injectPageLoadWait } from '../../public-layout/page-load-wait';
 import { PublicLayout } from '../../public-layout/public-layout';
 import { seasonDates } from '../league/season-dates';
 import { publicSeasonCanonicalPath } from '../public-league/public-league-path';
+import { readPublicPageNames } from '../public-league/public-page-names';
 import { PublicSeasonContent } from './public-season-content';
 import { PublicSeasonSkeleton } from './public-season-skeleton';
 import type { PublicSeasonTeams, PublicSeasonView } from './public-season-view';
@@ -52,7 +60,7 @@ import type { PublicSeasonTeams, PublicSeasonView } from './public-season-view';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
       } @else {
-        <app-public-season-skeleton />
+        <app-public-season-skeleton [names]="names()" />
       }
       <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
@@ -72,6 +80,19 @@ export class PublicSeasonPage {
     this.route.paramMap.pipe(map((params) => params.get('seasonSlug') ?? '')),
     { requireSync: true },
   );
+  private readonly router = inject(Router);
+
+  /** The state belongs to the navigation that brought the slugs. The read is untracked, so the names stay when that navigation ends. */
+  protected readonly names = linkedSignal({
+    source: () => ({
+      orgSlug: this.orgSlug(),
+      leagueSlug: this.leagueSlug(),
+      seasonSlug: this.seasonSlug(),
+    }),
+    computation: (route) =>
+      readPublicPageNames(untracked(this.router.currentNavigation)?.extras.state, route),
+  });
+
   private readonly requestedPage = toSignal(
     this.route.queryParamMap.pipe(map((params) => parseListPage(params.getAll('page')))),
     { requireSync: true },
@@ -169,6 +190,8 @@ export class PublicSeasonPage {
   protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
 
   constructor() {
+    // The names are computed on first read, and the skeleton reads them only after the navigation that carried the state has ended.
+    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(() => this.names());
     bindPageMeta(() => {
       const view = this.view();
       if (!view) return null;

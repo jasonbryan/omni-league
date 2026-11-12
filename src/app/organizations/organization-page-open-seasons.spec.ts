@@ -15,6 +15,7 @@ import { SKELETON_CLASSES } from '../ui/skeleton/hlm-skeleton';
 import { expectBadge } from '../ui/testing/badge';
 import { expectBareCard } from '../ui/testing/card';
 import { radiusClasses } from '../ui/testing/radius-classes';
+import { routerLinkState } from '../ui/testing/router-link-state';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -223,6 +224,34 @@ describe('the Registration open section', () => {
       expect(links.map((a) => a.getAttribute('href'))).toEqual([href, `${href}#registration`]);
       expect(text(links[1])).toBe('Register for Coed 7v7 Rec, Summer 2027');
       expect(links[1].getAttribute('data-slot')).toBe('button');
+    });
+
+    describe('the links to a season page', () => {
+      const SEVEN_V_SEVEN_NAMES = {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: { slug: 'coed-7v7-rec', name: 'Coed 7v7 Rec', sportName: 'Soccer' },
+        season: { slug: 'summer-2027', name: 'Summer 2027' },
+      };
+      const stateOf = (anchor: Element | null | undefined) =>
+        routerLinkState(harness.fixture, anchor);
+
+      it('gives the open season card’s title the organization, league, and season names as navigation state', () => {
+        const title = section(harness)?.querySelector(':scope > ul > li h3 a');
+
+        expect(stateOf(title)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
+
+      it('gives the open season card’s Register button the same names', () => {
+        const register = section(harness)?.querySelector(':scope > ul > li a[data-slot="button"]');
+
+        expect(stateOf(register)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
+
+      it('gives the league row’s Register link the names of its open season', () => {
+        const register = host(harness).querySelector('#league-1 a[href$="#registration"]');
+
+        expect(stateOf(register)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
     });
 
     it('leaves out a season whose deadline has passed', () => {

@@ -6,6 +6,7 @@ import { expectBareCard, expectBareCards, MESSAGE_CARD_LAYOUT } from '../ui/test
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { TeamPage } from './team-page';
+import { routerLinkState } from '../ui/testing/router-link-state';
 
 @Component({ template: '<a id="go" href="/app/teams/team_sharks">go</a>' })
 class Start {}
@@ -97,6 +98,13 @@ describe('TeamPage', () => {
     o.subscription(GET)!.fail(forbiddenError());
     await o.flush();
     expectBareCards(main(), [`${MESSAGE_CARD_LAYOUT} overflow-hidden`]);
+  });
+
+  it('sets no navigation state on its season link, so the season page shows the bars', async () => {
+    await open();
+    await answer(SHARKS);
+
+    expect(routerLinkState(o.harness.fixture, main().querySelector('h1 + p a'))).toBeUndefined();
   });
 
   it('shows the team, its links, the captain line, and the roster against the minimum', async () => {
