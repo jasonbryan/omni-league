@@ -30,7 +30,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
-import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from './field-classes';
+import { HlmBadge } from '../../ui/badge';
 import { LeagueCreateForm } from './league-create-form';
 import {
   PublishLeagueDialog,
@@ -45,7 +45,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
 
 @Component({
   selector: 'app-admin-leagues',
-  imports: [AdminAlert, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
+  imports: [AdminAlert, HlmBadge, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
   providers: [
     provideIcons({
       lucideCircleCheck,
@@ -126,7 +126,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                           >
                         </h3>
                         @if (row.status === 'published') {
-                          <span data-slot="badge" data-variant="default" [class]="defaultBadge"
+                          <span hlmBadge variant="default"
                             ><ng-icon
                               name="lucideCircleCheck"
                               data-icon="inline-start"
@@ -134,7 +134,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                             />Published</span
                           >
                         } @else {
-                          <span data-slot="badge" data-variant="outline" [class]="outlineBadge"
+                          <span hlmBadge variant="outline"
                             ><ng-icon
                               name="lucideCircleDashed"
                               data-icon="inline-start"
@@ -142,9 +142,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                             />Draft</span
                           >
                         }
-                        <span data-slot="badge" data-variant="secondary" [class]="secondaryBadge">{{
-                          row.sportName
-                        }}</span>
+                        <span hlmBadge variant="secondary">{{ row.sportName }}</span>
                       </div>
                       @if (row.divisionLabel) {
                         <p data-slot="league-division" class="mt-1 text-sm font-medium">
@@ -335,9 +333,6 @@ export class AdminLeagues {
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly defaultBadge = BADGE_DEFAULT;
-  protected readonly secondaryBadge = BADGE_SECONDARY;
-  protected readonly outlineBadge = BADGE_OUTLINE;
   protected readonly placeholders = [1, 2, 3];
   protected readonly skeletonFields = [1, 2];
   protected readonly skeletonChips = [1, 2, 3];

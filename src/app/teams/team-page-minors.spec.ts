@@ -3,6 +3,7 @@ import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { expectBadge } from '../ui/testing/badge';
 
 const GET = 'teams:getForMember';
 const ADD_MINOR = 'rosterEntries:addMinor';
@@ -81,6 +82,7 @@ describe('TeamPage: minors', () => {
     ]);
     const theo = rows()[3];
     expect(text(theo.querySelector('[data-slot="badge"]'))).toBe('Minor');
+    expectBadge(theo.querySelector('[data-slot="badge"]'), 'outline', 'default');
     expect(text(theo.querySelector('p.mt-1'))).toBe('Guardian: Marcus Bell');
     expect([...theo.querySelectorAll('button')].map((b) => text(b))).toEqual([
       'Rename Theo Bell',

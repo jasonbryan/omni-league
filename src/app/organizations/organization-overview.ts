@@ -52,6 +52,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
+import { HlmBadge } from '../ui/badge';
 import {
   OUTLINE_BUTTON,
   OUTLINE_BUTTON_LARGE,
@@ -62,11 +63,9 @@ import { publicLeaguePath, publicSeasonPath } from './public-league/public-leagu
 import { publicPageNames } from './public-league/public-page-names';
 import {
   closesText,
-  FULL_BADGE,
   FULL_BADGE_TEXT,
   OPEN_SEASONS_INTRO,
   leagueSeasonStatus,
-  OPEN_BADGE,
 } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
@@ -89,6 +88,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
 @Component({
   selector: 'app-organization-overview',
   imports: [
+    HlmBadge,
     LeagueFilters,
     NgIcon,
     OpenSeasonsSkeleton,
@@ -223,9 +223,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                       class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
                     >
                       <p class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <span data-slot="badge" [class]="openBadge">{{ card.sportName }}</span>
+                        <span hlmBadge variant="secondary" size="fit">{{ card.sportName }}</span>
                         @if (card.full) {
-                          <span data-slot="badge" [class]="fullBadge">{{ fullBadgeText }}</span>
+                          <span hlmBadge variant="outline" size="fit">{{ fullBadgeText }}</span>
                         }
                       </p>
                       <h3 class="mt-3 text-lg font-semibold tracking-tight">
@@ -386,8 +386,8 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ league.where }}</p>
                           @if (league.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              @if (status.badge) {
-                                <span data-slot="badge" [class]="status.badgeClass">{{
+                              @if (status.badge && status.badgeVariant; as variant) {
+                                <span hlmBadge size="fit" [variant]="variant">{{
                                   status.badge
                                 }}</span>
                               }
@@ -516,8 +516,6 @@ export class OrganizationOverview {
   protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
   protected readonly removeButton = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-normal! py-1.5 text-start`;
   protected readonly filterBar = viewChild(LeagueFilters);
-  protected readonly openBadge = OPEN_BADGE;
-  protected readonly fullBadge = FULL_BADGE;
   protected readonly fullBadgeText = FULL_BADGE_TEXT;
   protected readonly openSeasonsIntro = OPEN_SEASONS_INTRO;
 

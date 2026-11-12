@@ -31,7 +31,7 @@ import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
-import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
+import { HlmBadge } from '../../ui/badge';
 import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { publicSeasonPath } from '../public-league/public-league-path';
 import { LeagueBreadcrumb } from './league-breadcrumb';
@@ -58,6 +58,7 @@ interface PublishedSeason {
   selector: 'app-league-management',
   imports: [
     AdminAlert,
+    HlmBadge,
     LeagueBreadcrumb,
     LeagueDetailsForm,
     NgIcon,
@@ -93,7 +94,7 @@ interface PublishedSeason {
           </h1>
           <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
             @if (league.status === 'published') {
-              <span data-slot="badge" data-variant="default" [class]="defaultBadge"
+              <span hlmBadge variant="default"
                 ><ng-icon
                   name="lucideCircleCheck"
                   data-icon="inline-start"
@@ -101,7 +102,7 @@ interface PublishedSeason {
                 />Published</span
               >
             } @else {
-              <span data-slot="badge" data-variant="outline" [class]="outlineBadge"
+              <span hlmBadge variant="outline"
                 ><ng-icon
                   name="lucideCircleDashed"
                   data-icon="inline-start"
@@ -109,9 +110,7 @@ interface PublishedSeason {
                 />Draft</span
               >
             }
-            <span data-slot="badge" data-variant="secondary" [class]="secondaryBadge">{{
-              sport()
-            }}</span>
+            <span hlmBadge variant="secondary">{{ sport() }}</span>
           </div>
           @if (league.locationNames.length > 0) {
             <p class="flex items-start gap-1.5 text-sm text-muted-foreground mt-2">
@@ -215,7 +214,7 @@ interface PublishedSeason {
                           }}</a>
                         </h3>
                         @if (row.status === 'published') {
-                          <span data-slot="badge" data-variant="default" [class]="defaultBadge"
+                          <span hlmBadge variant="default"
                             ><ng-icon
                               name="lucideCircleCheck"
                               data-icon="inline-start"
@@ -223,7 +222,7 @@ interface PublishedSeason {
                             />Published</span
                           >
                         } @else {
-                          <span data-slot="badge" data-variant="outline" [class]="outlineBadge"
+                          <span hlmBadge variant="outline"
                             ><ng-icon
                               name="lucideCircleDashed"
                               data-icon="inline-start"
@@ -376,9 +375,6 @@ export class LeagueManagement {
   protected readonly league = this.context.league;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly defaultBadge = BADGE_DEFAULT;
-  protected readonly secondaryBadge = BADGE_SECONDARY;
-  protected readonly outlineBadge = BADGE_OUTLINE;
   protected readonly placeholders = [1, 2, 3];
   protected readonly seasonLink = ROW_TITLE_LINK;
   protected readonly dates = seasonDates;

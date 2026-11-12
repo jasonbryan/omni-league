@@ -1,4 +1,3 @@
-import { FULL_BADGE, MUTED_BADGE, OPEN_BADGE } from '../season-status';
 import { seasonStatus, type LeaguePageSeason } from './league-seasons';
 
 // 18:00 UTC is 06:00 on that date at UTC-12.
@@ -20,7 +19,7 @@ describe('seasonStatus', () => {
   it('says when an open season closes, with the year', () => {
     expect(seasonStatus(row(), at('2027-04-01'))).toEqual({
       badge: 'Registration open',
-      badgeClass: OPEN_BADGE,
+      badgeVariant: 'secondary',
       note: 'closes May 23, 2027',
     });
   });
@@ -28,7 +27,7 @@ describe('seasonStatus', () => {
   it('reads Registration closed between the deadline and the start', () => {
     expect(seasonStatus(row(), at('2027-05-30'))).toEqual({
       badge: 'Registration closed',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       note: undefined,
     });
   });
@@ -36,7 +35,7 @@ describe('seasonStatus', () => {
   it('reads In progress from the start date through the end date, with registration closed', () => {
     expect(seasonStatus(row(), at('2027-06-06'))).toEqual({
       badge: 'In progress',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       note: 'registration closed',
     });
     expect(seasonStatus(row(), at('2027-08-29'))?.badge).toBe('In progress');
@@ -45,7 +44,7 @@ describe('seasonStatus', () => {
   it('reads Ended after the end date', () => {
     expect(seasonStatus(row(), at('2027-08-30'))).toEqual({
       badge: 'Ended',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       note: undefined,
     });
   });
@@ -53,7 +52,7 @@ describe('seasonStatus', () => {
   it('reads Full with its waitlist open for a full season whose registration is open', () => {
     expect(seasonStatus(row({ isFull: true }), at('2027-04-01'))).toEqual({
       badge: 'Full',
-      badgeClass: FULL_BADGE,
+      badgeVariant: 'outline',
       note: 'waitlist open',
     });
   });
@@ -61,12 +60,12 @@ describe('seasonStatus', () => {
   it('reads the phase of a full season whose registration has closed or that is in progress', () => {
     expect(seasonStatus(row({ isFull: true }), at('2027-05-30'))).toEqual({
       badge: 'Registration closed',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       note: undefined,
     });
     expect(seasonStatus(row({ isFull: true }), at('2027-06-06'))).toEqual({
       badge: 'In progress',
-      badgeClass: MUTED_BADGE,
+      badgeVariant: 'muted',
       note: 'registration closed',
     });
   });

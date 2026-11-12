@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { seasonTeamsCount } from './season-teams-panel';
 import { TeamPage } from './team-page';
+import { expectBadge } from '../ui/testing/badge';
 
 const GET = 'teams:getForMember';
 const LIST = 'teams:listForSeasonMember';
@@ -68,6 +69,7 @@ describe('TeamPage: rosters in a season', () => {
     const roster = main().querySelector('section[aria-labelledby="roster-heading"]')!;
     expect([...roster.querySelectorAll('h3')].map(text)).toEqual(['Jalen Brooks', 'Priya Shah']);
     expect(text(roster.querySelector('[data-slot="badge"]'))).toBe('Captain');
+    expectBadge(roster.querySelector('[data-slot="badge"]'), 'secondary', 'default');
     expect(main().querySelectorAll('button')).toHaveLength(0);
     expect(main().querySelector('#pending-heading')).toBeNull();
     expect(main().querySelector('app-team-invite-panel')).toBeNull();
@@ -108,6 +110,9 @@ describe('TeamPage: rosters in a season', () => {
       ['Sand Sharks Your team', '/app/teams/team_sharks', null],
       ['Shore Thing', '/app/teams/team_shore', null],
     ]);
+    const [thisTeam, yourTeam] = [...seasonPanel()!.querySelectorAll('[data-slot="badge"]')];
+    expectBadge(thisTeam, 'outline', 'default');
+    expectBadge(yourTeam, 'secondary', 'default');
   });
 
   it('a failed list shows an error inside the panel and leaves the roster', async () => {

@@ -11,7 +11,7 @@ import {
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { slotsOf } from '../../ui/testing/helm-slots';
-import { FULL_BADGE, OPEN_BADGE } from '../season-status';
+import { expectBadge } from '../../ui/testing/badge';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -566,7 +566,7 @@ describe('PublicLeaguePage with a full season whose registration is open', () =>
     expect(text(card(harness)?.querySelector('h3'))).toBe('Summer 2027');
     const badge = clockLine(harness)?.querySelector('[data-slot="badge"]');
     expect(text(badge)).toBe('Full');
-    expect(badge?.className.split(' ').sort()).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(badge, 'outline', 'fit');
     expect(text(clockLine(harness))).toBe('Full Waitlist open · closes May 23, 2027');
     expect(card(harness)?.querySelectorAll('[data-slot="badge"]')).toHaveLength(1);
     const register = card(harness)?.querySelector<HTMLAnchorElement>('a[data-slot="button"]');
@@ -581,10 +581,8 @@ describe('PublicLeaguePage with a full season whose registration is open', () =>
     const [room, full] = rows(harness);
     expect(statusOf(room)).toEqual(['Registration open', 'closes Aug 29, 2027']);
     expect(statusOf(full)).toEqual(['Full', 'waitlist open']);
-    const badgeOf = (row: Element) =>
-      row.querySelector('[data-slot="badge"]')?.className.split(' ').sort();
-    expect(badgeOf(room)).toEqual(OPEN_BADGE.split(' ').sort());
-    expect(badgeOf(full)).toEqual(FULL_BADGE.split(' ').sort());
+    expectBadge(room.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
+    expectBadge(full.querySelector('[data-slot="badge"]'), 'outline', 'fit');
   });
 
   it('keeps Closes and no badge on the card of an open season with room', async () => {

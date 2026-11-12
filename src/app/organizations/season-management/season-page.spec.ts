@@ -14,6 +14,7 @@ import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { SeasonPage } from './season-page';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { expectBadge } from '../../ui/testing/badge';
 import { slotsOf } from '../../ui/testing/helm-slots';
 
 const GET_VIEW = 'seasons:getOrganizerView';
@@ -199,6 +200,7 @@ describe('SeasonPage', () => {
         'Below minimum',
         null,
       ]);
+      expectBadge(rows[1].querySelector('[data-slot="badge"]'), 'outline-destructive', 'default');
       expect(text(rows[1])).toContain('Captain: Captain of Dig Deep');
     });
 
