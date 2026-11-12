@@ -685,37 +685,7 @@ describe('ownSpecs: changed and imported specs', () => {
     }
   });
 
-  it('matches the documented git grep loop on the real repo', () => {
-    const grep = (stem) => {
-      const result = spawnSync('git', ['grep', '-lE', `[/']${stem}(\\.[a-z]+)?'`, '--', 'e2e/'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
-      return result.stdout.split('\n').filter(Boolean);
-    };
-    const documented = (start) => {
-      const files = new Set([start]);
-      const specs = new Set();
-      for (const file of files) {
-        const stem = file
-          .split('/')
-          .pop()
-          .replace(/\.[^.]+$/, '');
-        for (const found of grep(stem)) {
-          if (found.endsWith('.spec.ts')) specs.add(found);
-          else files.add(found);
-        }
-      }
-      return [...specs].sort();
-    };
-    for (const start of ['e2e/support/console-guard.ts', 'e2e/support/chip.ts']) {
-      const list = ownSpecs({
-        root: repoRoot,
-        runGit: gitReturning([start]),
-        ciScope: () => 'app',
-      });
-      assert.deepEqual(list, documented(start));
-    }
+  it('lists every spec of fixtures.ts for console-guard.ts on the real repo', () => {
     const guard = ownSpecs({
       root: repoRoot,
       runGit: gitReturning(['e2e/support/console-guard.ts']),
@@ -724,7 +694,315 @@ describe('ownSpecs: changed and imported specs', () => {
       root: repoRoot,
       runGit: gitReturning(['e2e/support/fixtures.ts']),
     });
+    assert.ok(fixtures.length > 0);
     for (const spec of fixtures) assert.ok(guard.includes(spec), spec);
+  });
+});
+
+describe('ownSpecs: the import bullet on the real repo', () => {
+  const realList = (files, options = {}) =>
+    ownSpecs({ root: repoRoot, runGit: gitReturning(files), ...options });
+  const PR_628_FILES = [
+    'convex/leagues.test.ts',
+    'convex/leagues.ts',
+    'convex/lib/leagueInput.ts',
+    'convex/lib/organizationInput.ts',
+    'convex/lib/seasonInput.test.ts',
+    'convex/lib/seasonInput.ts',
+    'convex/lib/slugs.ts',
+    'convex/lib/tenantWrites.ts',
+    'convex/lib/webAddressMessages.test.ts',
+    'convex/organizations.ts',
+    'convex/organizationsCreate.test.ts',
+    'convex/seasons.test.ts',
+    'convex/seasons.ts',
+    'convex/slugAvailability.test.ts',
+    'docs/glossary.md',
+    'e2e/create-organization.spec.ts',
+    'e2e/league-management.spec.ts',
+    'e2e/organization-leagues.spec.ts',
+    'e2e/validate-on-blur.spec.ts',
+    'e2e/web-address-availability.spec.ts',
+    'src/app/core/forms/slug-availability.spec.ts',
+    'src/app/core/forms/slug-availability.ts',
+    'src/app/organizations/admin/admin-leagues-division.spec.ts',
+    'src/app/organizations/admin/admin-leagues.spec.ts',
+    'src/app/organizations/admin/league-create-form.ts',
+    'src/app/organizations/admin/league-form.ts',
+    'src/app/organizations/admin/web-address-preview.ts',
+    'src/app/organizations/admin/web-address-status.ts',
+    'src/app/organizations/create-organization-page.spec.ts',
+    'src/app/organizations/create-organization-page.ts',
+    'src/app/organizations/league/league-management.ts',
+    'src/app/organizations/league/season-create-form.spec.ts',
+    'src/app/organizations/league/season-create-form.ts',
+    'src/app/organizations/league/season-form.ts',
+  ];
+  const PR_632_FILES = [
+    'convex/_generated/api.d.ts',
+    'convex/lib/adminAttention.ts',
+    'convex/organizations.test.ts',
+    'convex/organizations.ts',
+    'docs/glossary.md',
+    'e2e/organization-admin.spec.ts',
+    'e2e/organization-leagues-publish-states.spec.ts',
+    'e2e/organization-leagues-publish.spec.ts',
+    'e2e/organization-leagues.spec.ts',
+    'e2e/organization-staff.spec.ts',
+    'e2e/shell-sheet.spec.ts',
+    'src/app/organizations/admin/admin-attention.ts',
+    'src/app/organizations/admin/admin-open-seasons.ts',
+    'src/app/organizations/admin/admin-overview.spec.ts',
+    'src/app/organizations/admin/admin-overview.ts',
+    'src/app/organizations/admin/attention-text.spec.ts',
+    'src/app/organizations/admin/attention-text.ts',
+  ];
+  const MAX_PR_SPECS = 15;
+
+  for (const file of ['convex/users.ts', 'convex/leagues.ts']) {
+    it(`lists only the smoke spec for ${file}`, () => {
+      assert.deepEqual(realList([file], { ciScope: () => 'app' }), [SMOKE]);
+    });
+  }
+
+  for (const file of ['docs/conventions/angular.md', 'docs/conventions/convex.md']) {
+    it(`lists nothing for ${file}`, () => {
+      assert.deepEqual(realList([file]), []);
+    });
+  }
+
+  it('lists the changed, imported and mockup specs of a change to web address fields', () => {
+    const list = realList(PR_628_FILES);
+    for (const spec of [
+      'e2e/create-organization.spec.ts',
+      'e2e/league-management.spec.ts',
+      'e2e/organization-leagues.spec.ts',
+      'e2e/validate-on-blur.spec.ts',
+      'e2e/web-address-availability.spec.ts',
+      'e2e/league-management-mockup.spec.ts',
+      'e2e/organization-leagues-mockup.spec.ts',
+      'e2e/league-page.spec.ts',
+    ]) {
+      assert.ok(list.includes(spec), spec);
+    }
+    for (const spec of ['e2e/cache-key.spec.ts', 'e2e/sport-view.spec.ts']) {
+      assert.ok(!list.includes(spec), spec);
+    }
+    assert.ok(list.length <= MAX_PR_SPECS, `${list.length} specs`);
+  });
+
+  it('lists the specs of an Overview change that the stem rule also found', () => {
+    const list = realList(PR_632_FILES);
+    for (const spec of ['e2e/organization-staff.spec.ts', 'e2e/shell-sheet.spec.ts']) {
+      assert.ok(list.includes(spec), spec);
+    }
+    assert.ok(list.length <= MAX_PR_SPECS, `${list.length} specs`);
+  });
+
+  for (const file of ['public/manifest.webmanifest', 'public/icons/icon-maskable-512.png']) {
+    it(`lists the install spec for ${file}`, () => {
+      assert.ok(realList([file], { ciScope: () => 'app' }).includes('e2e/install.spec.ts'));
+    });
+  }
+
+  it('lists the service worker kill switch spec for ngsw-config.json', () => {
+    assert.ok(
+      realList(['ngsw-config.json'], { ciScope: () => 'app' }).includes(
+        'e2e/pwa-kill-switch.spec.ts',
+      ),
+    );
+  });
+});
+
+describe('ownSpecs: how a spec refers to a changed file', () => {
+  function project(files) {
+    const dir = mkdtempSync(join(tmpdir(), 'own-specs-test-'));
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+    return dir;
+  }
+  function listIn(files, changed, ciScope = () => 'docs') {
+    const dir = project(files);
+    try {
+      return ownSpecs({
+        root: dir,
+        runGit: gitReturning(changed),
+        ciScope,
+        buildGraph: () => ({}),
+        select: () => ({ scope: 'affected', specs: [SMOKE] }),
+        sessionSpecs: () => [],
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  describe('a relative specifier', () => {
+    const files = {
+      'e2e/a.spec.ts': "import { users } from '../convex/users';",
+      'e2e/b.spec.ts': "import { users } from './support/users';",
+    };
+
+    it('selects the spec that imports the changed convex file by path', () => {
+      assert.deepEqual(listIn(files, ['convex/users.ts']), ['e2e/a.spec.ts']);
+    });
+
+    it('selects the spec that imports the changed helper by path', () => {
+      assert.deepEqual(listIn(files, ['e2e/support/users.ts']), ['e2e/b.spec.ts']);
+    });
+
+    it('reads .js as .ts and .mjs as .mts', () => {
+      const list = listIn(
+        {
+          'e2e/a.spec.ts': "import './support/one.js';",
+          'e2e/b.spec.ts': "import './support/two.mjs';",
+          'e2e/c.spec.ts': "import './support/three.js';",
+        },
+        ['e2e/support/one.ts', 'e2e/support/two.mts'],
+      );
+      assert.deepEqual(list, ['e2e/a.spec.ts', 'e2e/b.spec.ts']);
+    });
+
+    it('selects the spec for a specifier that keeps the extension', () => {
+      const list = listIn({ 'e2e/a.spec.ts': "import data from './data.json';" }, [
+        'e2e/data.json',
+      ]);
+      assert.deepEqual(list, ['e2e/a.spec.ts']);
+    });
+  });
+
+  describe('a literal that is not a file name', () => {
+    const files = {
+      'e2e/a.spec.ts': [
+        "import { ConvexHttpClient } from 'convex/browser';",
+        "await page.goto('/leagues');",
+        "const rows = ['leagues'];",
+      ].join('\n'),
+    };
+
+    it('leaves a spec out when a route, a word and a package path share the changed stem', () => {
+      assert.deepEqual(listIn(files, ['convex/leagues.ts']), []);
+      assert.deepEqual(listIn(files, ['convex/browser.ts']), []);
+    });
+  });
+
+  describe('a quoted file name', () => {
+    const files = { 'e2e/a.spec.ts': "readFileSync(join(ROOT, 'angular.json'));" };
+
+    it('selects the spec that quotes the changed file name', () => {
+      assert.deepEqual(listIn(files, ['angular.json']), ['e2e/a.spec.ts']);
+    });
+
+    it('leaves the spec out for a docs file that shares the stem', () => {
+      assert.deepEqual(listIn(files, ['docs/conventions/angular.md']), []);
+    });
+
+    it('selects the spec that opens a docs file by its name', () => {
+      const list = listIn({ 'e2e/a.spec.ts': "readFileSync(join(ROOT, 'docs', 'guide.md'));" }, [
+        'docs/guide.md',
+      ]);
+      assert.deepEqual(list, ['e2e/a.spec.ts']);
+    });
+
+    it('matches the last segment of an absolute or nested path', () => {
+      const list = listIn(
+        {
+          'e2e/a.spec.ts': "await request.get('/manifest.webmanifest');",
+          'e2e/b.spec.ts': "await request.get('icons/icon-maskable-512.png');",
+        },
+        ['public/manifest.webmanifest', 'public/icons/icon-maskable-512.png'],
+      );
+      assert.deepEqual(list, ['e2e/a.spec.ts', 'e2e/b.spec.ts']);
+    });
+
+    it('does not match a literal that merely contains the file name', () => {
+      const list = listIn({ 'e2e/a.spec.ts': "await page.goto('/my-angular.json');" }, [
+        'angular.json',
+      ]);
+      assert.deepEqual(list, []);
+    });
+  });
+
+  describe('a TypeScript parse of the literals', () => {
+    const files = {
+      'e2e/a.spec.ts': [
+        'const url = `/${icon.src}`;',
+        "// the app's icon, see 'only-in-comment.png'",
+        "await request.get('/icons/x.png');",
+        "const config = join(ROOT, 'y.json');",
+        "const pattern = /'z.json'/;",
+      ].join('\n'),
+    };
+
+    it('finds a quoted name after a template with a substitution and an apostrophe in a comment', () => {
+      assert.deepEqual(listIn(files, ['public/icons/x.png']), ['e2e/a.spec.ts']);
+      assert.deepEqual(listIn(files, ['y.json']), ['e2e/a.spec.ts']);
+    });
+
+    it('does not read a comment or a regular expression as a literal', () => {
+      assert.deepEqual(listIn(files, ['public/only-in-comment.png']), []);
+      assert.deepEqual(listIn(files, ['z.json']), []);
+    });
+
+    it('reads the text of a template literal with no substitution and of a template head', () => {
+      const list = listIn(
+        {
+          'e2e/a.spec.ts': 'await request.get(`/plain.png`);',
+          'e2e/b.spec.ts': 'await request.get(`head.png${suffix}`);',
+          'e2e/c.spec.ts': 'await request.get(`${prefix}tail.png`);',
+          'e2e/d.spec.ts': 'await request.get(`${prefix}middle.png${suffix}`);',
+        },
+        ['public/plain.png', 'public/head.png', 'public/tail.png', 'public/middle.png'],
+      );
+      assert.deepEqual(list, ['e2e/a.spec.ts', 'e2e/b.spec.ts', 'e2e/c.spec.ts', 'e2e/d.spec.ts']);
+    });
+  });
+
+  describe('files under e2e/ that are not scripts', () => {
+    const files = {
+      'e2e/support/env.ts': [
+        "import backend from './backend.json';",
+        "const assets = ['./page.html', './style.css', './notes.md'];",
+        "import { helper } from './helper.mjs';",
+      ].join('\n'),
+      'e2e/support/helper.mjs': "export const helper = '../../src/m.ts';",
+      'e2e/a.spec.ts': "import { env } from './support/env';",
+      'e2e/support/backend.json': '{ "path": "../../src/x.ts" }',
+      'e2e/support/page.html': '<a href="../../src/y.ts">y</a>',
+      'e2e/support/style.css': '@import "../../src/z.ts";',
+      'e2e/support/notes.md': 'See "../../src/w.ts".',
+    };
+
+    it('selects the specs that import a changed json file through its importer', () => {
+      assert.deepEqual(listIn(files, ['e2e/support/backend.json']), ['e2e/a.spec.ts']);
+    });
+
+    it('reads a .mjs file under e2e/ for references', () => {
+      assert.deepEqual(listIn(files, ['src/m.ts']), ['e2e/a.spec.ts']);
+    });
+
+    for (const target of ['src/x.ts', 'src/y.ts', 'src/z.ts', 'src/w.ts']) {
+      it(`adds no reference from a json, html, css or md file that names ${target}`, () => {
+        assert.deepEqual(listIn(files, [target]), []);
+      });
+    }
+  });
+
+  describe('the chain of importers', () => {
+    it('follows a change through a helper to the specs that import it', () => {
+      const list = listIn(
+        {
+          'e2e/support/guard.ts': 'export const guard = 1;',
+          'e2e/support/fixtures.ts': "import { guard } from './guard';",
+          'e2e/a.spec.ts': "import { test } from './support/fixtures';",
+          'e2e/b.spec.ts': "import { other } from './support/other';",
+        },
+        ['e2e/support/guard.ts'],
+      );
+      assert.deepEqual(list, ['e2e/a.spec.ts']);
+    });
   });
 });
 
@@ -1065,6 +1343,7 @@ describe('npm run e2e:own entry point', () => {
         encoding: 'utf8',
       });
     mkdirSync(join(dir, 'scripts'));
+    symlinkSync(join(repoRoot, 'node_modules'), join(dir, 'node_modules'));
     for (const name of ['own-specs.mjs', 'e2e-affected.mjs', 'ci-scope.mjs']) {
       copyFileSync(join(import.meta.dirname, name), join(dir, 'scripts', name));
     }
@@ -1111,7 +1390,7 @@ describe('npm run e2e:own entry point', () => {
   };
 
   it('runs the smoke floor through the runner for an app-scope change, and exits with its code', () => {
-    const { dir, ranFile } = project(['package.json']);
+    const { dir, ranFile } = project(['angular.json']);
     try {
       const result = entry(dir, []);
       assert.equal(result.status, STUB_EXIT_CODE);
@@ -1143,7 +1422,7 @@ describe('npm run e2e:own entry point', () => {
   });
 
   it('prints the list and starts no run for --list', () => {
-    const { dir, ranFile } = project(['package.json']);
+    const { dir, ranFile } = project(['angular.json']);
     try {
       const result = entry(dir, ['--list']);
       assert.equal(result.status, 0);
@@ -1155,7 +1434,7 @@ describe('npm run e2e:own entry point', () => {
   });
 
   it('prints the usage and starts nothing for --help', () => {
-    const { dir, ranFile } = project(['package.json']);
+    const { dir, ranFile } = project(['angular.json']);
     const privateTmp = mkdtempSync(join(tmpdir(), 'own-specs-private-tmp-'));
     try {
       const result = entry(dir, ['--help'], privateTmp);
@@ -1170,7 +1449,7 @@ describe('npm run e2e:own entry point', () => {
   });
 
   it('exits 2 and starts nothing for an unknown option', () => {
-    const { dir, ranFile } = project(['package.json']);
+    const { dir, ranFile } = project(['angular.json']);
     const privateTmp = mkdtempSync(join(tmpdir(), 'own-specs-private-tmp-'));
     try {
       const result = entry(dir, ['--foo'], privateTmp);
@@ -1262,6 +1541,36 @@ describe('the rule in the docs', () => {
     const text = read('docs/process/dev-cycle.md');
     assert.match(text, /SCREEN_SPEC_CAP/);
     assert.match(text, /-mockup\.spec\.ts/);
+  });
+
+  describe('the import bullet of Own e2e specs', () => {
+    const section = () => {
+      const text = read('docs/process/dev-cycle.md');
+      const start = text.indexOf('#### Own e2e specs');
+      return text.slice(start, text.indexOf('### 5. Test', start));
+    };
+    const bullet = () => {
+      const text = section();
+      const start = text.indexOf('- every spec that');
+      return text.slice(start, text.indexOf('- the screen specs', start));
+    };
+
+    it('states the relative specifier and the last segment match', () => {
+      assert.match(bullet(), /relative specifier/);
+      assert.match(bullet(), /last `\/` segment/);
+    });
+
+    it('says the literals come from a TypeScript parse of the e2e script files', () => {
+      assert.match(bullet(), /createSourceFile/);
+    });
+
+    it('says docs and convex files match only by a literal that names them', () => {
+      assert.match(bullet(), /`convex\/` or docs/);
+    });
+
+    it('has no git grep stem command', () => {
+      assert.doesNotMatch(section(), /git grep/);
+    });
   });
 
   it('the CI pipeline decision records the amendment with the owner answer and no technology gate', () => {
