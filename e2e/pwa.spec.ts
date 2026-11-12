@@ -439,10 +439,10 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       } else {
         const cards = registrationOpen.locator(':scope > ul > li');
         await expect(cards.getByRole('heading', { level: 3 })).toHaveText(
-          expectedCards.map((card) => card.leagueName),
+          expectedCards.map((card) => card.title),
         );
         for (const [i, card] of expectedCards.entries()) {
-          await expect(cards.nth(i).getByText(card.seasonName, { exact: true })).toBeVisible();
+          await expect(cards.nth(i).getByText(card.subtitle, { exact: true })).toBeVisible();
         }
       }
       await expect(offlineNote).toBeVisible();

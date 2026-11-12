@@ -7,20 +7,20 @@ const GULF_COAST = 'gulf-coast-sport-social';
 test.describe('expected Registration open cards from the demo data', VIEWPORT_AGNOSTIC, () => {
   test('lists the published Summer 2027 seasons by soonest deadline on 2026-10-30', () => {
     expect(expectedOpenCards(GULF_COAST, Date.parse('2026-10-30T17:00:00Z'))).toEqual([
-      { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
-      { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
-      { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
+      { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
+      { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
+      { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },
     ]);
   });
 
   test('keeps a season open through its deadline date and drops it the day after', () => {
     expect(expectedOpenCards(GULF_COAST, Date.parse('2027-05-20T11:59:00Z'))).toEqual([
-      { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
-      { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
-      { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
+      { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
+      { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
+      { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },
     ]);
     expect(expectedOpenCards(GULF_COAST, Date.parse('2027-05-21T12:00:00Z'))).toEqual([
-      { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
+      { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },
     ]);
   });
 
@@ -29,7 +29,7 @@ test.describe('expected Registration open cards from the demo data', VIEWPORT_AG
   });
 
   test('never counts the seasons dated from the run as open', () => {
-    const titles = expectedOpenCards(GULF_COAST, Date.now()).map((card) => card.seasonName);
+    const titles = expectedOpenCards(GULF_COAST, Date.now()).map((card) => card.subtitle);
     expect(titles).not.toContain('Current season');
     expect(titles).not.toContain('Next season');
   });
@@ -55,15 +55,15 @@ test.describe(
 
     test('puts Gulf Coast Beach Open, the published tournament, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
       expect(expectedRegistrationOpenCards(GULF_COAST, RUN)).toEqual([
-        { leagueName: 'Gulf Coast Beach Open', seasonName: 'Tournament' },
-        { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
-        { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
-        { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
+        { title: 'Gulf Coast Beach Open', subtitle: 'Tournament' },
+        { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
+        { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
+        { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },
       ]);
     });
 
     test('leaves out the draft Winter Doubles Classic', () => {
-      const titles = expectedRegistrationOpenCards(GULF_COAST, RUN).map((card) => card.leagueName);
+      const titles = expectedRegistrationOpenCards(GULF_COAST, RUN).map((card) => card.title);
       expect(titles).not.toContain('Winter Doubles Classic');
     });
 

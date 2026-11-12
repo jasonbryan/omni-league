@@ -42,7 +42,7 @@ import {
   type PublicOrganizationHeader,
   type PublicSport,
 } from './organization-path';
-import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
+import { UNSEEN_OPEN_SEASON_COUNT, type OpenCardKind } from './open-seasons-seen';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
@@ -78,7 +78,14 @@ import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 import { publicTournamentNames } from './public-tournament/public-tournament-names';
 import { publicTournamentPath } from './public-tournament/public-tournament-path';
-import { OPEN_TOURNAMENTS_INTRO, tournamentStatus, upcomingTournaments } from './tournament-status';
+import {
+  OPEN_MIXED_INTRO,
+  OPEN_TOURNAMENTS_INTRO,
+  REGISTER_FOR_SEASON,
+  REGISTER_FOR_TOURNAMENT,
+  tournamentStatus,
+  upcomingTournaments,
+} from './tournament-status';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -153,11 +160,11 @@ function rowId(
               ><ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Manage</a
             >
           }
-          @if (!isEmpty() && !noMatches()) {
+          @if (registrationOpenShown()) {
             @if (openCards() === undefined) {
               @if (expectedOpenSeasons() > 0) {
                 <span hlmSkeleton aria-hidden="true" [class]="registerPlaceholder"
-                  ><span class="invisible">Register for a season</span
+                  ><span class="invisible">{{ placeholderText() }}</span
                   ><ng-icon
                     name="lucideArrowDown"
                     data-icon="inline-end"
@@ -220,9 +227,9 @@ function rowId(
         </div>
       </div>
     }
-    @if (!isEmpty() || locationsLoading() || locationRows().length || tournamentRows().length) {
+    @if (!isEmpty() || locationsLoading() || locationRows().length || tournamentsShown()) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
-        @if (!isEmpty() && !noMatches()) {
+        @if (registrationOpenShown()) {
           <section
             id="registration-open"
             aria-labelledby="registration-open-heading"
@@ -452,7 +459,7 @@ function rowId(
               }
             </section>
           }
-          @if (tournamentRows().length) {
+          @if (tournamentsShown()) {
             <section
               id="tournaments"
               aria-labelledby="tournaments-heading"
@@ -512,7 +519,7 @@ function rowId(
                   </li>
                 }
               </ul>
-              @if (tournamentPaging(); as paging) {
+              @if (shownTournamentPaging(); as paging) {
                 <div class="-mx-4 md:-mx-5">
                   <app-page-control
                     label="Tournaments pages"
@@ -603,6 +610,7 @@ export class OrganizationOverview {
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly openTournaments = input<PublicOpenTournamentRows | undefined>(undefined);
   readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
+  readonly expectedOpenKind = input<OpenCardKind>('season');
   readonly now = input.required<number>();
   readonly canManage = input(false);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
@@ -754,8 +762,11 @@ export class OrganizationOverview {
     return `No ${sport ? `${sport} ` : ''}season is open for registration right now. Each league below shows its next season once it is published.`;
   });
 
+  // The seasons are left out where the page speaks of no league, as for filters that match none.
+  protected readonly seasonsListed = computed(() => !this.isEmpty() && !this.noMatches());
+
   private readonly openSeasonCards = computed(() =>
-    this.openSeasons()?.map((season) => ({
+    (this.seasonsListed() ? this.openSeasons() : [])?.map((season) => ({
       kind: 'season' as const,
       href: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
       names: publicPageNames({ organization: this.page(), league: season.league, season }),
@@ -807,20 +818,54 @@ export class OrganizationOverview {
     );
   });
 
-  protected readonly heroRegisterText = computed(() =>
-    this.openCards()?.some((card) => card.kind === 'season')
-      ? 'Register for a season'
-      : 'Register for a tournament',
+  protected readonly registrationOpenShown = computed(
+    () => this.seasonsListed() || (this.openCards()?.length ?? 0) > 0,
   );
 
-  protected readonly openIntro = computed(() =>
+  protected readonly heroRegisterText = computed(() =>
     this.openCards()?.some((card) => card.kind === 'season')
-      ? OPEN_SEASONS_INTRO
-      : OPEN_TOURNAMENTS_INTRO,
+      ? REGISTER_FOR_SEASON
+      : REGISTER_FOR_TOURNAMENT,
+  );
+
+  protected readonly placeholderText = computed(() =>
+    this.expectedOpenKind() === 'tournament' ? REGISTER_FOR_TOURNAMENT : REGISTER_FOR_SEASON,
+  );
+
+  protected readonly openIntro = computed(() => {
+    const cards = this.openCards() ?? [];
+    const season = cards.some((card) => card.kind === 'season');
+    const tournament = cards.some((card) => card.kind === 'tournament');
+    if (season && tournament) return OPEN_MIXED_INTRO;
+    return tournament ? OPEN_TOURNAMENTS_INTRO : OPEN_SEASONS_INTRO;
+  });
+
+  private readonly upcoming = computed(() =>
+    upcomingTournaments(this.tournaments() ?? [], this.now()),
+  );
+
+  // The query counts the rows that have ended since it ran, so the total drops them, and a page left with none keeps its control for the way back.
+  protected readonly shownTournamentPaging = computed((): ListPaging | undefined => {
+    const paging = this.tournamentPaging();
+    const dropped = (this.tournaments()?.length ?? 0) - this.upcoming().length;
+    if (!paging || dropped === 0) return paging;
+    const total = Math.max(
+      paging.total - dropped,
+      paging.page > 1 ? (paging.page - 1) * LIST_PAGE_SIZE + 1 : 0,
+    );
+    const pageCount = Math.min(paging.pageCount, Math.ceil(total / LIST_PAGE_SIZE));
+    return { page: paging.page, total, pageCount: Math.max(paging.page, pageCount) };
+  });
+
+  protected readonly tournamentsShown = computed(
+    () =>
+      this.tournamentRows().length > 0 ||
+      ((this.shownTournamentPaging()?.page ?? 1) > 1 &&
+        (this.shownTournamentPaging()?.total ?? 0) > LIST_PAGE_SIZE),
   );
 
   protected readonly tournamentRows = computed(() =>
-    upcomingTournaments(this.tournaments() ?? [], this.now()).map((tournament, i) => ({
+    this.upcoming().map((tournament, i) => ({
       id: rowId('tournament', this.tournamentPaging(), i),
       name: tournament.name,
       href: publicTournamentPath(this.page().slug, tournament.slug),

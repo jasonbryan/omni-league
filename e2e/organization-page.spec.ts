@@ -1901,6 +1901,9 @@ test.describe('organization page: Tournaments, raw server HTML', () => {
           plainText(p),
         ),
       ).toEqual(['Soon Season', 'Tournament', 'Far Season']);
+      expect(plainText(open)).toContain(
+        'Registration open Register a team for a season or a tournament.',
+      );
       expect(plainText(open)).toContain('Coed · 2v2 · Open, teams of at least 2');
       expect(open).toMatch(
         new RegExp(
@@ -2018,6 +2021,28 @@ test.describe('organization page: Tournaments, raw server HTML', () => {
         'Coed Open',
         'Women Open',
       ]);
+    },
+  );
+
+  test(
+    'an organization with no league lists its open tournament under Registration open, with the hero button',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await seedTenant({
+        name: 'E2E Tournaments Only',
+        locations: [SAND_COURTS],
+        tournaments: [GULF_COAST_BEACH_OPEN],
+      });
+      const { html } = await fetchRawHtml(request, tenant.path);
+      expect(titlesIn(sectionOf(html))).toEqual(['Gulf Coast Beach Open']);
+      expect(plainText(sectionOf(html))).toContain('Register a team for a tournament.');
+      expect(html).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${tenant.path}#registration-open"[^>]*>Register for a tournament`,
+        ),
+      );
+      expect(titlesIn(sectionWithId(html, 'tournaments'))).toEqual(['Gulf Coast Beach Open']);
     },
   );
 

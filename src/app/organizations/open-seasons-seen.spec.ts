@@ -178,4 +178,28 @@ describe('OpenSeasonsSeen', () => {
     store().record(view('Soccer'), ['Soccer']);
     expect(localStorage.length).toBe(0);
   });
+
+  describe('the kind of card last seen', () => {
+    it('expects a season with nothing seen, and the kind recorded for a view', () => {
+      const seen = store();
+      expect(seen.expectedKind(view())).toBe('season');
+      seen.record(view('Soccer'), ['Soccer'], 'tournament');
+      expect(seen.expectedKind(view('Soccer'))).toBe('tournament');
+      expect(seen.expectedKind(view('Softball'))).toBe('tournament');
+    });
+
+    it('keeps the kind of another organization apart, and records a season by default', () => {
+      const seen = store();
+      seen.record(view(undefined, NO_DIVISION_FILTERS, 'other-org'), ['Soccer'], 'tournament');
+      expect(seen.expectedKind(view())).toBe('season');
+      seen.record(view(), ['Soccer']);
+      expect(seen.expectedKind(view())).toBe('season');
+    });
+
+    it('records nothing on the server', () => {
+      const seen = store('server');
+      seen.record(view(), ['Soccer'], 'tournament');
+      expect(seen.expectedKind(view())).toBe('season');
+    });
+  });
 });

@@ -19,7 +19,13 @@ import type {
   PublicOrganizationPage,
   PublicTournamentRows,
 } from './organization-path';
-import { GULF_COAST, listPage, pagedResults, queryResults } from './testing/pages';
+import {
+  GULF_COAST,
+  listPage,
+  pagedResults,
+  queryResults,
+  sportQueryResults,
+} from './testing/pages';
 
 const TOURNAMENTS = 'tournaments:listPublic';
 const OPEN_TOURNAMENTS = 'tournaments:listOpenForOrganization';
@@ -123,6 +129,8 @@ const section = (harness: RouterTestingHarness) => host(harness).querySelector('
 const rows = (harness: RouterTestingHarness) => [
   ...(section(harness)?.querySelectorAll(':scope > ul > li') ?? []),
 ];
+const heroPlaceholder = (harness: RouterTestingHarness) =>
+  host(harness).querySelector<HTMLElement>('[data-hero-actions] > span[aria-hidden="true"]');
 const openSection = (harness: RouterTestingHarness) =>
   host(harness).querySelector('#registration-open');
 const sectionIds = (harness: RouterTestingHarness) =>
@@ -300,6 +308,59 @@ describe('the Tournaments section', () => {
         'Registration closed',
       );
       expect(rows(harness)[0].querySelector('a[href$="#registration"]')).toBeNull();
+    });
+  });
+
+  describe('the page control after a date change drops rows the query still counts', () => {
+    const live = (n: number) => ({ ...BEACH_OPEN, name: `Open ${n}`, slug: `open-${n}` });
+
+    it('counts only the rows that have not ended, and keeps the range of the page', async () => {
+      const harness = await open();
+      await emit(harness, {
+        ...queryResults(withTournaments([])),
+        [TOURNAMENTS]: {
+          rows: [ENDED, live(1), live(2), live(3), live(4)],
+          page: 1,
+          pageCount: 2,
+          total: 7,
+        },
+      });
+      expect(rows(harness)).toHaveLength(4);
+      expect(text(section(harness)?.querySelector('nav'))).toContain('1–5 of 6');
+    });
+
+    it('drops the control when the rows that remain fit one page', async () => {
+      const harness = await open();
+      await emit(harness, {
+        ...queryResults(withTournaments([])),
+        [TOURNAMENTS]: {
+          rows: [ENDED, live(1), live(2), live(3), live(4)],
+          page: 1,
+          pageCount: 2,
+          total: 6,
+        },
+      });
+      expect(section(harness)?.querySelector('nav')).toBeNull();
+    });
+
+    it('keeps the section and a way back when every row of a later page has ended', async () => {
+      const harness = await open(`${ORG}?tournamentsPage=2`);
+      await emit(harness, {
+        ...queryResults(withTournaments([])),
+        [TOURNAMENTS]: {
+          rows: [ENDED, { ...ENDED, name: 'Winter Cup', slug: 'winter-cup' }],
+          page: 2,
+          pageCount: 2,
+          total: 7,
+        },
+      });
+      expect(rows(harness)).toHaveLength(0);
+      const nav = section(harness)?.querySelector('nav');
+      expect(nav).not.toBeNull();
+      const previous = [...(nav?.querySelectorAll('a') ?? [])].find((a) =>
+        text(a).startsWith('Previous'),
+      );
+      expect(previous?.getAttribute('href')).toBe(`${ORG}#tournaments`);
     });
   });
 
@@ -553,6 +614,130 @@ describe('the Registration open section with tournaments', () => {
     expect(text(host(harness).querySelector('main a[href$="#registration-open"]'))).toBe(
       'Register for a season',
     );
+  });
+
+  describe('the intro', () => {
+    const intro = (harness: RouterTestingHarness) =>
+      text(openSection(harness)?.querySelector('h2')?.nextElementSibling);
+
+    it('offers free agents only when every open card is a season', async () => {
+      const harness = await open();
+      await emit(harness, {
+        ...queryResults(withTournaments([])),
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      expect(intro(harness)).toBe(
+        'Register a team, or register as a free agent and an organizer places you on one.',
+      );
+    });
+
+    it('offers a team for a tournament when only tournaments are open', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])));
+      expect(intro(harness)).toBe('Register a team for a tournament.');
+    });
+
+    it('offers no free agent registration when a season and a tournament are both open', async () => {
+      const harness = await open();
+      await emit(harness, {
+        ...queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])),
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      expect(intro(harness)).toBe('Register a team for a season or a tournament.');
+      expect(text(openSection(harness))).not.toContain('free agent');
+    });
+  });
+
+  describe('an open tournament when no league shows', () => {
+    const NO_LEAGUE: PublicOrganizationPage = {
+      ...GULF_COAST,
+      leagueCount: 0,
+      sportCount: 0,
+      sports: [],
+      leagues: [],
+      locations: [],
+      locationCount: 0,
+    };
+
+    it('shows the section and the hero button for an organization with no league', async () => {
+      const harness = await open();
+      await emit(
+        harness,
+        queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN], openTournaments: [OPEN_ROW] }),
+      );
+      expect(cards(harness).map((card) => text(card.querySelector('h3')))).toEqual([
+        'Gulf Coast Beach Open',
+      ]);
+      expect(text(host(harness).querySelector('main a[href$="#registration-open"]'))).toBe(
+        'Register for a tournament',
+      );
+    });
+
+    it('shows no section for such an organization when no tournament is open', async () => {
+      const harness = await open();
+      await emit(harness, queryResults({ ...NO_LEAGUE, tournaments: [BEACH_OPEN] }));
+      expect(openSection(harness)).toBeNull();
+      expect(host(harness).querySelector('main a[href$="#registration-open"]')).toBeNull();
+    });
+
+    it('shows the tournaments that match a filter that no league matches, and none of the seasons', async () => {
+      const harness = await open(`${ORG}?gender=womens`);
+      await emit(harness, {
+        ...queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])),
+        'organizations:listPublicLeagues': { rows: [], page: 1, pageCount: 0, total: 0 },
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      expect(text(host(harness).querySelector('#leagues'))).toContain('No leagues match');
+      expect(cards(harness).map((card) => text(card.querySelector('h3')))).toEqual([
+        'Gulf Coast Beach Open',
+      ]);
+      expect(text(host(harness).querySelector('main a[href$="#registration-open"]'))).toBe(
+        'Register for a tournament',
+      );
+    });
+
+    it('shows no section for a filter that no league and no tournament matches', async () => {
+      const harness = await open(`${ORG}?gender=womens`);
+      await emit(harness, {
+        ...queryResults(withTournaments([], [])),
+        'organizations:listPublicLeagues': { rows: [], page: 1, pageCount: 0, total: 0 },
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      expect(openSection(harness)).toBeNull();
+    });
+  });
+
+  describe('the hero placeholder while the open cards load', () => {
+    async function loadingAfter(first: Record<string, unknown>) {
+      const harness = await open();
+      await emit(harness, first);
+      await harness.navigateByUrl(`${ORG}/sports/beach-volleyball`);
+      await settle(harness);
+      const results = sportQueryResults(
+        withTournaments([BEACH_OPEN], [OPEN_ROW]),
+        'beach-volleyball',
+      );
+      for (const name of Object.keys(results).filter(
+        (key) => key !== OPEN_TOURNAMENTS && key !== 'seasons:listOpenForOrganization',
+      )) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      return harness;
+    }
+
+    it('holds the tournament label when the cards last seen were tournaments only', async () => {
+      const harness = await loadingAfter(queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])));
+      expect(text(heroPlaceholder(harness))).toBe('Register for a tournament');
+    });
+
+    it('holds the season label when a season was among the cards last seen', async () => {
+      const harness = await loadingAfter({
+        ...queryResults(withTournaments([BEACH_OPEN], [OPEN_ROW])),
+        'seasons:listOpenForOrganization': [SEASON_ROW],
+      });
+      expect(text(heroPlaceholder(harness))).toBe('Register for a season');
+    });
   });
 
   it('shows the skeleton until both the seasons and the tournaments have answered', async () => {

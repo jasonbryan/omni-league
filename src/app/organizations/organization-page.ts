@@ -101,6 +101,7 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [openSeasons]="openSeasons()"
           [openTournaments]="openTournaments()"
           [expectedOpenSeasons]="expectedOpenSeasons()"
+          [expectedOpenKind]="expectedOpenKind()"
           [now]="now()"
           [canManage]="viewerIsOrgAdmin.value() === true"
           [filters]="filters()"
@@ -318,6 +319,11 @@ export class OrganizationPage {
     return view ? this.openSeasonsSeen.expectedCount(view) : UNSEEN_OPEN_SEASON_COUNT;
   });
 
+  protected readonly expectedOpenKind = computed(() => {
+    const view = this.openSeasonsView();
+    return view ? this.openSeasonsSeen.expectedKind(view) : 'season';
+  });
+
   // Online, the hero and chips stay on screen while the lists of another sport load. Offline, a list with no saved copy means the whole page has none.
   protected readonly organization = computed(() => {
     if (this.failed() || this.noLeagueInSport()) return undefined;
@@ -404,10 +410,14 @@ export class OrganizationPage {
       const seasons = view && this.openSeasons();
       const tournaments = view && this.openTournaments();
       if (view && seasons && tournaments) {
-        this.openSeasonsSeen.record(view, [
-          ...seasons.map((season) => season.league.sportName),
-          ...tournaments.map((tournament) => tournament.sportName),
-        ]);
+        this.openSeasonsSeen.record(
+          view,
+          [
+            ...seasons.map((season) => season.league.sportName),
+            ...tournaments.map((tournament) => tournament.sportName),
+          ],
+          seasons.length > 0 ? 'season' : 'tournament',
+        );
       }
     });
     bindPageMeta(() => {

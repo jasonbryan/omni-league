@@ -10,6 +10,12 @@ import { BADGE_TEXT, closesText, compare } from './season-status';
 
 export const OPEN_TOURNAMENTS_INTRO = 'Register a team for a tournament.';
 
+// Tournaments take teams only, so a season's free agent line stays off whenever a tournament is among the cards.
+export const OPEN_MIXED_INTRO = 'Register a team for a season or a tournament.';
+
+export const REGISTER_FOR_SEASON = 'Register for a season';
+export const REGISTER_FOR_TOURNAMENT = 'Register for a tournament';
+
 export interface TournamentStatusLine {
   badge: string;
   badgeVariant: HlmBadgeVariant;

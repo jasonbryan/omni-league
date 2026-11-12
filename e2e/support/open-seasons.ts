@@ -6,8 +6,8 @@ import type { PublicOpenSeasonRows } from '../../src/app/organizations/organizat
 import { compare, openSeasonsBySoonestDeadline } from '../../src/app/organizations/season-status';
 
 export interface ExpectedOpenCard {
-  leagueName: string;
-  seasonName: string;
+  title: string;
+  subtitle: string;
 }
 
 type OpenSeasonRow = PublicOpenSeasonRows[number];
@@ -22,8 +22,8 @@ type SeasonFields = Pick<
  */
 export function expectedOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
   return openSeasonRows(orgSlug, nowMs).map((row) => ({
-    leagueName: row.league.name,
-    seasonName: row.name,
+    title: row.league.name,
+    subtitle: row.name,
   }));
 }
 
@@ -68,27 +68,26 @@ function openSeasonRows(orgSlug: string, nowMs: number): OpenSeasonRow[] {
   return openSeasonsBySoonestDeadline(rows, nowMs);
 }
 
-/** A tournament's card is titled with its name and reads Tournament where a season's reads its name, as on the page. */
 export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
   const today = dateAtUtcMinus12(nowMs);
   const cards = openSeasonRows(orgSlug, nowMs).map((row) => ({
     deadline: row.registrationDeadline,
-    leagueName: row.league.name,
-    seasonName: row.name,
+    title: row.league.name,
+    subtitle: row.name,
   }));
   for (const tournament of DEMO_TOURNAMENTS) {
     const deadline = addCalendarDays(today, tournament.deadlineDaysFromRun);
     const start = addCalendarDays(today, tournament.startDaysFromRun);
     if (tournament.organizationSlug !== orgSlug || tournament.status !== 'published') continue;
     if (today > deadline || today >= start) continue;
-    cards.push({ deadline, leagueName: tournament.name, seasonName: 'Tournament' });
+    cards.push({ deadline, title: tournament.name, subtitle: 'Tournament' });
   }
   return cards
     .sort(
       (a, b) =>
         compare(a.deadline, b.deadline) ||
-        compare(a.leagueName, b.leagueName) ||
-        compare(a.seasonName, b.seasonName),
+        compare(a.title, b.title) ||
+        compare(a.subtitle, b.subtitle),
     )
-    .map(({ leagueName, seasonName }) => ({ leagueName, seasonName }));
+    .map(({ title, subtitle }) => ({ title, subtitle }));
 }
