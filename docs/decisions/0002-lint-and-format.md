@@ -5,6 +5,7 @@
 - **Issue:** #2
 - **Date:** 2026-10-07 (revised 2026-10-07: config-file patterns, ADR 0006 SSR files)
 - **Amended:** 2026-10-31, by #419: outside specs, `src/` may import `convex/server` and `convex/_generated/api` only with `import type`. See "Amendment: type-only Convex server imports (#419, 2026-10-31)" at the end.
+- **Amended:** 2026-11-12, by #678: `proseWrap: "never"` for `docs/conventions/**/*.md`. See "Amendment: unpadded convention tables (#678, 2026-11-12)" at the end.
 
 ## Context
 
@@ -222,7 +223,7 @@ No separate block is needed, and none of these files may be listed in `allowDefa
 
 - It keeps the Angular CLI's generated options (`printWidth: 100`, `singleQuote: true`).
 - **Scope the CLI's `*.html` override to `src/**/*.html`.** The generated override applies the `angular` parser to every `*.html`, which would parse the plain-HTML mockups as Angular templates and can fail on literal `{`, `}`, or `@` in their text.
-- Add `design/mockups/**/*.html` with `parser: "html"` and `**/*.md` with `proseWrap: "preserve"`.
+- Add `design/mockups/**/*.html` with `parser: "html"` and `**/*.md` with `proseWrap: "preserve"`. Amended by #678: `docs/conventions/**/*.md` uses `proseWrap: "never"`, as the last override (see the amendment at the end).
 
 ### Ignore list
 
@@ -336,3 +337,13 @@ A usage-rule change to the restricted-imports rule; no tool changes.
 | `convex/values`                                       | Allowed                                          | Unchanged                                                                                                                                                                                                                                                                                            |
 
 **Why.** A runtime import of either module puts Convex's server code in the browser's initial bundle. See [ADR 0006, "Amendment: Convex server code out of the browser bundle"](0006-angular-app-baseline.md#amendment-convex-server-code-out-of-the-browser-bundle-419-2026-10-31). `scripts/eslint-convex-server.test.mjs` pins the rule.
+
+## Amendment: unpadded convention tables (#678, 2026-11-12)
+
+A config change to the Markdown option recorded in this ADR; no package or tool changes, so it is not a `gate:technology` change. Prettier stays as accepted.
+
+- **Change.** `.prettierrc` gains a last override: `docs/conventions/**/*.md` uses `proseWrap: "never"`. Every other Markdown file keeps `proseWrap: "preserve"`.
+- **Why.** Prettier pads every cell of a Markdown table to the widest cell in its column unless `proseWrap` is `never`. Editing one row of the component map in `docs/conventions/angular.md` then rewrote every row, and PRs that edited different rows conflicted. With `never`, a table wider than `printWidth` (100) prints in compact form (`| a | b |`), so an edit to one row changes one line. `docs/conventions/angular.md` was reformatted once; only table lines changed, and no cell text changed.
+- **Why it comes after `**/*.md`.** Prettier applies matching overrides in order and the later one wins. Placed before `**/*.md`, the new entry loses to `preserve` and changes nothing. `scripts/prettier-config.test.mjs` fails if the order changes.
+- **Why it is not used for `**/*.md`.** `never` for every Markdown file rewrites about 1,100 table lines in 17 files, among them AGENTS.md, ADRs 0002 to 0013, and `dev-cycle.md`, and rejoins wrapped list lines in two ADRs. The conventions folder is the only place where several open PRs edit rows of one table.
+- **Limit.** A table that fits in 100 characters keeps its padding under `never`, so widening a column in a narrow table still re-pads that table. A table that grows past 100 characters is rewritten once into compact form. `docs/conventions/` has no narrow table today.
