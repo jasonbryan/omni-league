@@ -1,5 +1,6 @@
 import type { Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { expectBareCard } from '../ui/testing/card';
 import { OrganizationRowsSkeleton, OrganizationSkeleton } from './organization-skeleton';
 import { PublicLeagueSkeleton } from './public-league/public-league-skeleton';
 import type { PublicPageNames } from './public-league/public-page-names';
@@ -27,6 +28,27 @@ describe('page skeletons', () => {
     fixture.componentRef.setInput('kind', 'league');
 
     expect((fixture.nativeElement as HTMLElement).hasAttribute('data-page-loading')).toBe(false);
+  });
+
+  describe('cards', () => {
+    const render = (skeleton: Type<unknown>) => {
+      const fixture = TestBed.createComponent(skeleton);
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    it('the league skeleton draws its registration card as a bare helm card', () => {
+      const cards = render(PublicLeagueSkeleton).querySelectorAll('[data-slot="card"]');
+      expect(cards).toHaveLength(1);
+      expectBareCard(cards[0], 'mt-5 flex flex-col gap-3 p-5 md:p-6');
+    });
+
+    it('the season skeleton draws its registration card as a bare helm card, with its test id kept', () => {
+      const cards = render(PublicSeasonSkeleton).querySelectorAll('[data-slot="card"]');
+      expect(cards).toHaveLength(1);
+      expect(cards[0].getAttribute('data-testid')).toBe('season-skeleton-card');
+      expectBareCard(cards[0], 'p-5 md:p-6');
+    });
   });
 
   describe('breadcrumb rows', () => {

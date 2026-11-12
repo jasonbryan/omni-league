@@ -53,6 +53,7 @@ import {
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
 import { HlmBadge } from '../ui/badge';
+import { HlmCard } from '../ui/card';
 import {
   OUTLINE_BUTTON,
   OUTLINE_BUTTON_LARGE,
@@ -89,6 +90,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
   selector: 'app-organization-overview',
   imports: [
     HlmBadge,
+    HlmCard,
     LeagueFilters,
     NgIcon,
     OpenSeasonsSkeleton,
@@ -219,9 +221,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                 <p class="mt-1 text-sm text-muted-foreground">{{ openSeasonsIntro }}</p>
                 <ul role="list" class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
                   @for (card of cards; track card.href) {
-                    <li
-                      class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
-                    >
+                    <li hlmCard size="bare" class="flex flex-col p-5">
                       <p class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                         <span hlmBadge variant="secondary" size="fit">{{ card.sportName }}</span>
                         @if (card.full) {

@@ -22,15 +22,23 @@ class Host {}
 
 @Component({
   imports: [HlmCardImports],
-  template: `<div hlmCard [size]="size()" class="mx-auto max-w-lg" [class.is-open]="open()"></div>`,
+  template: `<div
+    hlmCard
+    [size]="size()"
+    class="mx-auto max-w-lg"
+    [class]="extra()"
+    [class.is-open]="open()"
+  ></div>`,
 })
 class Configurable {
   readonly size = signal<HlmCardSize>('default');
   readonly open = signal(true);
+  readonly extra = signal('lg:sticky');
 }
 
 const BARE_SURFACE =
   'group/card rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const CALLER_CLASSES = ['mx-auto', 'max-w-lg', 'lg:sticky', 'is-open'];
 const LAYOUT_CLASSES = [
   'flex',
   'flex-col',
@@ -74,11 +82,9 @@ describe('HlmCard', () => {
   it('bare renders exactly the card surface, with no flex, gap, overflow, padding, or text size', () => {
     const { card, classes } = render('bare');
     expect(card.getAttribute('data-size')).toBe('bare');
-    expect(
-      sorted(
-        classes.filter((name) => name !== 'mx-auto' && name !== 'max-w-lg' && name !== 'is-open'),
-      ),
-    ).toEqual(sorted(BARE_SURFACE.split(' ')));
+    expect(sorted(classes.filter((name) => !CALLER_CLASSES.includes(name)))).toEqual(
+      sorted(BARE_SURFACE.split(' ')),
+    );
     expect(sorted(CARD_CLASSES.split(' '))).toEqual(sorted(BARE_SURFACE.split(' ')));
   });
 
@@ -93,7 +99,9 @@ describe('HlmCard', () => {
 
   it('keeps the caller’s static class and its class binding beside the host class', () => {
     const { fixture, classes } = render('bare');
-    expect(classes).toEqual(expect.arrayContaining(['mx-auto', 'max-w-lg', 'is-open', 'bg-card']));
+    expect(classes).toEqual(
+      expect.arrayContaining(['mx-auto', 'max-w-lg', 'lg:sticky', 'is-open', 'bg-card']),
+    );
     fixture.componentInstance.open.set(false);
     fixture.detectChanges();
     const card = (fixture.nativeElement as HTMLElement).querySelector('div')!;
