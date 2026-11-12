@@ -185,6 +185,27 @@ test.describe('team invites', () => {
     if (isPhone(page)) expect(await scrollY(page)).toBeGreaterThan(0);
   });
 
+  test('after landing at #invite, a live change to the pending list leaves the invite form in place and keeps focus', async ({
+    page,
+  }, testInfo) => {
+    const captain = newUser('Captain');
+    await signUp(page, captain);
+    const { teamId } = await seedTeam(captain);
+    await addInvite(teamId, 'devon@example.com');
+    await page.goto(`/app/teams/${teamId}#invite`);
+    await expect(pendingList(page)).toContainText('devon@example.com');
+    await expect(email(page)).toBeFocused();
+    await expectBelowSlimBar(page, page.locator('#invite'), email(page));
+    const top = () => email(page).evaluate((element) => element.getBoundingClientRect().top);
+    const landedAt = await top();
+    await addInvite(teamId, 'kai@example.com');
+    await expect(pendingList(page)).toContainText('kai@example.com');
+    await expect(email(page)).toBeFocused();
+    expect(await top()).toBe(landedAt);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'invite-landing');
+  });
+
   test('a member opening #invite sees nothing scroll and focus stay on <main>', async ({
     page,
   }) => {
