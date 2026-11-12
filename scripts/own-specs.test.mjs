@@ -21,8 +21,8 @@ const SMOKE = 'e2e/smoke.spec.ts';
 const STUB_EXIT_CODE = 7;
 
 const gitReturning = (files) => () => files.join('\n') + '\n';
-const specNames = (count) =>
-  Array.from({ length: count }, (_, i) => `e2e/screen-${String(i).padStart(2, '0')}.spec.ts`);
+const specNames = (count, prefix = 'screen') =>
+  Array.from({ length: count }, (_, i) => `e2e/${prefix}-${String(i).padStart(2, '0')}.spec.ts`);
 
 const selectingFor = (specs) => () => ({
   scope: 'affected',
@@ -80,24 +80,6 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
     assert.ok(list.includes('e2e/organization-leagues-mockup.spec.ts'));
   });
 
-  it('lists only the mockup specs for a change whose screen specs pass the cap', () => {
-    const list = listFor([
-      'src/app/core/forms/slug-availability.ts',
-      'src/app/organizations/admin/league-create-form.ts',
-      'src/app/organizations/admin/league-form.ts',
-      'src/app/organizations/admin/web-address-preview.ts',
-      'src/app/organizations/admin/web-address-status.ts',
-      'src/app/organizations/create-organization-page.ts',
-      'src/app/organizations/league/league-management.ts',
-      'src/app/organizations/league/season-create-form.ts',
-      'src/app/organizations/league/season-form.ts',
-    ]);
-    assert.deepEqual(list, [
-      'e2e/league-management-mockup.spec.ts',
-      'e2e/organization-leagues-mockup.spec.ts',
-    ]);
-  });
-
   it('adds every screen spec when the union is exactly the cap', () => {
     const specs = specNames(SCREEN_SPEC_CAP);
     const mockup = 'e2e/a-mockup.spec.ts';
@@ -109,17 +91,18 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
     assert.equal(list.length, SCREEN_SPEC_CAP);
   });
 
-  it('adds only the mockup specs when the union is one over the cap', () => {
+  it('adds only the mockup specs for a file that fits no tier when the union is one over the cap', () => {
     const specs = specNames(SCREEN_SPEC_CAP);
     const mockup = 'e2e/a-mockup.spec.ts';
     const list = listFor(['src/app/cap-first.ts'], {
       select: selectingFor([...specs, mockup]),
       buildGraph: () => ({}),
+      routeSpecs: () => [],
     });
     assert.deepEqual(list, [mockup]);
   });
 
-  it('counts the union over every changed file, not each file alone', () => {
+  it('applies the tiers to each file when the union passes the cap though each file fits alone', () => {
     const specs = specNames(SCREEN_SPEC_CAP);
     const mockup = 'e2e/a-mockup.spec.ts';
     const select = (files) =>
@@ -130,7 +113,7 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
       select,
       buildGraph: () => ({}),
     });
-    assert.deepEqual(list, [mockup]);
+    assert.deepEqual(list, [...specs, mockup].sort());
   });
 
   it('selects each changed file on its own', () => {
@@ -181,6 +164,368 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
     assert.deepEqual(list, []);
     assert.equal(selected, 0);
     assert.equal(built, 0);
+  });
+});
+
+describe('ownSpecs: past the screen-spec cap, each file keeps its closest specs', () => {
+  const OVER = SCREEN_SPEC_CAP + 5;
+  const ALWAYS_SPECS = [SMOKE, 'e2e/convex-backend.spec.ts', 'e2e/harness/'];
+  const mockup = 'e2e/tier-mockup.spec.ts';
+
+  const selecting =
+    (byFile) =>
+    (files, context = {}) => {
+      const entry = byFile[files[0]];
+      if (entry === 'full') return { scope: 'full' };
+      return {
+        scope: 'affected',
+        specs: [...ALWAYS_SPECS, ...(context.narrow ? entry.narrow : entry.whole)],
+      };
+    };
+
+  function run(byFile, routes = {}) {
+    const lines = [];
+    const asked = [];
+    const list = listFor(Object.keys(byFile), {
+      select: selecting(byFile),
+      buildGraph: () => ({ graph: true }),
+      routeSpecs: (file, context) => {
+        asked.push({ file, context });
+        return routes[file] ?? [];
+      },
+      sessionSpecs: () => [],
+      log: (line) => lines.push(line),
+    });
+    return { list, lines, asked };
+  }
+
+  const OVER_ON_ALL_TIERS = 'src/app/padding.ts';
+  const padding = { whole: [...specNames(OVER, 'pad'), mockup], narrow: specNames(OVER, 'pad') };
+
+  it('adds the whole selection of a file whose selection fits the cap', () => {
+    const whole = specNames(6, 'whole');
+    const { list, lines } = run({
+      'src/app/whole.ts': { whole, narrow: [] },
+      [OVER_ON_ALL_TIERS]: padding,
+    });
+    assert.deepEqual(list, [...whole, mockup].sort());
+    assert.ok(lines.includes('e2e:own: src/app/whole.ts: whole, 6 specs'), lines.join('\n'));
+  });
+
+  it('adds only the own rule specs of a file whose selection passes the cap and whose rule fits', () => {
+    const own = specNames(4, 'own');
+    const { list, lines, asked } = run({
+      'src/app/rule.ts': { whole: [...specNames(OVER, 'importer'), ...own], narrow: own },
+      [OVER_ON_ALL_TIERS]: padding,
+    });
+    assert.deepEqual(list, [...own, mockup].sort());
+    assert.ok(lines.includes('e2e:own: src/app/rule.ts: own rule, 4 specs'), lines.join('\n'));
+    assert.deepEqual(
+      asked.map(({ file }) => file),
+      [OVER_ON_ALL_TIERS],
+    );
+  });
+
+  it('adds the route specs of a file whose rule passes the cap and whose routes fit', () => {
+    const routes = specNames(3, 'route');
+    const wide = specNames(OVER, 'wide');
+    const { list, lines, asked } = run(
+      { 'src/app/routes.ts': { whole: wide, narrow: wide }, [OVER_ON_ALL_TIERS]: padding },
+      { 'src/app/routes.ts': routes },
+    );
+    assert.deepEqual(list, [...routes, mockup].sort());
+    assert.ok(lines.includes('e2e:own: src/app/routes.ts: routes, 3 specs'), lines.join('\n'));
+    const [call] = asked.filter(({ file }) => file === 'src/app/routes.ts');
+    assert.deepEqual(call.context.graph, { graph: true });
+  });
+
+  it('adds nothing for a file that passes the cap on all three tiers', () => {
+    const wide = specNames(OVER, 'wide');
+    const { list, lines } = run(
+      { 'src/app/none.ts': { whole: wide, narrow: wide }, [OVER_ON_ALL_TIERS]: padding },
+      { 'src/app/none.ts': specNames(OVER, 'route') },
+    );
+    assert.deepEqual(list, [mockup]);
+    assert.ok(lines.includes('e2e:own: src/app/none.ts: none'), lines.join('\n'));
+  });
+
+  it('goes on to the routes for a file whose rule has only session specs', () => {
+    const routes = ['e2e/sign-in.spec.ts', 'e2e/auth-session.spec.ts', 'e2e/after-sign-in.spec.ts'];
+    const { list, lines } = run(
+      {
+        'src/app/sign-in/sign-in-page.ts': { whole: specNames(OVER, 'session'), narrow: [] },
+        [OVER_ON_ALL_TIERS]: padding,
+      },
+      { 'src/app/sign-in/sign-in-page.ts': routes },
+    );
+    assert.deepEqual(list, [...routes, mockup].sort());
+    assert.ok(
+      lines.includes('e2e:own: src/app/sign-in/sign-in-page.ts: routes, 3 specs'),
+      lines.join('\n'),
+    );
+  });
+
+  it('adds nothing for a file whose selection is empty, and tries no further tier for it', () => {
+    const { list, lines, asked } = run(
+      { 'src/app/unit.spec.ts': { whole: [], narrow: [] }, [OVER_ON_ALL_TIERS]: padding },
+      { 'src/app/unit.spec.ts': specNames(2, 'route') },
+    );
+    assert.deepEqual(list, [mockup]);
+    assert.ok(lines.includes('e2e:own: src/app/unit.spec.ts: none'), lines.join('\n'));
+    assert.ok(!asked.some(({ file }) => file === 'src/app/unit.spec.ts'));
+  });
+
+  it('adds nothing for a file whose selection is the full suite, and tries no tier for it', () => {
+    const { list, lines, asked } = run({
+      'src/app/core/auth/guards.ts': 'full',
+      [OVER_ON_ALL_TIERS]: padding,
+    });
+    assert.deepEqual(list, [mockup]);
+    assert.ok(
+      lines.includes(
+        'e2e:own: src/app/core/auth/guards.ts selects the full suite, which the batch run covers',
+      ),
+      lines.join('\n'),
+    );
+    assert.ok(!asked.some(({ file }) => file === 'src/app/core/auth/guards.ts'));
+  });
+
+  it('lists the mockup specs of the union whichever tier each file takes', () => {
+    const own = specNames(2, 'own');
+    const { list } = run({
+      'src/app/rule.ts': { whole: [...specNames(OVER, 'importer'), mockup], narrow: own },
+    });
+    assert.deepEqual(list, [...own, mockup].sort());
+  });
+
+  it('prints no tier line and runs no tier while the union is within the cap', () => {
+    const whole = specNames(SCREEN_SPEC_CAP, 'whole');
+    const { list, lines, asked } = run({ 'src/app/whole.ts': { whole, narrow: [] } });
+    assert.deepEqual(list, whole);
+    assert.deepEqual(lines, []);
+    assert.deepEqual(asked, []);
+  });
+
+  it('keeps the specs a rule with only derive specs gives, and only the mockup spec of its importer', () => {
+    const root = mkdtempSync(join(tmpdir(), 'own-specs-derive-'));
+    const write = (path, text) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    try {
+      write('src/app/organizations/league/lm.ts', 'export const lm = 1;\n');
+      write(
+        'src/app/organizations/organization-page.ts',
+        "import { lm } from './league/lm';\nexport const page = lm;\n",
+      );
+      write('e2e/harness/placeholder.txt', '');
+      write('e2e/lm-a.spec.ts', 'const path = `/app/organizations/${slug}/leagues/${league}`;\n');
+      write('e2e/lm-b.spec.ts', 'const path = `/app/organizations/${slug}/leagues/${league}`;\n');
+      const lines = [];
+      const list = ownSpecs({
+        root,
+        runGit: gitReturning(['src/app/organizations/league/lm.ts']),
+        ciScope: () => 'app',
+        sessionSpecs: () => [],
+        routeSpecs: () => [],
+        log: (line) => lines.push(line),
+      });
+      assert.deepEqual(list, [
+        'e2e/lm-a.spec.ts',
+        'e2e/lm-b.spec.ts',
+        'e2e/organization-leagues-mockup.spec.ts',
+      ]);
+      assert.ok(
+        lines.includes('e2e:own: src/app/organizations/league/lm.ts: own rule, 2 specs'),
+        lines.join('\n'),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reads the route specs from the route table of the copy of HEAD', () => {
+    const root = mkdtempSync(join(tmpdir(), 'own-specs-routes-'));
+    const write = (path, text) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    try {
+      write('src/app/sign-in/sign-in-page.ts', 'export const page = 1;\n');
+      write(
+        'src/app/app.routes.ts',
+        `export const routes: Routes = [
+  {
+    path: 'sign-in',
+    loadComponent: () => import('./sign-in/sign-in-page').then((m) => m.SignInPage),
+  },
+];
+`,
+      );
+      const lines = [];
+      const list = ownSpecs({
+        root,
+        runGit: gitReturning(['src/app/sign-in/sign-in-page.ts']),
+        ciScope: () => 'app',
+        sessionSpecs: () => specNames(OVER, 'session'),
+        select: (files, context) => ({
+          scope: 'affected',
+          specs: context.narrow ? [] : [...ALWAYS_SPECS, ...specNames(OVER, 'session')],
+        }),
+        log: (line) => lines.push(line),
+      });
+      assert.deepEqual(list, [
+        'e2e/after-sign-in.spec.ts',
+        'e2e/auth-session.spec.ts',
+        'e2e/sign-in.spec.ts',
+      ]);
+      assert.ok(
+        lines.includes('e2e:own: src/app/sign-in/sign-in-page.ts: routes, 3 specs'),
+        lines.join('\n'),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('names the reason and adds no route specs when the route table cannot be read', () => {
+    const root = mkdtempSync(join(tmpdir(), 'own-specs-no-routes-'));
+    try {
+      mkdirSync(join(root, 'src/app'), { recursive: true });
+      writeFileSync(join(root, 'src/app/page.ts'), 'export const page = 1;\n');
+      const lines = [];
+      const wide = specNames(OVER, 'wide');
+      const list = ownSpecs({
+        root,
+        runGit: gitReturning(['src/app/page.ts']),
+        ciScope: () => 'app',
+        sessionSpecs: () => [],
+        select: () => ({ scope: 'affected', specs: wide }),
+        log: (line) => lines.push(line),
+      });
+      assert.deepEqual(list, [SMOKE]);
+      assert.ok(
+        lines.some((line) =>
+          /^e2e:own: src\/app\/page\.ts: route table cannot be read: .+/.test(line),
+        ),
+        lines.join('\n'),
+      );
+      assert.ok(lines.includes('e2e:own: src/app/page.ts: none'), lines.join('\n'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('ownSpecs: the tiers on the real repo', () => {
+  const ORGANIZATIONS = 'src/app/organizations';
+  const ADMIN = `${ORGANIZATIONS}/admin`;
+  const PR_ADMIN_FILES = [
+    'admin-area',
+    'admin-leagues',
+    'admin-sidebar',
+    'admin-tournaments',
+    'create-form-landing',
+    'custom-level-panel',
+    'league-division-fields',
+    'tournament-create-form',
+    'tournament-form',
+  ].map((name) => `${ADMIN}/${name}.ts`);
+  const PR_PUBLIC_PAGE_FILES = [
+    'organization-overview',
+    'public-league/public-league-content',
+    'public-league/public-page-names',
+    'public-league/public-season-header-classes',
+    'public-season/public-season-content',
+    'public-season/public-season-page',
+    'public-season/public-season-skeleton',
+  ].map((name) => `${ORGANIZATIONS}/${name}.ts`);
+  const PR_BUTTON_FILES = [
+    `${ORGANIZATIONS}/organization-overview.ts`,
+    'src/app/ui/button/button-classes.ts',
+  ];
+  const PR_LEAGUE_FILES = [
+    'filter-draft',
+    'league/league-details-form',
+    'league/league-details-state',
+    'league/season-create-form',
+    'league/season-form',
+  ].map((name) => `${ORGANIZATIONS}/${name}.ts`);
+  const PR_SHELL_FILES = ['src/app/shell/shell.ts', 'src/app/account/account-page.ts'];
+
+  function replay(files) {
+    const lines = [];
+    const list = ownSpecs({
+      root: repoRoot,
+      runGit: gitReturning(files),
+      ciScope: () => 'app',
+      log: (line) => lines.push(line),
+    });
+    return { names: list.map((spec) => spec.replace(/^e2e\/|\.spec\.ts$/g, '')), lines };
+  }
+
+  function assertReplay(files, include, atMost) {
+    const { names, lines } = replay(files);
+    for (const name of include) assert.ok(names.includes(name), `${name} in ${names.join(' ')}`);
+    assert.ok(names.length <= atMost, `${names.length} specs: ${names.join(' ')}`);
+    return lines;
+  }
+
+  it('keeps the shell, the shell sheet and the home specs for the shell and account page', () => {
+    const lines = assertReplay(PR_SHELL_FILES, ['app-shell', 'shell-sheet', 'app-home'], 10);
+    assert.ok(lines.includes('e2e:own: src/app/shell/shell.ts: own rule, 2 specs'));
+  });
+
+  it('keeps the admin specs for the nine admin files', () => {
+    assertReplay(
+      PR_ADMIN_FILES,
+      [
+        'organization-admin',
+        'organization-leagues',
+        'organization-staff',
+        'organization-tournaments',
+        'organization-leagues-division',
+        'organization-leagues-custom-level',
+        'organization-details',
+        'navigation-focus',
+        'organization-leagues-publish',
+      ],
+      20,
+    );
+  });
+
+  it('keeps the public page specs for the seven public page files', () => {
+    assertReplay(
+      PR_PUBLIC_PAGE_FILES,
+      [
+        'season-page',
+        'public-page-layout-shift',
+        'league-page',
+        'organization-page',
+        'cache-key',
+        'free-agent',
+        'team-registration',
+        'league-page-offline',
+        'sport-view',
+      ],
+      15,
+    );
+  });
+
+  it('keeps the organization page specs for the overview and the button classes', () => {
+    const lines = assertReplay(
+      PR_BUTTON_FILES,
+      ['organization-page', 'organization-page-manage', 'sport-view'],
+      10,
+    );
+    assert.ok(
+      lines.includes('e2e:own: src/app/ui/button/button-classes.ts: none'),
+      lines.join('\n'),
+    );
+  });
+
+  it('keeps the league management specs for the five league files', () => {
+    assertReplay(PR_LEAGUE_FILES, ['league-management', 'league-management-details'], 15);
   });
 });
 
@@ -758,6 +1103,8 @@ describe('ownSpecs: the import bullet on the real repo', () => {
     'src/app/organizations/admin/attention-text.ts',
   ];
   const MAX_PR_SPECS = 20;
+  // Past the cap each file adds its closest specs, so the union may pass the cap.
+  const MAX_TIERED_PR_SPECS = 30;
 
   for (const file of ['convex/users.ts', 'convex/leagues.ts']) {
     it(`lists only the smoke spec for ${file}`, () => {
@@ -788,7 +1135,7 @@ describe('ownSpecs: the import bullet on the real repo', () => {
     for (const spec of ['e2e/cache-key.spec.ts', 'e2e/sport-view.spec.ts']) {
       assert.ok(!list.includes(spec), spec);
     }
-    assert.ok(list.length <= MAX_PR_SPECS, `${list.length} specs`);
+    assert.ok(list.length <= MAX_TIERED_PR_SPECS, `${list.length} specs`);
   });
 
   it('lists the specs of an Overview change that the stem rule also found', () => {
@@ -1169,6 +1516,14 @@ describe('main', () => {
     assert.deepEqual(ran, []);
   });
 
+  it('sends the tier lines to stderr, so --list stdout stays one spec per line', async () => {
+    const { printed, logged, received, result } = run(['--list'], { specs: ['e2e/a.spec.ts'] });
+    await result;
+    received[0].log('e2e:own: src/app/x.ts: none');
+    assert.deepEqual(printed, ['e2e/a.spec.ts']);
+    assert.deepEqual(logged, ['e2e:own: src/app/x.ts: none']);
+  });
+
   it('keeps --list out of the flags and the named specs', async () => {
     const { received, result } = run(['--list', 'e2e/x.spec.ts'], { specs: [] });
     await result;
@@ -1537,10 +1892,38 @@ describe('the rule in the docs', () => {
     });
   }
 
-  it('dev-cycle.md names the cap constant and the mockup fallback', () => {
+  const OLD_WORDING = [
+    /else only the/,
+    /only the `\*-mockup\.spec\.ts` specs among them/,
+    /only its `\*-mockup\.spec\.ts` specs are added/,
+  ];
+
+  for (const path of documents) {
+    it(`${path} states the tiers, not the old mockup-only fallback`, () => {
+      const text = read(path);
+      assert.match(text, /closest|own rule/);
+      assert.match(text, /mockup/);
+      for (const pattern of OLD_WORDING) assert.doesNotMatch(text, pattern);
+    });
+  }
+
+  it('dev-cycle.md names the cap constant, the three tiers, and the stderr lines', () => {
     const text = read('docs/process/dev-cycle.md');
     assert.match(text, /SCREEN_SPEC_CAP/);
     assert.match(text, /-mockup\.spec\.ts/);
+    for (const tier of ['**Whole selection:**', '**Own rule:**', '**Routes:**']) {
+      assert.ok(text.includes(tier), tier);
+    }
+    for (const line of [
+      'whole, <n> specs',
+      'own rule, <n> specs',
+      'routes, <n> specs',
+      ': none`',
+    ]) {
+      assert.ok(text.includes(line), line);
+    }
+    assert.match(text, /A tier with no specs does not fit/);
+    assert.match(text, /A full-suite file tries no tier/);
   });
 
   describe('the import bullet of Own e2e specs', () => {
@@ -1577,6 +1960,12 @@ describe('the rule in the docs', () => {
     const text = read('docs/decisions/0009-ci-pipeline.md');
     assert.match(text, /issues\/634#issuecomment-6786641125/);
     assert.match(text, /not a `gate:technology` change/);
+  });
+
+  it('the CI pipeline decision records the closest-per-file amendment with the owner answer', () => {
+    const text = read('docs/decisions/0009-ci-pipeline.md');
+    assert.match(text, /issues\/691#issuecomment-6829898486/);
+    assert.match(text, /Amendment: past the cap, each file keeps its closest specs/);
   });
 
   it('package.json has the e2e:own script', () => {

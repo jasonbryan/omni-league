@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { basename, extname, join, posix } from 'node:path';
 import ts from 'typescript';
 import { classify, deriveAppScripts } from './ci-scope.mjs';
-import { ALWAYS, buildImportGraph, deriveSessionSpecs, selectSpecs } from './e2e-affected.mjs';
+import {
+  ALWAYS,
+  buildImportGraph,
+  deriveSessionSpecs,
+  routeSpecsFor,
+  selectSpecs,
+} from './e2e-affected.mjs';
 import { runE2e } from './e2e.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -22,7 +28,7 @@ const SCRIPT_EXTENSION_READ_AS = new Map([
 const E2E_DIR = 'e2e';
 const ARCHIVE_MAX_BYTES = 1024 ** 3;
 
-// Specs past the cap are left to the batch run, whose full suite covers them.
+// A file's specs past the cap are left to the batch run, whose full suite covers them.
 export const SCREEN_SPEC_CAP = 20;
 
 function git(root, args) {
@@ -161,21 +167,70 @@ function importingSpecs(root, changed) {
   return [...specs];
 }
 
+const withoutAlways = (specs) => specs.filter((filter) => !ALWAYS.includes(filter));
+const fits = (specs) => specs.length > 0 && specs.length <= SCREEN_SPEC_CAP;
+
+/**
+ * @param {string} file
+ * @param {string[]} whole
+ * @param {{
+ *   root: () => string,
+ *   graph: import('./e2e-affected.mjs').ImportGraph,
+ *   select: typeof selectSpecs,
+ *   routeSpecs: typeof routeSpecsFor,
+ *   log: (message: string) => void,
+ * }} context
+ * @returns {string[]}
+ */
+function closestSpecs(file, whole, { root, graph, select, routeSpecs, log }) {
+  const keep = (tier, specs) => {
+    log(`e2e:own: ${file}: ${tier}, ${specs.length} specs`);
+    return specs;
+  };
+  if (whole.length === 0) {
+    log(`e2e:own: ${file}: none`);
+    return [];
+  }
+  if (fits(whole)) return keep('whole', whole);
+  const own = select([file], {
+    event: 'pull_request',
+    base: 'main',
+    root: root(),
+    graph,
+    warn: () => {},
+    narrow: true,
+  });
+  const ownSpecs = own.scope === 'affected' ? withoutAlways(own.specs) : [];
+  if (fits(ownSpecs)) return keep('own rule', ownSpecs);
+  let routes = [];
+  try {
+    routes = routeSpecs(file, { root: root(), graph });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : error;
+    log(`e2e:own: ${file}: route table cannot be read: ${reason}`);
+  }
+  if (fits(routes)) return keep('routes', routes);
+  log(`e2e:own: ${file}: none`);
+  return [];
+}
+
 /**
  * @param {string[]} changed
  * @param {{
  *   root: () => string,
  *   buildGraph: typeof buildImportGraph,
  *   select: typeof selectSpecs,
+ *   routeSpecs: typeof routeSpecsFor,
  *   sessionSpecs: () => string[],
  *   log: (message: string) => void,
  * }} context
  * @returns {string[]}
  */
-function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
+function screenSpecs(changed, { root, buildGraph, select, routeSpecs, sessionSpecs, log }) {
   const screenFiles = changed.filter((file) => SCREEN_DIRS.some((dir) => file.startsWith(dir)));
   if (screenFiles.length === 0) return [];
   const graph = buildGraph(root());
+  const wholeByFile = new Map();
   const union = new Set();
   for (const file of screenFiles) {
     const selection = select([file], {
@@ -190,13 +245,18 @@ function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
       log(`e2e:own: ${file} selects the full suite, which the batch run covers`);
       continue;
     }
-    for (const filter of selection.specs) if (!ALWAYS.includes(filter)) union.add(filter);
+    const whole = withoutAlways(selection.specs);
+    wholeByFile.set(file, whole);
+    for (const filter of whole) union.add(filter);
   }
   if (union.size <= SCREEN_SPEC_CAP) return [...union];
-  log(
-    `e2e:own: ${union.size} screen specs pass the cap of ${SCREEN_SPEC_CAP}; keeping the mockup specs`,
-  );
-  return [...union].filter((filter) => MOCKUP_SPEC.test(filter));
+  const kept = new Set([...union].filter((filter) => MOCKUP_SPEC.test(filter)));
+  for (const [file, whole] of wholeByFile) {
+    for (const filter of closestSpecs(file, whole, { root, graph, select, routeSpecs, log })) {
+      kept.add(filter);
+    }
+  }
+  return [...kept];
 }
 
 /**
@@ -206,6 +266,7 @@ function screenSpecs(changed, { root, buildGraph, select, sessionSpecs, log }) {
  *   snapshot?: typeof headSnapshot,
  *   buildGraph?: typeof buildImportGraph,
  *   select?: typeof selectSpecs,
+ *   routeSpecs?: typeof routeSpecsFor,
  *   sessionSpecs?: () => string[],
  *   ciScope?: (files: string[]) => string,
  *   exists?: (path: string) => boolean,
@@ -220,6 +281,7 @@ export function ownSpecs({
   snapshot = headSnapshot,
   buildGraph = buildImportGraph,
   select = selectSpecs,
+  routeSpecs = routeSpecsFor,
   sessionSpecs,
   ciScope,
   exists,
@@ -245,6 +307,7 @@ export function ownSpecs({
       root: tree,
       buildGraph,
       select,
+      routeSpecs,
       sessionSpecs: () => (sessions ??= sessionSpecsOf()),
       log,
     });

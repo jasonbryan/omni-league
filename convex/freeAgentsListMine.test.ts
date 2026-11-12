@@ -119,7 +119,7 @@ const waitIn = (s: Setup, seasonId: Id<'seasons'>, userId: Id<'users'>) =>
   });
 
 describe('freeAgents.listMine', () => {
-  test('returns the caller’s waiting row with its league, season, organization, deadline and start date', async () => {
+  test('returns the caller’s waiting row with its league, season, organization, deadline, start date and end date', async () => {
     const s = await setup();
     await waitIn(s, s.summer, s.x);
     const [row, ...rest] = await listMineAs(s, 'x');
@@ -132,6 +132,7 @@ describe('freeAgents.listMine', () => {
       organizationName: 'Gulf Coast Sport & Social',
       registrationDeadline: '2030-05-20',
       seasonStartDate: '2030-06-01',
+      seasonEndDate: '2030-08-30',
     });
   });
 

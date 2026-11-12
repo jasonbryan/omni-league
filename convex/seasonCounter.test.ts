@@ -252,7 +252,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       stored: 2,
       recount: 2,
     });
-    expect(all['gulf-coast-sport-social/coed-7v7-rec']).toEqual({ stored: 2, recount: 2 });
+    expect(all['gulf-coast-sport-social/coed-7v7-rec']).toEqual({ stored: 3, recount: 3 });
     expect(all['gulf-coast-sport-social/thursday-night-coed-2s']).toEqual({
       stored: 1,
       recount: 1,

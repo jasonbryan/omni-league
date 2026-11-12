@@ -13,6 +13,7 @@ export interface HomeFreeAgent {
   organizationName: string;
   registrationDeadline: string;
   seasonStartDate: string;
+  seasonEndDate: string;
 }
 
 @Component({

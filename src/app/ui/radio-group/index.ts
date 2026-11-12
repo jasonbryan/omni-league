@@ -15,7 +15,8 @@
 //   touch exploration find the input where the radio is drawn;
 // - static classes, so a chunk that uses them carries no class-merging code: the radio sets `shrink-0` on its host and its own classes
 //   on `brn-radio`, followed by the `class` input, which a consumer binds with `[class]` so the classes are not also left on the host;
-// - the group is a grid with a `gap-3` in place of `gap-2`, which is today's spacing between the rows.
+// - the group is a grid with a `gap-3` in place of `gap-2`, which is today's spacing between the rows;
+// - the class strings and the input styles live in `radio-classes.ts`, which imports nothing, so an e2e spec can read them.
 import { HlmRadio } from './hlm-radio';
 import { HlmRadioGroup } from './hlm-radio-group';
 import { HlmRadioIndicator } from './hlm-radio-indicator';
@@ -23,5 +24,6 @@ import { HlmRadioIndicator } from './hlm-radio-indicator';
 export * from './hlm-radio';
 export * from './hlm-radio-group';
 export * from './hlm-radio-indicator';
+export * from './radio-classes';
 
 export const HlmRadioGroupImports = [HlmRadioGroup, HlmRadio, HlmRadioIndicator] as const;

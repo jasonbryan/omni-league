@@ -90,9 +90,7 @@ describe('AdminTournaments', () => {
   }
 
   async function choose(id: string) {
-    const radio = input(id);
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    input(id).click();
     await o.harness.fixture.whenStable();
   }
 

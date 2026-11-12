@@ -69,6 +69,7 @@ export const listMine = query({
       organizationName: v.string(),
       registrationDeadline: v.string(),
       seasonStartDate: v.string(),
+      seasonEndDate: v.string(),
     }),
   ),
   handler: async (ctx) => {
@@ -95,6 +96,7 @@ export const listMine = query({
         organizationName: organization.name,
         registrationDeadline: season.registrationDeadline,
         seasonStartDate: season.startDate,
+        seasonEndDate: season.endDate,
       });
     }
     return rows;

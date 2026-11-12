@@ -12,8 +12,12 @@ const FORCED_COLORS_CHOICE_FOCUS = 'peer-focus-visible:forced-colors:outline-[Ca
 const WEBKIT_CHOICE_FOCUS =
   'supports-[-webkit-backdrop-filter:none]:peer-focus:outline-2 supports-[-webkit-backdrop-filter:none]:peer-focus:outline-offset-2 supports-[-webkit-backdrop-filter:none]:peer-focus:outline-ring';
 
-const CHIP =
-  'inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center';
+const WEBKIT_RADIO_CHIP_FOCUS =
+  'supports-[-webkit-backdrop-filter:none]:has-[input:focus]:outline-2 supports-[-webkit-backdrop-filter:none]:has-[input:focus]:outline-offset-2 supports-[-webkit-backdrop-filter:none]:has-[input:focus]:outline-ring';
+
+const CHIP_SHAPE =
+  'inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center';
+const CHIP = `${CHIP_SHAPE} gap-2`;
 
 export function chipLinkClasses(current: boolean): string {
   return current
@@ -32,4 +36,16 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
   WEBKIT_CHOICE_FOCUS,
   FORCED_COLORS_CHECKED_FILL,
   FORCED_COLORS_CHOICE_FOCUS,
+].join(' ');
+
+// The helm radio classes come first and nothing merges classes: `mt-0!` beats their `mt-0.5`, which a plain zero margin sorts before,
+// and the fill is `data-[checked=true]:` so it matches the specificity of their `has-checked:` fill and comes later in the stylesheet
+// (spartan's `data-checked:` is a zero-specificity `:where()`). Their keyboard focus ring stays; this adds the WebKit and forced-colours cases.
+export const RADIO_CHIP_CLASSES = [
+  CHIP_SHAPE,
+  'mt-0! w-fit cursor-pointer select-none hover:bg-muted',
+  'data-[checked=true]:border-foreground data-[checked=true]:bg-foreground data-[checked=true]:text-background',
+  WEBKIT_RADIO_CHIP_FOCUS,
+  'data-[checked=true]:forced-colors:forced-color-adjust-none data-[checked=true]:forced-colors:bg-[Highlight] data-[checked=true]:forced-colors:text-[HighlightText]',
+  'has-[input:focus-visible]:forced-colors:outline-[CanvasText]',
 ].join(' ');
