@@ -226,7 +226,6 @@ export const getForCopy = query({
     v.null(),
     v.object({
       name: v.string(),
-      // The next free web address from the name, so the copy never starts on a taken one.
       slug: v.string(),
       sport: sportValidator,
       locationIds: v.array(v.id('locations')),

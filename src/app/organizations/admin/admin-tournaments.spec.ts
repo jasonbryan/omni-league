@@ -716,6 +716,24 @@ describe('AdminTournaments', () => {
       ]);
     });
 
+    it('keeps the copied division when its name states another, on leaving Name and on submit', async () => {
+      await openCopy({ ...COPY, name: 'Winter 4v4 BB Classic' });
+      await leave('name');
+      expect(input('format-2').checked).toBe(true);
+      expect(input('level-open').checked).toBe(true);
+      expect(text(form().querySelector('[role="status"]'))).not.toContain(
+        'filled in from the name',
+      );
+      await type('start-date', '2028-01-15');
+      await type('registration-deadline', '2028-01-08');
+      await submit();
+      expect(o.convex.calls.find((c) => c.name === CREATE)!.args).toMatchObject({
+        name: 'Winter 4v4 BB Classic',
+        playersPerSide: 2,
+        level: 'open',
+      });
+    });
+
     it('keeps a custom level, so the new tournament sends it', async () => {
       await openCopy({ ...COPY, level: 'rec', customLevelId: 'cl_sandy' });
       await type('start-date', '2028-01-15');

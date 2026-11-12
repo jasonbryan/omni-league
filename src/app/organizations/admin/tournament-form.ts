@@ -112,6 +112,8 @@ export class TournamentForm {
   private readonly clientErrors: Signal<Partial<Record<TournamentField, TournamentInputError>>>;
   private readonly shown: Record<TournamentField, ShownUntilValid>;
   private readonly locationsChanged = signal(false);
+  // The source's name, whose division the copy already holds.
+  private copiedName: string | null = null;
   private readonly serverErrors: Record<TournamentField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<TournamentField, Signal<string | null>>;
@@ -235,7 +237,6 @@ export class TournamentForm {
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
   }
 
-  /** Leaves the dates blank and the web address as offered, so the name still derives it until the address is edited. */
   loadCopy(copy: TournamentCopy): void {
     this.model.update((m) => ({
       ...m,
@@ -243,7 +244,9 @@ export class TournamentForm {
       slug: copy.slug,
       maximumTeams: String(copy.maximumTeams),
     }));
+    // Unedited, so renaming the copy still derives the address.
     this.slugEdited.set(false);
+    this.copiedName = copy.name;
     this.chosenSport.set(copy.sport);
     this.division.load({
       gender: copy.gender,
@@ -274,6 +277,7 @@ export class TournamentForm {
   clear(): void {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
+    this.copiedName = null;
     this.chosenSport.set(null);
     this.division.clear();
     this.selected.set(this.defaultSelected());
@@ -338,6 +342,7 @@ export class TournamentForm {
   }
 
   private fillDivisionFromName(): void {
+    if (this.model().name.trim() === this.copiedName?.trim()) return;
     this.division.fillFromName(this.model().name, this.sport());
   }
 
