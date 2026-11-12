@@ -17,11 +17,12 @@ const SIZES: Readonly<Record<HlmCardSize, string>> = {
 // - `shadow-xs`, and 20px spacing (helm's is 16px), as the pages draw their cards;
 // - no footer, no `sm` size, and no image rules (`img:first-child`, `img:last-child`): the app has
 //   none of them, and each rule adds to the global stylesheet;
-// - a 16px gap between the parts, and a `lg` size with 24px spacing for the cards that stand alone on a page;
+// - a 16px gap between its children, and a `lg` size with 24px spacing for the cards that stand alone on a page;
 // - a `bare` size, the surface only, with no flex, gap, overflow, padding, or text size, for cards that lay out
 //   their own sections: with no `tailwind-merge`, a page cannot take those off the other sizes;
 // - `card-classes.ts` exports the `bare` surface and a `shadow-lg` one for the update prompt, which loads
 //   with the first page and so cannot import this directive;
+// - no header, title, description, content, or action parts, which no page draws yet;
 // - no `HlmCardConfig` token: the size defaults to `default`.
 @Directive({
   selector: '[hlmCard],hlm-card',
