@@ -21,6 +21,7 @@ import {
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { slotsOf } from '../ui/testing/helm-slots';
+import { expectBareCard } from '../ui/testing/card';
 import {
   GULF_COAST,
   PAGED,
@@ -461,6 +462,30 @@ describe('Registration open on the server', () => {
       '/organizations/gulf-coast-sport-social#registration-open',
     );
     expect(html).not.toContain('SECRET');
+  });
+
+  it('puts each open card’s slot, size, and classes in the raw HTML as static attributes', async () => {
+    const { body } = await render('/organizations/gulf-coast-sport-social', withOpen);
+    const cards = [...body.querySelectorAll('#registration-open > ul > li')];
+    expect(cards).toHaveLength(2);
+    for (const card of cards) expectBareCard(card, 'flex flex-col p-5');
+  });
+
+  it('puts the open cards of a sport view in the raw HTML as bare helm cards', async () => {
+    const { body } = await render('/organizations/gulf-coast-sport-social/sports/soccer', (name) =>
+      Promise.resolve(
+        sportQueryResults(
+          {
+            ...GULF_COAST,
+            openSeasons: [season('Soon 2027', '2027-04-20', 7)],
+          },
+          'soccer',
+        )[name],
+      ),
+    );
+    const cards = [...body.querySelectorAll('#registration-open > ul > li')];
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'flex flex-col p-5');
   });
 
   it('puts Full and the open waitlist in the raw HTML of a full season’s league row and card', async () => {

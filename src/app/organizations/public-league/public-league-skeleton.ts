@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight } from '@ng-icons/lucide';
+import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { CRUMB_BOX, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import type { PublicPageNames } from './public-page-names';
@@ -10,7 +11,7 @@ const BAR = 'block rounded-md';
 /** Its heading sits where the page's `h1` does, so the page replaces it without a jump. */
 @Component({
   selector: 'app-public-league-skeleton',
-  imports: [HlmSkeleton, NgIcon],
+  imports: [HlmCard, HlmSkeleton, NgIcon],
   providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', 'data-testid': 'league-skeleton', 'data-page-loading': '' },
@@ -53,9 +54,7 @@ const BAR = 'block rounded-md';
       <div class="mx-auto grid w-full max-w-6xl gap-x-12 px-4 py-8 md:px-8 md:py-12 lg:grid-cols-3">
         <div class="lg:col-span-2">
           <span hlmSkeleton aria-hidden="true" class="${BAR} h-7 w-48"></span>
-          <div
-            class="mt-5 flex flex-col gap-3 rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6"
-          >
+          <div hlmCard size="bare" class="mt-5 flex flex-col gap-3 p-5 md:p-6">
             <span hlmSkeleton aria-hidden="true" class="${BAR} h-6 w-40"></span>
             <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-3/4"></span>
             <span hlmSkeleton aria-hidden="true" class="${BAR} h-11 w-full md:w-40"></span>

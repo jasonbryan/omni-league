@@ -22,6 +22,7 @@ import {
   without,
 } from './testing/season-data';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCard } from '../../ui/testing/card';
 
 const SEASON = 'seasons:getPublicPage';
 const TEAMS = 'teams:listPublic';
@@ -242,6 +243,12 @@ describe('PublicSeasonPage populated', () => {
     const follows = Node.DOCUMENT_POSITION_FOLLOWING;
     expect(h1.compareDocumentPosition(registration) & follows).toBeTruthy();
     expect(registration.compareDocumentPosition(details) & follows).toBeTruthy();
+  });
+
+  it('draws the registration card as a bare helm card that sticks from lg', () => {
+    const cards = host(harness).querySelectorAll('#registration [data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'min-h-66 sm:min-h-58 p-5 md:p-6 lg:sticky lg:top-24 lg:min-h-0');
   });
 
   it('lists the dates, division, deadline, and location with its address in a labelled details list', () => {
@@ -617,6 +624,13 @@ describe('PublicSeasonPage teams', () => {
       'Sunday Reverse Coed 4s · Summer 2027',
     );
     expect(teamNames(harness)).toEqual(TEAM_NAMES.slice(0, 5));
+  });
+
+  it('draws the teams panel as a bare helm card on its section', async () => {
+    const harness = await open();
+    emit(seasonQueryResults({ teams: teamsPage(1, TEAM_NAMES.slice(0, 2)) }));
+    await settle(harness);
+    expectBareCard(panel(harness), 'scroll-mt-20 overflow-hidden');
   });
 
   it('falls back to the error view when the teams never answer', async () => {

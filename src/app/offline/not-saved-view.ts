@@ -11,6 +11,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideRotateCw, lucideWifiOff } from '@ng-icons/lucide';
 import { focusWhenReplacing } from '../core/replaced-focus';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 
 /**
  * The page's live subscription stays open, so the page replaces this view by itself when the connection returns.
@@ -18,13 +19,15 @@ import { PRIMARY_BUTTON } from '../ui/button/button-classes';
  */
 @Component({
   selector: 'app-not-saved-view',
-  imports: [NgIcon],
+  imports: [HlmCard, NgIcon],
   providers: [provideIcons({ lucideRotateCw, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
   template: `
     <div
-      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+      hlmCard
+      size="bare"
+      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
     >
       <span
         class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"

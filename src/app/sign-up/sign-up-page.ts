@@ -27,6 +27,7 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { HlmAlertImports } from '../ui/alert';
+import { HlmCard } from '../ui/card';
 import { HlmFieldImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
@@ -84,6 +85,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
     Checkbox,
     FormField,
     HlmAlertImports,
+    HlmCard,
     HlmFieldImports,
     HlmInputImports,
     NgIcon,
@@ -95,9 +97,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
   template: `
     <app-public-layout>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
-        <div
-          class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-        >
+        <div hlmCard size="bare" class="mx-auto w-full max-w-md overflow-hidden">
           <div class="px-5 pt-6 md:px-8 md:pt-8">
             <h1 id="sign-up-heading" class="text-2xl font-semibold tracking-tight">
               Create your account

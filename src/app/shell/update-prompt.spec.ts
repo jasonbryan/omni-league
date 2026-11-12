@@ -23,7 +23,7 @@ class FakeResizeObserver {
 }
 
 const CARD_CLASSES =
-  'fixed inset-x-3 bottom-3 z-40 rounded-xl bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ' +
+  'group/card fixed inset-x-3 bottom-3 z-40 rounded-xl bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ' +
   'text-card-foreground shadow-lg ring-1 ring-foreground/10 sm:inset-x-auto sm:end-4 sm:bottom-4 sm:w-96';
 
 const LUCIDE_REFRESH_CW = [
@@ -120,6 +120,7 @@ describe('UpdatePrompt', () => {
       const section = card();
       expect(section).not.toBeNull();
       expect(sorted(section?.className ?? '')).toEqual(sorted(CARD_CLASSES));
+      expect(section?.getAttribute('data-slot')).toBe('card');
       expect(section?.hasAttribute('role')).toBe(false);
       const heading = section?.querySelector('h2');
       expect(section?.getAttribute('aria-labelledby')).toBe(heading?.id);
@@ -231,6 +232,7 @@ describe('UpdatePrompt', () => {
       const section = card();
       expect(section?.getAttribute('role')).toBe('alert');
       expect(sorted(section?.className ?? '')).toEqual(sorted(CARD_CLASSES));
+      expect(section?.getAttribute('data-slot')).toBe('card');
       const heading = section?.querySelector('h2');
       expect(section?.getAttribute('aria-labelledby')).toBe(heading?.id);
       expect(text(heading)).toBe('Omni League needs to reload');

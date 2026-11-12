@@ -12,17 +12,20 @@ import { lucideCloudOff, lucideRotateCw } from '@ng-icons/lucide';
 import { setServerErrorStatus } from '../core/server-error-status';
 import { focusWhenReplacing } from '../core/replaced-focus';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 
 /** It never shows the error's message, which on the server is the real one. */
 @Component({
   selector: 'app-server-error-view',
-  imports: [NgIcon],
+  imports: [HlmCard, NgIcon],
   providers: [provideIcons({ lucideCloudOff, lucideRotateCw })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
   template: `
     <div
-      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+      hlmCard
+      size="bare"
+      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
     >
       <span
         class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
