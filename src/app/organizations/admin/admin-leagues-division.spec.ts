@@ -70,8 +70,7 @@ describe('AdminLeagues: the Division group', () => {
   }
 
   async function choose(id: string) {
-    input(id).checked = true;
-    input(id).dispatchEvent(new Event('change', { bubbles: true }));
+    input(id).click();
     await settle();
   }
 
@@ -149,7 +148,7 @@ describe('AdminLeagues: the Division group', () => {
     it('a chip is chosen by pressing its label, and its radio shows no text of its own', async () => {
       await open();
       await choose('sport-beachVolleyball');
-      const chip = input('format-4').closest('label')!.querySelector('span')!;
+      const chip = input('format-4').closest('label')!;
       expect(text(input('format-4'))).toBe('');
       chip.click();
       await settle();
@@ -200,10 +199,10 @@ describe('AdminLeagues: the Division group', () => {
     it('keeps a gender chosen by hand, fills the rest, and names only those in the status', async () => {
       await open();
       await choose('sport-beachVolleyball');
-      await choose('gender-coed');
+      await choose('gender-mens');
       await type('name', NAME);
       await leave('name');
-      expect(group('gender').checked).toEqual(['Coed']);
+      expect(group('gender').checked).toEqual(['Men']);
       expect(group('format').checked).toEqual(['2v2']);
       expect(status()).toBe(
         'Format and level were filled in from the name. Change any that are wrong.',
@@ -283,7 +282,8 @@ describe('AdminLeagues: the Division group', () => {
       expect(page.querySelector('fieldset#format')?.getAttribute('aria-describedby')).toBe(
         'format-description format-error',
       );
-      expect(input('format-2').getAttribute('aria-invalid')).toBe('true');
+      expect(input('format-2').getAttribute('aria-describedby')).toBe('format-error');
+      expect(input('format-2').hasAttribute('aria-invalid')).toBe(false);
       expect(page.querySelector('#format-error')?.getAttribute('role')).toBe('alert');
       expect(document.activeElement).toBe(input('format-2'));
     });
