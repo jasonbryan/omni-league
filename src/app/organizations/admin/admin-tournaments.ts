@@ -11,7 +11,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarDays,
@@ -22,6 +23,7 @@ import {
   lucidePlus,
   lucideSwords,
 } from '@ng-icons/lucide';
+import { map } from 'rxjs';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { keepFocusWhenAlertGoes } from '../../core/replaced-focus';
 import { isPlainClick } from '../../shell/follow-link';
@@ -179,12 +181,24 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
           </div>
           @if (locations(); as locations) {
             @if (locations.length > 0) {
-              <app-tournament-create-form
-                [organizationId]="organization.organizationId"
-                [organizationName]="organization.name"
-                [organizationSlug]="organization.slug"
-                [locations]="locations"
-              />
+              @if (copyFailed()) {
+                <div class="px-4 pt-4 md:px-5 md:pt-5">
+                  <app-admin-alert
+                    kind="error"
+                    title="The tournament to copy could not be loaded."
+                    description="The form is empty. Check your connection and reload to try again."
+                  />
+                </div>
+              }
+              @if (!copyLoading()) {
+                <app-tournament-create-form
+                  [organizationId]="organization.organizationId"
+                  [organizationName]="organization.name"
+                  [organizationSlug]="organization.slug"
+                  [locations]="locations"
+                  [copy]="copySource()"
+                />
+              }
             } @else {
               <div class="flex flex-col items-center px-6 py-10 text-center">
                 <span
@@ -214,7 +228,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
             </div>
           }
           @if (skeletonShown()) {
-            <p role="status" class="sr-only">Loading the locations.</p>
+            <p role="status" class="sr-only">{{ loadingStatus() }}</p>
             <div aria-hidden="true" class="px-4 py-4 md:px-5 md:py-5">
               <div class="flex flex-col gap-5">
                 @for (field of skeletonFields; track field) {
@@ -267,6 +281,28 @@ export class AdminTournaments {
   protected readonly locationsLoading = computed(
     () => this.locations() === undefined && !this.locationsFailed(),
   );
+
+  private readonly copyOf = toSignal(
+    inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get('copyOf') ?? '')),
+    { requireSync: true },
+  );
+  private readonly source = injectQuery(api.tournaments.getForCopy, () => {
+    const organization = this.context.organization();
+    const slug = this.copyOf();
+    return organization && slug !== '' ? { organizationSlug: organization.slug, slug } : skipToken;
+  });
+  protected readonly copySource = computed(() => this.source.value() ?? null);
+  protected readonly copyFailed = computed(() => this.source.error() !== undefined);
+  protected readonly copyLoading = computed(
+    () => this.copyOf() !== '' && this.source.value() === undefined && !this.copyFailed(),
+  );
+  // The form is built only once both answers are in, so the copy fills it before the first paint.
+  private readonly formLoading = computed(
+    () => this.locationsLoading() || (this.copyLoading() && (this.locations()?.length ?? 0) > 0),
+  );
+  protected readonly loadingStatus = computed(() =>
+    this.locationsLoading() ? 'Loading the locations.' : 'Loading the tournament to copy.',
+  );
   protected readonly createPath = computed(
     () => `${adminPath(this.context.slug(), 'tournaments')}#create-tournament`,
   );
@@ -301,14 +337,14 @@ export class AdminTournaments {
     // layout, so the skeleton goes one render later, after a layout with both in the page.
     afterRenderEffect({
       earlyRead: () => {
-        if (!this.locationsLoading()) this.createSection()?.nativeElement.getBoundingClientRect();
+        if (!this.formLoading()) this.createSection()?.nativeElement.getBoundingClientRect();
       },
-      write: () => this.skeletonShown.set(this.locationsLoading()),
+      write: () => this.skeletonShown.set(this.formLoading()),
     });
   }
 
   private landOnceItsTargetRenders(): void {
-    if (!this.landing.pending() || this.locationsLoading()) return;
+    if (!this.landing.pending() || this.formLoading()) return;
     const section = this.createSection()?.nativeElement;
     if (!section) return;
     this.landing.settle();

@@ -73,6 +73,10 @@ describe('TournamentManagement', () => {
     [...dialog()!.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
       text(b)?.startsWith(label),
     )!;
+  const buttonLink = (label: string) =>
+    [...main().querySelectorAll<HTMLAnchorElement>('a[data-slot="button"]')].find(
+      (a) => text(a) === label,
+    ) ?? null;
   const notice = () => page.querySelector<HTMLElement>('main [data-slot="alert"][role="status"]');
   const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
   const details = () =>
@@ -201,7 +205,16 @@ describe('TournamentManagement', () => {
       expect(button.getAttribute('data-slot')).toBe('button');
       expect(tokens(button.className)).toEqual(tokens(PRIMARY_BUTTON));
       expect(button.querySelector('ng-icon')?.getAttribute('name')).toBe('lucideGlobe');
-      expect(main().querySelector('a[data-slot="button"]')).toBeNull();
+      expect(buttonLink('View public page')).toBeNull();
+    });
+
+    it('offers Copy to a new tournament, an outline link to the Tournaments form with this web address in copyOf', () => {
+      const link = buttonLink('Copy to a new tournament')!;
+      expect(link.getAttribute('href')).toBe(
+        `${BASE}?copyOf=winter-doubles-classic#create-tournament`,
+      );
+      expect(tokens(link.className)).toEqual(tokens(OUTLINE_BUTTON));
+      expect(link.querySelector('ng-icon')?.getAttribute('name')).toBe('lucideCopy');
     });
 
     it('says it is a draft that only staff see, in a note with no role', () => {
@@ -228,19 +241,27 @@ describe('TournamentManagement', () => {
     });
 
     it('links to the public page, an outline button that carries the names for the page’s skeleton', () => {
-      const link = main().querySelector<HTMLAnchorElement>('a[data-slot="button"]')!;
-      expect(text(link)).toBe('View public page');
+      const link = buttonLink('View public page')!;
       expect(link.getAttribute('href')).toBe(
         `/organizations/${COASTAL.slug}/tournaments/winter-doubles-classic`,
       );
       expect(tokens(link.className)).toEqual(tokens(OUTLINE_BUTTON));
       const names = o.harness.fixture.debugElement
-        .query(By.css('main a[data-slot="button"]'))
+        .query(By.css('main a[href^="/organizations/"]'))
         .injector.get(RouterLink).state;
       expect(names).toEqual({
         organization: { slug: COASTAL.slug, name: COASTAL.name },
         tournament: { slug: 'winter-doubles-classic', name: 'Winter Doubles Classic' },
       });
+    });
+  });
+
+  describe('Copy to a new tournament on a published tournament', () => {
+    it('is offered too, and goes to the same form', async () => {
+      await open(PUBLISHED);
+      expect(buttonLink('Copy to a new tournament')!.getAttribute('href')).toBe(
+        `${BASE}?copyOf=winter-doubles-classic#create-tournament`,
+      );
     });
   });
 

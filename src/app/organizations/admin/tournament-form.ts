@@ -1,5 +1,6 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
+import type { FunctionReturnType } from 'convex/server';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
@@ -12,7 +13,7 @@ import {
   type TournamentField,
   type TournamentInputError,
 } from '../../../../convex/lib/tournamentInput';
-import { ConvexOfflineError } from '../../core/data/convex';
+import { ConvexOfflineError, type api } from '../../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
@@ -45,6 +46,8 @@ export interface TournamentCreateValues {
   registrationDeadline: string;
   maximumTeams: number;
 }
+
+export type TournamentCopy = NonNullable<FunctionReturnType<typeof api.tournaments.getForCopy>>;
 
 export type TournamentFormAlertKind = 'offline' | 'failed';
 
@@ -230,6 +233,26 @@ export class TournamentForm {
   nameTyped(name: string): void {
     if (this.slugEdited()) return;
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
+  }
+
+  /** Leaves the dates blank and the web address as offered, so the name still derives it until the address is edited. */
+  loadCopy(copy: TournamentCopy): void {
+    this.model.update((m) => ({
+      ...m,
+      name: copy.name,
+      slug: copy.slug,
+      maximumTeams: String(copy.maximumTeams),
+    }));
+    this.slugEdited.set(false);
+    this.chosenSport.set(copy.sport);
+    this.division.load({
+      gender: copy.gender,
+      playersPerSide: copy.playersPerSide,
+      level: copy.level,
+      customLevelId: copy.customLevelId,
+      ageGroup: copy.ageGroup,
+    });
+    this.selected.set(new Set(copy.locationIds));
   }
 
   chooseSport(sport: Sport): void {

@@ -554,3 +554,162 @@ test.describe('who may open a tournament’s management page', () => {
     },
   );
 });
+
+const PELICAN_AND_REDFISH = [
+  ...LOCATIONS,
+  { name: 'Redfish Flats Fields', address: '880 Redfish Flats Ln, Rockport, TX 78382' },
+];
+
+async function copyable(page: Page, role: Role | null = 'orgAdmin') {
+  const { user, tenant } = await memberOf(page, role, { locations: PELICAN_AND_REDFISH });
+  await seedTournament(tenant, {
+    name: 'Gulf Coast Beach Open',
+    slug: 'gulf-coast-beach-open',
+    locations: ['Redfish Flats Fields'],
+    division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+    startDate: dateFromToday(40),
+    endDate: dateFromToday(41),
+    registrationDeadline: dateFromToday(30),
+    maximumTeams: 12,
+  });
+  const tournaments = `/app/organizations/${tenant.slug}/tournaments`;
+  return {
+    user,
+    tenant,
+    tournaments,
+    managePath: `${tournaments}/gulf-coast-beach-open`,
+    copyPath: `${tournaments}?copyOf=gulf-coast-beach-open#create-tournament`,
+  };
+}
+
+const copyLink = (page: Page) => main(page).getByRole('link', { name: 'Copy to a new tournament' });
+const copyNote = (page: Page) => form(page).locator('[data-slot="copy-note"]');
+
+test.describe('Tournaments: copying one to run it again', () => {
+  test('Copy opens the form filled with blank dates and the next free address, and creating it adds a new draft', async ({
+    page,
+  }, testInfo) => {
+    const { tournaments, managePath } = await copyable(page);
+    await page.goto(managePath);
+    await expect(copyLink(page)).toBeVisible();
+    await screenshot(page, testInfo, 'tournament-copy-action');
+    await expectAccessible(page);
+
+    await copyLink(page).click();
+    await expect(page).toHaveURL(`${tournaments}?copyOf=gulf-coast-beach-open#create-tournament`);
+    await expect(page.locator('#name')).toHaveValue('Gulf Coast Beach Open');
+    await expect(page.locator('#slug')).toHaveValue('gulf-coast-beach-open-2');
+    await expect(chipLabel(page, 'Beach volleyball').getByRole('radio')).toBeChecked();
+    await expect(chipLabel(page, '2v2').getByRole('radio')).toBeChecked();
+    await expect(chipLabel(page, 'Open').getByRole('radio')).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Redfish Flats Fields' })).toBeChecked();
+    await expect(
+      page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }),
+    ).not.toBeChecked();
+    await expect(page.locator('#maximum-teams')).toHaveValue('12');
+    for (const id of ['#start-date', '#end-date', '#registration-deadline']) {
+      await expect(page.locator(id)).toHaveValue('');
+    }
+    await expect(copyNote(page)).toContainText('Copied from Gulf Coast Beach Open.');
+    await screenshot(page, testInfo, 'tournament-copy-form');
+    await expectAccessible(page);
+
+    await submit(page).click();
+    await expect(page.locator('#start-date-error')).toHaveText('Enter the start date.');
+    await expect(page.locator('#start-date')).toBeFocused();
+    await expect(rows(page)).toHaveCount(1);
+
+    await page.locator('#start-date').fill('2031-06-12');
+    await page.locator('#end-date').fill('2031-06-13');
+    await page.locator('#registration-deadline').fill('2031-06-05');
+    await submit(page).click();
+    await expect(form(page).getByRole('status').filter({ hasText: 'created' })).toHaveText(
+      'Gulf Coast Beach Open created. It stays a draft until you publish it.Open Gulf Coast Beach Open',
+    );
+    await expect(rows(page)).toHaveCount(2);
+    const added = rows(page).filter({ hasText: 'Jun 12 – Jun 13, 2031' });
+    await expect(added.locator('[data-slot="badge"]')).toHaveText('Draft');
+    await expect(rows(page).filter({ hasText: 'Published' })).toHaveCount(1);
+    await screenshot(page, testInfo, 'tournament-copy-created');
+    await expectAccessible(page);
+
+    await form(page).getByRole('link', { name: 'Open Gulf Coast Beach Open' }).click();
+    await expect(page).toHaveURL(`${tournaments}/gulf-coast-beach-open-2`);
+    await expect(stateBadge(page)).toHaveText('Draft');
+    await expect(main(page).getByText('Up to 12 teams')).toBeVisible();
+    await expect(main(page).getByText('Redfish Flats Fields')).toBeVisible();
+  });
+
+  test(
+    'a web address that is another organization’s tournament or unknown opens the form empty',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tournaments } = await copyable(page);
+      const other = await seedTenant({ name: 'E2E Other Org', locations: LOCATIONS });
+      await seedTournament(other, {
+        name: 'Other Open',
+        slug: 'other-open',
+        locations: [PELICAN],
+        startDate: dateFromToday(40),
+        endDate: dateFromToday(40),
+      });
+      for (const slug of ['other-open', 'no-such-tournament']) {
+        await page.goto(`${tournaments}?copyOf=${slug}#create-tournament`);
+        await expect(form(page)).toBeVisible();
+        await expect(page.locator('#name')).toHaveValue('');
+        await expect(page.locator('#slug')).toHaveValue('');
+        await expect(copyNote(page)).toHaveCount(0);
+        await expect(page.locator('#create-tournament').getByRole('alert')).toHaveCount(0);
+      }
+    },
+  );
+
+  test('the form shows a skeleton while the source is held, and the state passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { copyPath } = await copyable(page);
+    const held = await holdQueries(page, ['tournaments:getForCopy']);
+    await page.goto(copyPath);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the tournament to copy.' }),
+    ).toBeAttached();
+    await expect(form(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'tournament-copy-loading');
+    await expectAccessible(page);
+
+    held.release();
+    await expect(form(page)).toBeVisible();
+    await expect(page.locator('#name')).toHaveValue('Gulf Coast Beach Open');
+  });
+
+  test('a source that fails to load opens the form empty with an alert that passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { copyPath } = await copyable(page);
+    await failFirstAnswer(page, 'tournaments:getForCopy');
+    await page.goto(copyPath);
+    const alert = page.locator('#create-tournament').getByRole('alert');
+    await expect(alert).toContainText('The tournament to copy could not be loaded.');
+    await expect(form(page)).toBeVisible();
+    await expect(page.locator('#name')).toHaveValue('');
+    await screenshot(page, testInfo, 'tournament-copy-error');
+    await expectAccessible(page);
+  });
+
+  test(
+    'a league organizer opening the copy address sees the no-access view and no Copy action',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { copyPath, managePath } = await copyable(page, 'leagueOrganizer');
+      for (const path of [copyPath, managePath]) {
+        await page.goto(path);
+        await expect(
+          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(copyLink(page)).toHaveCount(0);
+        await expect(form(page)).toHaveCount(0);
+      }
+    },
+  );
+});

@@ -19,6 +19,7 @@ import {
   lucideCalendarDays,
   lucideCircleCheck,
   lucideCircleDashed,
+  lucideCopy,
   lucideGlobe,
   lucideMapPin,
   lucideUsers,
@@ -37,6 +38,7 @@ import { publicTournamentNames } from '../public-tournament/public-tournament-na
 import { publicTournamentPath } from '../public-tournament/public-tournament-path';
 import { AdminAlert } from './admin-alert';
 import { AdminContext } from './admin-context';
+import { adminPath } from './admin-path';
 import { AdminNoAccess } from './admin-no-access';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import {
@@ -73,6 +75,7 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
       lucideCalendarDays,
       lucideCircleCheck,
       lucideCircleDashed,
+      lucideCopy,
       lucideGlobe,
       lucideMapPin,
       lucideUsers,
@@ -120,27 +123,42 @@ type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error'
                   {{ tournament.divisionLabel }}
                 </p>
               </div>
-              @if (tournament.status === 'published') {
+              <div class="flex flex-wrap items-center gap-2">
                 <a
-                  [routerLink]="publicPath()"
-                  [state]="names()"
+                  [routerLink]="copyPath()"
+                  [queryParams]="{ copyOf: tournament.slug }"
+                  fragment="create-tournament"
                   data-slot="button"
                   [class]="outlineButton"
-                  ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
-                  public page</a
+                  ><ng-icon name="lucideCopy" data-icon="inline-start" aria-hidden="true" />Copy to
+                  a new tournament</a
                 >
-              } @else {
-                <button
-                  #publishButton
-                  type="button"
-                  data-slot="button"
-                  aria-haspopup="dialog"
-                  [class]="primaryButton"
-                  (click)="publish()"
-                >
-                  <ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />Publish
-                </button>
-              }
+                @if (tournament.status === 'published') {
+                  <a
+                    [routerLink]="publicPath()"
+                    [state]="names()"
+                    data-slot="button"
+                    [class]="outlineButton"
+                    ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
+                    public page</a
+                  >
+                } @else {
+                  <button
+                    #publishButton
+                    type="button"
+                    data-slot="button"
+                    aria-haspopup="dialog"
+                    [class]="primaryButton"
+                    (click)="publish()"
+                  >
+                    <ng-icon
+                      name="lucideGlobe"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Publish
+                  </button>
+                }
+              </div>
             </div>
             @if (published()) {
               <app-admin-alert
@@ -307,6 +325,10 @@ export class TournamentManagement {
   protected readonly publicPath = computed(() => {
     const tournament = this.tournament();
     return tournament ? publicTournamentPath(tournament.organization.slug, tournament.slug) : '';
+  });
+  protected readonly copyPath = computed(() => {
+    const tournament = this.tournament();
+    return tournament ? adminPath(tournament.organization.slug, 'tournaments') : '';
   });
   protected readonly names = computed(() => {
     const tournament = this.tournament();
