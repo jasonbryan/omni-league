@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { BACKFILL_TEAM_COUNT_SCAN_LIMIT } from './lib/rosterWrites';
 import { BACKFILL_SCAN_LIMIT } from './lib/tenantWrites';
 import { BATCH_SIZE } from './releaseBackfill';
 import schema from './schema';
@@ -469,6 +470,26 @@ describe('the release backfill', () => {
       );
       await expectCountersUnset(t, organizationId);
     });
+
+    test.each([
+      { counted: 'teams', shape: { teams: BACKFILL_TEAM_COUNT_SCAN_LIMIT, waiting: 0 } },
+      { counted: 'waiting entries', shape: { teams: 0, waiting: BACKFILL_TEAM_COUNT_SCAN_LIMIT } },
+    ])(
+      'a season with as many $counted as the scan limit fails the run and keeps its counter unset',
+      async ({ shape }) => {
+        const t = setup();
+        const tenant = await insertTenantWithoutCounters(t, 'big-season', { published: 1 });
+        const { seasonId } = await insertLegacySeasonWithTeams(t, tenant, {
+          status: 'draft',
+          ...shape,
+        });
+
+        await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(/scan limit/);
+        const season = await t.run((ctx) => ctx.db.get('seasons', seasonId));
+        expect(season?.teamCount).toBeUndefined();
+        expect(season?.waitlistCount).toBeUndefined();
+      },
+    );
 
     test('an organization at the scan limit fails the run instead of getting a short count', async () => {
       const t = setup();
