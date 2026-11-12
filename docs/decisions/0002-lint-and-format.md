@@ -4,7 +4,8 @@
 - **Gate:** `gate:technology`
 - **Issue:** #2
 - **Date:** 2026-10-07 (revised 2026-10-07: config-file patterns, ADR 0006 SSR files)
-- **Amended:** 2026-10-31, by #419: outside specs, `src/` may import `convex/server` and `convex/_generated/api` only with `import type`. See "Amendment: type-only Convex server imports (#419, 2026-10-31)" at the end. 2026-11-12, by #678: `proseWrap: "never"` for `docs/conventions/**/*.md`. See "Amendment: unpadded convention tables (#678, 2026-11-12)" at the end.
+- **Amended:** 2026-10-31, by #419: outside specs, `src/` may import `convex/server` and `convex/_generated/api` only with `import type`. See "Amendment: type-only Convex server imports (#419, 2026-10-31)" at the end.
+- **Amended:** 2026-11-12, by #678: `proseWrap: "never"` for `docs/conventions/**/*.md`. See "Amendment: unpadded convention tables (#678, 2026-11-12)" at the end.
 
 ## Context
 
@@ -222,7 +223,7 @@ No separate block is needed, and none of these files may be listed in `allowDefa
 
 - It keeps the Angular CLI's generated options (`printWidth: 100`, `singleQuote: true`).
 - **Scope the CLI's `*.html` override to `src/**/*.html`.** The generated override applies the `angular` parser to every `*.html`, which would parse the plain-HTML mockups as Angular templates and can fail on literal `{`, `}`, or `@` in their text.
-- Add `design/mockups/**/*.html` with `parser: "html"` and `**/*.md` with `proseWrap: "preserve"`.
+- Add `design/mockups/**/*.html` with `parser: "html"` and `**/*.md` with `proseWrap: "preserve"`. Amended by #678: `docs/conventions/**/*.md` uses `proseWrap: "never"`, as the last override (see the amendment at the end).
 
 ### Ignore list
 

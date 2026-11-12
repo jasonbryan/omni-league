@@ -19,7 +19,7 @@ const differingLines = (before, after) => {
 };
 
 describe('the Prettier markdown config', () => {
-  it('never rewraps the convention docs', async () => {
+  it('resolves proseWrap to never for the convention docs', async () => {
     assert.equal(await proseWrapOf(conventionsFile), 'never');
   });
 
