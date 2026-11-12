@@ -28,7 +28,6 @@ export const listForOrganization = query({
       email: v.string(),
       role: roleValidator,
       leagueNames: v.array(v.string()),
-      // Absent when the member runs no tournament.
       tournamentNames: v.optional(v.array(v.string())),
       isYou: v.boolean(),
     }),

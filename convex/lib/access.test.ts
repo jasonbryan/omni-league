@@ -244,7 +244,6 @@ async function programSetup() {
       leagueIds: [],
       programIds: [tournamentA],
     });
-    // Holds another organization's program id, and its own league's program id.
     await ctx.db.insert('memberships', {
       userId: organizerForged,
       organizationId: base.organizationA,

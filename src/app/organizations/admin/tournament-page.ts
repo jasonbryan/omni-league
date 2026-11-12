@@ -5,7 +5,6 @@ import { AdminSidebar } from './admin-sidebar';
 import { TournamentContext } from './tournament-context';
 import { TournamentManagement } from './tournament-management';
 
-/** An org admin gets the admin sidebar and an assigned organizer the organizer's, as on the league page. */
 @Component({
   selector: 'app-tournament-page',
   imports: [AdminSidebar, LeagueSidebar, Shell, ShellSidebar, TournamentManagement],

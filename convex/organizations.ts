@@ -375,7 +375,6 @@ export const listMine = query({
       slug: v.string(),
       role: roleValidator,
       leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
-      // Absent when the organizer runs no tournament.
       tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
     }),
   ),

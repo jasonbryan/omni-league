@@ -250,7 +250,6 @@ export const listPending = query({
       email: v.string(),
       role: roleValidator,
       leagueNames: v.array(v.string()),
-      // Absent when the invite names no tournament.
       tournamentNames: v.optional(v.array(v.string())),
       expiresAt: v.number(),
     }),
@@ -299,7 +298,6 @@ const inviteSummaryFields = {
   organizationName: v.string(),
   role: roleValidator,
   leagueNames: v.array(v.string()),
-  // Absent when the invite names no tournament.
   tournamentNames: v.optional(v.array(v.string())),
 };
 
@@ -375,7 +373,6 @@ export const accept = mutation({
     ...inviteSummaryFields,
     organizationSlug: v.string(),
     leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
-    // Absent when the invite names no tournament.
     tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
   }),
   handler: async (ctx, { token }) => {
