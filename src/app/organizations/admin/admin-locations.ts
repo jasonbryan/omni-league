@@ -24,7 +24,7 @@ import { HlmSkeleton } from '../../ui/skeleton';
 
 @Component({
   selector: 'app-admin-locations',
-  imports: [AddLocationForm, AdminAlert, HlmCard, LocationRow, NgIcon],
+  imports: [AddLocationForm, AdminAlert, HlmCard, HlmSkeleton, LocationRow, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideMapPinOff, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },

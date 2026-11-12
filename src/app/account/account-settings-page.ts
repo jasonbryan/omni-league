@@ -13,7 +13,7 @@ import { HlmSkeleton } from '../ui/skeleton';
 
 @Component({
   selector: 'app-account-settings-page',
-  imports: [AdminAlert, HlmCard, NgIcon, Shell],
+  imports: [AdminAlert, HlmCard, HlmSkeleton, NgIcon, Shell],
   providers: [provideIcons({ lucideLogOut })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

@@ -6,7 +6,7 @@ const PANEL = 'overflow-hidden';
 
 @Component({
   selector: 'app-league-loading',
-  imports: [HlmCard],
+  imports: [HlmCard, HlmSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
