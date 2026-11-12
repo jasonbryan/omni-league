@@ -147,6 +147,10 @@ describe('AccountPage', () => {
   const barTitle = () => text(page.querySelector('header p'));
   const nextStepRegion = () => main().querySelector('section[aria-labelledby="next-heading"]');
 
+  const ENDS_TODAY = Date.UTC(2027, 7, 29, 15);
+  const LAST_HOUR = Date.UTC(2027, 7, 30, 11, 59);
+  const NEXT_DATE = Date.UTC(2027, 7, 30, 12);
+
   afterEach(() => vi.useRealTimers());
 
   describe('data', () => {
@@ -464,9 +468,6 @@ describe('AccountPage', () => {
     });
 
     describe('once the season has ended', () => {
-      const ENDS_TODAY = Date.UTC(2027, 7, 29, 15);
-      const LAST_HOUR = Date.UTC(2027, 7, 30, 11, 59);
-      const NEXT_DATE = Date.UTC(2027, 7, 30, 12);
       const ENDED = {
         ...WAITING,
         freeAgentId: 'k3fa',
@@ -499,8 +500,7 @@ describe('AccountPage', () => {
       it('drops the card without a reload when the date changes while the home is open', async () => {
         await show([SAND_SHARKS], [], undefined, [WAITING], ENDS_TODAY);
         expect(freeAgentCards()).toHaveLength(1);
-        // From 03:00 on the end date at UTC-12 to the change of date, 12:00 UTC the next day.
-        vi.advanceTimersByTime(21 * 60 * 60 * 1000);
+        vi.advanceTimersByTime(NEXT_DATE - ENDS_TODAY);
         await harness.fixture.whenStable();
         expect(freeAgentSection()).toBeNull();
       });
@@ -779,7 +779,7 @@ describe('AccountPage', () => {
     });
 
     it('is new for a user with no team whose only waiting registration has ended', async () => {
-      await show([], [], undefined, [WAITING], Date.UTC(2027, 7, 30, 12));
+      await show([], [], undefined, [WAITING], NEXT_DATE);
       await leave();
       expect(remembered()).toBe('new');
     });
