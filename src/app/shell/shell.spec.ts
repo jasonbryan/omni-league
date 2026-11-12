@@ -11,7 +11,13 @@ import { hlm } from '../ui/utils';
 import { LOAD_SHELL_SHEET, Shell } from './shell';
 import { skipLinkHref } from './skip-link';
 import { LOAD_PAGE } from './follow-link';
-import { PendingTestPage, PlainTestPage, SidebarTestPage } from './testing/test-pages';
+import {
+  BarTitleSidebarTestPage,
+  BarTitleTestPage,
+  PendingTestPage,
+  PlainTestPage,
+  SidebarTestPage,
+} from './testing/test-pages';
 
 function emptyRouter(): Router {
   TestBed.configureTestingModule({ providers: [provideRouter([])] });
@@ -193,6 +199,16 @@ describe('Shell', () => {
     it("names the page's organization", async () => {
       const harness = await render(SidebarTestPage);
       expect(host(harness).querySelector('header p')?.textContent).toBe('Test organization');
+    });
+
+    it('shows barTitle when the page gives one', async () => {
+      const harness = await render(BarTitleTestPage);
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
+    });
+
+    it("shows barTitle over the page's organization", async () => {
+      const harness = await render(BarTitleSidebarTestPage);
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
     });
 
     it('has no Sign in link and no link to the public home', async () => {

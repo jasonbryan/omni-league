@@ -447,6 +447,35 @@ test.describe('/app: while the teams load', () => {
   });
 });
 
+test.describe('/app: the slim bar', () => {
+  test.skip(({ isMobile }) => !isMobile, 'the slim bar shows below 1024px only');
+
+  test('reads Home on one 56px line while the teams load and once they have', async ({ page }) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedTashasTeams(user);
+    const bar = page.locator('header');
+    const title = bar.locator('p');
+    const held = await holdQueries(page, ['teams:listMine']);
+    await page.goto('/app');
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(main(page).getByRole('status')).toBeVisible();
+    await expect(title).toHaveText('Home');
+    const loadingHeight = (await bar.boundingBox())!.height;
+
+    held.release();
+    await expect(teams(page)).toBeVisible();
+    await expect(title).toHaveText('Home');
+    expect((await bar.boundingBox())!.height).toBe(56);
+    expect(loadingHeight).toBe(56);
+    const lineHeight = await title.evaluate((element) =>
+      parseFloat(getComputedStyle(element).lineHeight),
+    );
+    expect((await title.boundingBox())!.height).toBeLessThanOrEqual(lineHeight);
+    await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+  });
+});
+
 test.describe('/app: the teams cannot be loaded', () => {
   test('shows an alert with Try again in place of the cards, and the cards return once the answer succeeds', async ({
     page,
