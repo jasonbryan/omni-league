@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
+import { dateFromToday, seedSeasons, seedTenant, seedTournament } from './support/tenant';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
@@ -243,6 +243,63 @@ test.describe('find a league by sport offline', () => {
     await expect(
       filters.getByRole('list', { name: 'Active filters' }).getByRole('link', { name: /^U10/ }),
     ).toBeVisible();
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('a tournament page offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('a page viewed online opens from its saved copy with the note, and one never viewed shows the not-saved view', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Tournament',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    });
+    const seed = (name: string, slug: string) =>
+      seedTournament(tenant, {
+        name,
+        slug,
+        locations: ['Alpha Field'],
+        startDate: dateFromToday(30),
+        endDate: dateFromToday(31),
+        registrationDeadline: dateFromToday(20),
+      });
+    const viewed = await seed('Viewed Open', 'viewed-open');
+    const never = await seed('Never Viewed Open', 'never-viewed-open');
+    const note = page.locator('app-saved-copy-note');
+
+    await page.goto(viewed);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Open' })).toBeVisible();
+    await expect(note).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(viewed);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Open' })).toBeVisible();
+    await expect(note).toBeVisible();
+    await expect(page.locator('#registration')).toContainText('Registration open · closes');
+
+    // The router follows a history entry the way it follows Back, so the page opens without a request.
+    await page.evaluate((path) => {
+      history.pushState({}, '', path);
+      dispatchEvent(new PopStateEvent('popstate'));
+    }, never);
+    await expect(
+      page.getByRole('heading', { level: 1, name: "This page isn't saved on this device" }),
+    ).toBeVisible();
+    await expect(note).toHaveCount(0);
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
 
     await context.setOffline(false);
   });
