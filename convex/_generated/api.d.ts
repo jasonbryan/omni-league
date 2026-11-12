@@ -78,6 +78,7 @@ import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
 import type * as push from "../push.js";
 import type * as pushSend from "../pushSend.js";
+import type * as releaseBackfill from "../releaseBackfill.js";
 import type * as rosterEntries from "../rosterEntries.js";
 import type * as search from "../search.js";
 import type * as seasons from "../seasons.js";
@@ -167,6 +168,7 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   push: typeof push;
   pushSend: typeof pushSend;
+  releaseBackfill: typeof releaseBackfill;
   rosterEntries: typeof rosterEntries;
   search: typeof search;
   seasons: typeof seasons;

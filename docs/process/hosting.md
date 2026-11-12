@@ -147,6 +147,36 @@ Anyone holding the password can sign in to any preview or staging backend as a d
 
 **Every change keeps the seed current (#230).** An issue that adds or changes a table, a field, or a user-visible feature has a Demo data criterion, and its PR updates `convex/seed.ts` to deliver it ([dev cycle](dev-cycle.md), Phases 1, 4, 5, and 6). `convex/seedCoverage.test.ts` runs `seed:demo` on an empty `convex-test` backend, with the Better Auth component registered, throwaway auth variables, and a mocked breach check, and fails when a schema table has no rows and is not in its `SEED_EXCEPTIONS` map (table name to reason), when an exception names no table, or when a second run changes any table's row count or `_id`s. An exception needs a reason the reviewer accepts. It runs in `test:convex`, so `ci` needs no extra step.
 
+## Release backfill
+
+`seed:demo` backfills counters on preview and staging only, so rows that exist on production before the first release that reads a counter need `releaseBackfill:run` (`convex/releaseBackfill.ts`). It is internal, so only `npx convex run` and other Convex functions call it, and it has no preview check. The owner runs it on production once, after the release is deployed, because only the owner holds the production key ([Where secrets live](#where-secrets-live)); the release PR or deploy request lists it as a step.
+
+**Run.** In a terminal at the repository root, the owner enters the production deploy key without echoing it, then runs the function. Without `CONVEX_DEPLOY_KEY` exported, `npx convex run` targets the `.env.local` development deployment and production is not backfilled.
+
+```
+read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY
+npx convex run releaseBackfill:run
+```
+
+It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result: `locations`, `leagues`, `organizations`, `staffCounts`, `staffInviteCounts`, `draftLeagueCounts`, `teamCounts`, `waitlistCounts`, `pendingInviteCounts`. Then `unset CONVEX_DEPLOY_KEY`.
+
+**What it does.** It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`) and `sortName` and `hasPublishedLeague`; season `teamCount` and `waitlistCount`; team `pendingInviteCount`. It sets only what is unset, so a second run changes nothing and a run that stops partway (network, timeout) is repeated with the same command and continues.
+
+**Check afterwards.**
+
+1. Run the same command again. Every number in `backfilled` is `0`.
+2. In the production dashboard, no `organizations` row lacks `leagueCount`, `locationCount`, `staffCount`, `pendingInviteCount`, `draftLeagueCount`, `sportLeagueCounts`, `sportLocationCounts`, `sortName`, or `hasPublishedLeague`; no `leagues` row lacks `sortName`, `status`, or `publishedSeasonCount`; no `seasons` row lacks `teamCount` or `waitlistCount`; no `teams` row lacks `pendingInviteCount`; no `locations` row lacks `sortName`.
+3. Spot-check one organization: `leagueCount` equals its published leagues, `draftLeagueCount` its draft leagues, `staffCount` its memberships, `pendingInviteCount` its `pending` invites.
+
+**Failures.** A recount that reaches its scan limit (`BACKFILL_SCAN_LIMIT`, `BACKFILL_TEAM_COUNT_SCAN_LIMIT`) would store a short count, so the run fails instead and the batch writes nothing. Two messages name the row:
+
+- `reaches the scan limit`: a league, season, or organization has that many rows to count (published seasons, teams, waiting entries, memberships, pending invites, or draft leagues).
+- `cannot be recounted in one change`: an organization has that many locations, leagues, or sport location rows.
+
+Either one stops the run at that row, and repeating it fails the same way. The owner reports it as a bug and does not repeat the run.
+
+The division fields, `searchText`, and `seasons.format` are not counters, and every production row is written after those fields exist, so they need no production step.
+
 ## Web Push keys
 
 Each deployment that sends push notifications has its own VAPID key pair ([ADR 0013](../decisions/0013-pwa-stack.md) section 6):
