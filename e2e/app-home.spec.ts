@@ -145,7 +145,10 @@ test.describe('/app: a user with teams', () => {
     await expect(nextStep(page).getByRole('link')).toHaveAccessibleName(
       'Invite players to Sand Sharks',
     );
-    await expect(nextStep(page).getByRole('link')).toHaveAttribute('href', `/app/teams/${sharks}`);
+    await expect(nextStep(page).getByRole('link')).toHaveAttribute(
+      'href',
+      `/app/teams/${sharks}#invite`,
+    );
 
     await expect(teams(page).getByRole('heading', { level: 2 })).toHaveText('Your teams');
     await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText([
@@ -508,7 +511,7 @@ test.describe('/app: keyboard, touch, and live changes', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(nextStep(page).getByRole('link')).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}`);
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${sharks}#invite`);
   });
 
   test('links and the button are 44px tall on touch screens and keep their size with a mouse', async ({
