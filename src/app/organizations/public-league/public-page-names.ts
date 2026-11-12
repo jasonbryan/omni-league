@@ -35,7 +35,6 @@ function readNamed(value: unknown): Named | undefined {
 /**
  * Navigation state is whatever the history entry holds, so the names are used only when each field is
  * text and the slugs are the route's: a stale or edited entry falls back to the plain skeleton.
- * A route with a season slug needs the season's names too.
  */
 export function readPublicPageNames(
   state: unknown,
