@@ -27,7 +27,6 @@ export function leagueRequiredFields(sport: Sport, name: string) {
   return { ...defaultDivision(sport), searchText: name };
 }
 
-/** A program of another type, which no writer makes yet, holding a slug of the organization. */
 export function tournamentProgramFields(organizationId: Id<'organizations'>, slug: string) {
   return {
     ...defaultDivision('soccer'),

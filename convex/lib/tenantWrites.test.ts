@@ -45,7 +45,6 @@ const SOCCER = {
   division: { ...defaultDivision('soccer'), playersPerSide: 7, level: 'rec' as const },
 };
 
-/** What the program row of a league holds: the league's own fields, and nothing a later type adds. */
 function mirrored(league: Doc<'leagues'>) {
   return {
     organizationId: league.organizationId,
