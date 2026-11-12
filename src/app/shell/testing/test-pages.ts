@@ -39,6 +39,33 @@ export class PlainTestPage {}
 export class SidebarTestPage {}
 
 @Component({
+  selector: 'app-bar-title-test-page',
+  imports: [Shell],
+  template: `
+    <app-shell barTitle="Bar title">
+      <div><h1>Bar title page</h1></div>
+    </app-shell>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class BarTitleTestPage {}
+
+@Component({
+  selector: 'app-bar-title-sidebar-test-page',
+  imports: [Shell, ShellSidebar],
+  template: `
+    <app-shell barTitle="Bar title">
+      <ng-template appShellSidebar appShellOrganizationName="Test organization">
+        <nav aria-label="Test organization"></nav>
+      </ng-template>
+      <div><h1>Bar title and sidebar page</h1></div>
+    </app-shell>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class BarTitleSidebarTestPage {}
+
+@Component({
   selector: 'app-pending-test-page',
   imports: [Shell],
   template: `

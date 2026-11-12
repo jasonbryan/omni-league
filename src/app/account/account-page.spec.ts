@@ -134,6 +134,7 @@ describe('AccountPage', () => {
   const freeAgentSection = () =>
     main().querySelector('section[aria-labelledby="free-agent-heading"]');
   const freeAgentCards = () => [...(freeAgentSection()?.querySelectorAll('li') ?? [])];
+  const barTitle = () => text(page.querySelector('header p'));
   const nextStepRegion = () => main().querySelector('section[aria-labelledby="next-heading"]');
 
   afterEach(() => vi.useRealTimers());
@@ -517,6 +518,25 @@ describe('AccountPage', () => {
     });
   });
 
+  describe('slim bar', () => {
+    it('reads "Home" while the teams load', async () => {
+      await open();
+      accept();
+      expect(main().querySelector('[role="status"]')).not.toBeNull();
+      expect(barTitle()).toBe('Home');
+    });
+
+    it('reads "Home" once the home lists teams', async () => {
+      await show([SAND_SHARKS]);
+      expect(barTitle()).toBe('Home');
+    });
+
+    it('reads "Home" for a user with no team yet', async () => {
+      await show([]);
+      expect(barTitle()).toBe('Home');
+    });
+  });
+
   describe('loading', () => {
     it('shows the skeleton and a polite status while the teams load, with no card', async () => {
       await open();
@@ -574,6 +594,17 @@ describe('AccountPage', () => {
   });
 
   describe('error', () => {
+    it('keeps "Home" in the slim bar beside the failure alert', async () => {
+      await open();
+      accept();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'teams:listMine') subscription.fail(new Error('Server Error'));
+      }
+      await harness.fixture.whenStable();
+      expect(main().querySelector('[role="alert"]')).not.toBeNull();
+      expect(barTitle()).toBe('Home');
+    });
+
     it('shows the same alert when the free agent rows fail, and no team card', async () => {
       await open();
       accept();
