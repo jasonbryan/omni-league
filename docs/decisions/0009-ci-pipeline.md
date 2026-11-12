@@ -14,6 +14,7 @@
 - **Amended:** 2026-11-05 (#563): the nightly job `e2e` is a matrix of Playwright shards under a 30-minute global timeout, and `nightly-issue` runs for a cancelled job and names every shard that did not finish. See "Amendment: sharded nightly e2e and a reported cancel (2026-11-05)" at the end. Where the sections above or the 2026-10-12 amendment say the suite runs in one job, this amendment applies.
 - **Amended:** 2026-11-09 (#599): the `production-mobile` step of `e2e-production` gets 4 minutes by the step timeout rule, and the job keeps 20. See "Amendment: e2e-production step and job timeouts (2026-11-09)" at the end. Where the #426 amendment's table says `pwa.spec.ts` has 10 tests, the amendment applies. Re-measured 2026-11-10 (#607) for 14 tests; the limits are unchanged.
 - **Amended:** 2026-11-10 (#610): `e2e browsers` gets a 16-minute step limit in `e2e` and `e2e-production`, the WebKit install moves to its own step, `e2e webkit`, with no limit, and the job limits go to 51 on `e2e` and 38 on `e2e-production`. See "Amendment: browser install step timeouts (2026-11-10)" at the end. Where the #426 amendment's "Timeout" row says 20 minutes, the #563 amendment says 13 minutes of setup and a 45-minute job, and the #599 amendment says `e2e-production` keeps 20 by its job formula (`SETUP_MINUTES` 2), this amendment applies.
+- **Amended:** 2026-11-12 (#691), process only: past the 20-spec screen cap, each changed file adds its closest specs (whole selection, own rule, or routes) in place of only the mockup specs. See "Amendment: past the cap, each file keeps its closest specs (2026-11-12)" at the end. Where the 2026-11-11 amendment says "else only the `*-mockup.spec.ts` specs", this amendment applies.
 
 ## Context
 
@@ -988,3 +989,15 @@ The 2026-10-31 amendment made the PR's own specs the pre-merge run, and a PR tha
 **What a PR gains.** On the 23 of the last 40 merges that touch `src/` or `design/`, the screen bullet adds all of a PR's screen specs for 11 PRs (at most 18) and 1 or 2 mockup specs for 12. Without the cap it would add a median of 31 of 67 specs. Specs past the cap stay with the batch run.
 
 **What stays open.** A file whose selection is the full suite adds nothing, and a `convex/` file adds nothing (`npm run test:convex` covers it). The batch run and the nightly run remain the net for both.
+
+## Amendment: past the cap, each file keeps its closest specs (2026-11-12)
+
+Issue #691. Past `SCREEN_SPEC_CAP` (20), the 2026-11-11 amendment kept only the `*-mockup.spec.ts` specs. The owner chose [option A, closest per file](https://github.com/jasonbryan/omni-league/issues/691#issuecomment-6829898486) in chat on 2026-11-12, which replaces the "else mockups" half of option C. This changes process and two scripts (`scripts/own-specs.mjs`, `scripts/e2e-affected.mjs`). It adds no package, service, or workflow, so it is not a `gate:technology` change.
+
+| Item                       | Before                                    | After                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Screen specs past the cap  | the union's `*-mockup.spec.ts` specs only | each file adds the first tier that holds at most 20 specs: its whole selection, its own rule's specs, or its routes' specs; the union's mockup specs are still added                 |
+| `selectSpecs`              | one selection                             | an option `narrow: true` skips the importer widening and the session specs, and keeps a rule's `derive` specs                                                                        |
+| `scripts/e2e-affected.mjs` | no route reader                           | `readRouteTable(root)` reads the client route tables with `loadChildren` followed, and `routeSpecsFor(file, { root, graph })` gives the `ROUTE_SPECS` of the routes that show a file |
+
+A tier with no specs does not fit, a file whose whole selection is empty tries no tier, and a full-suite file adds nothing past the cap, as below it. The cap stays 20 and bounds each file's tier, so the union of the tiers may pass it.

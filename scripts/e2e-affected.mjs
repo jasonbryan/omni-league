@@ -385,6 +385,214 @@ export function buildImportGraph(root) {
   return graph;
 }
 
+const ROUTE_TABLE_ENTRY = { file: 'src/app/app.routes.ts', exportName: 'routes' };
+const QUOTES = `'"\``;
+
+/**
+ * @param {string} text
+ * @param {number} start
+ * @returns {number}
+ */
+function stringEnd(text, start) {
+  let index = start + 1;
+  while (index < text.length && text[index] !== text[start]) index += text[index] === '\\' ? 2 : 1;
+  return index + 1;
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+function withoutComments(text) {
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    const pair = text.slice(index, index + 2);
+    if (pair === '//') {
+      while (index < text.length && text[index] !== '\n') index += 1;
+    } else if (pair === '/*') {
+      const end = text.indexOf('*/', index + 2);
+      index = end === -1 ? text.length : end + 2;
+    } else if (QUOTES.includes(text[index])) {
+      const end = stringEnd(text, index);
+      result += text.slice(index, end);
+      index = end;
+    } else {
+      result += text[index];
+      index += 1;
+    }
+  }
+  return result;
+}
+
+/**
+ * @param {string} text
+ * @param {number} open
+ * @returns {number}
+ */
+function closingBracket(text, open) {
+  let depth = 0;
+  for (let index = open; index < text.length;) {
+    if (QUOTES.includes(text[index])) {
+      index = stringEnd(text, index);
+      continue;
+    }
+    if ('([{'.includes(text[index])) depth += 1;
+    if (')]}'.includes(text[index])) depth -= 1;
+    if (depth === 0) return index;
+    index += 1;
+  }
+  throw new Error(`a bracket at ${open} is never closed`);
+}
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length;) {
+    if (QUOTES.includes(text[index])) {
+      index = stringEnd(text, index);
+      continue;
+    }
+    if ('([{'.includes(text[index])) depth += 1;
+    if (')]}'.includes(text[index])) depth -= 1;
+    if (text[index] === ',' && depth === 0) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+    index += 1;
+  }
+  parts.push(text.slice(start));
+  return parts.map((part) => part.trim()).filter((part) => part !== '');
+}
+
+const LAZY_IMPORT = /import\(\s*(['"])(\.[^'"]+)\1\s*\)/;
+const LAZY_EXPORT = /\.then\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.(\w+)\s*\)/;
+
+/**
+ * @param {string} root
+ * @param {string} file
+ * @param {string} exportName
+ * @param {string | undefined} parentPath
+ * @returns {{ path: string, file: string | undefined, below: string[] }[]}
+ */
+function readRouteArray(root, file, exportName, parentPath) {
+  let text;
+  try {
+    text = withoutComments(readFileSync(join(root, file), 'utf8'));
+  } catch (error) {
+    throw new Error(`cannot read ${file}: ${error instanceof Error ? error.message : error}`, {
+      cause: error,
+    });
+  }
+  const declaration = new RegExp(String.raw`export const ${exportName}: Routes = \[`).exec(text);
+  if (declaration === null)
+    throw new Error(`${file} has no \`export const ${exportName}: Routes = [\``);
+  const open = declaration.index + declaration[0].length - 1;
+  return readRouteItems(root, file, text.slice(open + 1, closingBracket(text, open)), parentPath);
+}
+
+/**
+ * @param {string} root
+ * @param {string} file
+ * @param {string} body
+ * @param {string | undefined} parentPath
+ */
+function readRouteItems(root, file, body, parentPath) {
+  const dir = posix.dirname(file);
+  const lazyFile = (value) => {
+    const specifier = LAZY_IMPORT.exec(value)?.[2];
+    if (specifier === undefined)
+      throw new Error(`${file} has a route whose import() is not a relative path`);
+    return `${posix.normalize(posix.join(dir, specifier))}.ts`;
+  };
+  const nodes = [];
+  for (const item of splitTopLevel(body)) {
+    if (!item.startsWith('{') || !item.endsWith('}')) {
+      throw new Error(`${file} has a route that is not an object literal: ${item.slice(0, 40)}`);
+    }
+    const properties = new Map();
+    for (const property of splitTopLevel(item.slice(1, -1))) {
+      const match = /^(\w+)\s*:\s*([\s\S]*)$/.exec(property);
+      if (match !== null) properties.set(match[1], match[2]);
+    }
+    const ownPath = /^(['"])([^'"]*)\1$/.exec(properties.get('path') ?? '')?.[2];
+    if (ownPath === undefined)
+      throw new Error(`${file} has a route whose path is not a string literal`);
+    const path = parentPath === undefined ? ownPath : `${parentPath}/${ownPath}`;
+    const component = properties.get('loadComponent');
+    const lazy = properties.get('loadChildren');
+    const children = properties.get('children');
+    let below = [];
+    if (lazy !== undefined) {
+      const exportName = LAZY_EXPORT.exec(lazy)?.[1];
+      if (exportName === undefined)
+        throw new Error(`${file} has a loadChildren that names no export`);
+      below = readRouteArray(root, lazyFile(lazy), exportName, path);
+    } else if (children !== undefined) {
+      below = readRouteItems(root, file, children.slice(1, -1), path);
+    }
+    nodes.push(
+      {
+        path,
+        file: component === undefined ? undefined : lazyFile(component),
+        below: below.map((node) => node.path),
+      },
+      ...below,
+    );
+  }
+  return nodes;
+}
+
+// Text scanning, not a TypeScript parse, because this file runs without an install.
+/**
+ * @param {string} root
+ * @returns {Map<string, string[]>}
+ * @throws {Error} when a route table cannot be read
+ */
+export function readRouteTable(root) {
+  /** @type {Map<string, string[]>} */
+  const table = new Map();
+  const { file, exportName } = ROUTE_TABLE_ENTRY;
+  for (const node of readRouteArray(root, file, exportName, undefined)) {
+    if (node.file === undefined) continue;
+    const paths = table.get(node.file) ?? [];
+    for (const path of [node.path, ...node.below]) if (!paths.includes(path)) paths.push(path);
+    table.set(node.file, paths);
+  }
+  return table;
+}
+
+/**
+ * @param {string} file
+ * @param {{ root: string, graph: ImportGraph }} context
+ * @returns {string[]}
+ * @throws {Error} when a route table cannot be read
+ */
+export function routeSpecsFor(file, { root, graph }) {
+  const table = readRouteTable(root);
+  const reached = new Set([file]);
+  const queue = [file];
+  for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
+    for (const importer of graph.importers.get(next) ?? []) {
+      if (reached.has(importer)) continue;
+      reached.add(importer);
+      queue.push(importer);
+    }
+  }
+  const specs = new Set();
+  for (const page of reached) {
+    for (const path of table.get(page) ?? []) {
+      for (const name of ROUTE_SPECS[path] ?? []) specs.add(spec(name));
+    }
+  }
+  return [...specs];
+}
+
 /**
  * @typedef {{
  *   name: string,
@@ -963,6 +1171,7 @@ class FullSuite extends Error {}
  *   root?: string,
  *   sessionSpecs?: string[] | (() => string[]),
  *   warn?: (reason: string) => void,
+ *   narrow?: boolean,
  * }} SelectContext
  */
 
@@ -995,7 +1204,7 @@ function addFileSpecs(file, selected, context, visiting) {
 function addRuleSpecs(rule, file, selected, context, visiting) {
   if (rule.full) throw new FullSuite(`${file} is covered by the full-suite rule "${rule.name}"`);
   let session = [];
-  if (rule.specs.includes(SESSION)) {
+  if (rule.specs.includes(SESSION) && !context.narrow) {
     const { sessionSpecs } = context;
     session = (typeof sessionSpecs === 'function' ? sessionSpecs() : sessionSpecs) ?? [];
     if (session.length === 0) throw new FullSuite('the session specs are not known');
@@ -1012,7 +1221,7 @@ function addRuleSpecs(rule, file, selected, context, visiting) {
       addFileSpecs(derivedFile, selected, context, visiting);
     }
   }
-  if (widensToImporters(rule, file)) {
+  if (!context.narrow && widensToImporters(rule, file)) {
     widenToImporters(file, rule, selected, context, visiting);
   }
 }
@@ -1099,7 +1308,10 @@ function traceImporters(file, graph, selected, context, visiting, seen) {
  * @param {{ event?: string, base?: string, graph?: ImportGraph } & SelectContext} [context]
  * @returns {{ scope: 'full' } | { scope: 'affected', specs: string[] }}
  */
-export function selectSpecs(files, { event, base, root, sessionSpecs, warn, graph: given } = {}) {
+export function selectSpecs(
+  files,
+  { event, base, root, sessionSpecs, warn, graph: given, narrow = false } = {},
+) {
   const full = { scope: /** @type {const} */ ('full') };
   if (event !== 'pull_request' || base === 'production') return full;
   if (!Array.isArray(files) || files.length === 0) return full;
@@ -1108,6 +1320,7 @@ export function selectSpecs(files, { event, base, root, sessionSpecs, warn, grap
   const context = {
     root,
     sessionSpecs,
+    narrow,
     widened: new Set(),
     graph: () => {
       if (graph) return graph;
