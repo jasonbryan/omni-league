@@ -316,17 +316,18 @@ test.describe('Staff: inviting', () => {
 
 async function openStaffWithTournaments(page: Page, leagues = LEAGUES) {
   const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues });
-  for (const [name, slug] of [
-    ['Gulf Coast Beach Open', 'gulf-coast-beach-open'],
-    ['Winter Doubles Classic', 'winter-doubles-classic'],
-  ]) {
+  // The picker lists the latest start first, as the Tournaments page does.
+  for (const [name, slug, startsIn] of [
+    ['Gulf Coast Beach Open', 'gulf-coast-beach-open', 40],
+    ['Winter Doubles Classic', 'winter-doubles-classic', 60],
+  ] as const) {
     await seedTournament(org.tenant, {
       name,
       slug,
       locations: [LOCATIONS[0].name],
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(41),
-      registrationDeadline: dateFromToday(30),
+      startDate: dateFromToday(startsIn),
+      endDate: dateFromToday(startsIn + 1),
+      registrationDeadline: dateFromToday(startsIn - 10),
       status: 'draft',
     });
   }
@@ -347,7 +348,7 @@ test.describe('Staff: tournaments', () => {
     const tournaments = page.getByRole('group', { name: 'Tournaments' });
     await expect(tournaments.getByRole('checkbox')).toHaveCount(2);
     await expect(tournaments.getByRole('checkbox').first()).toHaveAccessibleName(
-      'Gulf Coast Beach Open',
+      'Winter Doubles Classic',
     );
     await expect(page.getByText('Runs only the leagues and tournaments you choose.')).toBeVisible();
     await screenshot(page, testInfo, 'staff-tournaments-picker');
