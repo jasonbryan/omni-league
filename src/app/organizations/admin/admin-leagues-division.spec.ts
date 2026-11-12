@@ -10,6 +10,13 @@ import {
   openAdmin,
   text,
 } from './testing/admin-harness';
+import {
+  fieldShape,
+  formShapes,
+  INVALID_ATTRIBUTES,
+  inputShape,
+  shapeOf,
+} from '../../ui/testing/form-shapes';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
@@ -447,6 +454,79 @@ describe('AdminLeagues: the Division group', () => {
       const rows = [...page.querySelectorAll<HTMLElement>('#leagues-list > li')];
       expect(text(rows[0].querySelector('[data-slot="league-division"]'))).toBe('Coed · 4v4 · BB');
       expect(rows[1].querySelector('[data-slot="league-division"]')).toBeNull();
+    });
+  });
+  describe('the field markup the helm directives draw', () => {
+    const fields = () => page.querySelector('app-league-division-fields')!;
+
+    const ageGroup = () => ({
+      ...inputShape('age-group', { 'aria-describedby': 'age-group-description' }),
+      tag: 'select',
+      attributes: {
+        ...inputShape('age-group', { 'aria-describedby': 'age-group-description' }).attributes,
+        name: 'ageGroup',
+      },
+    });
+
+    const shapes = (errors: { format?: boolean; minimum?: boolean }, minimumShown = false) => [
+      ...(errors.format ? [shapeOf('field-error', { id: 'format-error' }, 'mt-2')] : []),
+      ...(minimumShown
+        ? [
+            shapeOf(
+              'field',
+              {
+                'data-orientation': 'vertical',
+                ...(errors.minimum ? { 'data-matches-spartan-invalid': 'true' } : {}),
+              },
+              'mt-4',
+            ),
+            shapeOf('field-label', { for: 'minimum-roster-size' }),
+            shapeOf('input', {
+              id: 'minimum-roster-size',
+              type: 'number',
+              inputmode: 'numeric',
+              autocomplete: 'off',
+              'aria-describedby': errors.minimum
+                ? 'minimum-roster-size-description minimum-roster-size-error'
+                : 'minimum-roster-size-description',
+              ...(errors.minimum ? { 'aria-invalid': 'true', ...INVALID_ATTRIBUTES } : {}),
+            }),
+            shapeOf('field-description', { id: 'minimum-roster-size-description' }),
+            ...(errors.minimum
+              ? [shapeOf('field-error', { id: 'minimum-roster-size-error' })]
+              : []),
+          ]
+        : []),
+      fieldShape(),
+      shapeOf('field-label', { for: 'age-group' }),
+      ageGroup(),
+      shapeOf('field-description', { id: 'age-group-description' }),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      await choose('sport-beachVolleyball');
+      expect(formShapes(fields())).toEqual(shapes({}));
+    });
+
+    it('draws the Format error under its chips after a submit with no format', async () => {
+      await open();
+      await type('name', 'Sunday Night Sand');
+      await choose('sport-beachVolleyball');
+      await submit();
+      expect(formShapes(fields())).toEqual(shapes({ format: true }));
+    });
+
+    it('draws Minimum roster size as a number field with a numeric keyboard, valid and invalid', async () => {
+      await open();
+      await type('name', 'Sunday Reverse Coed 4s');
+      await choose('sport-beachVolleyball');
+      await choose('format-4');
+      await pressRaiseMinimum();
+      expect(formShapes(fields())).toEqual(shapes({}, true));
+      await type('minimum-roster-size', '3');
+      await leave('minimum-roster-size');
+      expect(formShapes(fields())).toEqual(shapes({ minimum: true }, true));
     });
   });
 });

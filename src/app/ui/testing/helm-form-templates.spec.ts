@@ -89,6 +89,8 @@ interface Parts {
   legends?: number;
   textareas?: number;
   horizontal?: number;
+  /** The slots a template writes itself, because helm has no part for them. */
+  handWritten?: string[];
 }
 
 const ADMIN_FORMS: Record<string, Parts> = {
@@ -106,6 +108,43 @@ const ADMIN_FORMS: Record<string, Parts> = {
     descriptions: 1,
     errors: 1,
   },
+  'src/app/organizations/admin/league-create-form.ts': {
+    inputs: 2,
+    fields: 3,
+    labels: 3,
+    descriptions: 3,
+    errors: 3,
+    contents: 1,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 1,
+    handWritten: ['field-set'],
+  },
+  'src/app/organizations/league/league-details-form.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+    handWritten: ['field-group', 'field-set'],
+  },
+  'src/app/organizations/admin/league-division-fields.ts': {
+    inputs: 1,
+    fields: 2,
+    labels: 2,
+    descriptions: 2,
+    errors: 2,
+    handWritten: ['input'],
+  },
+  'src/app/organizations/admin/custom-level-panel.ts': {
+    inputs: 1,
+    fields: 2,
+    labels: 2,
+    descriptions: 2,
+    errors: 2,
+    handWritten: ['input'],
+  },
+  'src/app/organizations/admin/chip-radio-group.ts': { errors: 1 },
   'src/app/organizations/admin/staff-invite-panel.ts': {
     inputs: 1,
     nativeInputs: 2,
@@ -150,17 +189,19 @@ describe.each(Object.entries(ADMIN_FORMS))('%s', (path, expected) => {
     legends: 0,
     textareas: 0,
     horizontal: 0,
+    handWritten: [],
     ...expected,
   };
 
   it('imports none of the field class constants', () => {
-    const imported = [...source.matchAll(/import \{([^}]*)\} from '\.\/field-classes'/g)].flatMap(
+    const imported = [...source.matchAll(/import \{([^}]*)\} from '[^']*field-classes'/g)].flatMap(
       (match) => match[1].split(',').map((name) => name.trim()),
     );
     expect(imported.filter((name) => FIELD_CONSTANTS.includes(name))).toEqual([]);
   });
 
   it.each([
+    ['field group', GROUP_CLASSES],
     ['field set', FIELD_SET_CLASSES],
     ['legend', LEGEND_CLASSES],
     ['textarea', TEXTAREA_CLASSES],
@@ -184,11 +225,9 @@ describe.each(Object.entries(ADMIN_FORMS))('%s', (path, expected) => {
     expect(count(source, /<legend\b[^>]*\bhlmFieldLegend\b/g)).toBe(want.legends);
     expect(count(source, /<textarea\b[^>]*\bhlmTextarea\b/g)).toBe(want.textareas);
     expect(count(source, /\borientation="horizontal"/g)).toBe(want.horizontal);
-    expect(
-      count(
-        source,
-        /data-slot="(?:field-group|field|field-label|input|field-description|field-content|field-error|field-set|field-legend|textarea)"/g,
-      ),
-    ).toBe(0);
+    const written = source.matchAll(
+      /data-slot="(field-group|field|field-label|input|field-description|field-content|field-error|field-set|field-legend|textarea)"/g,
+    );
+    expect([...written].map((match) => match[1]).sort()).toEqual(want.handWritten);
   });
 });

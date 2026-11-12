@@ -16,6 +16,13 @@ import {
   UNDO_UPDATE_LEAGUE,
   UPDATE_LEAGUE,
 } from './testing/league-harness';
+import {
+  fieldShape,
+  formShapes,
+  INVALID_ATTRIBUTES,
+  inputShape,
+  shapeOf,
+} from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
 const SUNDAY = {
@@ -1267,6 +1274,105 @@ describe('LeagueDetailsForm', () => {
       expect(text(page.querySelector('[data-slot="alert"]'))).toContain(
         "Try again when you're connected.",
       );
+    });
+  });
+  describe('the field markup the helm directives draw', () => {
+    const select = () => {
+      const age = inputShape('details-age-group', {
+        name: 'ageGroup',
+        'aria-describedby': 'details-age-group-description',
+      });
+      return { ...age, tag: 'select' };
+    };
+
+    const shapes = (errors: { name?: boolean; format?: boolean; minimum?: boolean }) => [
+      {
+        tag: 'div',
+        classes: [...STICKY_FOOTER_CLEARANCE.split(' '), 'flex', 'flex-col', 'gap-6'].sort(),
+        attributes: { 'data-slot': 'field-group' },
+      },
+      fieldShape(!!errors.name),
+      shapeOf('field-label', { for: 'league-name' }),
+      inputShape(
+        'league-name',
+        {
+          name: 'form.name',
+          type: 'text',
+          autocomplete: 'off',
+          'aria-describedby': errors.name
+            ? 'league-name-description league-name-error'
+            : 'league-name-description',
+        },
+        !!errors.name,
+      ),
+      shapeOf('field-description', { id: 'league-name-description' }),
+      ...(errors.name ? [shapeOf('field-error', { id: 'league-name-error' })] : []),
+      {
+        tag: 'fieldset',
+        classes: ['border-border', 'border-t', 'pt-5'],
+        attributes: { 'data-slot': 'field-set' },
+      },
+      ...(errors.format ? [shapeOf('field-error', { id: 'details-format-error' }, 'mt-2')] : []),
+      ...(errors.minimum
+        ? [
+            shapeOf(
+              'field',
+              { 'data-orientation': 'vertical', 'data-matches-spartan-invalid': 'true' },
+              'mt-4',
+            ),
+            shapeOf('field-label', { for: 'details-minimum-roster-size' }),
+            shapeOf('input', {
+              id: 'details-minimum-roster-size',
+              type: 'number',
+              inputmode: 'numeric',
+              autocomplete: 'off',
+              'aria-describedby':
+                'details-minimum-roster-size-description details-minimum-roster-size-error',
+              'aria-invalid': 'true',
+              ...INVALID_ATTRIBUTES,
+            }),
+            shapeOf('field-description', { id: 'details-minimum-roster-size-description' }),
+            shapeOf('field-error', { id: 'details-minimum-roster-size-error' }),
+          ]
+        : []),
+      fieldShape(),
+      shapeOf('field-label', { for: 'details-age-group' }),
+      select(),
+      shapeOf('field-description', { id: 'details-age-group-description' }),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(form())).toEqual(shapes({}));
+    });
+
+    it('marks Name and Minimum roster size invalid and ties each error to its field', async () => {
+      await open();
+      await typeName('');
+      await leaveName();
+      form().querySelector<HTMLButtonElement>('button[type="button"]')!.click();
+      await o.flush();
+      const minimum = page.querySelector<HTMLInputElement>('#details-minimum-roster-size')!;
+      minimum.value = '3';
+      minimum.dispatchEvent(new Event('input'));
+      minimum.dispatchEvent(new Event('blur'));
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes({ name: true, minimum: true }));
+    });
+
+    it('marks only Format when the server refuses it', async () => {
+      await open();
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'format',
+          code: 'draftSeasonsTooMany',
+          message: LEAGUE_MESSAGES.draftSeasonsTooMany,
+        }),
+      );
+      await o.flush();
+      expect(formShapes(form())).toEqual(shapes({ format: true }));
     });
   });
 });
