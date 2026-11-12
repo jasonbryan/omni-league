@@ -1275,6 +1275,16 @@ describe('LeagueDetailsForm', () => {
         "Try again when you're connected.",
       );
     });
+
+    it('keeps the typed name in the field after the offline note shows', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(page.querySelector('[data-slot="alert"]')).not.toBeNull();
+      expect(nameInput().value).toBe('Sunday Sand');
+    });
   });
   describe('the field markup the helm directives draw', () => {
     const select = () => {
