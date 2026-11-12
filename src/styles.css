@@ -20,6 +20,9 @@
 /* Tailwind reads the badge variant names in the source as `outline-color` classes, and nothing uses them. */
 @source not inline('outline-destructive outline-muted');
 
+/* No page draws the stacked card sizes or the card parts yet, so Tailwind would ship their classes as unused rules. */
+@source not inline('@container/card-header row-span-2 auto-rows-min justify-self-end rounded-t-xl px-(--card-spacing) py-(--card-spacing) [--card-spacing:--spacing(5)] data-[size=lg]:[--card-spacing:--spacing(6)] has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]');
+
 /* Angular's critical-CSS inliner (beasties) cannot resolve `var(--font-sans)`, so with base.css
    alone it inlines no Inter @font-face and adds no font preload. The literal family name lets it
    inline the Latin @font-face and preload that file in production builds. It resolves to the same

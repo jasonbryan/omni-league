@@ -1,5 +1,5 @@
-export const CARD_CLASSES =
-  'group/card rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const SURFACE = 'group/card rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10';
 
-export const FLOATING_CARD_CLASSES =
-  'group/card rounded-xl bg-card text-card-foreground shadow-lg ring-1 ring-foreground/10';
+export const CARD_CLASSES = `${SURFACE} shadow-xs`;
+
+export const FLOATING_CARD_CLASSES = `${SURFACE} shadow-lg`;
