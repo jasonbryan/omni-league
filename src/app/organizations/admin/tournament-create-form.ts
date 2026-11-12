@@ -12,6 +12,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCircleAlert, lucidePlus, lucideSparkles } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -32,6 +33,7 @@ import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields, type DivisionErrors } from './league-division-fields';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
+import { tournamentPath } from './tournament-path';
 import { TOURNAMENT_FORM_ALERTS, TournamentForm, type TournamentField } from './tournament-form';
 import { WebAddressStatus } from './web-address-status';
 
@@ -82,6 +84,7 @@ const FOCUS_SELECTOR: Record<
     HlmInputImports,
     LeagueDivisionFields,
     NgIcon,
+    RouterLink,
     StickyFooter,
     StickyFooterFocus,
     WebAddressStatus,
@@ -392,12 +395,19 @@ const FOCUS_SELECTOR: Record<
           @if (created(); as created) {
             <div [class]="createdClass">
               <ng-icon name="lucideCheck" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
-              <span
-                data-slot="created-title"
-                [class]="createdTitleClass"
-                style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere"
-                >{{ created.name }} created. It stays a draft until you publish it.</span
-              >
+              <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                <span
+                  data-slot="created-title"
+                  [class]="createdTitleClass"
+                  style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere"
+                  >{{ created.name }} created. It stays a draft until you publish it.</span
+                >
+                <a
+                  [routerLink]="openHref(created.slug)"
+                  class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  >Open {{ created.name }}</a
+                >
+              </div>
             </div>
           }
         </div>
@@ -429,6 +439,7 @@ export class TournamentCreateForm {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
+  readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly { locationId: Id<'locations'>; name: string }[]>();
 
   protected readonly online = injectOnline();
@@ -458,7 +469,7 @@ export class TournamentCreateForm {
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
-  protected readonly created = signal<{ name: string } | null>(null);
+  protected readonly created = signal<{ name: string; slug: string } | null>(null);
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
@@ -489,6 +500,10 @@ export class TournamentCreateForm {
     return described === '' ? null : described;
   }
 
+  protected openHref(slug: string): string {
+    return tournamentPath(this.organizationSlug(), slug);
+  }
+
   protected edited(): void {
     this.created.set(null);
   }
@@ -512,7 +527,7 @@ export class TournamentCreateForm {
       this.create.run({ organizationId, ...values }),
     );
     if (outcome.sent) {
-      this.created.set({ name: outcome.values.name });
+      this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {

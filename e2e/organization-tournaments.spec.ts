@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -9,7 +9,8 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant, type TenantSeed } from './support/tenant';
+import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -74,7 +75,7 @@ test.describe('Tournaments: creating a draft', () => {
 
     const status = form(page).getByRole('status').filter({ hasText: 'created' });
     await expect(status).toHaveText(
-      'Winter Doubles Classic created. It stays a draft until you publish it.',
+      'Winter Doubles Classic created. It stays a draft until you publish it.Open Winter Doubles Classic',
     );
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#maximum-teams')).toHaveValue('');
@@ -302,6 +303,254 @@ test.describe('the admin sidebar', () => {
         'href',
         `/app/organizations/${tenant.slug}/leagues`,
       );
+    },
+  );
+});
+
+const PELICAN = LOCATIONS[0].name;
+
+async function managedBy(page: Page, role: Role | null) {
+  const { user, tenant } = await memberOf(page, role);
+  const publicPath = await seedTournament(tenant, {
+    name: 'Winter Doubles Classic',
+    slug: 'winter-doubles-classic',
+    locations: [PELICAN],
+    division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+    startDate: dateFromToday(40),
+    endDate: dateFromToday(41),
+    registrationDeadline: dateFromToday(30),
+    status: 'draft',
+  });
+  return {
+    user,
+    tenant,
+    publicPath,
+    managePath: `/app/organizations/${tenant.slug}/tournaments/winter-doubles-classic`,
+  };
+}
+
+const publishDialog = (page: Page) => page.getByRole('alertdialog');
+const publishButton = (page: Page) => main(page).getByRole('button', { name: 'Publish' });
+const stateBadge = (page: Page) => main(page).locator('h1 + div [data-slot="badge"]').first();
+
+test.describe('Tournaments: the management page and Publish', () => {
+  test('an org admin publishes: Cancel changes nothing, Publish confirms, and the public page then answers 200', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, publicPath, managePath } = await managedBy(page, 'orgAdmin');
+    await page.goto(managePath);
+    await expect(page).toHaveTitle(`Winter Doubles Classic | ${tenant.name} | Omni League`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Winter Doubles Classic' }),
+    ).toBeVisible();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    await expect(main(page).getByText('Coed · 2v2 · Open')).toBeVisible();
+    await expect(main(page).getByText(LOCATIONS[0].address)).toBeVisible();
+    await screenshot(page, testInfo, 'tournament-draft');
+    await expectAccessible(page);
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+
+    await publishButton(page).click();
+    await expect(publishDialog(page)).toContainText('Publish Winter Doubles Classic?');
+    await expect(publishDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await screenshot(page, testInfo, 'tournament-publish-dialog');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await publishDialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(publishDialog(page)).toHaveCount(0);
+    await expect(publishButton(page)).toBeFocused();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+
+    await publishButton(page).click();
+    await publishDialog(page).getByRole('button', { name: 'Publish tournament' }).click();
+    await expect(publishDialog(page)).toHaveCount(0);
+    await expect(stateBadge(page)).toHaveText('Published');
+    const notice = main(page).getByRole('status').filter({ hasText: 'is published.' });
+    await expect(notice).toContainText('Winter Doubles Classic is published.');
+    await expect(notice).toBeFocused();
+    await expect(publishButton(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'tournament-published');
+    await expectAccessible(page);
+    expect((await page.request.get(publicPath)).status()).toBe(200);
+
+    await notice.getByRole('link', { name: 'View public page' }).click();
+    await expect(page).toHaveURL(publicPath);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Winter Doubles Classic' }),
+    ).toBeVisible();
+    await expect(page.locator('#registration')).toContainText('Registration open · closes');
+  });
+
+  test('the Publish dialog traps Tab and Shift+Tab, and Escape closes it and returns focus to Publish', async ({
+    page,
+  }) => {
+    const { managePath, publicPath } = await managedBy(page, 'orgAdmin');
+    await page.goto(managePath);
+    await publishButton(page).click();
+    await expect(publishDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    const focusIsInDialog = () =>
+      page.evaluate(() => !!document.activeElement?.closest('[role="alertdialog"]'));
+    for (const key of ['Tab', 'Tab', 'Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab']) {
+      await page.keyboard.press(key);
+      expect(await focusIsInDialog()).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(publishDialog(page)).toHaveCount(0);
+    await expect(publishButton(page)).toBeFocused();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+  });
+
+  test('a tournament created on the Tournaments page opens from its status', async ({ page }) => {
+    const { tenant, url } = await memberOf(page, 'orgAdmin');
+    await page.goto(url);
+    await fillValid(page, 'Winter Doubles Classic');
+    await submit(page).click();
+    await form(page).getByRole('link', { name: 'Open Winter Doubles Classic' }).click();
+    await expect(page).toHaveURL(`${url}/winter-doubles-classic`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Winter Doubles Classic' }),
+    ).toBeVisible();
+    await expect(stateBadge(page)).toHaveText('Draft');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Breadcrumb' })
+        .getByRole('link', { name: 'Tournaments', exact: true }),
+    ).toHaveAttribute('href', `/app/organizations/${tenant.slug}/tournaments`);
+  });
+
+  test(
+    'a row of the Tournaments list opens the tournament, and the sidebar keeps Tournaments current',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tenant, managePath } = await managedBy(page, 'orgAdmin');
+      await page.goto(`/app/organizations/${tenant.slug}/tournaments`);
+      await rows(page).getByRole('link', { name: 'Winter Doubles Classic' }).click();
+      await expect(page).toHaveURL(managePath);
+      await expect(
+        page
+          .getByRole('navigation', { name: `${tenant.name} admin` })
+          .getByRole('link', { name: /^Tournaments/ }),
+      ).toHaveAttribute('aria-current', 'true');
+    },
+  );
+
+  test('an unknown web address shows the not-found view', async ({ page }) => {
+    const { tenant } = await managedBy(page, 'orgAdmin');
+    await page.goto(`/app/organizations/${tenant.slug}/tournaments/no-such-tournament`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
+    ).toBeVisible();
+  });
+
+  test('the page shows a skeleton with its status while the answer is held', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await managedBy(page, 'orgAdmin');
+    const held = await holdQueries(page, ['tournaments:getForManagement']);
+    await page.goto(managePath);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the tournament.' }),
+    ).toBeAttached();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveCount(0);
+    await screenshot(page, testInfo, 'tournament-loading');
+    await expectAccessible(page);
+    held.release();
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Winter Doubles Classic' }),
+    ).toBeVisible();
+  });
+
+  test.describe('a publish the server fails', () => {
+    test.use({ expectedConvexErrors: ['tournaments:publish'] });
+
+    test('shows the alert in the dialog, keeps the draft, and passes the axe helper', async ({
+      page,
+    }, testInfo) => {
+      const { managePath, publicPath } = await managedBy(page, 'orgAdmin');
+      await failMutation(page, 'tournaments:publish');
+      await page.goto(managePath);
+      await publishButton(page).click();
+      await publishDialog(page).getByRole('button', { name: 'Publish tournament' }).click();
+      const alert = publishDialog(page).getByRole('alert');
+      await expect(alert).toContainText('The tournament could not be published.');
+      await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, 'tournament-publish-error');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      expect((await page.request.get(publicPath)).status()).toBe(404);
+    });
+  });
+
+  test('pressing Publish offline shows the offline alert and keeps the draft', async ({
+    page,
+    context,
+  }) => {
+    const { managePath, publicPath } = await managedBy(page, 'orgAdmin');
+    await page.goto(managePath);
+    await publishButton(page).click();
+    await context.setOffline(true);
+    const confirm = publishDialog(page).getByRole('button', { name: 'Publish tournament' });
+    await expect(confirm).toHaveAttribute('aria-disabled', 'true');
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
+    await confirm.click({ force: true });
+    await expect(publishDialog(page).getByRole('alert')).toContainText(
+      "You're offline. Nothing was sent.",
+    );
+    await context.setOffline(false);
+    expect((await page.request.get(publicPath)).status()).toBe(404);
+  });
+});
+
+test.describe('who may open a tournament’s management page', () => {
+  for (const [label, role] of [
+    ['a league organizer of the organization', 'leagueOrganizer'],
+    ['a signed-in user with no membership', null],
+  ] as const) {
+    test(
+      `${label} sees the no-access view, and the tournament is not requested`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const { managePath } = await managedBy(page, role);
+        const frames: string[] = [];
+        page.on('websocket', (socket) => {
+          socket.on('framesent', (frame) => {
+            frames.push(String(frame.payload));
+          });
+        });
+        await page.goto(managePath);
+        await expect(
+          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(main(page).getByText('Winter Doubles Classic')).toHaveCount(0);
+        expect(frames.join('\n')).not.toContain('tournaments:getForManagement');
+      },
+    );
+  }
+
+  test('an org admin of another organization sees the no-access view too', async ({ page }) => {
+    const { user, managePath } = await managedBy(page, null);
+    const other = await seedTenant({ name: 'E2E Other Tournaments', locations: LOCATIONS });
+    await convexRun('testing:addMembership', {
+      organizationSlug: other.slug,
+      email: user.email,
+      role: 'orgAdmin',
+    });
+    await page.goto(managePath);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+    ).toBeVisible();
+  });
+
+  test(
+    'a signed-out visitor is sent to sign in, with the page as returnTo',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedTenant({ name: 'E2E Signed Out', locations: LOCATIONS });
+      const managePath = `/app/organizations/${tenant.slug}/tournaments/winter-doubles-classic`;
+      await page.goto(managePath);
+      await expect(page).toHaveURL(/\/sign-in\?/);
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe(managePath);
     },
   );
 });

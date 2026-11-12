@@ -33,7 +33,7 @@ const ROWS = {
   customLevels: 1,
   leagues: 46,
   seasons: 7,
-  tournaments: 1,
+  tournaments: 2,
 };
 const NONE = {
   organizations: 0,
@@ -1127,7 +1127,7 @@ describe('seed:demo league programs', () => {
 });
 
 describe('seed:demo tournaments', () => {
-  async function winterDoublesClassic(t: T) {
+  async function winterDoublesClassic(t: T, slug = 'winter-doubles-classic') {
     return t.run(async (ctx) => {
       const organization = await ctx.db
         .query('organizations')
@@ -1136,7 +1136,7 @@ describe('seed:demo tournaments', () => {
       const program = await ctx.db
         .query('programs')
         .withIndex('by_organizationId_and_slug', (q) =>
-          q.eq('organizationId', organization!._id).eq('slug', 'winter-doubles-classic'),
+          q.eq('organizationId', organization!._id).eq('slug', slug),
         )
         .unique();
       const tournaments = await ctx.db.query('tournaments').collect();
@@ -1163,7 +1163,7 @@ describe('seed:demo tournaments', () => {
     expect(second.tournaments).toBe(0);
     const { organizationId, location, program, tournaments, tournament } =
       await winterDoublesClassic(t);
-    expect(tournaments).toHaveLength(1);
+    expect(tournaments).toHaveLength(2);
     expect(program).toMatchObject({
       organizationId,
       type: 'tournament',
@@ -1189,7 +1189,42 @@ describe('seed:demo tournaments', () => {
     expect(tournament!.endDate >= tournament!.startDate).toBe(true);
   });
 
-  test('adds none where a program already holds its web address', async () => {
+  test('adds the published Gulf Coast Beach Open with registration open, and its public page answers', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { organizationId, location, program, tournament } = await winterDoublesClassic(
+      t,
+      'gulf-coast-beach-open',
+    );
+    expect(program).toMatchObject({
+      organizationId,
+      type: 'tournament',
+      name: 'Gulf Coast Beach Open',
+      sport: 'beachVolleyball',
+      status: 'published',
+      locationIds: [location],
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'open',
+      ageGroup: 'adult',
+    });
+    expect(tournament).toMatchObject({ organizationId, maximumTeams: 16, minimumRosterSize: 2 });
+    expect(registrationIsOpen(tournament!, Date.now())).toBe(true);
+    expect(tournament!.startDate > tournament!.registrationDeadline).toBe(true);
+    expect(tournament!.endDate >= tournament!.startDate).toBe(true);
+    expect(
+      await t.query(api.tournaments.getPublicPage, {
+        orgSlug: 'gulf-coast-sport-social',
+        tournamentSlug: 'gulf-coast-beach-open',
+      }),
+    ).toMatchObject({
+      name: 'Gulf Coast Beach Open',
+      divisionLabel: 'Coed · 2v2 · Open',
+      locations: [{ name: 'North Beach Sand Courts' }],
+    });
+  });
+
+  test('adds only the tournament whose web address is free where a program holds the other', async () => {
     const t = setup();
     await t.run(async (ctx) => {
       await insertTenant(ctx, {
@@ -1206,8 +1241,10 @@ describe('seed:demo tournaments', () => {
       });
     });
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.tournaments).toBe(0);
-    expect((await winterDoublesClassic(t)).tournaments).toHaveLength(0);
+    expect(result.tournaments).toBe(1);
+    const held = await winterDoublesClassic(t);
+    expect(held.tournaments).toHaveLength(1);
+    expect(held.program?.type).toBe('league');
   });
 });
 

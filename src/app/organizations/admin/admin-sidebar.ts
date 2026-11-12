@@ -153,7 +153,7 @@ export class AdminSidebar {
       overview: [link('Overview', 'lucideLayoutDashboard', '', null)],
       programs: [
         link('Leagues', 'lucideTrophy', 'leagues', this.counts.leagues(), true),
-        link('Tournaments', 'lucideSwords', 'tournaments', null),
+        link('Tournaments', 'lucideSwords', 'tournaments', null, true),
       ],
       settings: [
         link('Locations', 'lucideMapPin', 'locations', this.counts.locations()),

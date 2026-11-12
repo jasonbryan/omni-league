@@ -33,6 +33,13 @@ export const routes: Routes = [
       import('./organizations/public-season/public-season-page').then((m) => m.PublicSeasonPage),
   },
   {
+    path: 'organizations/:orgSlug/tournaments/:tournamentSlug',
+    loadComponent: () =>
+      import('./organizations/public-tournament/public-tournament-page').then(
+        (m) => m.PublicTournamentPage,
+      ),
+  },
+  {
     path: 'sign-up',
     title: 'Create an account | Omni League',
     canActivate: [redirectSignedIn],

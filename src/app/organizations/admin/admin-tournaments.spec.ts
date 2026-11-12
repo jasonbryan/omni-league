@@ -208,6 +208,22 @@ describe('AdminTournaments', () => {
       expect(text(items()[1].querySelector('p'))).toBe('Dates: Jan 16 – Jan 17, 2027');
     });
 
+    it('links each row’s name to its management page', async () => {
+      await open(TOURNAMENTS);
+      expect(
+        items().map((li) => [
+          text(li.querySelector('h3 a')),
+          li.querySelector('h3 a')!.getAttribute('href'),
+        ]),
+      ).toEqual([
+        ['Spring Open', `/app/organizations/${COASTAL.slug}/tournaments/spring-open`],
+        [
+          'Winter Doubles Classic',
+          `/app/organizations/${COASTAL.slug}/tournaments/winter-doubles-classic`,
+        ],
+      ]);
+    });
+
     it('a failed list shows the destructive alert, never the error message', async () => {
       await open(undefined, COASTAL_LOCATIONS);
       o.subscription(LIST_TOURNAMENTS)!.fail(new Error('Server Error: secret'));
@@ -450,7 +466,12 @@ describe('AdminTournaments', () => {
       await created();
       const status = createdStatus()!;
       expect(text(status)).toBe(
-        'Winter Doubles Classic created. It stays a draft until you publish it.',
+        'Winter Doubles Classic created. It stays a draft until you publish it.Open Winter Doubles Classic',
+      );
+      const openLink = status.querySelector('a')!;
+      expect(text(openLink)).toBe('Open Winter Doubles Classic');
+      expect(openLink.getAttribute('href')).toBe(
+        `/app/organizations/${COASTAL.slug}/tournaments/winter-doubles-classic`,
       );
       expect(status.getAttribute('role')).toBe('status');
       expect(status.nextElementSibling).toBe(submitButton());
