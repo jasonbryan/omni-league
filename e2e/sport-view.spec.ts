@@ -336,6 +336,7 @@ test.describe('the sport view: tournaments', () => {
             slug: 'gulf-coast-beach-open',
             sport: 'beachVolleyball',
             locations: [NORTH_BEACH.name],
+            division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
             startDate: dateFromToday(30),
             endDate: dateFromToday(31),
             registrationDeadline: dateFromToday(23),

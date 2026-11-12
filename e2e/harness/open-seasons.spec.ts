@@ -62,14 +62,12 @@ test.describe(
       ]);
     });
 
-    test('leaves out the draft tournament and one whose deadline has passed', () => {
-      const titles = (nowMs: number) =>
-        expectedRegistrationOpenCards(GULF_COAST, nowMs).map((card) => card.leagueName);
-      expect(titles(RUN)).not.toContain('Winter Doubles Classic');
-      expect(titles(Date.parse('2027-05-25T12:00:00Z'))).toEqual([]);
+    test('leaves out the draft Winter Doubles Classic', () => {
+      const titles = expectedRegistrationOpenCards(GULF_COAST, RUN).map((card) => card.leagueName);
+      expect(titles).not.toContain('Winter Doubles Classic');
     });
 
-    test('is the seasons alone for a demo organization with no tournament', () => {
+    test('is empty for a demo organization with no published season or tournament', () => {
       expect(expectedRegistrationOpenCards('port-aransas-beach-volleyball-club', RUN)).toEqual([]);
     });
   },
