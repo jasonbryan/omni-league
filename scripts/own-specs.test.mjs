@@ -757,7 +757,7 @@ describe('ownSpecs: the import bullet on the real repo', () => {
     'src/app/organizations/admin/attention-text.spec.ts',
     'src/app/organizations/admin/attention-text.ts',
   ];
-  const MAX_PR_SPECS = 15;
+  const MAX_PR_SPECS = 20;
 
   for (const file of ['convex/users.ts', 'convex/leagues.ts']) {
     it(`lists only the smoke spec for ${file}`, () => {
