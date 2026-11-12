@@ -196,7 +196,7 @@ describe('AccountPage', () => {
         'Sunday Reverse Coed 4s needs 4 players per team by May 23, 2027.',
       );
       const link = region.querySelector('a')!;
-      expect(link.getAttribute('href')).toBe('/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e');
+      expect(link.getAttribute('href')).toBe('/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e#invite');
       expect(text(link)).toBe('Invite players to Sand Sharks');
       expect(text(link.querySelector('.sr-only'))).toBe('to Sand Sharks');
     });
@@ -317,7 +317,7 @@ describe('AccountPage', () => {
       await show([{ ...SAND_SHARKS, teamId: '../x?y' }]);
       expect(cards()[0]?.querySelector('h3 a')?.getAttribute('href')).toBe('/app/teams/..%2Fx%3Fy');
       expect(nextStepRegion()?.querySelector('a')?.getAttribute('href')).toBe(
-        '/app/teams/..%2Fx%3Fy',
+        '/app/teams/..%2Fx%3Fy#invite',
       );
     });
 

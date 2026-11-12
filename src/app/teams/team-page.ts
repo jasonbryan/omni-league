@@ -52,6 +52,7 @@ import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
 import { SeasonTeamsPanel } from './season-teams-panel';
 import { RenameMinorForm, type RenameMinorOutcome } from './rename-minor-form';
+import { TeamInviteLanding } from './team-invite-landing';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
@@ -95,6 +96,7 @@ export interface TeamPageNavigationState {
     TeamPendingInvites,
   ],
   providers: [
+    TeamInviteLanding,
     provideIcons({
       lucideArrowLeft,
       lucideCircleCheck,
@@ -395,6 +397,7 @@ export interface TeamPageNavigationState {
                 <div class="flex flex-col gap-4 md:gap-6">
                   @if (fullPanel(); as full) {
                     <section
+                      #fullSection
                       [id]="full.id"
                       aria-labelledby="team-full-heading"
                       hlmCard
@@ -405,7 +408,14 @@ export interface TeamPageNavigationState {
                       <div
                         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                       >
-                        <h2 id="team-full-heading" class="font-semibold">{{ full.heading }}</h2>
+                        <h2
+                          #fullHeading
+                          id="team-full-heading"
+                          tabindex="-1"
+                          class="rounded-sm font-semibold"
+                        >
+                          {{ full.heading }}
+                        </h2>
                       </div>
                       <div class="flex flex-col items-center px-6 py-10 text-center">
                         <span
@@ -583,6 +593,16 @@ export class TeamPage {
 
   private readonly registeredStatus = viewChild<AdminAlert>('registeredStatus');
   private readonly invitePanel = viewChild(TeamInvitePanel);
+  private readonly fullSection = viewChild<ElementRef<HTMLElement>>('fullSection');
+  private readonly fullHeading = viewChild<ElementRef<HTMLElement>>('fullHeading');
+  private readonly landing = inject(TeamInviteLanding);
+  /** The pending list sits above the invite panel, so landing before it answers would leave the panel moving. */
+  private readonly landingStep = computed<'wait' | 'nothing' | 'land'>(() => {
+    if (this.state() === 'loading') return 'wait';
+    if (!this.team()?.viewerCanManage) return 'nothing';
+    const answered = this.pending.value() !== undefined || this.pending.error() !== undefined;
+    return answered ? 'land' : 'wait';
+  });
   private readonly statusFocused = signal(false);
   private readonly removeDialog = viewChild(RemovePlayerDialog);
   private readonly rosterStatus = viewChild<AdminAlert>('rosterStatus');
@@ -611,6 +631,23 @@ export class TeamPage {
       if (!status || this.statusFocused()) return;
       this.statusFocused.set(true);
       status.focus();
+    });
+    effect(() => {
+      if (!this.landing.pending()) return;
+      const step = this.landingStep();
+      if (step === 'wait') return;
+      if (step === 'nothing') {
+        this.landing.settle();
+        return;
+      }
+      afterNextRender(
+        () => {
+          if (!this.landing.pending()) return;
+          this.showInvite();
+          this.landing.settle();
+        },
+        { injector: this.injector },
+      );
     });
   }
 
@@ -662,12 +699,21 @@ export class TeamPage {
   }
 
   protected jumpToPanel(event: MouseEvent): void {
-    if (!isPlainClick(event)) return;
+    if (isPlainClick(event) && this.showInvite()) event.preventDefault();
+  }
+
+  private showInvite(): boolean {
     const panel = this.invitePanel();
-    const section = panel?.scrollTarget();
-    if (!panel || !section) return;
-    event.preventDefault();
-    section.scrollIntoView();
-    panel.focusFirst();
+    const form = panel?.scrollTarget();
+    if (panel && form) {
+      form.scrollIntoView();
+      panel.focusFirst();
+      return true;
+    }
+    const note = this.fullSection()?.nativeElement;
+    if (!note || this.fullPanel()?.id !== 'invite') return false;
+    note.scrollIntoView();
+    this.fullHeading()?.nativeElement.focus({ preventScroll: true });
+    return true;
   }
 }

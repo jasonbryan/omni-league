@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -6,6 +6,7 @@ import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
 import { seedBatch, type SeedBatch } from './support/seed-batch';
+import { expectOnScreen } from './support/sticky-footer';
 import { dateFromToday, newTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 
@@ -69,6 +70,29 @@ const revokeButton = (page: Page, address: string) =>
 async function openTeam(page: Page, teamId: string): Promise<void> {
   await page.goto(`/app/teams/${teamId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Sand Sharks' })).toBeVisible();
+}
+
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 1024;
+const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+const slimBarBottom = async (page: Page) => {
+  const box = await page.locator('header').first().boundingBox();
+  return box ? box.y + box.height : 0;
+};
+
+async function expectBelowSlimBar(page: Page, section: Locator, target: Locator): Promise<void> {
+  await expectOnScreen(page, target);
+  const top = await section.evaluate((element) => element.getBoundingClientRect().top);
+  expect(top).toBeGreaterThanOrEqual(await slimBarBottom(page));
+}
+
+async function expectFocusOnPageOrMain(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.activeElement === document.body || document.activeElement?.id === 'main',
+      ),
+    )
+    .toBe(true);
 }
 
 async function invite(page: Page, address: string): Promise<void> {
@@ -143,6 +167,36 @@ test.describe('team invites', () => {
     await expect(page.locator('main')).not.toContainText('@');
     await expectAccessible(page);
     await screenshot(page, testInfo, '131-member-view');
+  });
+
+  test('opened at #invite, lands on the email field with the invite form below the slim bar', async ({
+    page,
+  }) => {
+    const captain = newUser('Captain');
+    await signUp(page, captain);
+    const { teamId } = await seedTeam(captain);
+    for (const name of ['devon', 'kai', 'priya', 'marcus', 'elena']) {
+      await addInvite(teamId, `${name}@example.com`);
+    }
+    await page.goto(`/app/teams/${teamId}#invite`);
+    await expect(pendingList(page)).toContainText('elena@example.com');
+    await expect(email(page)).toBeFocused();
+    await expectBelowSlimBar(page, page.locator('#invite'), email(page));
+    if (isPhone(page)) expect(await scrollY(page)).toBeGreaterThan(0);
+  });
+
+  test('a member opening #invite sees nothing scroll and focus stay on <main>', async ({
+    page,
+  }) => {
+    const captain = await seedUser(newUser('Captain'));
+    const member = newUser('Member');
+    await signUp(page, member);
+    const { teamId } = await seedTeam(captain);
+    await convexRun('testing:addToTeam', { teamId, email: member.email });
+    await page.goto(`/app/teams/${teamId}#invite`);
+    await expect(rosterRows(page)).toHaveCount(2);
+    await expectFocusOnPageOrMain(page);
+    expect(await scrollY(page)).toBe(0);
   });
 
   test('an organizer of the league invites and revokes on the team page', async ({
@@ -273,6 +327,20 @@ test.describe('team invites: a full team', () => {
     await expect(pendingList(page)).toContainText('before@example.com');
     await expectAccessible(page);
     await screenshot(page, testInfo, '144-team-full');
+  });
+
+  test('opened at #invite, the full note scrolls into view and its heading has focus', async ({
+    page,
+  }) => {
+    const captain = newUser('Captain');
+    await signUp(page, captain);
+    const member = newUser('Member');
+    const teamId = await seedFullTeam(captain, member, [member]);
+    await page.goto(`/app/teams/${teamId}#invite`);
+    const full = page.getByTestId('team-full');
+    await expect(pendingList(page)).toContainText('before@example.com');
+    await expect(full.getByRole('heading', { name: 'Invite players' })).toBeFocused();
+    await expectBelowSlimBar(page, full, full.getByRole('heading', { name: 'Invite players' }));
   });
 
   test('a teammate sees Add a minor give way to the full note', async ({ page }, testInfo) => {
