@@ -610,7 +610,7 @@ describe('SeasonPage', () => {
         expect(formShapes(dialog()!)).toEqual(expected(true));
       });
 
-      const indicators = () => [...dialog()!.querySelectorAll('hlm-radio-indicator')];
+      const circles = () => [...dialog()!.querySelectorAll('brn-radio')];
 
       it('draws one radiogroup named by the Team legend, with a brn-radio per team', async () => {
         await openDialog();
@@ -626,7 +626,7 @@ describe('SeasonPage', () => {
 
       it('shows the invalid edge on every indicator while no team is chosen after Place on team, and clears it on a choice', async () => {
         await openDialog();
-        const edges = () => indicators().map((el) => el.classList.contains('border-destructive'));
+        const edges = () => circles().map((el) => el.classList.contains('border-destructive'));
         expect(edges()).toEqual([false, false, false]);
         dialogButton('Place on team').click();
         await o.flush();

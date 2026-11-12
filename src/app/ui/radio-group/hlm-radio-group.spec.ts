@@ -42,6 +42,7 @@ describe('helm radio group', () => {
   let root: HTMLElement;
   const inputs = () => [...root.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
   const indicators = () => [...root.querySelectorAll<HTMLElement>('hlm-radio-indicator')];
+  const circles = () => [...root.querySelectorAll<HTMLElement>('brn-radio')];
 
   beforeEach(async () => {
     fixture = TestBed.createComponent(Host);
@@ -106,8 +107,8 @@ describe('helm radio group', () => {
   });
 
   it('shows the invalid edge on every indicator only while the consumer says invalid', async () => {
-    const edge = () => indicators().map((el) => el.classList.contains('border-destructive'));
-    const normal = () => indicators().map((el) => el.classList.contains('border-input'));
+    const edge = () => circles().map((el) => el.classList.contains('border-destructive'));
+    const normal = () => circles().map((el) => el.classList.contains('border-input'));
     expect(edge()).toEqual([false, false, false]);
     expect(normal()).toEqual([true, true, true]);
     fixture.componentInstance.invalid.set(true);
@@ -122,22 +123,31 @@ describe('helm radio group', () => {
     expect(root.querySelector('[role="radiogroup"]')!.hasAttribute('aria-invalid')).toBe(false);
   });
 
-  it('draws the indicator as a filled circle with a dot, and a focus ring from the radio that holds the input', () => {
-    const indicator = indicators()[0];
-    const classes = indicator.className.split(/\s+/);
+  it('draws the radio as a filled circle with a dot and a focus ring, from the brn-radio that holds the input', () => {
+    const classes = root.querySelector('brn-radio')!.className.split(/\s+/);
     expect(classes).toEqual(
       expect.arrayContaining([
+        'group/radio',
         'size-4',
         'rounded-full',
         'border',
-        'group-has-checked/radio:border-primary',
-        'group-has-checked/radio:bg-primary',
-        'group-has-focus-visible/radio:outline-2',
-        'group-has-focus-visible/radio:outline-ring',
+        'has-checked:border-primary',
+        'has-checked:bg-primary',
+        'has-focus-visible:outline-2',
+        'has-focus-visible:outline-ring',
       ]),
     );
-    expect(indicator.querySelector('span')!.className).toContain('bg-primary-foreground');
-    expect(root.querySelector('brn-radio')!.classList.contains('group/radio')).toBe(true);
+    expect(indicators()[0].querySelector('span')!.className).toContain('bg-primary-foreground');
+  });
+
+  it('dims the radio while it is disabled', async () => {
+    fixture.componentInstance.bDisabled.set(true);
+    await settle();
+    expect(circles().map((el) => el.classList.contains('opacity-50'))).toEqual([
+      false,
+      true,
+      false,
+    ]);
   });
 
   it('keeps the data-slot that the touch-target rule in base.css selects', () => {
