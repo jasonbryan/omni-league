@@ -4,6 +4,7 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { getOrganizerContext } from './leagues';
 import { FORBIDDEN_CODE } from './lib/forbidden';
 import { insertCustomLevel, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
@@ -145,6 +146,16 @@ describe('leagues.getOrganizerContext', () => {
         label: 'Coed · 4v4 · Rec',
       },
     });
+  });
+
+  test('requires the division in its result', () => {
+    // The registered function's JSON export is runtime-only, so its type does not declare it.
+    const registered = getOrganizerContext as unknown as { exportReturns: () => string };
+    const returns = JSON.parse(registered.exportReturns()) as {
+      value: { type: string; value?: { division?: { optional: boolean } } }[];
+    };
+    const league = returns.value.find((member) => member.type === 'object');
+    expect(league?.value?.division?.optional).toBe(false);
   });
 
   test('gives the league organizer assigned to the league the same, with their role', async () => {
