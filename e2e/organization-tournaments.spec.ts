@@ -6,6 +6,7 @@ import { remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
@@ -159,6 +160,34 @@ test.describe('Tournaments: creating a draft', () => {
         'winter-doubles-classic is already taken. Choose another web address.',
       );
     });
+  });
+});
+
+test.describe('Tournaments: loading', () => {
+  test('the list and the form show skeletons while their answers are held, and the state passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { url } = await memberOf(page, 'orgAdmin');
+    const held = await holdQueries(page, [
+      'tournaments:listForOrganization',
+      'locations:listForAdmin',
+    ]);
+    await page.goto(url);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the tournaments.' }),
+    ).toBeAttached();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the locations.' }),
+    ).toBeAttached();
+    await expect(page.getByText('No tournaments yet')).toHaveCount(0);
+    await expect(form(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'tournaments-loading');
+    await expectAccessible(page);
+
+    held.release();
+    await expect(page.getByText('No tournaments yet')).toBeVisible();
+    await expect(form(page)).toBeVisible();
   });
 });
 
