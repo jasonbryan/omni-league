@@ -21,6 +21,8 @@ import {
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
+import { ERROR_CLASSES } from '../../ui/testing/field-class-literals';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../../ui/testing/form-shapes';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 
@@ -1368,6 +1370,133 @@ describe('AdminLeagues', () => {
       expect(error('slug')).toBeNull();
       await submit();
       expect(o.convex.calls).toHaveLength(1);
+    });
+  });
+  describe('the field markup the helm directives draw', () => {
+    const withoutDivisionFields = () => {
+      const copy = form().cloneNode(true) as HTMLFormElement;
+      copy.querySelector('app-league-division-fields')?.remove();
+      return copy;
+    };
+
+    const shapes = (errors: {
+      name?: boolean;
+      slug?: boolean;
+      sport?: boolean;
+      locations?: boolean;
+    }) => [
+      shapeOf('field-group', {}, STICKY_FOOTER_CLEARANCE),
+      fieldShape(!!errors.name),
+      shapeOf('field-label', { for: 'name' }),
+      inputShape(
+        'name',
+        {
+          type: 'text',
+          autocomplete: 'off',
+          'aria-describedby': errors.name ? 'name-description name-error' : 'name-description',
+        },
+        !!errors.name,
+      ),
+      shapeOf('field-description', { id: 'name-description' }),
+      ...(errors.name ? [shapeOf('field-error', { id: 'name-error' })] : []),
+      fieldShape(!!errors.slug),
+      shapeOf('field-label', { for: 'slug' }),
+      inputShape(
+        'slug',
+        {
+          type: 'text',
+          autocomplete: 'off',
+          'aria-describedby': errors.slug ? 'slug-description slug-error' : 'slug-description',
+        },
+        !!errors.slug,
+      ),
+      shapeOf('field-description', { id: 'slug-description' }),
+      ...(errors.slug ? [shapeOf('field-error', { id: 'slug-error' })] : []),
+      ...(errors.sport ? [shapeOf('field-error', { id: 'sport-error' }, 'mt-2')] : []),
+      {
+        tag: 'fieldset',
+        classes: ['border-border', 'border-t', 'pt-5'],
+        attributes: { 'data-slot': 'field-set' },
+      },
+      shapeOf('field-set', {
+        id: 'locations',
+        'aria-describedby': errors.locations
+          ? 'locations-description locations-error'
+          : 'locations-description',
+        ...(errors.locations ? { 'data-invalid': 'true' } : {}),
+      }),
+      shapeOf(
+        'field-legend',
+        { 'data-variant': 'label' },
+        errors.locations ? 'text-destructive' : '',
+      ),
+      shapeOf('field-description', { id: 'locations-description' }, '-mt-1.5'),
+      ...[1, 2, 3].flatMap((n) => [
+        {
+          ...fieldShape(false, 'horizontal'),
+          attributes: {
+            ...fieldShape(false, 'horizontal').attributes,
+            ...(errors.locations ? { 'data-matches-spartan-invalid': 'true' } : {}),
+          },
+        },
+        shapeOf('field-content'),
+        shapeOf('field-label', { for: `location-${n}` }),
+      ]),
+      ...(errors.locations ? [shapeOf('field-error', { id: 'locations-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open([]);
+      expect(formShapes(withoutDivisionFields())).toEqual(shapes({}));
+    });
+
+    it('marks Name, Web address, Sport, and Locations invalid and ties each error to its field after an empty submit', async () => {
+      await open([]);
+      await submit();
+      expect(formShapes(withoutDivisionFields())).toEqual(
+        shapes({ name: true, slug: true, sport: true, locations: true }),
+      );
+    });
+
+    it('marks only Web address when the server says the address is taken', async () => {
+      await open([]);
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: LEAGUE_MESSAGES.slugTaken('sunday-reverse-coed-4s'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(withoutDivisionFields())).toEqual(shapes({ slug: true }));
+    });
+
+    it('draws the chip group error with the field error classes, its role, and its slot', async () => {
+      await open([]);
+      await submit();
+      const chipError = page.querySelector('#sport-error')!;
+      expect(chipError.getAttribute('data-slot')).toBe('field-error');
+      expect(chipError.getAttribute('role')).toBe('alert');
+      expect(tokens(chipError.getAttribute('class') ?? '')).toEqual(
+        tokens(`${ERROR_CLASSES} mt-2`),
+      );
+    });
+
+    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+      await open([]);
+      await submit();
+      const field = input('slug').closest('[data-slot="field"]')!;
+      expect(
+        [...field.children].map(
+          (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
+        ),
+      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      expect(
+        field.querySelector('[data-slot="field-description"] app-web-address-preview'),
+      ).not.toBeNull();
+      expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
     });
   });
 });
