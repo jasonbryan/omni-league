@@ -1,5 +1,6 @@
 import { v, type Infer, type Validator } from 'convex/values';
 import { sportValidator } from './sports';
+import { tournamentDetailsValidator } from './tournamentDetails';
 
 // These live apart from the function modules and import no function code, so the Angular app can
 // import the same validators to check saved copies without bundling the server functions.
@@ -234,3 +235,9 @@ const publicOpenSeasonValidator = v.object({
 export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
+
+export const publicTournamentPageValidator = tournamentDetailsValidator;
+
+export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;
+
+export const getTournamentPublicPageReturns = v.union(v.null(), publicTournamentPageValidator);

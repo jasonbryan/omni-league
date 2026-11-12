@@ -262,7 +262,7 @@ const DATA = {
   customLevels: 1,
   leagues: 46,
   seasons: 7,
-  tournaments: 1,
+  tournaments: 2,
 };
 const NO_BACKFILL = {
   organizations: 0,

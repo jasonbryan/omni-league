@@ -472,6 +472,18 @@ export async function insertDraftTournament(
   });
 }
 
+export async function publishTournament(
+  ctx: MutationCtx,
+  tournament: Doc<'tournaments'>,
+): Promise<void> {
+  const program = await ctx.db.get('programs', tournament.programId);
+  if (program?.organizationId !== tournament.organizationId) {
+    throw new Error(`Tournament ${tournament._id} has no program of its organization`);
+  }
+  if (program.status === 'published') return;
+  await ctx.db.patch('programs', program._id, { status: 'published' });
+}
+
 export const MAX_DRAFT_SEASONS_UPDATED = 200;
 
 export const leagueEarlierValidator = v.object({
