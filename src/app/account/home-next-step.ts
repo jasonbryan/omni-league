@@ -30,7 +30,7 @@ const noun = (count: number) => (count === 1 ? 'player' : 'players');
             {{ step().leagueName }} needs {{ perTeam() }} per team by {{ deadline() }}.
           </p>
         </div>
-        <a [routerLink]="path()" data-slot="button" [class]="button"
+        <a [routerLink]="path()" fragment="invite" data-slot="button" [class]="button"
           >Invite players<span class="sr-only"> to {{ step().teamName }}</span></a
         >
       </div>
