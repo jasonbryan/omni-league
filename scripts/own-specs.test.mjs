@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
-import { SCREEN_SPEC_CAP, main, ownSpecs } from './own-specs.mjs';
+import { PLAYWRIGHT_TEST_OPTIONS, SCREEN_SPEC_CAP, main, ownSpecs } from './own-specs.mjs';
 
 const repoRoot = join(import.meta.dirname, '..');
 const DIFF = ['diff', '--no-renames', '--name-only', 'origin/main...HEAD'];
@@ -812,10 +812,12 @@ describe('main', () => {
     const ran = [];
     const printed = [];
     const received = [];
+    const logged = [];
     return {
       ran,
       printed,
       received,
+      logged,
       result: main(argv, {
         own: (options) => {
           received.push(options);
@@ -826,7 +828,7 @@ describe('main', () => {
           return code;
         },
         print: (line) => printed.push(line),
-        log: () => {},
+        log: (message) => logged.push(message),
       }),
     };
   };
@@ -894,6 +896,165 @@ describe('main', () => {
     await result;
     assert.deepEqual(received[0].named, ['e2e/x.spec.ts']);
   });
+
+  describe('--help and -h', () => {
+    for (const argv of [
+      ['--help'],
+      ['-h'],
+      ['--help', 'e2e/x.spec.ts'],
+      ['e2e/x.spec.ts', '-h'],
+      ['--list', '--help'],
+      ['--headed', '--help'],
+      ['--foo', '--help'],
+    ]) {
+      it(`prints usage to stdout and returns 0 for ${argv.join(' ')}`, async () => {
+        const { ran, printed, received, result } = run(argv, { specs: ['e2e/x.spec.ts'] });
+        assert.equal(await result, 0);
+        assert.deepEqual(received, []);
+        assert.deepEqual(ran, []);
+        assert.ok(printed.length > 0);
+      });
+    }
+
+    it('names the command, the options, and where the rest is documented', async () => {
+      const { printed, result } = run(['--help']);
+      await result;
+      const usage = printed.join('\n');
+      for (const text of [
+        'npm run e2e:own -- [--list] [spec ...] [playwright test options]',
+        '--list',
+        '-h, --help',
+        'docs/process/dev-cycle.md (Own e2e specs)',
+        'npx playwright test --help',
+      ]) {
+        assert.ok(usage.includes(text), `usage lacks ${text}`);
+      }
+    });
+
+    it('treats -h as a value after an option that requires one', async () => {
+      const { ran, printed, result } = run(['-g', '-h'], { specs: ['e2e/smoke.spec.ts'] });
+      assert.equal(await result, 0);
+      assert.deepEqual(printed, []);
+      assert.deepEqual(ran, [['e2e/smoke.spec.ts', '-g', '-h']]);
+    });
+
+    it('treats --help after a bare -- as a test filter', async () => {
+      const { ran, result } = run(['--', '--help'], { specs: ['e2e/smoke.spec.ts'] });
+      assert.equal(await result, 0);
+      assert.deepEqual(ran, [['e2e/smoke.spec.ts', '--', '--help']]);
+    });
+  });
+
+  describe('unknown options', () => {
+    for (const option of [
+      '--foo',
+      '--foo=1',
+      '--lst',
+      '--helpme',
+      '-z',
+      '-xj4',
+      '--headed=1',
+      '--list=1',
+    ]) {
+      it(`names ${option} on one stderr line and returns 2 without reading the diff or running`, async () => {
+        const { ran, printed, received, logged, result } = run(['e2e/x.spec.ts', option], {
+          specs: ['e2e/x.spec.ts'],
+        });
+        assert.equal(await result, 2);
+        assert.deepEqual(received, []);
+        assert.deepEqual(ran, []);
+        assert.deepEqual(printed, []);
+        assert.equal(logged.length, 1);
+        assert.ok(logged[0].includes(option), logged[0]);
+        assert.ok(logged[0].includes('npm run e2e:own -- --help'), logged[0]);
+        assert.ok(!logged[0].includes('\n'));
+      });
+    }
+
+    it('rejects an unknown option that follows an option with an optional value', async () => {
+      const { ran, logged, result } = run(['--shuffle', '--foo'], { specs: [] });
+      assert.equal(await result, 2);
+      assert.deepEqual(ran, []);
+      assert.ok(logged[0].includes('--foo'));
+    });
+
+    it('rejects an unknown option under --list too', async () => {
+      const { printed, received, result } = run(['--list', '--foo'], { specs: [] });
+      assert.equal(await result, 2);
+      assert.deepEqual(received, []);
+      assert.deepEqual(printed, []);
+    });
+  });
+
+  describe('the Playwright options', () => {
+    for (const { names, value } of PLAYWRIGHT_TEST_OPTIONS.filter(
+      ({ names }) => !names.includes('--list'),
+    )) {
+      for (const name of names) {
+        it(`passes ${name} after the specs${value === 'none' ? '' : ' with and without =value'}`, async () => {
+          const forms =
+            name.startsWith('--') && value !== 'none' ? [[`${name}=x`], [name, 'x']] : [[name]];
+          for (const form of forms) {
+            const { ran, logged, result } = run(['e2e/x.spec.ts', ...form], {
+              specs: ['e2e/x.spec.ts'],
+              code: STUB_EXIT_CODE,
+            });
+            assert.equal(await result, STUB_EXIT_CODE);
+            assert.deepEqual(
+              logged.filter((line) => !line.startsWith('e2e:own: running')),
+              [],
+            );
+            assert.deepEqual(ran, [['e2e/x.spec.ts', ...form]]);
+          }
+        });
+      }
+    }
+
+    it('lists --list as an option that takes no value', () => {
+      const list = PLAYWRIGHT_TEST_OPTIONS.find(({ names }) => names.includes('--list'));
+      assert.equal(list?.value, 'none');
+    });
+  });
+
+  describe('forms Playwright reads', () => {
+    for (const argv of [
+      ['-j4'],
+      ['-gtitle'],
+      ['-uall'],
+      ['-g', '-slow'],
+      ['--grep', '-slow'],
+      ['--grep', '-slow', 'e2e/x.spec.ts'],
+      ['--shuffle', 'e2e/x.spec.ts', '--headed'],
+      ['--', '--anything'],
+      ['--', '--anything', '-z'],
+      ['-j4', '--', '--foo=1'],
+    ]) {
+      it(`passes ${argv.join(' ')} to run in order and returns its code`, async () => {
+        const { ran, result } = run(argv, { specs: ['e2e/smoke.spec.ts'], code: STUB_EXIT_CODE });
+        assert.equal(await result, STUB_EXIT_CODE);
+        assert.equal(ran.length, 1);
+        assert.deepEqual(
+          ran[0].slice(1).filter((arg) => !arg.startsWith('e2e/x')),
+          argv.filter((arg) => !arg.startsWith('e2e/x')),
+        );
+      });
+    }
+
+    it('keeps a spec after a dash-leading value as a named spec', async () => {
+      const { ran, received, result } = run(['--grep', '-slow', 'e2e/x.spec.ts'], {
+        specs: ['e2e/x.spec.ts'],
+      });
+      await result;
+      assert.deepEqual(received[0].named, ['e2e/x.spec.ts']);
+      assert.deepEqual(ran, [['e2e/x.spec.ts', '--grep', '-slow']]);
+    });
+
+    it('keeps the words after a dash-leading value out of the named specs', async () => {
+      const { received, result } = run(['-g', '-slow', 'checkout'], { specs: [] });
+      await result;
+      assert.deepEqual(received[0].named, ['checkout']);
+    });
+  });
 });
 
 describe('npm run e2e:own entry point', () => {
@@ -936,9 +1097,10 @@ describe('npm run e2e:own entry point', () => {
     return { dir, ranFile: join(dir, 'ran.json') };
   }
 
-  const entry = (dir, args) =>
+  const entry = (dir, args, tmp) =>
     spawnSync(process.execPath, [join(dir, 'scripts', 'own-specs.mjs'), ...args], {
       encoding: 'utf8',
+      env: tmp === undefined ? process.env : { ...process.env, TMPDIR: tmp },
     });
   const ranWith = (file) => {
     try {
@@ -990,6 +1152,89 @@ describe('npm run e2e:own entry point', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('prints the usage and starts nothing for --help', () => {
+    const { dir, ranFile } = project(['package.json']);
+    const privateTmp = mkdtempSync(join(tmpdir(), 'own-specs-private-tmp-'));
+    try {
+      const result = entry(dir, ['--help'], privateTmp);
+      assert.equal(result.status, 0);
+      assert.ok(result.stdout.includes('npm run e2e:own -- [--list]'));
+      assert.equal(ranWith(ranFile), undefined);
+      assert.deepEqual(readdirSync(privateTmp), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(privateTmp, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 2 and starts nothing for an unknown option', () => {
+    const { dir, ranFile } = project(['package.json']);
+    const privateTmp = mkdtempSync(join(tmpdir(), 'own-specs-private-tmp-'));
+    try {
+      const result = entry(dir, ['--foo'], privateTmp);
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, '');
+      assert.equal(result.stderr.trim().split('\n').length, 1);
+      assert.equal(ranWith(ranFile), undefined);
+      assert.deepEqual(readdirSync(privateTmp), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(privateTmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('PLAYWRIGHT_TEST_OPTIONS', () => {
+  const OPTION_LINE = /^ {2}(-\S.*?)(?: {2,}|$)/;
+  const VALUE_KIND = { '<': 'required', '[': 'optional' };
+
+  function installedOptions() {
+    const help = execFileSync(
+      process.execPath,
+      [join(repoRoot, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--help'],
+      { encoding: 'utf8', cwd: repoRoot, env: { ...process.env, COLUMNS: '120' } },
+    );
+    const kinds = new Map();
+    for (const line of help.split('\n')) {
+      const flags = OPTION_LINE.exec(line)?.[1];
+      if (flags === undefined || flags === '-h, --help') continue;
+      const [, placeholder] = /\s([<[].*)$/.exec(flags) ?? [];
+      const kind = VALUE_KIND[placeholder?.[0]] ?? 'none';
+      for (const name of flags.replace(/\s[<[].*$/, '').split(', ')) kinds.set(name, kind);
+    }
+    return kinds;
+  }
+
+  it('equals the options of the installed playwright test, by name and value kind', () => {
+    const installed = installedOptions();
+    const listed = new Map(
+      PLAYWRIGHT_TEST_OPTIONS.flatMap(({ names, value }) => names.map((name) => [name, value])),
+    );
+    const problems = [
+      ...[...installed.keys()]
+        .filter((name) => !listed.has(name))
+        .map((name) => `added by Playwright: ${name}`),
+      ...[...listed.keys()]
+        .filter((name) => !installed.has(name))
+        .map((name) => `removed by Playwright: ${name}`),
+      ...[...listed]
+        .filter(([name, kind]) => installed.has(name) && installed.get(name) !== kind)
+        .map(
+          ([name, kind]) =>
+            `value kind of ${name}: listed ${kind}, installed ${installed.get(name)}`,
+        ),
+    ];
+    assert.deepEqual(
+      problems,
+      [],
+      `Update PLAYWRIGHT_TEST_OPTIONS in scripts/own-specs.mjs:\n${problems.join('\n')}`,
+    );
+  });
+
+  it('parses the installed help into options, so an empty parse cannot pass', () => {
+    assert.ok(installedOptions().size > 20);
   });
 });
 
