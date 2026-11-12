@@ -36,7 +36,7 @@ describe('the registration cards', () => {
     fixture.componentRef.setInput('kicker', 'Register a team');
     fixture.componentRef.setInput('seasonHref', '/seasons/summer-2027');
     fixture.detectChanges();
-    expectBareCards(fixture.nativeElement, ['mt-3 overflow-hidden']);
+    expectBareCards(fixture.nativeElement as HTMLElement, ['mt-3 overflow-hidden']);
   });
 
   it('draws the loading placeholder as a bare helm card, with its test id kept', () => {
