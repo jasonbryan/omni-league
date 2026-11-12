@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type { TestConvex } from 'convex-test';
+import type { Id } from './_generated/dataModel';
 import { defaultDivision } from './lib/tenantWrites';
 import type schema from './schema';
 import type { Sport } from './lib/sports';
@@ -24,4 +25,18 @@ export function organizationListFields(name: string) {
 
 export function leagueRequiredFields(sport: Sport, name: string) {
   return { ...defaultDivision(sport), searchText: name };
+}
+
+export function tournamentProgramFields(organizationId: Id<'organizations'>, slug: string) {
+  return {
+    ...defaultDivision('soccer'),
+    organizationId,
+    type: 'tournament' as const,
+    name: slug,
+    sortName: slug,
+    slug,
+    sport: 'soccer' as const,
+    status: 'published' as const,
+    locationIds: [],
+  };
 }

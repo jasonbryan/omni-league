@@ -1069,6 +1069,36 @@ describe('seed:demo league search text', () => {
   });
 });
 
+describe('seed:demo league programs', () => {
+  test('every demo league has one program row equal to it, in its own organization, and a second run adds none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { leagues, programs } = await t.run(async (ctx) => ({
+      leagues: await ctx.db.query('leagues').collect(),
+      programs: await ctx.db.query('programs').collect(),
+    }));
+    expect(programs).toHaveLength(ROWS.leagues);
+    for (const league of leagues) {
+      const matching = programs.filter((program) => program.leagueId === league._id);
+      expect(matching, league.name).toHaveLength(1);
+      expect(league.programId, league.name).toBe(matching[0]._id);
+      expect(matching[0], league.name).toMatchObject({
+        organizationId: league.organizationId,
+        type: 'league',
+        name: league.name,
+        slug: league.slug,
+        sport: league.sport,
+        status: league.status,
+        gender: league.gender,
+        playersPerSide: league.playersPerSide,
+        level: league.level,
+        ageGroup: league.ageGroup,
+      });
+    }
+  });
+});
+
 describe('seed:demo backfill against a recount', () => {
   async function expectCountersMatchRecount(t: T) {
     const { organizations, locations, leagues } = await snapshot(t);

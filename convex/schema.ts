@@ -4,6 +4,7 @@ import { ageGroupValidator, genderValidator, standardLevelValidator } from './li
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { programStatusValidator, programTypeValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
@@ -98,6 +99,8 @@ export default defineSchema({
     sortName: v.optional(v.string()),
     status: v.optional(leagueStatusValidator),
     publishedSeasonCount: v.optional(v.number()),
+    /** The league's `programs` row, kept in step by `convex/lib/tenantWrites.ts`. */
+    programId: v.optional(v.id('programs')),
     gender: genderValidator,
     playersPerSide: v.number(),
     /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
@@ -126,6 +129,33 @@ export default defineSchema({
       searchField: 'searchText',
       filterFields: ['status', 'sport'],
     }),
+
+  // The fields every program type shares, so a slug is unique across types and one index lists them. The tenant writers keep a league's row equal to the league.
+  programs: defineTable({
+    organizationId: v.id('organizations'),
+    type: programTypeValidator,
+    name: v.string(),
+    // `name` lowercased: Convex indexes sort case-sensitively.
+    sortName: v.string(),
+    slug: v.string(),
+    sport: sportValidator,
+    status: programStatusValidator,
+    locationIds: v.array(v.id('locations')),
+    gender: genderValidator,
+    playersPerSide: v.number(),
+    level: standardLevelValidator,
+    customLevelId: v.optional(v.id('customLevels')),
+    ageGroup: ageGroupValidator,
+    /** Set on a program of the league type. */
+    leagueId: v.optional(v.id('leagues')),
+  })
+    .index('by_organizationId_and_slug', ['organizationId', 'slug'])
+    .index('by_organizationId_and_type_and_status_and_sortName', [
+      'organizationId',
+      'type',
+      'status',
+      'sortName',
+    ]),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
