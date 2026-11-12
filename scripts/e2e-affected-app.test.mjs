@@ -8,8 +8,11 @@ import {
   AREAS,
   OFFLINE_QUERY_GROUP_SPECS,
   ROUTE_SPECS,
+  buildImportGraph,
   deriveSessionSpecs,
   findLeagueManagementPageSpecs,
+  readRouteTable,
+  routeSpecsFor,
   selectSpecs,
 } from './e2e-affected.mjs';
 
@@ -488,14 +491,14 @@ describe('the route tables', () => {
   /**
    * Written apart from the rule: each `path:` of the file with the full path of its route, and the guards on that route.
    * @param {string} text
-   * @returns {{ path: string, guards: string[] }[]}
+   * @returns {{ path: string, guards: string[], component: boolean }[]}
    */
   function readRoutes(text) {
     const source = text.replace(/^\s*\/\/.*$/gm, '');
-    /** @type {{ path?: string, guards: string[] }[]} */
+    /** @type {{ path?: string, guards: string[], component?: boolean }[]} */
     const stack = [];
     const routes = [];
-    const token = /\{|\}|\bpath:\s*'([^']*)'|\bcanActivate:\s*\[([^\]]*)\]/g;
+    const token = /\{|\}|\bpath:\s*'([^']*)'|\bcanActivate:\s*\[([^\]]*)\]|\bloadComponent:/g;
     for (const match of source.matchAll(token)) {
       if (match[0] === '{') {
         stack.push({ guards: [] });
@@ -506,15 +509,24 @@ describe('the route tables', () => {
         assert.ok(top, 'a path outside a route object');
         top.path = match[1];
         const full = stack.filter((route) => route.path !== undefined).map((route) => route.path);
-        routes.push({ path: full.join('/'), guards: top.guards });
+        routes.push({ path: full.join('/'), guards: top.guards, node: top });
+      } else if (match[0] === 'loadComponent:') {
+        const top = stack.at(-1);
+        assert.ok(top, 'a loadComponent outside a route object');
+        top.component = true;
       } else {
         stack.at(-1)?.guards.push(...match[2].split(',').map((name) => name.trim()));
       }
     }
-    return routes;
+    return routes.map(({ path, guards, node }) => ({
+      path,
+      guards,
+      component: node.component === true,
+    }));
   }
 
   const routes = readRoutes(inlineLoadChildren('src/app/app.routes.ts'));
+  const ownPaths = (table) => [...new Set([...table.values()].flat())].sort();
 
   const GUARD_SPECS = {
     requireSignedIn: ['after-sign-in'],
@@ -601,6 +613,231 @@ describe('the route tables', () => {
     for (const [path, names] of Object.entries(ROUTE_SPECS)) {
       for (const name of names) assert.ok(specNames.includes(specFile(name)), `${path}: ${name}`);
     }
+  });
+
+  describe('readRouteTable', () => {
+    const table = readRouteTable(repoRoot);
+
+    it('gives the same full paths as the test reader, for the routes that load a component', () => {
+      const expected = [
+        ...new Set(routes.filter((route) => route.component).map((route) => route.path)),
+      ].sort();
+      assert.ok(expected.length >= 20, expected.join(', '));
+      assert.deepEqual(ownPaths(table), expected);
+    });
+
+    it('maps each page file to the path of its route', () => {
+      assert.deepEqual(table.get('src/app/account/account-page.ts'), ['app/']);
+      assert.deepEqual(table.get('src/app/sign-in/sign-in-page.ts'), ['sign-in']);
+      assert.deepEqual(table.get('src/app/invites/accept-invite-page.ts'), ['invites/accept/']);
+      assert.deepEqual(table.get('src/app/organizations/organization-page.ts'), [
+        'organizations/:orgSlug',
+        'organizations/:orgSlug/sports/:sport',
+      ]);
+    });
+
+    it('maps a layout route file to its own path and to each child path', () => {
+      const adminPaths = table.get('src/app/organizations/admin/admin-area.ts');
+      const adminRoutes = routes
+        .filter((route) => route.path.startsWith('app/organizations/:slug'))
+        .map((route) => route.path)
+        .sort();
+      assert.ok(adminRoutes.includes('app/organizations/:slug/staff'));
+      assert.deepEqual([...adminPaths].sort(), adminRoutes);
+    });
+
+    it('lists no route table file, which has no route of its own', () => {
+      for (const file of ROUTE_TABLE_FILES) assert.ok(!table.has(file), file);
+    });
+
+    it('gives each path a ROUTE_SPECS entry', () => {
+      for (const path of ownPaths(table)) assert.ok(ROUTE_SPECS[path], path);
+    });
+
+    it('throws naming the file when the route table is missing', () => {
+      withRepo({}, (root) => {
+        assert.throws(() => readRouteTable(root), /src\/app\/app\.routes\.ts/);
+      });
+    });
+
+    it('throws naming the export when a file lacks it', () => {
+      withRepo({ 'src/app/app.routes.ts': 'export const other = 1;\n' }, (root) => {
+        assert.throws(() => readRouteTable(root), /routes/);
+      });
+    });
+
+    it('throws naming the file that loadChildren cannot read', () => {
+      withRepo(
+        {
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  { path: 'x', loadChildren: () => import('./missing').then((m) => m.xRoutes) },
+];\n`,
+        },
+        (root) => {
+          assert.throws(() => readRouteTable(root), /missing/);
+        },
+      );
+    });
+
+    it('throws for a route object it cannot read', () => {
+      withRepo(
+        { 'src/app/app.routes.ts': 'export const routes: Routes = [{ path: 1 }, ];\n' },
+        (root) => {
+          assert.throws(() => readRouteTable(root), /path/);
+        },
+      );
+    });
+
+    it('ignores comments and strings that look like routes', () => {
+      withRepo(
+        {
+          'src/app/a.ts': 'export const a = 1;\n',
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  // { path: 'commented', loadComponent: () => import('./nope').then((m) => m.N) },
+  {
+    path: 'a', /* path: 'inline' */
+    title: 'https://example.test, { path: "x" }',
+    loadComponent: () => import('./a').then((m) => m.A),
+  },
+];\n`,
+        },
+        (root) => {
+          assert.deepEqual([...readRouteTable(root)], [['src/app/a.ts', ['a']]]);
+        },
+      );
+    });
+
+    it('joins the paths of a loadChildren file under its parent, and an empty child ends in a slash', () => {
+      withRepo(
+        {
+          'src/app/p.ts': 'export const p = 1;\n',
+          'src/app/layout.ts': 'export const layout = 1;\n',
+          'src/app/k.ts': 'export const k = 1;\n',
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  { path: 'outer', loadChildren: () => import('./inner').then((m) => m.innerRoutes) },
+];\n`,
+          'src/app/inner.ts': `export const innerRoutes: Routes = [
+  { path: '', loadComponent: () => import('./p').then((m) => m.P) },
+  {
+    path: 'l',
+    loadComponent: () => import('./layout').then((m) => m.Layout),
+    children: [{ path: 'k', loadComponent: () => import('./k').then((m) => m.K) }],
+  },
+];\n`,
+        },
+        (root) => {
+          const result = readRouteTable(root);
+          assert.deepEqual(result.get('src/app/p.ts'), ['outer/']);
+          assert.deepEqual(result.get('src/app/layout.ts'), ['outer/l', 'outer/l/k']);
+          assert.deepEqual(result.get('src/app/k.ts'), ['outer/l/k']);
+        },
+      );
+    });
+  });
+
+  describe('routeSpecsFor', () => {
+    const graph = buildImportGraph(repoRoot);
+    const names = (file) =>
+      routeSpecsFor(file, { root: repoRoot, graph })
+        .map((spec) => spec.replace(/^e2e\/|\.spec\.ts$/g, ''))
+        .sort();
+
+    it('gives the specs of every route that shows the file, through the files that import it', () => {
+      assert.deepEqual(names('src/app/organizations/organization-overview.ts'), [
+        'organization-filters',
+        'organization-page',
+        'organization-page-manage',
+        'sport-view',
+      ]);
+    });
+
+    it('gives a spec path, once', () => {
+      const specs = routeSpecsFor('src/app/organizations/organization-overview.ts', {
+        root: repoRoot,
+        graph,
+      });
+      assert.equal(new Set(specs).size, specs.length);
+      for (const spec of specs) assert.ok(specNames.includes(spec), spec);
+    });
+
+    it('gives a page its own route, and the routes of its layout for a file the layout imports', () => {
+      assert.deepEqual(names('src/app/sign-in/sign-in-page.ts'), [
+        'after-sign-in',
+        'auth-session',
+        'sign-in',
+      ]);
+      const area = names('src/app/organizations/admin/admin-area.ts');
+      for (const name of ['organization-admin', 'organization-staff', 'organization-leagues']) {
+        assert.ok(area.includes(name), name);
+      }
+    });
+
+    it('gives a route table file nothing, as no route shows it', () => {
+      assert.deepEqual(names('src/app/app.routes.app.ts'), []);
+    });
+
+    it('gives nothing for a file no route page imports', () => {
+      withRepo(
+        {
+          'src/app/lonely.ts': 'export const lonely = 1;\n',
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  { path: 'a', loadComponent: () => import('./a').then((m) => m.A) },
+];\n`,
+          'src/app/a.ts': 'export const a = 1;\n',
+        },
+        (root) => {
+          const small = buildImportGraph(root);
+          assert.deepEqual(routeSpecsFor('src/app/lonely.ts', { root, graph: small }), []);
+        },
+      );
+    });
+
+    it('walks importers that form a cycle', () => {
+      withRepo(
+        {
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  { path: 'sign-in', loadComponent: () => import('./page').then((m) => m.P) },
+];\n`,
+          'src/app/page.ts': "import { b } from './b';\nexport const page = b;\n",
+          'src/app/b.ts': "import { c } from './c';\nexport const b = c;\n",
+          'src/app/c.ts': "import { b } from './b';\nexport const c = b;\n",
+        },
+        (root) => {
+          const cyclic = buildImportGraph(root);
+          assert.deepEqual(routeSpecsFor('src/app/c.ts', { root, graph: cyclic }).sort(), [
+            'e2e/after-sign-in.spec.ts',
+            'e2e/auth-session.spec.ts',
+            'e2e/sign-in.spec.ts',
+          ]);
+        },
+      );
+    });
+
+    it('gives nothing for a route path that ROUTE_SPECS does not list', () => {
+      withRepo(
+        {
+          'src/app/app.routes.ts': `export const routes: Routes = [
+  { path: 'unlisted', loadComponent: () => import('./page').then((m) => m.P) },
+];\n`,
+          'src/app/page.ts': 'export const page = 1;\n',
+        },
+        (root) => {
+          assert.deepEqual(
+            routeSpecsFor('src/app/page.ts', { root, graph: buildImportGraph(root) }),
+            [],
+          );
+        },
+      );
+    });
+
+    it('throws the reason when the route table cannot be read', () => {
+      withRepo({ 'src/app/page.ts': 'export const page = 1;\n' }, (root) => {
+        assert.throws(
+          () => routeSpecsFor('src/app/page.ts', { root, graph: buildImportGraph(root) }),
+          /app\.routes\.ts/,
+        );
+      });
+    });
   });
 
   for (const file of CLIENT_ROUTE_FILES) {
@@ -943,5 +1180,103 @@ describe('earlier pull requests', () => {
     const specs = specsFor(FORM_ERRORS_PR_FILES);
     assert.ok(!specs.includes(FULL));
     for (const spec of league) assert.ok(specs.includes(spec), spec);
+  });
+});
+
+describe('selectSpecs with narrow', () => {
+  const narrow = (files, root = repoRoot, extra = {}) => {
+    const selection = selectSpecs(files, {
+      ...pr,
+      root,
+      sessionSpecs,
+      warn: () => {},
+      narrow: true,
+      ...extra,
+    });
+    return selection.scope === 'full' ? [FULL] : selection.specs;
+  };
+
+  it('gives a rule its own specs and no session spec', () => {
+    assert.deepEqual(
+      narrow(['src/app/shell/shell.ts']),
+      withAlways(specFile('app-shell'), specFile('shell-sheet')),
+    );
+    assert.ok(specsFor(['src/app/shell/shell.ts']).length > 2 + ALWAYS.length);
+  });
+
+  it('does not need the session specs, so a session-only rule gives nothing and not the full suite', () => {
+    assert.deepEqual(
+      narrow(['src/app/sign-in/sign-in-page.ts'], repoRoot, { sessionSpecs: undefined }),
+      withAlways(),
+    );
+  });
+
+  it('adds no importer spec, which the default adds', () => {
+    withRepo(
+      {
+        'src/app/find/helper.ts': 'export const helper = 1;\n',
+        'src/app/organizations/organization-page.ts':
+          "import { helper } from '../find/helper';\nexport const page = helper;\n",
+      },
+      (root) => {
+        const own = withAlways(
+          ...['find-a-league', 'find-organizations', 'cache-key'].map(specFile),
+        );
+        assert.deepEqual(narrow(['src/app/find/helper.ts'], root), own);
+        const whole = specsFor(['src/app/find/helper.ts'], root);
+        assert.ok(whole.includes(specFile('organization-page')));
+      },
+    );
+  });
+
+  it('gives a file with no rule the specs of the rules of its nearest importers, without their importers', () => {
+    withRepo(
+      {
+        'src/app/core/new-helper.ts': 'export const helper = 1;\n',
+        'src/app/find/find-page.ts':
+          "import { helper } from '../core/new-helper';\nexport const page = helper;\n",
+        'src/app/organizations/organization-page.ts':
+          "import { page } from '../find/find-page';\nexport const org = page;\n",
+      },
+      (root) => {
+        assert.deepEqual(
+          narrow(['src/app/core/new-helper.ts'], root),
+          withAlways(...['find-a-league', 'find-organizations', 'cache-key'].map(specFile)),
+        );
+        assert.ok(
+          specsFor(['src/app/core/new-helper.ts'], root).includes(specFile('organization-page')),
+        );
+      },
+    );
+  });
+
+  it('keeps the derive specs of a rule that has only derive specs', () => {
+    withRepo(
+      {
+        'src/app/organizations/league/lm.ts': 'export const lm = 1;\n',
+        'src/app/organizations/organization-page.ts':
+          "import { lm } from './league/lm';\nexport const page = lm;\n",
+        'e2e/harness/placeholder.txt': '',
+        'e2e/lm.spec.ts': 'const path =`/app/organizations/${slug}/leagues/${league}`;\n',
+      },
+      (root) => {
+        assert.deepEqual(
+          narrow(['src/app/organizations/league/lm.ts'], root),
+          withAlways('e2e/lm.spec.ts'),
+        );
+      },
+    );
+  });
+
+  it('still gives the full suite for a full-suite rule', () => {
+    assert.deepEqual(narrow(['src/app/core/auth/guards.ts']), [FULL]);
+  });
+
+  it('leaves the default selection unchanged when narrow is false', () => {
+    const files = ['src/app/shell/shell.ts', 'src/app/organizations/admin/admin-area.ts'];
+    assert.deepEqual(
+      selectSpecs(files, { ...pr, root: repoRoot, sessionSpecs, warn: () => {}, narrow: false }),
+      selectSpecs(files, { ...pr, root: repoRoot, sessionSpecs, warn: () => {} }),
+    );
   });
 });
