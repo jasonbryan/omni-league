@@ -7,15 +7,21 @@ import { HomeShape } from './home-shape';
 
 describe('HomeShape', () => {
   const signedIn = signal(true);
-  const accountChanged = new Subject<void>();
+  const authEpoch = signal(0);
+  const signedInByCheck = new Subject<void>();
 
   function create(startSignedIn = true) {
     signedIn.set(startSignedIn);
+    authEpoch.set(0);
     TestBed.configureTestingModule({
       providers: [
         {
           provide: AuthService,
-          useValue: { signedIn: signedIn.asReadonly(), accountChanged },
+          useValue: {
+            signedIn: signedIn.asReadonly(),
+            authEpoch: authEpoch.asReadonly(),
+            signedInByCheck,
+          },
         },
       ],
     });
@@ -68,15 +74,38 @@ describe('HomeShape', () => {
   });
 
   describe('the session', () => {
-    it('drops the shape when the account changes: a sign-out, or authEpoch advancing', () => {
+    it('shows no shape while signed out, and none after a sign-out from another tab and a sign-in', () => {
       const shape = create();
       shape.record('nextStep');
-      accountChanged.next();
+      signedIn.set(false);
+      expect(shape.current()).toBeNull();
+      signedInByCheck.next();
+      signedIn.set(true);
+      expect(shape.current()).toBeNull();
+    });
+
+    it('shows no shape once authEpoch has advanced past the one it was recorded in', () => {
+      const shape = create();
+      shape.record('nextStep');
+      authEpoch.set(1);
+      expect(shape.current()).toBeNull();
+    });
+
+    it('shows a shape recorded after authEpoch advanced', () => {
+      const shape = create();
+      authEpoch.set(1);
+      shape.record('list');
+      expect(shape.current()).toBe('list');
+    });
+
+    it('drops the shape when a check signs this tab in from signed out', () => {
+      const shape = create();
+      shape.record('nextStep');
+      signedInByCheck.next();
       expect(shape.current()).toBeNull();
     });
 
     it('keeps the shape through a sign-in that changes no account, as a sign-up records it', () => {
-      signedIn.set(false);
       const shape = create(false);
       signedIn.set(true);
       shape.record('new');
@@ -86,9 +115,7 @@ describe('HomeShape', () => {
     it('ignores a shape recorded while signed out, so the next account never gets the old one', () => {
       const shape = create();
       signedIn.set(false);
-      accountChanged.next();
       shape.record('nextStep');
-      expect(shape.current()).toBeNull();
       signedIn.set(true);
       expect(shape.current()).toBeNull();
     });

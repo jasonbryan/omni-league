@@ -1678,62 +1678,6 @@ describe('AuthService', () => {
     });
   });
 
-  describe('accountChanged', () => {
-    afterEach(() => vi.useRealTimers());
-
-    async function watch() {
-      const auth = configure();
-      await loaded();
-      const emitted = vi.fn();
-      auth.accountChanged.subscribe(emitted);
-      return { auth, emitted };
-    }
-
-    it('emits when this tab signs out', async () => {
-      const { auth, emitted } = await watch();
-      client.emitSession({ id: 's1' });
-      expect(emitted).not.toHaveBeenCalled();
-      await auth.signOut();
-      expect(emitted).toHaveBeenCalled();
-    });
-
-    it('emits when another tab signs out and the session check answers with no session', async () => {
-      const { emitted } = await watch();
-      client.emitSession({ id: 's1' });
-      client.emitSession(null);
-      expect(emitted).toHaveBeenCalled();
-    });
-
-    it('emits when a confirm after a withheld token advances authEpoch', async () => {
-      vi.useFakeTimers();
-      const auth = configure();
-      await vi.advanceTimersByTimeAsync(0);
-      const emitted = vi.fn();
-      auth.accountChanged.subscribe(emitted);
-      await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
-      await auth.fetchToken({ forceRefreshToken: false });
-      client.emitSession({ id: 's1' });
-      expect(auth.authEpoch()).toBe(1);
-      expect(emitted).toHaveBeenCalledTimes(1);
-    });
-
-    it('emits when a sign-in replaces a signed-in session, and not when it starts from signed out', async () => {
-      client.storedCookie = '';
-      const { auth, emitted } = await watch();
-      await auth.signIn(INPUT);
-      expect(emitted).not.toHaveBeenCalled();
-      await auth.signIn(INPUT);
-      expect(auth.authEpoch()).toBe(1);
-      expect(emitted).toHaveBeenCalledTimes(1);
-    });
-
-    it('stays quiet for a first confirmed check', async () => {
-      const { emitted } = await watch();
-      client.emitSession({ id: 's1' });
-      expect(emitted).not.toHaveBeenCalled();
-    });
-  });
-
   describe('signOut', () => {
     it('signs out through the client and is signed out at once', async () => {
       const auth = configure();
