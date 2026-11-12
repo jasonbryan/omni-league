@@ -14,7 +14,7 @@ import {
   expectVisibleInFooter,
   expectWhollyAboveFooter,
   footerHeight,
-  settleAfterFocusScroll,
+  expectOnScreen,
   PHONE,
   footerTabWalk,
   underTheFooter,
@@ -760,21 +760,6 @@ const showNext = (page: Page) =>
   createdStatus(page).getByRole('link', { name: 'Show it in Seasons', exact: true });
 const rowTitle = (page: Page, slug: string) => page.locator(`#season-${slug} h3`);
 const seasonsHeading = (page: Page) => page.locator('#seasons-heading');
-
-async function expectOnScreen(page: Page, target: Locator) {
-  await expect(target).toBeVisible();
-  await settleAfterFocusScroll(page);
-  const place = await target.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    return {
-      inViewport:
-        rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth,
-      unobscured: !!hit && element.contains(hit),
-    };
-  });
-  expect(place).toEqual({ inViewport: true, unobscured: true });
-}
 
 async function createFall2026(page: Page, name = 'Fall 2026') {
   await fillFall2026(page);

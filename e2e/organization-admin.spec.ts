@@ -7,6 +7,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
+import { expectOnScreen } from './support/sticky-footer';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -230,6 +231,27 @@ test.describe('Overview', () => {
       'href',
       `${base}/leagues#create-league`,
     );
+  });
+
+  test('the header "Create a league" lands on Name, on screen', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', LOCATIONS);
+    await page.goto(base);
+    await main(page).getByRole('link', { name: 'Create a league' }).first().click();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues#create-league`);
+    await expect(nameField(page)).toBeFocused();
+    await expectOnScreen(page, nameField(page));
+  });
+
+  test('the Get set up "Create a league" lands on Name, on screen', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', LOCATIONS);
+    await page.goto(base);
+    const step = page.getByRole('region', { name: 'Get set up' });
+    const link = step.getByRole('link', { name: 'Create a league' });
+    await expect(link).toHaveAttribute('href', `${base}/leagues#create-league`);
+    await link.click();
+    await expect(page).toHaveURL(`${baseURL}${base}/leagues#create-league`);
+    await expect(nameField(page)).toBeFocused();
+    await expectOnScreen(page, nameField(page));
   });
 
   test('the league count and the sidebar count a published and a draft league, and only the published one needs a season', async ({
