@@ -382,8 +382,8 @@ const QUOTES = `'"\``;
 
 /**
  * @param {string} text
- * @param {number} start the index of an opening quote
- * @returns {number} the index after the closing quote
+ * @param {number} start
+ * @returns {number}
  */
 function stringEnd(text, start) {
   let index = start + 1;
@@ -419,8 +419,8 @@ function withoutComments(text) {
 
 /**
  * @param {string} text
- * @param {number} open the index of an opening bracket
- * @returns {number} the index of its closing bracket
+ * @param {number} open
+ * @returns {number}
  */
 function closingBracket(text, open) {
   let depth = 0;
@@ -439,7 +439,7 @@ function closingBracket(text, open) {
 
 /**
  * @param {string} text
- * @returns {string[]} the parts between the commas that sit outside every bracket and string
+ * @returns {string[]}
  */
 function splitTopLevel(text) {
   const parts = [];
@@ -470,8 +470,7 @@ const LAZY_EXPORT = /\.then\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.(\w+)\s*\)/;
  * @param {string} file
  * @param {string} exportName
  * @param {string | undefined} parentPath
- * @returns {{ path: string, file: string | undefined, below: string[] }[]} every route under the array, nested ones with their
- * parents' paths
+ * @returns {{ path: string, file: string | undefined, below: string[] }[]}
  */
 function readRouteArray(root, file, exportName, parentPath) {
   let text;
@@ -492,7 +491,7 @@ function readRouteArray(root, file, exportName, parentPath) {
 /**
  * @param {string} root
  * @param {string} file
- * @param {string} body the routes between an array's brackets
+ * @param {string} body
  * @param {string | undefined} parentPath
  */
 function readRouteItems(root, file, body, parentPath) {

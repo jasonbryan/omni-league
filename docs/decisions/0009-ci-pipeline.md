@@ -1000,4 +1000,4 @@ Issue #691. Past `SCREEN_SPEC_CAP` (20), the 2026-11-11 amendment kept only the 
 | `selectSpecs`              | one selection                             | an option `narrow: true` skips the importer widening and the session specs, and keeps a rule's `derive` specs                                                                        |
 | `scripts/e2e-affected.mjs` | no route reader                           | `readRouteTable(root)` reads the client route tables with `loadChildren` followed, and `routeSpecsFor(file, { root, graph })` gives the `ROUTE_SPECS` of the routes that show a file |
 
-A tier with no specs does not fit, and a full-suite file adds nothing past the cap, as below it. The cap stays 20 and bounds each file's tier, so the union of the tiers may pass it.
+A tier with no specs does not fit, a file whose whole selection is empty tries no tier, and a full-suite file adds nothing past the cap, as below it. The cap stays 20 and bounds each file's tier, so the union of the tiers may pass it.
