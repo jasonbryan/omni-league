@@ -28,12 +28,14 @@ import {
   addMinorEntry,
   addRosterEntry,
   adultEntryInSeason,
+  adultEntryInTournament,
   backfillTeamPendingInviteCounts,
   freeAgentInSeason,
   insertFreeAgent,
   insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
+  insertTournamentTeamWithCaptain,
   pendingTeamInvite,
   registerTeamOrJoinWaitlist,
   removeRosterEntry,
@@ -42,6 +44,8 @@ import {
 import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
 import { seasonIsFull } from './lib/seasonInput';
 import { teamSortName } from './lib/teamInput';
+import { tournamentIsFull } from './lib/tournamentInput';
+import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
@@ -921,6 +925,11 @@ export const DEMO_TEAM_SEASON = {
   seasonSlug: 'summer-2027',
 } as const;
 
+export const DEMO_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'gulf-coast-beach-open',
+} as const;
+
 /**
  * Fictional captains, signed up with a random password that is discarded, so nobody can sign in as
  * them. An address is the captain's identity, so an entry is never renamed or removed.
@@ -1010,6 +1019,14 @@ export const DEMO_WAITLIST_ENTRY = {
   teamName: 'Late Lobsters',
   captainEmail: DEMO_CAPTAINS[2].email,
 } as const;
+
+/** Each team is inserted by name in `DEMO_TOURNAMENT`, once its captain's account exists. player@ captains Sand Crabs, so the player account has a tournament team under Your teams. */
+export const DEMO_TOURNAMENT_TEAMS: readonly { name: string; captainEmail: string }[] = [
+  { name: 'Sand Crabs', captainEmail: `player@${DEMO_ACCOUNT_DOMAIN}` },
+  { name: 'Beach Bombers', captainEmail: DEMO_CAPTAINS[0].email },
+  { name: 'Set Point', captainEmail: DEMO_CAPTAINS[1].email },
+  { name: 'Spike Squad', captainEmail: DEMO_CAPTAINS[2].email },
+];
 
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
@@ -1278,9 +1295,11 @@ export const insertDemoTeams = internalMutation({
   returns: v.number(),
   handler: async (ctx, { captains }) => {
     assertPreviewDeployment();
+    const tournamentTeams = await insertTournamentTeams(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
-    if (!found) return 0;
-    let inserted = await insertSeasonTeams(ctx, found.season._id, DEMO_TEAMS, captains);
+    if (!found) return tournamentTeams;
+    let inserted =
+      tournamentTeams + (await insertSeasonTeams(ctx, found.season._id, DEMO_TEAMS, captains));
     await insertDemoRemovedPlayer(ctx, captains);
     const full = await findSeasonBySlugs(ctx, DEMO_FULL_SEASON);
     if (full) {
@@ -1290,6 +1309,44 @@ export const insertDemoTeams = internalMutation({
     return inserted;
   },
 });
+
+async function insertTournamentTeams(
+  ctx: MutationCtx,
+  captains: readonly { email: string; authUserId: string }[],
+): Promise<number> {
+  const organization = await organizationBySlug(ctx, DEMO_TOURNAMENT.orgSlug);
+  const found =
+    organization &&
+    (await findTournamentBySlugs(ctx, organization, DEMO_TOURNAMENT.tournamentSlug));
+  if (!found) return 0;
+  const tournamentId = found.tournament._id;
+  let inserted = 0;
+  for (const team of DEMO_TOURNAMENT_TEAMS) {
+    const authUserId = captains.find((captain) => captain.email === team.captainEmail)?.authUserId;
+    if (authUserId === undefined) continue;
+    const sortName = teamSortName(team.name);
+    const named = await ctx.db
+      .query('teams')
+      .withIndex('by_tournamentId_and_sortName', (q) =>
+        q.eq('tournamentId', tournamentId).eq('sortName', sortName),
+      )
+      .first();
+    if (named) continue;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user || (await adultEntryInTournament(ctx, tournamentId, user._id))) continue;
+    const tournament = await ctx.db.get('tournaments', tournamentId);
+    if (!tournament || tournamentIsFull(tournament)) return inserted;
+    await insertTournamentTeamWithCaptain(ctx, tournament, {
+      name: team.name,
+      captainUserId: user._id,
+    });
+    inserted++;
+  }
+  return inserted;
+}
 
 async function insertDemoWaitlistEntry(
   ctx: MutationCtx,
@@ -1351,9 +1408,9 @@ async function insertDemoRemovedPlayer(
   )?.authUserId;
   if (authUserId === undefined) return;
   const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
-  const team = found
-    ? await teamWithSortName(ctx, found.season._id, DEMO_REMOVED_PLAYER.teamName)
-    : null;
+  if (!found) return;
+  const seasonId = found.season._id;
+  const team = await teamWithSortName(ctx, seasonId, DEMO_REMOVED_PLAYER.teamName);
   if (!team) return;
   const user = await ctx.db
     .query('users')
@@ -1363,10 +1420,10 @@ async function insertDemoRemovedPlayer(
   const seeded = await ctx.db
     .query('rosterEntries')
     .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
-      q.eq('seasonId', team.seasonId).eq('userId', user._id),
+      q.eq('seasonId', seasonId).eq('userId', user._id),
     )
     .first();
-  if (seeded || (await freeAgentInSeason(ctx, team.seasonId, user._id))) return;
+  if (seeded || (await freeAgentInSeason(ctx, seasonId, user._id))) return;
   const entryId = await addRosterEntry(ctx, team, {
     userId: user._id,
     source: 'invite',
@@ -1413,9 +1470,9 @@ export const insertDemoTeamPlayer = internalMutation({
   handler: async (ctx, { authUserId }) => {
     assertPreviewDeployment();
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
-    const team = found
-      ? await teamWithSortName(ctx, found.season._id, DEMO_TEAM_PLAYER.teamName)
-      : null;
+    if (!found) return false;
+    const seasonId = found.season._id;
+    const team = await teamWithSortName(ctx, seasonId, DEMO_TEAM_PLAYER.teamName);
     if (!team) return false;
     const marked = await ctx.db
       .query('teamInvites')
@@ -1426,7 +1483,7 @@ export const insertDemoTeamPlayer = internalMutation({
       .query('users')
       .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
       .unique();
-    if (!user || (await adultEntryInSeason(ctx, team.seasonId, user._id))) return false;
+    if (!user || (await adultEntryInSeason(ctx, seasonId, user._id))) return false;
     const inviteId = await insertTeamInvite(ctx, team, {
       email: DEMO_TEAM_PLAYER.email,
       tokenHash: DEMO_TEAM_PLAYER.tokenHash,
@@ -1508,17 +1565,17 @@ async function insertDemoPlacedFreeAgent(
   )?.authUserId;
   if (authUserId === undefined) return false;
   const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
-  const team = found
-    ? await teamWithSortName(ctx, found.season._id, DEMO_PLACED_FREE_AGENT.teamName)
-    : null;
+  if (!found) return false;
+  const seasonId = found.season._id;
+  const team = await teamWithSortName(ctx, seasonId, DEMO_PLACED_FREE_AGENT.teamName);
   if (!team) return false;
   const user = await ctx.db
     .query('users')
     .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
     .unique();
   if (!user) return false;
-  if (await freeAgentInSeason(ctx, team.seasonId, user._id)) return false;
-  if (await adultEntryInSeason(ctx, team.seasonId, user._id)) return false;
+  if (await freeAgentInSeason(ctx, seasonId, user._id)) return false;
+  if (await adultEntryInSeason(ctx, seasonId, user._id)) return false;
   await insertPlacedFreeAgent(ctx, team, user._id);
   return true;
 }

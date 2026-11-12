@@ -20,6 +20,11 @@ export interface SeasonFullRefusal {
   message: string;
 }
 
+export interface TournamentFullRefusal {
+  code: 'tournamentFull';
+  message: string;
+}
+
 export interface TeamFullRefusal {
   code: 'teamFull';
   message: string;
@@ -76,6 +81,7 @@ export interface NotRosteredRefusal {
 }
 
 export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
+export const TOURNAMENT_NOT_FOUND_CODE = 'tournamentNotFound';
 
 export const TEAM_MESSAGES = {
   nameEmpty: 'Enter a team name.',
@@ -85,6 +91,12 @@ export const TEAM_MESSAGES = {
     `${registered} is already registered in this season. Choose another name.`,
   registrationClosed: 'Registration for this season is closed.',
   seasonFull: 'This season is full.',
+  tournamentFull: 'This tournament is full.',
+  tournamentRegistrationClosed: 'Registration for this tournament is closed.',
+  tournamentNameTaken: (registered: string) =>
+    `${registered} is already registered in this tournament. Choose another name.`,
+  alreadyOnAnotherTournamentTeam: (teamName: string) =>
+    `Already on ${teamName} in this tournament.`,
   teamFull: 'The team is full.',
   alreadyOnTeam: 'Already on the team.',
   alreadyOnAnotherTeam: (teamName: string) => `Already on ${teamName} in this season.`,
@@ -103,7 +115,7 @@ export function normalizeTeamName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
 
-/** Names are unique in a season by this key. */
+/** Names are unique in a season or a tournament by this key. */
 export function teamSortName(name: string): string {
   return normalizeTeamName(name).toLowerCase();
 }

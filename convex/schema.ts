@@ -165,6 +165,8 @@ export default defineSchema({
     endDate: v.string(),
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
+    /** Kept by `convex/lib/rosterWrites.ts`; absent on a tournament with no team yet. */
+    teamCount: v.optional(v.number()),
     /** The division's players per side. */
     minimumRosterSize: v.number(),
     structure: v.literal('bracket'),
@@ -222,13 +224,15 @@ export default defineSchema({
       'registrationDeadline',
     ]),
 
-  // Written only through `convex/lib/rosterWrites.ts`, which keeps `rosterCount` and the season's `teamCount`.
+  // Written only through `convex/lib/rosterWrites.ts`, which keeps `rosterCount` and the parent's `teamCount`.
+  // A team has exactly one parent: `leagueId` with `seasonId`, or `tournamentId`.
   teams: defineTable({
     organizationId: v.id('organizations'),
-    leagueId: v.id('leagues'),
-    seasonId: v.id('seasons'),
+    leagueId: v.optional(v.id('leagues')),
+    seasonId: v.optional(v.id('seasons')),
+    tournamentId: v.optional(v.id('tournaments')),
     name: v.string(),
-    // `name` lowercased: names are unique in a season ignoring case.
+    // `name` lowercased: names are unique in a season or a tournament ignoring case.
     sortName: v.string(),
     captainUserId: v.id('users'),
     /** The team's `rostered` entries. */
@@ -238,13 +242,16 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
+    .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName'])
     .index('by_seasonId_and_rosterCount', ['seasonId', 'rosterCount'])
     .index('by_captainUserId', ['captainUserId']),
 
   // A removed entry keeps its row, with status `removed`, so records that point at it stay valid.
   rosterEntries: defineTable({
     organizationId: v.id('organizations'),
-    seasonId: v.id('seasons'),
+    /** Set with the team's `seasonId`, or `tournamentId` with the team's. */
+    seasonId: v.optional(v.id('seasons')),
+    tournamentId: v.optional(v.id('tournaments')),
     teamId: v.id('teams'),
     /** The guardian's, when the entry is a minor's. */
     userId: v.id('users'),
@@ -264,6 +271,7 @@ export default defineSchema({
       'minorName',
       'status',
     ])
+    .index('by_tournamentId_and_userId', ['tournamentId', 'userId'])
     .index('by_userId_and_status', ['userId', 'status']),
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.

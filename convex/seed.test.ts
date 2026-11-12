@@ -1030,6 +1030,8 @@ describe('seed:demo', () => {
       DEMO_TEAM_SEASON,
       DEMO_CAPTAINS,
       DEMO_TEAMS,
+      DEMO_TOURNAMENT,
+      DEMO_TOURNAMENT_TEAMS,
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
       DEMO_WAITLIST_ENTRY,
@@ -1052,6 +1054,14 @@ describe('seed:demo', () => {
     expect(DEMO_TEAM_SEASON.seasonSlug).toBe('summer-2027');
     expect(DEMO_CAPTAINS).toHaveLength(3);
     expect(DEMO_TEAMS).toHaveLength(4);
+    expect(DEMO_TOURNAMENT.tournamentSlug).toBe('gulf-coast-beach-open');
+    expect(DEMO_TOURNAMENT_TEAMS.map((team) => team.name)).toEqual([
+      'Sand Crabs',
+      'Beach Bombers',
+      'Set Point',
+      'Spike Squad',
+    ]);
+    expect(DEMO_TOURNAMENT_TEAMS[0]?.captainEmail).toBe(`player@${DEMO_ACCOUNT_DOMAIN}`);
     expect(DEMO_FULL_SEASON.leagueSlug).toBe('thursday-night-coed-2s');
     expect(DEMO_FULL_SEASON_TEAMS).toHaveLength(2);
     expect(DEMO_WAITLIST_ENTRY.teamName).toBe('Late Lobsters');

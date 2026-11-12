@@ -69,6 +69,7 @@ export const create = action({
 async function isOnTeam(
   ctx: Pick<MutationCtx, 'db' | 'runQuery'>,
   team: Doc<'teams'>,
+  seasonId: Id<'seasons'>,
   email: string,
 ): Promise<boolean> {
   const authUserId = await authUserIdByEmail(ctx, email);
@@ -78,7 +79,7 @@ async function isOnTeam(
     .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
     .unique();
   if (!user) return false;
-  const entry = await adultEntryInSeason(ctx, team.seasonId, user._id);
+  const entry = await adultEntryInSeason(ctx, seasonId, user._id);
   return entry?.teamId === team._id;
 }
 
@@ -91,13 +92,13 @@ export const insertPending = internalMutation({
     await requireUser(ctx);
     const team = await teamOf(ctx, args.teamId);
     const user = await requireTeamManager(ctx, team);
-    const season = await ctx.db.get('seasons', team.seasonId);
+    const season = team.seasonId ? await ctx.db.get('seasons', team.seasonId) : null;
     if (season?.status !== 'published') throw new Error('Not allowed');
 
     const checked = checkTeamInviteEmail(args.email);
     if (!checked.ok) refuse(checked.error);
     const { email } = checked;
-    if (await isOnTeam(ctx, team, email)) {
+    if (await isOnTeam(ctx, team, season._id, email)) {
       refuse({
         field: 'email',
         code: 'alreadyOnTeam',
@@ -176,7 +177,7 @@ export const getByToken = query({
     const found = await findUsableTeamInvite(ctx, token, Date.now());
     if (!found) return { status: 'invalid' as const };
     const { invite, team, season } = found;
-    const league = await ctx.db.get('leagues', team.leagueId);
+    const league = team.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
     const organization = await ctx.db.get('organizations', team.organizationId);
     if (!league || !organization) return { status: 'invalid' as const };
     return {
@@ -224,7 +225,7 @@ export const accept = mutation({
 
     // The writer refuses this too; here the refusal also carries the id, so the page links to the
     // caller's own team.
-    const entry = joinSelf ? await adultEntryInSeason(ctx, team.seasonId, user._id) : null;
+    const entry = joinSelf ? await adultEntryInSeason(ctx, season._id, user._id) : null;
     if (entry?.teamId === team._id) {
       throw new ConvexError({
         code: 'alreadyOnTeam' satisfies TeamInviteAcceptCode,

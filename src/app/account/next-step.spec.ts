@@ -48,6 +48,10 @@ describe('nextStep', () => {
     );
   });
 
+  it('names nothing for a tournament team, whose captain has no invites to send yet', () => {
+    expect(nextStep([team({ tournamentName: 'Gulf Coast Beach Open' })], NOW)).toBeNull();
+  });
+
   it('names nothing for a team the user only plays on or guards', () => {
     expect(nextStep([team({ role: 'player' }), team({ role: 'guardian' })], NOW)).toBeNull();
   });

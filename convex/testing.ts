@@ -22,6 +22,7 @@ import {
   insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
+  insertTournamentTeamWithCaptain,
   isMinorEntry,
   registerTeamOrJoinWaitlist,
   removeRosterEntry,
@@ -45,6 +46,7 @@ import {
   type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
+import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
@@ -466,6 +468,29 @@ export const seedTeam = internalMutation({
     const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
     const captain = await userByEmail(ctx, captainEmail);
     const teamId = await insertTeamWithCaptain(ctx, season, { name, captainUserId: captain._id });
+    return { teamId };
+  },
+});
+
+// Through the roster writer, so a seeded team keeps the counters and the one-team rule. Skips the registration window.
+export const seedTournamentTeam = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    name: v.string(),
+    captainEmail: v.string(),
+  },
+  returns: v.object({ teamId: v.id('teams') }),
+  handler: async (ctx, { organizationSlug, tournamentSlug, name, captainEmail }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const captain = await userByEmail(ctx, captainEmail);
+    const teamId = await insertTournamentTeamWithCaptain(ctx, found.tournament, {
+      name,
+      captainUserId: captain._id,
+    });
     return { teamId };
   },
 });

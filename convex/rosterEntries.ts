@@ -32,7 +32,7 @@ function checkedMinorName(minorName: string): string {
 async function entryWithTeam(ctx: MutationCtx, rosterEntryId: Doc<'rosterEntries'>['_id']) {
   const entry = await ctx.db.get('rosterEntries', rosterEntryId);
   const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
-  const league = team ? await ctx.db.get('leagues', team.leagueId) : null;
+  const league = team?.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
   if (!entry || !team || !league) throw new Error('Not allowed');
   return { entry, team, league };
 }
@@ -67,7 +67,7 @@ export const addMinor = mutation({
   handler: async (ctx, { teamId, minorName }) => {
     const user = await requireUser(ctx);
     const team = await ctx.db.get('teams', teamId);
-    if (!team) throw new Error('Not allowed');
+    if (team?.seasonId === undefined) throw new Error('Not allowed');
     const entries = await rosteredEntriesInSeason(ctx, team.seasonId, user._id);
     if (!entries.some((entry) => entry.teamId === team._id)) throw new Error('Not allowed');
     const name = checkedMinorName(minorName);

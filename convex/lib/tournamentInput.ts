@@ -20,6 +20,14 @@ export const MAX_TOURNAMENT_NAME_LENGTH = 100;
 export const MIN_MAXIMUM_TEAMS = 2;
 export const MAX_MAXIMUM_TEAMS = 128;
 
+/** A tournament takes no waitlist, so reaching its maximum teams is the end of registration. */
+export function tournamentIsFull(tournament: {
+  teamCount?: number | undefined;
+  maximumTeams: number;
+}): boolean {
+  return (tournament.teamCount ?? 0) >= tournament.maximumTeams;
+}
+
 export type TournamentField =
   | 'name'
   | 'slug'

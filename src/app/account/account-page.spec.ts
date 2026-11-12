@@ -52,6 +52,21 @@ const BAYSIDE = {
   teamName: 'Bayside Strikers',
   role: 'guardian',
 };
+// A tournament team fills the season fields the previous frontend reads, so `seasonName` repeats the tournament's name.
+const SAND_CRABS = {
+  teamId: 'k1crabs',
+  teamName: 'Sand Crabs',
+  tournamentName: 'Gulf Coast Beach Open',
+  seasonName: 'Gulf Coast Beach Open',
+  leagueName: 'Gulf Coast Sport & Social',
+  organizationName: 'Gulf Coast Sport & Social',
+  role: 'captain',
+  seasonStartDate: '2027-06-12',
+  seasonEndDate: '2027-06-13',
+  registrationDeadline: '2027-06-05',
+  minimumRosterSize: 2,
+  rosterCount: 1,
+};
 const COACHED = { ...PAIR_OF_ACES, teamId: 'k1coached', teamName: 'Coached Crew', role: 'coach' };
 const WAITING = {
   freeAgentId: 'k1fa',
@@ -291,6 +306,22 @@ describe('AccountPage', () => {
       expect(text(aces?.querySelector('h3 + p'))).toBe('Thursday Night Coed 2s · Summer 2027');
       expect(text(aces?.querySelector('[data-slot="badge"]'))).toBe('Player');
       expect(facts(aces)).toEqual({ Season: 'Jun 3 – Aug 26', Roster: '2 of 2 needed' });
+    });
+
+    it('lists a tournament team with the tournament’s name and dates', async () => {
+      await show([SAND_SHARKS, SAND_CRABS]);
+      const crabs = cards()[1];
+      expect(text(crabs?.querySelector('h3'))).toBe('Sand Crabs');
+      expect(text(crabs?.querySelector('h3 + p'))).toBe('Gulf Coast Beach Open');
+      expect(text(crabs?.querySelector('[data-slot="badge"]'))).toBe('Captain');
+      expect(facts(crabs)).toEqual({ Tournament: 'Jun 12 – Jun 13', Roster: '1 of 2 needed' });
+      expect(crabs?.querySelector('h3 a')?.getAttribute('href')).toBe('/app/teams/k1crabs');
+    });
+
+    it('names no next step for a tournament team below its minimum, which has no invites yet', async () => {
+      await show([SAND_CRABS]);
+      expect(nextStepRegion()).toBeNull();
+      expect(cards()).toHaveLength(1);
     });
 
     it('marks Captain with a crown and the roles as secondary badges; an unknown role has no badge', async () => {

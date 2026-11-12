@@ -863,6 +863,7 @@ describe('tournaments.getPublicPage', () => {
       registrationDeadline: '2027-01-09',
       minimumRosterSize: 2,
       maximumTeams: 16,
+      isFull: false,
     });
   });
 

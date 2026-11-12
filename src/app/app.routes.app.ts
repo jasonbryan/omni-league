@@ -43,6 +43,13 @@ export const appRoutes: Routes = [
       import('./organizations/season-management/season-page').then((m) => m.SeasonPage),
   },
   {
+    // No guard: an unknown tournament shows the not-found view before any sign-in, and the page sends a signed-out visitor to sign in. Ahead of the admin area, whose `organizations/:slug` is a shorter prefix of the same URL space.
+    path: 'organizations/:orgSlug/tournaments/:tournamentSlug/register',
+    title: 'Register a team | Omni League',
+    loadComponent: () =>
+      import('./teams/register-tournament-team-page').then((m) => m.RegisterTournamentTeamPage),
+  },
+  {
     path: 'organizations/:slug',
     canActivate: [requireSignedIn],
     loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),
