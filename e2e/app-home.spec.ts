@@ -453,7 +453,7 @@ async function loadHeld(page: Page, query: string) {
   return held;
 }
 
-/** A press on a link inside the tab, which keeps the page's memory; `page.goto` reloads it. */
+/** `page.goto` reloads the page and loses what the tab holds in memory. */
 async function goInTab(page: Page, path: string) {
   await page.evaluate((target) => {
     history.pushState(null, '', target);

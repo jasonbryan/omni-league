@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { appRoutes } from '../app.routes.app';
 import { AuthService } from '../core/auth/auth.service';
+import { ChangesInFlight } from '../core/changes-in-flight';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
@@ -73,7 +74,7 @@ describe('AccountPage', () => {
   let harness: RouterTestingHarness;
   let page: HTMLElement;
 
-  async function open(now = NOW) {
+  async function open(now = NOW, remembered: HomeShapeKind | null = null) {
     vi.useFakeTimers({ toFake: ['Date'], now });
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
@@ -88,7 +89,14 @@ describe('AccountPage', () => {
       ],
     });
     auth.emitSession({ id: 's1' });
-    harness = await RouterTestingHarness.create('/app');
+    if (remembered === null) {
+      harness = await RouterTestingHarness.create('/app');
+    } else {
+      harness = await RouterTestingHarness.create();
+      await TestBed.inject(AuthService).isSignedIn();
+      TestBed.inject(HomeShape).record(remembered);
+      await harness.navigateByUrl('/app');
+    }
     page = harness.routeNativeElement!;
   }
 
@@ -558,9 +566,8 @@ describe('AccountPage', () => {
       const newUserCard = () => main().querySelector('[data-slot="home-skeleton-new-user-card"]');
 
       async function loadingWith(remembered: HomeShapeKind | null) {
-        await open();
+        await open(NOW, remembered);
         accept();
-        if (remembered) TestBed.inject(HomeShape).record(remembered);
         harness.detectChanges();
       }
 
@@ -572,6 +579,14 @@ describe('AccountPage', () => {
         );
         expect(listCards()).toHaveLength(2);
         expect(newUserCard()).toBeNull();
+      });
+
+      it('keeps the shape it was created with when a change settles while it shows, so the page does not move', async () => {
+        await loadingWith('nextStep');
+        TestBed.inject(ChangesInFlight).begin()();
+        expect(TestBed.inject(HomeShape).current()).toBeNull();
+        harness.detectChanges();
+        expect(nextStepBlock()).not.toBeNull();
       });
 
       it('is the list shape when the remembered shape is list', async () => {

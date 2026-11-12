@@ -47,7 +47,7 @@ const HOME_PATH = '/app';
         <p class="mt-1 text-muted-foreground">{{ subtitle() }}</p>
         @switch (state()) {
           @case ('loading') {
-            <app-home-skeleton [shape]="skeletonShape()" />
+            <app-home-skeleton [shape]="skeletonShape" />
           }
           @case ('failed') {
             <app-admin-alert
@@ -85,6 +85,7 @@ const HOME_PATH = '/app';
 })
 export class AccountPage {
   private readonly auth = inject(AuthService);
+  private readonly homeShape = inject(HomeShape);
   protected readonly now = injectNow();
 
   private readonly me = injectQuery(api.users.me, () =>
@@ -121,8 +122,8 @@ export class AccountPage {
     }
     return this.teams().length === 0 && this.freeAgents().length === 0 ? 'new' : 'ready';
   });
-  private readonly homeShape = inject(HomeShape);
-  protected readonly skeletonShape = computed(() => this.homeShape.current() ?? 'list');
+  // Read once: a change that settles while the skeleton shows would otherwise redraw it and move the page.
+  protected readonly skeletonShape = untracked(this.homeShape.current) ?? 'list';
   private readonly loadedShape = computed<HomeShapeKind | null>(() => {
     const state = this.state();
     if (state === 'new') return 'new';
@@ -131,7 +132,7 @@ export class AccountPage {
   });
   // The new-user subtitle wraps to two lines at 360px, so the loading card stands where the loaded one will.
   private readonly newUserHome = computed(
-    () => this.state() === 'new' || (this.state() === 'loading' && this.skeletonShape() === 'new'),
+    () => this.state() === 'new' || (this.state() === 'loading' && this.skeletonShape === 'new'),
   );
   protected readonly subtitle = computed(() =>
     this.newUserHome()

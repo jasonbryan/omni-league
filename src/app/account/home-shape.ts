@@ -1,5 +1,6 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { merge } from 'rxjs';
 import { AuthService } from '../core/auth/auth.service';
 import { ChangesInFlight } from '../core/changes-in-flight';
 
@@ -14,28 +15,13 @@ export class HomeShape {
   readonly current = this.remembered.asReadonly();
 
   constructor() {
-    inject(ChangesInFlight)
-      .settled.pipe(takeUntilDestroyed())
-      .subscribe(() => this.forget());
-
-    let epochSeen = untracked(this.auth.authEpoch);
-    // An effect, not a linkedSignal: a reset that waits for a read would miss a session that changed while no page read the shape.
-    effect(() => {
-      const signedIn = this.auth.signedIn();
-      const epoch = this.auth.authEpoch();
-      untracked(() => {
-        if (!signedIn || epoch !== epochSeen) this.forget();
-        epochSeen = epoch;
-      });
-    });
+    merge(inject(ChangesInFlight).settled, this.auth.accountChanged)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.remembered.set(null));
   }
 
   record(shape: HomeShapeKind): void {
     // A sign-out in another tab can end the session before this page is destroyed and records its shape.
     if (this.auth.signedIn()) this.remembered.set(shape);
-  }
-
-  private forget(): void {
-    this.remembered.set(null);
   }
 }

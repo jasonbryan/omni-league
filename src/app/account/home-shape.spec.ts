@@ -1,4 +1,5 @@
 import { signal } from '@angular/core';
+import { Subject } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from '../core/auth/auth.service';
 import { ChangesInFlight } from '../core/changes-in-flight';
@@ -6,21 +7,19 @@ import { HomeShape } from './home-shape';
 
 describe('HomeShape', () => {
   const signedIn = signal(true);
-  const authEpoch = signal(0);
+  const accountChanged = new Subject<void>();
 
-  function create() {
-    signedIn.set(true);
-    authEpoch.set(0);
+  function create(startSignedIn = true) {
+    signedIn.set(startSignedIn);
     TestBed.configureTestingModule({
       providers: [
         {
           provide: AuthService,
-          useValue: { signedIn: signedIn.asReadonly(), authEpoch: authEpoch.asReadonly() },
+          useValue: { signedIn: signedIn.asReadonly(), accountChanged },
         },
       ],
     });
     const shape = TestBed.inject(HomeShape);
-    TestBed.tick();
     return shape;
   }
 
@@ -69,48 +68,28 @@ describe('HomeShape', () => {
   });
 
   describe('the session', () => {
-    it('drops the shape when the user is signed out', () => {
+    it('drops the shape when the account changes: a sign-out, or authEpoch advancing', () => {
       const shape = create();
       shape.record('nextStep');
-      signedIn.set(false);
-      TestBed.tick();
+      accountChanged.next();
       expect(shape.current()).toBeNull();
     });
 
-    it('drops the shape when authEpoch advances', () => {
-      const shape = create();
-      shape.record('nextStep');
-      authEpoch.set(1);
-      TestBed.tick();
-      expect(shape.current()).toBeNull();
-    });
-
-    it('keeps the shape through a sign-in that leaves authEpoch alone, as a sign-up records it', () => {
+    it('keeps the shape through a sign-in that changes no account, as a sign-up records it', () => {
       signedIn.set(false);
-      authEpoch.set(0);
-      TestBed.configureTestingModule({
-        providers: [
-          {
-            provide: AuthService,
-            useValue: { signedIn: signedIn.asReadonly(), authEpoch: authEpoch.asReadonly() },
-          },
-        ],
-      });
-      const shape = TestBed.inject(HomeShape);
-      TestBed.tick();
+      const shape = create(false);
       signedIn.set(true);
       shape.record('new');
-      TestBed.tick();
       expect(shape.current()).toBe('new');
     });
 
     it('ignores a shape recorded while signed out, so the next account never gets the old one', () => {
       const shape = create();
       signedIn.set(false);
+      accountChanged.next();
       shape.record('nextStep');
       expect(shape.current()).toBeNull();
       signedIn.set(true);
-      TestBed.tick();
       expect(shape.current()).toBeNull();
     });
   });

@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { baseURL } from './env';
 import { expect } from './fixtures';
 
-/** Goes to Home by the sidebar's link, which a phone keeps in the sheet that the menu button opens. */
+/** A phone keeps the sidebar's links in the sheet that the menu button opens. */
 export async function goHomeBySidebar(page: Page): Promise<void> {
   const menu = page.getByRole('button', { name: 'Open navigation' });
   const navigation = (await menu.isVisible())

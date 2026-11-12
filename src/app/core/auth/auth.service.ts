@@ -113,6 +113,10 @@ export class AuthService implements ConvexAuthSource {
   /** Only from `signed-out`: a kept session sent no page to sign-in, and this tab's own sign-in navigates by itself. */
   readonly signedInByCheck = this.checkSignedIn.asObservable();
 
+  private readonly accountChangedSubject = new Subject<void>();
+  /** Emits when the session ends, and when a new session replaces a signed-in one or a confirm advances `authEpoch`, so what a page remembers of one account is not shown to the next. */
+  readonly accountChanged = this.accountChangedSubject.asObservable();
+
   private readonly destroyRef = inject(DestroyRef);
   private readonly changes = inject(ChangesInFlight);
   private readonly injector = inject(Injector);
@@ -203,7 +207,7 @@ export class AuthService implements ConvexAuthSource {
     if (previous === 'signed-out') this.checkSignedIn.next();
     if (!askAgain) return;
     this.forgetToken();
-    this.epoch.update((epoch) => epoch + 1);
+    this.advanceEpoch();
   }
 
   /**
@@ -458,7 +462,7 @@ export class AuthService implements ConvexAuthSource {
     this.signOutGuard = 'off';
     this.forgetToken();
     this.setSession('signed-in');
-    if (replacesSignedInSession) this.epoch.update((epoch) => epoch + 1);
+    if (replacesSignedInSession) this.advanceEpoch();
     this.watchSession(client);
   }
 
@@ -508,6 +512,12 @@ export class AuthService implements ConvexAuthSource {
     }
     this.session.set(state);
     this.resolveKnown();
+    if (state === 'signed-out') this.accountChangedSubject.next();
+  }
+
+  private advanceEpoch(): void {
+    this.epoch.update((epoch) => epoch + 1);
+    this.accountChangedSubject.next();
   }
 
   private forgetToken(): void {
