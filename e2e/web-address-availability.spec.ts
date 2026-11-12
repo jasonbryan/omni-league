@@ -7,6 +7,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -147,7 +148,7 @@ for (const form of FORMS) {
       await expect(availability(page)).toHaveText('');
     });
 
-    test('checks the address derived from the name', async ({ page }) => {
+    test('checks the address derived from the name', VIEWPORT_AGNOSTIC, async ({ page }) => {
       await form.open(page);
       await page.locator('#name').fill(form.nameForTaken);
       await expect(field(page)).toHaveValue(form.taken);
@@ -181,52 +182,60 @@ for (const form of FORMS) {
       );
     });
 
-    test('shows no answer while typing a malformed address, and its message only after leaving', async ({
-      page,
-    }) => {
-      await form.open(page);
-      await field(page).pressSequentially('Bad-Address');
-      await page.waitForTimeout(700);
-      await expect(fieldError(page)).toHaveCount(0);
-      await expect(availability(page)).toHaveText('');
-      await page.locator('#name').focus();
-      await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
-      await expect(availability(page)).toHaveText('');
-    });
+    test(
+      'shows no answer while typing a malformed address, and its message only after leaving',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        await form.open(page);
+        await field(page).pressSequentially('Bad-Address');
+        await page.waitForTimeout(700);
+        await expect(fieldError(page)).toHaveCount(0);
+        await expect(availability(page)).toHaveText('');
+        await page.locator('#name').focus();
+        await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
+        await expect(availability(page)).toHaveText('');
+      },
+    );
 
-    test('shows no answer for a reserved address, and its message only after leaving', async ({
-      page,
-    }) => {
-      await form.open(page);
-      await field(page).pressSequentially('new');
-      await page.waitForTimeout(700);
-      await expect(fieldError(page)).toHaveCount(0);
-      await expect(availability(page)).toHaveText('');
-      await page.locator('#name').focus();
-      await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
-    });
+    test(
+      'shows no answer for a reserved address, and its message only after leaving',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        await form.open(page);
+        await field(page).pressSequentially('new');
+        await page.waitForTimeout(700);
+        await expect(fieldError(page)).toHaveCount(0);
+        await expect(availability(page)).toHaveText('');
+        await page.locator('#name').focus();
+        await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
+      },
+    );
 
-    test('never shows the word slug on the field in any state', async ({ page }) => {
-      await form.open(page);
-      const seen: string[] = [];
-      const read = async () => {
-        seen.push(
-          (await page.locator(form.container).locator('#slug-description').innerText()) +
-            (await availability(page).innerText()) +
-            ((await fieldError(page).count()) > 0 ? await fieldError(page).innerText() : ''),
-        );
-      };
-      await field(page).fill(form.taken);
-      await expect(fieldError(page)).toBeVisible();
-      await read();
-      await field(page).fill('Bad-Address');
-      await page.locator('#name').focus();
-      await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
-      await read();
-      await field(page).fill('free-address');
-      await expect(availability(page)).toHaveText('Available');
-      await read();
-      for (const text of seen) expect(text).not.toMatch(/slug/i);
-    });
+    test(
+      'never shows the word slug on the field in any state',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        await form.open(page);
+        const seen: string[] = [];
+        const read = async () => {
+          seen.push(
+            (await page.locator(form.container).locator('#slug-description').innerText()) +
+              (await availability(page).innerText()) +
+              ((await fieldError(page).count()) > 0 ? await fieldError(page).innerText() : ''),
+          );
+        };
+        await field(page).fill(form.taken);
+        await expect(fieldError(page)).toBeVisible();
+        await read();
+        await field(page).fill('Bad-Address');
+        await page.locator('#name').focus();
+        await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
+        await read();
+        await field(page).fill('free-address');
+        await expect(availability(page)).toHaveText('Available');
+        await read();
+        for (const text of seen) expect(text).not.toMatch(/slug/i);
+      },
+    );
   });
 }
