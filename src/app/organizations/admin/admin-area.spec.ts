@@ -3,6 +3,7 @@ import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import {
   adminRoutes,
@@ -68,6 +69,11 @@ describe('AdminArea', () => {
       expect(
         page.querySelectorAll('[aria-hidden="true"].motion-safe\\:animate-pulse').length,
       ).toBeGreaterThan(5);
+    });
+
+    it('draws every placeholder in the panel through the skeleton, each with its own radius', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-lg': 3, 'rounded-md': 13 });
     });
 
     it('draws the two panel placeholders as bare helm cards, as the panels they stand for', async () => {

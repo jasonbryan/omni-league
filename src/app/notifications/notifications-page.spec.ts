@@ -10,6 +10,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { RELOAD_PAGE } from '../core/service-worker/app-updates';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
@@ -246,6 +247,11 @@ describe('NotificationsPage', () => {
   });
 
   describe('checking', () => {
+    it('draws the badge and the lines through the skeleton, each with its own radius', async () => {
+      await open();
+      expectSkeletonBoxes(panel(), { 'rounded-4xl': 1, 'rounded-lg': 1, 'rounded-md': 2 });
+    });
+
     it('shows skeleton lines and a polite status until the device is known', async () => {
       await open();
       expect(badge()).toBe('');

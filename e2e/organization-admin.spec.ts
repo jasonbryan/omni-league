@@ -5,6 +5,7 @@ import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { expectOnScreen } from './support/sticky-footer';
@@ -189,6 +190,24 @@ test.describe('the admin area: entry and navigation', () => {
       );
     },
   );
+});
+
+test.describe('the admin area: while the organization loads', () => {
+  test('the loading skeleton pulses only while the visitor allows motion', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    const held = await holdQueries(page, ['organizations:getAdminContext']);
+    await page.goto(base);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const bar = page.locator('app-admin-loading [data-slot="skeleton"]').first();
+    const animationName = () => bar.evaluate((element) => getComputedStyle(element).animationName);
+
+    await expect.poll(animationName).toBe('pulse');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(animationName).toBe('none');
+
+    held.release();
+    await expect(main(page).getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  });
 });
 
 test.describe('Overview', () => {

@@ -49,6 +49,7 @@ import { CAP_NOTE } from './note-classes';
 import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
 import { HlmCard } from '../../ui/card';
+import { HlmSkeleton } from '../../ui/skeleton';
 
 const EMAIL_THEN_LINK_THEN_ALERT = ['#email', '#invite-link-heading', '[data-slot="alert"]'];
 
@@ -104,6 +105,7 @@ const ROLE_LABEL: Record<Role, string> = {
     AdminOfflineAlert,
     HlmBadge,
     HlmCard,
+    HlmSkeleton,
     HlmSpinner,
     NgIcon,
     NgTemplateOutlet,
@@ -197,16 +199,10 @@ const ROLE_LABEL: Record<Role, string> = {
               <div aria-hidden="true" class="divide-y divide-border">
                 @for (placeholder of placeholders; track placeholder) {
                   <div class="flex gap-3 px-4 py-3.5 md:px-5">
-                    <div
-                      class="size-9 shrink-0 rounded-full bg-muted motion-safe:animate-pulse"
-                    ></div>
+                    <div hlmSkeleton class="size-9 shrink-0 rounded-full"></div>
                     <div class="flex-1">
-                      <div
-                        class="h-4 w-40 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div
-                        class="mt-2 h-3.5 w-56 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
+                      <div hlmSkeleton class="h-4 w-40 max-w-full rounded-md"></div>
+                      <div hlmSkeleton class="mt-2 h-3.5 w-56 max-w-full rounded-md"></div>
                     </div>
                   </div>
                 }
@@ -383,16 +379,10 @@ const ROLE_LABEL: Record<Role, string> = {
               <div aria-hidden="true" class="divide-y divide-border">
                 @for (placeholder of placeholders; track placeholder) {
                   <div class="flex gap-3 px-4 py-3.5 md:px-5">
-                    <div
-                      class="size-9 shrink-0 rounded-lg bg-muted motion-safe:animate-pulse"
-                    ></div>
+                    <div hlmSkeleton class="size-9 shrink-0 rounded-lg"></div>
                     <div class="flex-1">
-                      <div
-                        class="h-4 w-48 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div
-                        class="mt-2 h-3.5 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
+                      <div hlmSkeleton class="h-4 w-48 max-w-full rounded-md"></div>
+                      <div hlmSkeleton class="mt-2 h-3.5 w-64 max-w-full rounded-md"></div>
                     </div>
                   </div>
                 }

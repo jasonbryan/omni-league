@@ -9,6 +9,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { AccountSettingsPage } from './account-settings-page';
 
 @Component({ template: 'home' })
@@ -105,6 +106,14 @@ describe('AccountSettingsPage', () => {
     expect(status?.textContent?.trim()).toBe('Loading your account details.');
     expect(status?.classList.contains('sr-only')).toBe(true);
     expect(signOutButton(page)?.textContent?.trim()).toBe('Sign out');
+  });
+
+  it('draws every skeleton box through the skeleton', async () => {
+    const page = await open();
+    accepted();
+    await harness.fixture.whenStable();
+
+    expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-full': 1, 'rounded-md': 2 });
   });
 
   it('draws the skeleton avatar rounded-full and its text bars rounded-md', async () => {

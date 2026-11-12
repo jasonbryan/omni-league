@@ -44,6 +44,7 @@ import { HlmCard } from '../ui/card';
 import { HlmSpinner } from '../ui/spinner';
 import { PUSH_DEVICE } from './push-device';
 import { TestNotification } from './test-notification';
+import { HlmSkeleton } from '../ui/skeleton';
 
 export { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 
@@ -70,6 +71,7 @@ const STEP_NUMBER =
     HlmBadge,
     HlmBreadcrumbImports,
     HlmCard,
+    HlmSkeleton,
     HlmSpinner,
     NgIcon,
     Shell,
@@ -118,10 +120,7 @@ const STEP_NUMBER =
             <h2 id="device-heading" class="font-semibold">This device</h2>
             @switch (state()) {
               @case ('checking') {
-                <span
-                  aria-hidden="true"
-                  class="h-5 w-14 rounded-4xl bg-muted motion-safe:animate-pulse"
-                ></span>
+                <span hlmSkeleton aria-hidden="true" class="h-5 w-14 rounded-4xl"></span>
               }
               @case ('on') {
                 <span hlmBadge variant="default"
@@ -181,9 +180,9 @@ const STEP_NUMBER =
             @switch (state()) {
               @case ('checking') {
                 <div aria-hidden="true" class="w-full space-y-3">
-                  <div class="h-4 w-full rounded-md bg-muted motion-safe:animate-pulse"></div>
-                  <div class="h-4 w-3/4 rounded-md bg-muted motion-safe:animate-pulse"></div>
-                  <div class="h-9 w-52 rounded-lg bg-muted motion-safe:animate-pulse"></div>
+                  <div hlmSkeleton class="h-4 w-full rounded-md"></div>
+                  <div hlmSkeleton class="h-4 w-3/4 rounded-md"></div>
+                  <div hlmSkeleton class="h-9 w-52 rounded-lg"></div>
                 </div>
                 <p role="status" class="sr-only">Checking notifications on this device.</p>
               }

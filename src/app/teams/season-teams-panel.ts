@@ -7,6 +7,7 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { HlmBadge } from '../ui/badge';
 import { teamPath } from './team-paths';
 import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 
 export interface SeasonTeamRow {
   teamId: Id<'teams'>;
@@ -15,7 +16,6 @@ export interface SeasonTeamRow {
 }
 
 const PANEL = 'overflow-hidden';
-const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
 
 export function seasonTeamsCount(shown: number, total: number): string {
   const teams = `${total} ${total === 1 ? 'team' : 'teams'}`;
@@ -24,7 +24,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
 
 @Component({
   selector: 'app-season-teams-panel',
-  imports: [AdminAlert, HlmBadge, HlmCard, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmBadge, HlmCard, HlmSkeleton, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -77,7 +77,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
         <div aria-hidden="true" class="divide-y divide-border">
           @for (placeholder of placeholders; track placeholder) {
             <div class="flex min-h-11 items-center px-4 py-2.5 md:px-5">
-              <div class="${SKELETON} h-5 w-40 max-w-full"></div>
+              <div hlmSkeleton class="rounded-md h-5 w-40 max-w-full"></div>
             </div>
           }
         </div>

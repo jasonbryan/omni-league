@@ -16,6 +16,7 @@ import {
 import { LeagueLanding } from './league-landing';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -44,6 +45,12 @@ describe('LeaguePage', () => {
       expect(text(o.page.querySelector('main [role="status"]'))).toBe('Loading the league.');
       expect(o.page.querySelector('nav')).toBeNull();
       expect(o.page.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
+    });
+
+    it('draws every placeholder through the skeleton, each with its own radius', async () => {
+      o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
+      TestBed.tick();
+      expectSkeletonBoxes(o.page.querySelector('app-league-loading')!, { 'rounded-md': 18 });
     });
 
     it('reserves the breadcrumb’s one-line height, 44px on touch, above the heading bar', async () => {
@@ -241,6 +248,13 @@ describe('LeaguePage', () => {
       expect(panel.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(3);
       expect(text(page.querySelector('#create-season h2'))).toBe('Create a season');
       expect(page.querySelector('#create-season form')).not.toBeNull();
+    });
+
+    it('loading: every row placeholder is drawn through the skeleton', async () => {
+      await open(COED);
+      expectSkeletonBoxes(page.querySelector('section[aria-labelledby="seasons-heading"]')!, {
+        'rounded-md': 6,
+      });
     });
 
     it('none yet (state 2): the empty state', async () => {
