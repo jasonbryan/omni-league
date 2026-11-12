@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, extname, join, posix } from 'node:path';
+import ts from 'typescript';
 import { classify, deriveAppScripts } from './ci-scope.mjs';
 import { ALWAYS, buildImportGraph, deriveSessionSpecs, selectSpecs } from './e2e-affected.mjs';
 import { runE2e } from './e2e.mjs';
@@ -12,7 +13,12 @@ const SMOKE_SPEC = 'e2e/smoke.spec.ts';
 const SCREEN_DIRS = ['src/', 'design/'];
 const MOCKUP_SPEC = /-mockup\.spec\.ts$/;
 const SPEC_FILE = /\.spec\.ts$/;
-const E2E_TEXT_FILE = /\.(?:ts|mts|mjs|js|json|html|css|md)$/;
+const E2E_SCRIPT_FILE = /\.(?:ts|mts|js|mjs)$/;
+const RELATIVE_SPECIFIER = /^\.\.?\//;
+const SCRIPT_EXTENSION_READ_AS = new Map([
+  ['.js', '.ts'],
+  ['.mjs', '.mts'],
+]);
 const E2E_DIR = 'e2e';
 const ARCHIVE_MAX_BYTES = 1024 ** 3;
 
@@ -60,7 +66,7 @@ function defaultCiScope(root, files) {
 }
 
 /** @returns {Map<string, string>} */
-function readE2eTextsByPath(root) {
+function readE2eScriptsByPath(root) {
   const texts = new Map();
   let entries;
   try {
@@ -69,7 +75,7 @@ function readE2eTextsByPath(root) {
     return texts;
   }
   for (const entry of entries) {
-    if (!entry.isFile() || !E2E_TEXT_FILE.test(entry.name)) continue;
+    if (!entry.isFile() || !E2E_SCRIPT_FILE.test(entry.name)) continue;
     const path = posix.join(
       E2E_DIR,
       ...join(entry.parentPath, entry.name)
@@ -81,7 +87,52 @@ function readE2eTextsByPath(root) {
   return texts;
 }
 
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A parse, not a quote-pairing regex: a template literal or an apostrophe in a comment misleads one.
+/**
+ * @param {string} path
+ * @param {string} text
+ * @returns {string[]}
+ */
+function stringLiterals(path, text) {
+  const literals = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      literals.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true));
+  return literals;
+}
+
+const withoutExtension = (path) => path.slice(0, path.length - extname(path).length);
+
+/**
+ * @param {string} path
+ * @param {string} text
+ */
+function readReferences(path, text) {
+  const paths = new Set();
+  const fileNames = new Set();
+  for (const literal of stringLiterals(path, text)) {
+    if (RELATIVE_SPECIFIER.test(literal)) {
+      const resolved = posix.join(posix.dirname(path), literal);
+      paths.add(resolved);
+      const readAs = SCRIPT_EXTENSION_READ_AS.get(extname(resolved));
+      if (readAs !== undefined) paths.add(withoutExtension(resolved) + readAs);
+      continue;
+    }
+    const lastSegment = literal.slice(literal.lastIndexOf('/') + 1);
+    if (extname(lastSegment) !== '') fileNames.add(lastSegment);
+  }
+  return { paths, fileNames };
+}
 
 /**
  * @param {() => string} root
@@ -91,15 +142,18 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function importingSpecs(root, changed) {
   const starting = changed.filter((file) => !SPEC_FILE.test(file));
   if (starting.length === 0) return [];
-  const texts = readE2eTextsByPath(root());
+  const referrers = [...readE2eScriptsByPath(root())].map(([path, text]) => ({
+    path,
+    ...readReferences(path, text),
+  }));
   const files = new Set(starting);
   const specs = new Set();
   for (const file of files) {
-    const stem = basename(file, extname(file));
-    if (stem === '') continue;
-    const importsIt = new RegExp(`[/']${escapeRegExp(stem)}(\\.[a-z]+)?'`);
-    for (const [path, text] of texts) {
-      if (!importsIt.test(text)) continue;
+    const name = basename(file);
+    for (const { path, paths, fileNames } of referrers) {
+      const refersToIt =
+        paths.has(file) || paths.has(withoutExtension(file)) || fileNames.has(name);
+      if (!refersToIt) continue;
       if (SPEC_FILE.test(path)) specs.add(path);
       else files.add(path);
     }
