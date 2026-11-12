@@ -581,10 +581,7 @@ test.describe('organization page: first load', () => {
 test.describe('organization page: after an in-app navigation', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test('shows the skeleton with its status while the data is on its way, then the page within 4px of it, with focus on main', async ({
-    page,
-    consoleGuard,
-  }) => {
+  async function navigateToHeldOrganization(page: Page, consoleGuard: { hydrated: boolean }) {
     const tenant = await smallTenant();
     const leaguePath = `${tenant.path}/leagues/alpha-league`;
     const held = await holdQueries(page, [
@@ -602,6 +599,30 @@ test.describe('organization page: after an in-app navigation', () => {
       .click();
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+    return { tenant, held };
+  }
+
+  test('pulses the skeleton only while the visitor allows motion', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { held } = await navigateToHeldOrganization(page, consoleGuard);
+    const bar = page.getByTestId('organization-skeleton').locator('[data-slot="skeleton"]').first();
+    const animationName = () => bar.evaluate((element) => getComputedStyle(element).animationName);
+
+    await expect.poll(animationName).toBe('pulse');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(animationName).toBe('none');
+
+    held.release();
+    await expect(page.getByTestId('organization-skeleton')).toHaveCount(0);
+  });
+
+  test('shows the skeleton with its status while the data is on its way, then the page within 4px of it, with focus on main', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant, held } = await navigateToHeldOrganization(page, consoleGuard);
 
     const skeleton = page.getByTestId('organization-skeleton');
     await expect(skeleton).toBeVisible();

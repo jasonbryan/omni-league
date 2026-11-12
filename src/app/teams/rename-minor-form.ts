@@ -18,15 +18,9 @@ import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { api, injectMutation, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  INPUT,
-  LABEL,
-} from '../organizations/admin/field-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm } from './minor-name-form';
@@ -51,6 +45,8 @@ export interface RenameMinorOutcome {
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmFieldImports,
+    HlmInputImports,
     HlmSpinner,
     MinorNameErrorText,
     MousePressKeepsFocus,
@@ -79,21 +75,18 @@ export interface RenameMinorOutcome {
           />
         }
       }
-      <div data-slot="field-group" [class]="fieldGroupClass + ' mt-3'">
+      <div hlmFieldGroup class="mt-3">
         <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
+          hlmField
           [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
           [attr.data-invalid]="form.error() ? 'true' : null"
-          [class]="fieldClass"
         >
-          <label for="rename-name" data-slot="field-label" [class]="labelClass">Minor’s name</label>
+          <label hlmFieldLabel for="rename-name">Minor’s name</label>
           <input
+            hlmInput
             #nameInput
             id="rename-name"
             type="text"
-            data-slot="input"
             autocomplete="off"
             [formField]="form.fields.name"
             (blur)="form.left()"
@@ -103,13 +96,10 @@ export interface RenameMinorOutcome {
             [attr.aria-invalid]="form.error() ? 'true' : null"
             [attr.data-invalid]="form.error() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
-            [class]="inputClass"
           />
-          <p data-slot="field-description" id="rename-name-description" [class]="descriptionClass">
-            Up to 60 characters.
-          </p>
+          <p hlmFieldDescription id="rename-name-description">Up to 60 characters.</p>
           @if (form.error(); as error) {
-            <div role="alert" data-slot="field-error" id="rename-name-error" [class]="errorClass">
+            <div hlmFieldError id="rename-name-error">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -161,12 +151,6 @@ export class RenameMinorForm implements OnInit {
   protected readonly form = new MinorNameForm();
   protected readonly alerts = RENAME_MINOR_ALERTS;
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
 

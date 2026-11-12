@@ -1,7 +1,13 @@
 import type { Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { FindSkeleton } from '../find/find-skeleton';
 import { expectBareCard } from '../ui/testing/card';
-import { OrganizationRowsSkeleton, OrganizationSkeleton } from './organization-skeleton';
+import { radiusClasses } from '../ui/testing/radius-classes';
+import {
+  OpenSeasonsSkeleton,
+  OrganizationRowsSkeleton,
+  OrganizationSkeleton,
+} from './organization-skeleton';
 import { PublicLeagueSkeleton } from './public-league/public-league-skeleton';
 import type { PublicPageNames } from './public-league/public-page-names';
 import { PublicSeasonSkeleton } from './public-season/public-season-skeleton';
@@ -10,6 +16,72 @@ const ROWS = '[data-testid="skeleton-breadcrumb-row"]';
 const rowCount = (root: Element) => root.querySelectorAll(ROWS).length;
 
 describe('page skeletons', () => {
+  describe('skeleton elements', () => {
+    type Tally = Record<string, number>;
+    const RADIUS_TALLIES: [string, Type<unknown>, Record<string, unknown>, Tally][] = [
+      [
+        'organization',
+        OrganizationSkeleton,
+        {},
+        { 'rounded-lg md:rounded-xl': 1, 'rounded-md': 36, 'rounded-full': 6 },
+      ],
+      ['league rows', OrganizationRowsSkeleton, { kind: 'league' }, { 'rounded-md': 9 }],
+      ['location rows', OrganizationRowsSkeleton, { kind: 'location' }, { 'rounded-md': 6 }],
+      ['open seasons', OpenSeasonsSkeleton, { count: 3 }, { 'rounded-md': 22, 'rounded-full': 3 }],
+      [
+        'no open seasons',
+        OpenSeasonsSkeleton,
+        { count: 0, noOpenText: 'None open' },
+        { 'rounded-md': 1 },
+      ],
+      ['league', PublicLeagueSkeleton, {}, { 'rounded-md': 14, 'rounded-full': 2 }],
+      [
+        'season',
+        PublicSeasonSkeleton,
+        {},
+        { 'rounded-md': 16, 'rounded-full': 2, 'rounded-lg': 4 },
+      ],
+      ['find', FindSkeleton, {}, { 'rounded-md': 7, 'rounded-xl': 3, 'rounded-full': 3 }],
+    ];
+
+    const render = (skeleton: Type<unknown>, inputs: Record<string, unknown>) => {
+      const fixture = TestBed.createComponent(skeleton);
+      for (const [name, value] of Object.entries(inputs)) {
+        fixture.componentRef.setInput(name, value);
+      }
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    it.each(RADIUS_TALLIES)(
+      'the %s skeleton draws every filled box through the skeleton, each with its own radius',
+      (_, skeleton, inputs, tally) => {
+        const root = render(skeleton, inputs);
+        const boxes = [...root.querySelectorAll('.bg-muted')];
+        const counted: Tally = {};
+        for (const box of boxes) {
+          expect(box.getAttribute('data-slot')).toBe('skeleton');
+          const radius = radiusClasses(box).join(' ') || 'none';
+          counted[radius] = (counted[radius] ?? 0) + 1;
+        }
+
+        expect(counted).toEqual(tally);
+        expect(root.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(boxes.length);
+      },
+    );
+
+    it.each(RADIUS_TALLIES)(
+      'the %s skeleton pulses only where motion is allowed',
+      (_, skeleton, inputs) => {
+        for (const box of render(skeleton, inputs).querySelectorAll('[data-slot="skeleton"]')) {
+          const animations = [...box.classList].filter((name) => name.includes('animate-'));
+
+          expect(animations).toEqual(['motion-safe:animate-pulse']);
+        }
+      },
+    );
+  });
+
   it.each<[string, Type<unknown>]>([
     ['organization', OrganizationSkeleton],
     ['league', PublicLeagueSkeleton],

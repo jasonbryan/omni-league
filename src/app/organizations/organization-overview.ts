@@ -60,6 +60,7 @@ import {
   PRIMARY_BUTTON,
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
+import { HlmSkeleton } from '../ui/skeleton';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
 import { publicPageNames } from './public-league/public-page-names';
 import {
@@ -91,6 +92,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
   imports: [
     HlmBadge,
     HlmCard,
+    HlmSkeleton,
     LeagueFilters,
     NgIcon,
     OpenSeasonsSkeleton,
@@ -141,10 +143,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
           }
           @if (!isEmpty() && !noMatches()) {
             @if (openCards() === undefined) {
-              <span
-                aria-hidden="true"
-                class="block h-11 w-48 rounded-md bg-muted motion-safe:animate-pulse"
-              ></span>
+              <span hlmSkeleton aria-hidden="true" class="block h-11 w-48 rounded-md"></span>
             } @else if (openCards()?.length) {
               <a
                 [href]="openHref()"
@@ -346,8 +345,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
                       <p role="status" class="sr-only">Loading the suggestions.</p>
                       @for (pill of activeValues(); track pill) {
                         <span
+                          hlmSkeleton
                           aria-hidden="true"
-                          class="block h-9 w-44 rounded-lg bg-muted motion-safe:animate-pulse pointer-coarse:h-11"
+                          class="block h-9 w-44 rounded-lg pointer-coarse:h-11"
                         ></span>
                       }
                     </div>
