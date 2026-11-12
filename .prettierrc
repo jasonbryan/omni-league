@@ -19,6 +19,12 @@
       "options": {
         "proseWrap": "preserve"
       }
+    },
+    {
+      "files": "docs/conventions/**/*.md",
+      "options": {
+        "proseWrap": "never"
+      }
     }
   ]
 }
