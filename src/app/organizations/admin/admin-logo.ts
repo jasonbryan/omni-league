@@ -30,6 +30,7 @@ import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { HlmFieldDescription, HlmFieldError } from '../../ui/field';
 import { RemoveLogoDialog, type RemoveOutcome } from './remove-logo-dialog';
+import { HlmCard } from '../../ui/card';
 
 type LogoAlert = 'failed' | 'offline';
 
@@ -79,6 +80,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
+    HlmCard,
     HlmFieldDescription,
     HlmFieldError,
     HlmSpinner,
@@ -93,7 +95,9 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
     @if (organization(); as organization) {
       <section
         aria-labelledby="logo-heading"
-        class="mt-6 max-w-xl overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+        hlmCard
+        size="bare"
+        class="mt-6 max-w-xl overflow-clip"
       >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

@@ -43,6 +43,7 @@ import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm, type CreatedSeason, type SeasonShown } from './season-create-form';
+import { HlmCard } from '../../ui/card';
 
 interface PublishedSeason {
   seasonId: Id<'seasons'>;
@@ -59,6 +60,7 @@ interface PublishedSeason {
   imports: [
     AdminAlert,
     HlmBadge,
+    HlmCard,
     LeagueBreadcrumb,
     LeagueDetailsForm,
     NgIcon,
@@ -153,7 +155,9 @@ interface PublishedSeason {
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="seasons-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
+          hlmCard
+          size="bare"
+          class="overflow-hidden lg:col-span-2"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -326,7 +330,9 @@ interface PublishedSeason {
           #createSection
           id="create-season"
           aria-labelledby="create-season-heading"
-          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          hlmCard
+          size="bare"
+          class="overflow-clip"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -353,7 +359,9 @@ interface PublishedSeason {
         #detailsSection
         id="details"
         aria-labelledby="details-heading"
-        class="mt-4 max-w-2xl overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 md:mt-6"
+        hlmCard
+        size="bare"
+        class="mt-4 max-w-2xl overflow-clip md:mt-6"
       >
         <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-6">
           <h2 id="details-heading" class="font-semibold">League details</h2>

@@ -5,6 +5,7 @@ import { lucideArrowLeft } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../convex/lib/seasonInput';
 import { seasonDates } from '../organizations/league/season-dates';
 import type { RegistrationAnswer } from './register-team-state';
+import { HlmCard } from '../ui/card';
 
 const FILL = 'bg-muted motion-safe:animate-pulse';
 const SKELETON = `rounded-md ${FILL}`;
@@ -17,7 +18,7 @@ export function rosterRange(minimumRosterSize: number, maxRosterSize?: number): 
 
 @Component({
   selector: 'app-register-card',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideArrowLeft })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -29,9 +30,7 @@ export function rosterRange(minimumRosterSize: number, maxRosterSize?: number): 
           class="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground pointer-coarse:min-h-11"
           ><ng-icon name="lucideArrowLeft" class="text-base" aria-hidden="true" />{{ heading() }}</a
         >
-        <div
-          class="mt-3 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-        >
+        <div hlmCard size="bare" class="mt-3 overflow-hidden">
           <div class="px-5 pt-6 md:px-8 md:pt-8">
             <p class="text-sm font-medium text-muted-foreground">{{ kicker() }}</p>
             <h1
@@ -91,6 +90,7 @@ export class RegisterCard {
 
 @Component({
   selector: 'app-register-skeleton',
+  imports: [HlmCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -100,10 +100,7 @@ export class RegisterCard {
         <div aria-hidden="true" class="flex h-5 items-center pointer-coarse:h-11">
           <div class="${SKELETON} h-4 w-56"></div>
         </div>
-        <div
-          aria-hidden="true"
-          class="mt-3 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-        >
+        <div aria-hidden="true" hlmCard size="bare" class="mt-3 overflow-hidden">
           <div class="px-5 pt-6 md:px-8 md:pt-8">
             <div class="${SKELETON} h-5 w-28"></div>
             <div class="${SKELETON} mt-1 h-8 w-72 max-w-full"></div>

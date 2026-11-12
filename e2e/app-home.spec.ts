@@ -42,6 +42,7 @@ const tasha = (): TestUser => ({ ...newUser('Tasha'), name: 'Tasha Greene' });
 const main = (page: Page) => page.getByRole('main');
 const nextStep = (page: Page) => page.getByRole('region', { name: 'Next step' });
 const teams = (page: Page) => page.getByRole('region', { name: 'Your teams' });
+const freeAgent = (page: Page) => page.getByRole('region', { name: 'Free agent' });
 const cardOf = (page: Page, team: string) =>
   teams(page)
     .getByRole('listitem')
@@ -101,6 +102,14 @@ async function seedTashasTeams(user: TestUser) {
   await Promise.all([...mates.map((mate) => addToTeam(sharks, mate)), addToTeam(aces, user)]);
   return { tenant, sharks, aces };
 }
+
+const waitInSeason = (tenant: Tenant, league: string, user: TestUser) =>
+  convexRun('testing:seedFreeAgent', {
+    organizationSlug: tenant.slug,
+    leagueSlug: slugOf(league),
+    seasonSlug: SUMMER.slug,
+    email: user.email,
+  });
 
 const makeAdmin = (tenant: Tenant, user: TestUser) =>
   convexRun('testing:addMembership', {
@@ -334,6 +343,69 @@ test.describe('/app: a user on no team', () => {
   });
 });
 
+test.describe('/app: a free agent waiting to be placed', () => {
+  const placementNote = (tenant: Tenant) =>
+    `${tenant.name}. An organizer places you on a team before ${formatCalendarDate(SUMMER.registrationDeadline)}.`;
+
+  test('shows the registration under the team cards with its status and deadline', async ({
+    page,
+  }, testInfo) => {
+    const user = tasha();
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    const captain = await seedUser(newUser('Captain'));
+    await addToTeam(await seedTeam(tenant, THURSDAY, 'Pair of Aces', captain), user);
+    await waitInSeason(tenant, SUNDAY, user);
+    await openHome(page, 'Hi, Tasha');
+
+    await expect(teams(page).getByRole('heading', { level: 3 })).toHaveText(['Pair of Aces']);
+    await expect(freeAgent(page).getByRole('heading', { level: 2 })).toHaveText('Free agent');
+    const card = freeAgent(page).getByRole('listitem');
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText(`${SUNDAY} · ${SUMMER.name}`);
+    await expect(card).toContainText(placementNote(tenant));
+    await expect(card.locator('[data-slot="badge"]')).toHaveText('Waiting');
+    const below = (await freeAgent(page).boundingBox())!.y - (await teams(page).boundingBox())!.y;
+    expect(below, 'the card sits below the team cards').toBeGreaterThan(0);
+
+    await screenshot(page, testInfo, '300-home-free-agent');
+    await expectAccessible(page);
+  });
+
+  test('a user whose only registration is waiting does not see the new-user state', async ({
+    page,
+  }, testInfo) => {
+    const user = tasha();
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    await waitInSeason(tenant, SUNDAY, user);
+    await openHome(page, 'Hi, Tasha');
+
+    await expect(main(page)).toContainText('Your teams and registrations.');
+    await expect(freeAgent(page).getByRole('listitem')).toContainText(placementNote(tenant));
+    await expect(main(page)).not.toContainText("You're not on a team yet");
+    await expect(teams(page)).toHaveCount(0);
+    await expect(nextStep(page)).toHaveCount(0);
+    await screenshot(page, testInfo, '300-home-free-agent-only');
+    await expectAccessible(page);
+  });
+
+  test('a registration made while the home is open replaces the new-user state', async ({
+    page,
+  }) => {
+    const user = tasha();
+    await signUp(page, user);
+    await expect(
+      main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
+    ).toBeVisible();
+
+    const tenant = await gulfCoast();
+    await waitInSeason(tenant, SUNDAY, user);
+    await expect(freeAgent(page).getByRole('listitem')).toContainText(placementNote(tenant));
+    await expect(main(page)).not.toContainText("You're not on a team yet");
+  });
+});
+
 test.describe('/app: while the teams load', () => {
   test('shows the skeleton and a status, and the cards arrive where the skeleton stood', async ({
     page,
@@ -346,7 +418,9 @@ test.describe('/app: while the teams load', () => {
     await expect.poll(() => held.isHolding()).toBe(true);
 
     await expect(homeHeading(page)).toBeVisible();
-    await expect(main(page).getByRole('status')).toHaveText('Loading your teams.');
+    await expect(main(page).getByRole('status')).toHaveText(
+      'Loading your teams and registrations.',
+    );
     await expect(main(page).getByRole('link')).toHaveCount(0);
     const heading = page.locator('[data-slot="home-skeleton-heading"]');
     const card = page.locator('[data-slot="home-skeleton-card"]').first();
@@ -384,7 +458,7 @@ test.describe('/app: the teams cannot be loaded', () => {
     await page.goto('/app');
 
     const alert = main(page).getByRole('alert');
-    await expect(alert).toContainText('Your teams could not be loaded.');
+    await expect(alert).toContainText('Your teams and registrations could not be loaded.');
     await expect(alert).toContainText('Check your connection.');
     await expect(alert).not.toContainText('forced failure');
     await expect(teams(page)).toHaveCount(0);

@@ -3,17 +3,20 @@ import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideBell } from '@ng-icons/lucide';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 
 @Component({
   selector: 'app-home-notifications',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideBell })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mt-8 md:mt-10' },
   template: `
     <section
+      hlmCard
+      size="bare"
       aria-labelledby="app-notifications-heading"
-      class="max-w-xl px-4 py-4 md:px-5 md:py-5 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+      class="max-w-xl px-4 py-4 md:px-5 md:py-5"
     >
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex min-w-0 items-start gap-3">

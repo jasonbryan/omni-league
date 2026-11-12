@@ -7,6 +7,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountSettingsPage } from './account-settings-page';
 
@@ -192,6 +193,14 @@ describe('AccountSettingsPage', () => {
     auth.releaseSignOut();
     await settle();
     expect(TestBed.inject(Router).url).toBe('/');
+  });
+
+  it('draws the details panel in a bare helm card', async () => {
+    const page = await open();
+    expectBareCard(
+      page.querySelector('section[aria-labelledby="account-details-heading"]'),
+      'mt-4 max-w-xl overflow-hidden md:mt-6',
+    );
   });
 
   it('still signs this browser out and goes to / when the sign-out request is rejected', async () => {

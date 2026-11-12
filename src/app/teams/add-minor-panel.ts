@@ -23,9 +23,9 @@ import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm } from './minor-name-form';
+import { HlmCard } from '../ui/card';
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 
 export const ADD_MINOR_ALERTS = {
   failed: {
@@ -42,6 +42,7 @@ export const ADD_MINOR_ALERTS = {
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmCard,
     HlmFieldImports,
     HlmInputImports,
     HlmSpinner,
@@ -53,7 +54,13 @@ export const ADD_MINOR_ALERTS = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section id="add-minor" aria-labelledby="add-minor-heading" class="${PANEL}">
+    <section
+      id="add-minor"
+      aria-labelledby="add-minor-heading"
+      hlmCard
+      size="bare"
+      class="${PANEL}"
+    >
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >

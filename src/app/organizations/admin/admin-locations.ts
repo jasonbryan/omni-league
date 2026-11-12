@@ -19,10 +19,11 @@ import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { LocationRow } from './location-row';
+import { HlmCard } from '../../ui/card';
 
 @Component({
   selector: 'app-admin-locations',
-  imports: [AddLocationForm, AdminAlert, LocationRow, NgIcon],
+  imports: [AddLocationForm, AdminAlert, HlmCard, LocationRow, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideMapPinOff, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -46,7 +47,9 @@ import { LocationRow } from './location-row';
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="locations-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
+          hlmCard
+          size="bare"
+          class="overflow-hidden lg:col-span-2"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -119,7 +122,9 @@ import { LocationRow } from './location-row';
           #addSection
           id="add-location"
           aria-labelledby="add-location-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          hlmCard
+          size="bare"
+          class="overflow-hidden"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

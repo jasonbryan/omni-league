@@ -10,21 +10,19 @@ import { openSeasonsBySoonestDeadline } from '../season-status';
 import { AdminAlert } from './admin-alert';
 import { AdminContext } from './admin-context';
 import { adminPath } from './admin-path';
+import { HlmCard } from '../../ui/card';
 
 const PULSE = 'bg-muted motion-safe:animate-pulse';
 
 /** The query reads no clock, so `registrationIsOpen` runs here at the viewer's time. */
 @Component({
   selector: 'app-admin-open-seasons',
-  imports: [AdminAlert, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block self-start xl:col-span-2' },
   template: `
-    <section
-      aria-labelledby="open-heading"
-      class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-    >
+    <section aria-labelledby="open-heading" hlmCard size="bare" class="overflow-hidden">
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >

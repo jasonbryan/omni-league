@@ -3,16 +3,19 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
+import { HlmCard } from '../../ui/card';
 
 @Component({
   selector: 'app-league-no-access',
-  imports: [NgIcon, RouterLink],
+  imports: [HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideArrowLeft, lucideLock })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
   template: `
     <div
-      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+      hlmCard
+      size="bare"
+      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
     >
       <span
         class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"

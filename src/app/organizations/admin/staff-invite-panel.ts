@@ -36,6 +36,7 @@ import { HlmInputImports } from '../../ui/input';
 import { HlmRadioGroupImports } from '../../ui/radio-group';
 import { HlmSpinner } from '../../ui/spinner';
 import { HlmTextareaImports } from '../../ui/textarea';
+import { HlmCard } from '../../ui/card';
 
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
@@ -54,19 +55,20 @@ type CopyOutcome = 'copied' | 'blocked' | null;
 @Component({
   selector: 'app-staff-invite-panel',
   imports: [
-    HlmSpinner,
-    MousePressKeepsFocus,
-    RevealOnFocus,
     AdminAlert,
     AdminOfflineAlert,
     Checkbox,
     FormField,
+    HlmCard,
     HlmFieldImports,
     HlmFieldSetImports,
     HlmInputImports,
     HlmRadioGroupImports,
+    HlmSpinner,
     HlmTextareaImports,
+    MousePressKeepsFocus,
     NgIcon,
+    RevealOnFocus,
   ],
   providers: [
     provideIcons({
@@ -85,7 +87,9 @@ type CopyOutcome = 'copied' | 'blocked' | null;
         id="invite"
         #section
         aria-labelledby="invite-link-heading"
-        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+        hlmCard
+        size="bare"
+        class="overflow-hidden"
       >
         <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
           <h2 #linkHeading id="invite-link-heading" tabindex="-1" class="font-semibold rounded-sm">
@@ -160,7 +164,9 @@ type CopyOutcome = 'copied' | 'blocked' | null;
         #section
         tabindex="-1"
         aria-labelledby="invite-heading"
-        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 focus:outline-none"
+        hlmCard
+        size="bare"
+        class="overflow-hidden focus:outline-none"
       >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

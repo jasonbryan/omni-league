@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { forbiddenError, openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { expectBareCard, expectBareCards, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { TeamPage } from './team-page';
 
@@ -69,6 +70,27 @@ describe('TeamPage', () => {
         ['rounded-md'],
       ]);
     }
+  });
+
+  it('draws the loading placeholder as a bare helm card, as the roster it stands for', async () => {
+    await open();
+    expectBareCards(main(), ['overflow-hidden lg:col-span-2']);
+  });
+
+  it('draws the roster as a bare helm card', async () => {
+    await open();
+    await answer(SHARKS);
+    expectBareCard(
+      main().querySelector('section[aria-labelledby="roster-heading"]'),
+      'overflow-hidden',
+    );
+  });
+
+  it('draws the no-access message in a bare helm card, with the panel overflow', async () => {
+    await open();
+    o.subscription(GET)!.fail(forbiddenError());
+    await o.flush();
+    expectBareCards(main(), [`${MESSAGE_CARD_LAYOUT} overflow-hidden`]);
   });
 
   it('shows the team, its links, the captain line, and the roster against the minimum', async () => {

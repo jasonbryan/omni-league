@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { HlmCard } from '../../ui/card';
 
 const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 
 @Component({
   selector: 'app-league-loading',
+  imports: [HlmCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
@@ -16,7 +17,7 @@ const PANEL =
     <div aria-hidden="true" class="${PULSE} mt-1 h-8 w-56 md:h-9"></div>
     <div aria-hidden="true" class="${PULSE} mt-2 h-5 w-44"></div>
     <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
-      <div aria-hidden="true" class="${PANEL} lg:col-span-2">
+      <div aria-hidden="true" hlmCard size="bare" class="${PANEL} lg:col-span-2">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div aria-hidden="true" class="${PULSE} h-5 w-24"></div>
         </div>
@@ -32,7 +33,7 @@ const PANEL =
           }
         </div>
       </div>
-      <div aria-hidden="true" class="${PANEL}">
+      <div aria-hidden="true" hlmCard size="bare" class="${PANEL}">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div aria-hidden="true" class="${PULSE} h-5 w-36"></div>
         </div>

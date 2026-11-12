@@ -16,6 +16,7 @@ import {
   moreItemsText,
 } from './attention-text';
 import { OUTLINE_BUTTON } from './button-classes';
+import { HlmCard } from '../../ui/card';
 
 const PULSE = 'bg-muted motion-safe:animate-pulse';
 const ROW = 'flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 md:px-5';
@@ -25,15 +26,12 @@ const ACTION = `${OUTLINE_BUTTON} w-full sm:w-auto`;
 
 @Component({
   selector: 'app-admin-attention',
-  imports: [AdminAlert, NgIcon, RouterLink],
+  imports: [AdminAlert, HlmCard, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCalendar, lucidePencil, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block self-start xl:col-span-3' },
   template: `
-    <section
-      aria-labelledby="attention-heading"
-      class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-    >
+    <section aria-labelledby="attention-heading" hlmCard size="bare" class="overflow-hidden">
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >
