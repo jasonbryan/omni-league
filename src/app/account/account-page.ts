@@ -6,6 +6,7 @@ import {
   inject,
   untracked,
 } from '@angular/core';
+import { seasonPhase } from '../../../convex/lib/registration';
 import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { injectNow } from '../core/now';
@@ -104,7 +105,19 @@ export class AccountPage {
   protected readonly homePath = HOME_PATH;
   protected readonly heading = computed(() => greeting(this.me.value()?.name));
   protected readonly teams = computed(() => this.mine.value() ?? []);
-  protected readonly freeAgents = computed(() => this.waiting.value() ?? []);
+  protected readonly freeAgents = computed(() =>
+    (this.waiting.value() ?? []).filter(
+      (registration) =>
+        seasonPhase(
+          {
+            startDate: registration.seasonStartDate,
+            endDate: registration.seasonEndDate,
+            registrationDeadline: registration.registrationDeadline,
+          },
+          this.now(),
+        ) !== 'ended',
+    ),
+  );
   protected readonly step = computed(() => nextStep(this.teams(), this.now()));
   /** Unknown while the list loads or fails, so "Run a league?" is never offered to someone who may already run one. */
   protected readonly canRunLeague = computed(() => this.organizations.value()?.length === 0);

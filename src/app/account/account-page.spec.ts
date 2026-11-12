@@ -60,6 +60,7 @@ const WAITING = {
   organizationName: 'Gulf Coast Sport & Social',
   registrationDeadline: '2027-05-19',
   seasonStartDate: '2027-06-06',
+  seasonEndDate: '2027-08-29',
 };
 const ORGANIZATION = {
   name: 'Coastal Bend Rec Club',
@@ -75,7 +76,7 @@ describe('AccountPage', () => {
   let page: HTMLElement;
 
   async function open(now = NOW, remembered: HomeShapeKind | null = null) {
-    vi.useFakeTimers({ toFake: ['Date'], now });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], now });
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
     TestBed.configureTestingModule({
@@ -145,6 +146,10 @@ describe('AccountPage', () => {
   const freeAgentCards = () => [...(freeAgentSection()?.querySelectorAll('li') ?? [])];
   const barTitle = () => text(page.querySelector('header p'));
   const nextStepRegion = () => main().querySelector('section[aria-labelledby="next-heading"]');
+
+  const ENDS_TODAY = Date.UTC(2027, 7, 29, 15);
+  const LAST_HOUR = Date.UTC(2027, 7, 30, 11, 59);
+  const NEXT_DATE = Date.UTC(2027, 7, 30, 12);
 
   afterEach(() => vi.useRealTimers());
 
@@ -462,6 +467,62 @@ describe('AccountPage', () => {
       ]);
     });
 
+    describe('once the season has ended', () => {
+      const ENDED = {
+        ...WAITING,
+        freeAgentId: 'k3fa',
+        leagueName: 'Wednesday Coed Slow-Pitch',
+        seasonName: 'Spring 2027',
+        seasonStartDate: '2027-03-01',
+        registrationDeadline: '2027-02-20',
+        seasonEndDate: '2027-04-30',
+      };
+
+      it.each([
+        ['on its end date', ENDS_TODAY],
+        ['in the last hour of its end date at UTC-12', LAST_HOUR],
+      ])('keeps the card %s, still waiting', async (_, now) => {
+        await show([SAND_SHARKS], [], undefined, [WAITING], now);
+        const [card] = freeAgentCards();
+        expect(text(card?.querySelector('[data-slot="badge"]'))).toBe('Waiting');
+        expect(text(card?.querySelectorAll('p')[1])).toBe(
+          'Gulf Coast Sport & Social. An organizer places you on a team.',
+        );
+      });
+
+      it('leaves the card and the Free agent heading out from the day after its end date', async () => {
+        await show([SAND_SHARKS], [], undefined, [WAITING], NEXT_DATE);
+        expect(freeAgentCards()).toHaveLength(0);
+        expect(freeAgentSection()).toBeNull();
+        expect(heading(2, 'Free agent')).toBeUndefined();
+      });
+
+      it('drops the card without a reload when the date changes while the home is open', async () => {
+        await show([SAND_SHARKS], [], undefined, [WAITING], ENDS_TODAY);
+        expect(freeAgentCards()).toHaveLength(1);
+        vi.advanceTimersByTime(NEXT_DATE - ENDS_TODAY);
+        await harness.fixture.whenStable();
+        expect(freeAgentSection()).toBeNull();
+      });
+
+      it('shows the new-user state to a user with no team whose only registration has ended', async () => {
+        await show([], [], undefined, [WAITING], NEXT_DATE);
+        expect(heading(2, "You're not on a team yet")).toBeTruthy();
+        expect(main().textContent).toContain('Find a league');
+        expect(freeAgentSection()).toBeNull();
+        expect(text(page.querySelector('main > div > p'))).toBe(
+          'Your teams and registrations will show here.',
+        );
+      });
+
+      it('shows only the current registration to a user with one ended and one current', async () => {
+        await show([], [], undefined, [ENDED, WAITING]);
+        expect(freeAgentCards().map((card) => text(card.querySelector('p')))).toEqual([
+          'Coed 7v7 Rec · Summer 2027',
+        ]);
+      });
+    });
+
     it('shows no section while there is no waiting registration', async () => {
       await show([SAND_SHARKS]);
       expect(freeAgentSection()).toBeNull();
@@ -715,6 +776,12 @@ describe('AccountPage', () => {
       await show([], [], undefined, [WAITING]);
       await leave();
       expect(remembered()).toBe('list');
+    });
+
+    it('is new for a user with no team whose only waiting registration has ended', async () => {
+      await show([], [], undefined, [WAITING], NEXT_DATE);
+      await leave();
+      expect(remembered()).toBe('new');
     });
 
     it('is new when the home left is the new-user state', async () => {
