@@ -12,7 +12,6 @@ import {
   seasonIsFull,
   firstSeasonError,
   SEASON_MESSAGES,
-  type LeagueFormatMissingError,
   type SeasonInputError,
 } from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
@@ -37,7 +36,7 @@ import {
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { isChoosableSlug } from './lib/slugs';
 import { formatLabel } from './lib/divisions';
-import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
+import { sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import {
@@ -85,12 +84,6 @@ export const create = mutation({
   returns: v.object({ seasonId: v.id('seasons') }),
   handler: async (ctx, args) => {
     const { league } = await requireLeagueOrganizer(ctx, args.leagueId);
-    if (league.playersPerSide === undefined) {
-      throw new ConvexError({
-        code: 'leagueFormatMissing',
-        message: SEASON_MESSAGES.leagueFormatMissing,
-      } satisfies LeagueFormatMissingError);
-    }
     const minimumRosterSize = league.minimumRosterSize ?? league.playersPerSide;
     const refusal = firstSeasonError(checkSeasonFields({ ...args, minimumRosterSize }));
     if (refusal) refuse(refusal);
@@ -192,7 +185,7 @@ export const listForOrganizer = query({
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline,
-      formatName: formatLabel(seasonPlayersPerSide(season)),
+      formatName: formatLabel(season.playersPerSide),
       minimumRosterSize: season.minimumRosterSize,
       status: season.status,
     }));
@@ -257,7 +250,7 @@ export const getOrganizerView = query({
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline,
-      formatName: formatLabel(seasonPlayersPerSide(season)),
+      formatName: formatLabel(season.playersPerSide),
       minimumRosterSize: season.minimumRosterSize,
       teams: rows,
       teamCount: season.teamCount ?? 0,
@@ -295,7 +288,7 @@ export const listPublic = query({
         startDate: season.startDate,
         endDate: season.endDate,
         registrationDeadline: season.registrationDeadline,
-        formatName: formatLabel(seasonPlayersPerSide(season)),
+        formatName: formatLabel(season.playersPerSide),
         isFull: seasonIsFull(season),
       })),
       page,
@@ -322,7 +315,7 @@ export const getPublicPage = query({
         slug: league.slug,
         sportName: sportName(league.sport),
         locationNames: await leagueLocationNames(ctx, organization, league),
-        ...(divisionLabel !== undefined && { divisionLabel }),
+        divisionLabel,
         locations: await leagueLocations(ctx, organization, league),
         upcomingSeasons: await leagueUpcomingSeasons(ctx, league),
       },
@@ -331,7 +324,7 @@ export const getPublicPage = query({
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline,
-      formatName: formatLabel(seasonPlayersPerSide(season)),
+      formatName: formatLabel(season.playersPerSide),
       minimumRosterSize: season.minimumRosterSize,
       isFull: seasonIsFull(season),
       ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
@@ -368,7 +361,6 @@ export const listOpenForOrganization = query({
           league.status === 'published' &&
           (sport === undefined || league.sport === sport) &&
           matchesDivisionFilters(league, filters);
-        const divisionLabel = shown ? await leagueDivisionLabel(ctx, league) : undefined;
         leagues.set(
           season.leagueId,
           shown
@@ -376,7 +368,7 @@ export const listOpenForOrganization = query({
                 name: league.name,
                 slug: league.slug,
                 sportName: sportName(league.sport),
-                ...(divisionLabel !== undefined && { divisionLabel }),
+                divisionLabel: await leagueDivisionLabel(ctx, league),
                 locationNames: await leagueLocationNames(ctx, organization, league),
               }
             : null,
@@ -451,7 +443,7 @@ export const getForRegistration = query({
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline,
-      formatName: formatLabel(seasonPlayersPerSide(season)),
+      formatName: formatLabel(season.playersPerSide),
       minimumRosterSize: season.minimumRosterSize,
       isFull: seasonIsFull(season),
       ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),

@@ -10,7 +10,9 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
+import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
+import { HomeShape } from '../account/home-shape';
 import { MESSAGES, SignUpPage } from './sign-up-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
@@ -116,6 +118,13 @@ describe('SignUpPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await harness.fixture.whenStable();
   }
+
+  it('draws its form in a bare helm card', async () => {
+    await open();
+    const cards = page.querySelectorAll('[data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'mx-auto w-full max-w-md overflow-hidden');
+  });
 
   it('renders in the public layout: top bar and footer, no sidebar', async () => {
     await open();
@@ -539,6 +548,52 @@ describe('SignUpPage', () => {
       await fill();
       await submit();
       expect(url()).toBe(to);
+    });
+
+    describe('the home shape it leaves for the next visit', () => {
+      const remembered = () => TestBed.inject(HomeShape).current();
+
+      // Better Auth's store checks the new session before it answers, so the fake does not answer "no session" meanwhile.
+      async function openChecking(url = '/sign-up') {
+        await open(url);
+        client.emitPending();
+      }
+
+      it('is new when the sign-up goes on to /app', async () => {
+        await openChecking();
+        await fill();
+        await submit();
+        expect(url()).toBe('/app');
+        expect(remembered()).toBe('new');
+      });
+
+      it.each(['/sign-up?returnTo=%2F', '/sign-up?returnTo=https%3A%2F%2Fevil.example'])(
+        'is new when %s falls back to /app',
+        async (from) => {
+          await openChecking(from);
+          await fill();
+          await submit();
+          expect(url()).toBe('/app');
+          expect(remembered()).toBe('new');
+        },
+      );
+
+      it('is none when the sign-up goes on to a returnTo page', async () => {
+        await openChecking('/sign-up?returnTo=%2Fleagues%2Fx%2Fregister');
+        await fill();
+        await submit();
+        expect(url()).toBe('/leagues/x/register');
+        expect(remembered()).toBeNull();
+      });
+
+      it('is none when the sign-up fails', async () => {
+        await openChecking();
+        client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' };
+        await fill();
+        await submit();
+        expect(url()).toBe('/sign-up');
+        expect(remembered()).toBeNull();
+      });
     });
 
     it('shows "Creating account…", is aria-disabled, ignores a second press, and hides the password', async () => {

@@ -118,19 +118,7 @@ describe('insertLeague with a division', () => {
     expect(rows[1]).toMatchObject({ ...division, minimumRosterSize: 12 });
   });
 
-  test('writes no division on a league inserted without one', async () => {
-    const t = setup();
-    const row = await t.run(async (ctx) => {
-      const organizationId = await insertTenant(ctx, TENANT);
-      await insertLeague(ctx, organizationId, league);
-      return (await ctx.db.query('leagues').collect())[0];
-    });
-    for (const field of ['gender', 'playersPerSide', 'level', 'ageGroup', 'customLevelId']) {
-      expect(row).not.toHaveProperty(field);
-    }
-  });
-
-  test('links the custom level named by the seed, found through the by_customLevelId index', async () => {
+  test('links the custom level named by the seed to the league and its program', async () => {
     const t = setup();
     const result = await t.run(async (ctx) => {
       const organizationId = await insertTenant(ctx, TENANT);
@@ -143,14 +131,18 @@ describe('insertLeague with a division', () => {
         ...league,
         division: { ...division, customLevel: 'd' },
       });
-      const users = await ctx.db
-        .query('leagues')
+      const programs = await ctx.db
+        .query('programs')
         .withIndex('by_customLevelId', (q) => q.eq('customLevelId', levelId))
         .collect();
-      return { users, levelId };
+      const users = await Promise.all(
+        programs.map((program) => ctx.db.get('leagues', program.leagueId!)),
+      );
+      return { programs, users, levelId };
     });
-    expect(result.users.map((row) => row.name)).toEqual(['D Division']);
+    expect(result.users.map((row) => row?.name)).toEqual(['D Division']);
     expect(result.users[0]?.customLevelId).toBe(result.levelId);
+    expect(result.programs).toHaveLength(1);
   });
 
   test('refuses a custom level that does not exist or maps to another level, writing no league', async () => {

@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import schema from './schema';
-import { modules, setTeamCounts } from './test.setup';
+import { modules, setTeamCounts, leagueRequiredFields } from './test.setup';
 
 const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
 
@@ -32,15 +32,38 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Draft League', sport: 'soccer', locations: ['Alpha Field'], status: 'draft' },
-        { name: 'Empty League', sport: 'soccer', locations: ['Alpha Field'] },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Empty League',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
       ],
     });
     await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['B Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
   });
   return t;
@@ -211,7 +234,9 @@ describe('seasons.listPublic', () => {
     const league = await leagueOf(t, 'org-a', 'coed-7v7');
     await t.run(async (ctx) => {
       await ctx.db.replace('leagues', league._id, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,

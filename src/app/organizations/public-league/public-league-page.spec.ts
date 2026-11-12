@@ -12,6 +12,8 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { slotsOf } from '../../ui/testing/helm-slots';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCard } from '../../ui/testing/card';
+import { routerLinkState } from '../../ui/testing/router-link-state';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -299,6 +301,12 @@ describe('PublicLeaguePage populated', () => {
   describe('the open season card', () => {
     const card = () => host(harness).querySelector('section#registration-open');
 
+    it('is a bare helm card inside its section', () => {
+      const cards = card()?.querySelectorAll('[data-slot="card"]');
+      expect(cards).toHaveLength(1);
+      expectBareCard(cards?.[0], 'mt-5 flex flex-col gap-5 p-5 md:flex-row md:items-center md:p-6');
+    });
+
     it('comes first, with the season, dates, division and team size, deadline, and a Register link', () => {
       expect(text(card()?.querySelector('h2'))).toBe('Registration open');
       expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
@@ -391,6 +399,40 @@ describe('PublicLeaguePage populated', () => {
       await settle(harness);
       expect(card()).toBeNull();
       expect(host(harness).querySelectorAll('section#seasons > ul > li')).toHaveLength(5);
+    });
+  });
+
+  describe('the links to a season page', () => {
+    const namesOf = (season: { slug: string; name: string }) => ({
+      organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+      league: {
+        slug: 'sunday-reverse-coed-4s',
+        name: 'Sunday Reverse Coed 4s',
+        sportName: 'Beach volleyball',
+      },
+      season: { slug: season.slug, name: season.name },
+    });
+    const stateOf = (anchor: Element | null | undefined) =>
+      routerLinkState(harness.fixture, anchor);
+
+    it('gives the registration card’s title the organization, league, and season names as navigation state', () => {
+      const title = host(harness).querySelector('section#registration-open h3 a');
+
+      expect(stateOf(title)).toEqual(namesOf(SEASONS[0]));
+    });
+
+    it('gives the registration card’s Register button the same names', () => {
+      const register = host(harness).querySelector(
+        'section#registration-open a[data-slot="button"]',
+      );
+
+      expect(stateOf(register)).toEqual(namesOf(SEASONS[0]));
+    });
+
+    it('gives each season row’s link its own season’s names', () => {
+      const links = [...host(harness).querySelectorAll('section#seasons > ul > li h3 a')];
+
+      expect(links.map(stateOf)).toEqual(SEASONS.slice(0, 5).map(namesOf));
     });
   });
 

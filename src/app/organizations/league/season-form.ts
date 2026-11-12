@@ -54,7 +54,6 @@ export const SEASON_FORM_ALERTS = {
 export type SeasonSubmitOutcome =
   | { sent: true; values: SeasonValues }
   | { sent: false; focus: SeasonField }
-  | { sent: false; leagueFormatMissing: true }
   | { sent: false; alert: SeasonFormAlertKind };
 
 const RESERVED_SLUG = 'new';
@@ -62,16 +61,6 @@ const RESERVED_SLUG = 'new';
 interface ServerError {
   text: string;
   taken: string | null;
-}
-
-function isLeagueFormatMissing(failure: unknown): boolean {
-  if (!(failure instanceof ConvexError)) return false;
-  const data: unknown = failure.data;
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    (data as Record<string, unknown>)['code'] === 'leagueFormatMissing'
-  );
 }
 
 function inputErrorOf(failure: unknown): SeasonInputError | null {
@@ -120,7 +109,6 @@ export class SeasonForm {
 
   private readonly minimumRosterSize: () => number | undefined;
 
-  /** `minimumRosterSize` is the league's; `undefined` while the league has no format, which `seasons.create` refuses. */
   constructor(
     minimumRosterSize: () => number | undefined = () => undefined,
     private readonly webAddress: WebAddressCheck = NOT_CHECKED,
@@ -257,9 +245,6 @@ export class SeasonForm {
 
   private failed(failure: unknown, slug: string): SeasonSubmitOutcome {
     if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
-    if (isLeagueFormatMissing(failure)) {
-      return { sent: false, leagueFormatMissing: true };
-    }
     const refusal = inputErrorOf(failure);
     if (refusal) {
       this.serverErrors[refusal.field].set({

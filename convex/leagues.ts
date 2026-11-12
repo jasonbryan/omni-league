@@ -100,7 +100,7 @@ export const listForAdmin = query({
         sportName: sportName(league.sport),
         status: league.status ?? ('draft' as const),
         locationNames: names,
-        ...(label !== undefined && { divisionLabel: label }),
+        divisionLabel: label,
       });
     }
     return rows;
@@ -246,7 +246,7 @@ export const update = mutation({
           field: 'name',
           code: 'changedSince',
           message: LEAGUE_MESSAGES.changedWhileEditing,
-          current: { name: league.name, ...(division && { division }) },
+          current: { name: league.name, division },
         });
       }
     }
@@ -274,11 +274,6 @@ export const undoUpdate = mutation({
     const name = checkLeagueName(values.name);
     if (!name.ok || draftSeasons.length > MAX_DRAFT_SEASONS_UPDATED) throw new Error('Not allowed');
     const { gender, playersPerSide, level, ageGroup, customLevelId, minimumRosterSize } = values;
-    // A league without a division cannot be put back to one, so no screen lets a save strip it.
-    if (gender === undefined || playersPerSide === undefined || level === undefined) {
-      throw new Error('Not allowed');
-    }
-    if (ageGroup === undefined) throw new Error('Not allowed');
     await checkedDivision(ctx, league.organizationId, league.sport, {
       gender,
       playersPerSide,
@@ -348,19 +343,9 @@ const organizerDivisionValidator = v.object({
   label: v.string(),
 });
 
-// A league not yet backfilled with a division has none.
 async function organizerDivision(ctx: QueryCtx, league: Doc<'leagues'>) {
   const { gender, playersPerSide, level, ageGroup } = league;
   const label = await leagueDivisionLabel(ctx, league);
-  if (
-    gender === undefined ||
-    playersPerSide === undefined ||
-    level === undefined ||
-    ageGroup === undefined ||
-    label === undefined
-  ) {
-    return null;
-  }
   const customLevel =
     league.customLevelId === undefined
       ? null
@@ -390,12 +375,12 @@ function organizerShows(
 ): boolean {
   return (
     expected.name === name &&
-    expected.gender === division?.gender &&
-    expected.playersPerSide === division?.playersPerSide &&
-    expected.level === division?.level &&
-    expected.customLevelId === division?.customLevel?.customLevelId &&
-    expected.ageGroup === division?.ageGroup &&
-    expected.minimumRosterSize === division?.minimumRosterSize
+    expected.gender === division.gender &&
+    expected.playersPerSide === division.playersPerSide &&
+    expected.level === division.level &&
+    expected.customLevelId === division.customLevel?.customLevelId &&
+    expected.ageGroup === division.ageGroup &&
+    expected.minimumRosterSize === division.minimumRosterSize
   );
 }
 
@@ -413,7 +398,7 @@ export const getOrganizerContext = query({
       role: roleValidator,
       organization: v.object({ name: v.string(), slug: v.string() }),
       organizationId: v.id('organizations'),
-      division: v.optional(organizerDivisionValidator),
+      division: organizerDivisionValidator,
     }),
   ),
   handler: async (ctx, args) => {
@@ -438,7 +423,7 @@ export const getOrganizerContext = query({
       role: access.membership.role,
       organization: { name: organization.name, slug: organization.slug },
       organizationId: organization._id,
-      ...(division && { division }),
+      division,
     };
   },
 });
@@ -463,7 +448,7 @@ export const getPublicPage = query({
       name: league.name,
       slug: league.slug,
       sportName: sportName(league.sport),
-      ...(divisionLabel !== undefined && { divisionLabel }),
+      divisionLabel,
       locationNames: locations.map((location) => location.name),
       locations,
       seasons: await leaguePageSeasons(ctx, league),

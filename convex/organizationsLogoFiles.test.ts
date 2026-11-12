@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { LOGO_MAX_BYTES, LOGO_UPLOAD_MAX_AGE_MS } from './lib/logoFile';
-import { insertTenant } from './lib/tenantWrites';
+import { insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -45,12 +45,26 @@ async function setup() {
     const a = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Courts', address: '1 Rd' }],
-      leagues: [{ name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Courts'] }],
+      leagues: [
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Courts'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const b = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'Fields', address: '2 Rd' }],
-      leagues: [{ name: 'Coed 7s', sport: 'soccer', locations: ['Fields'] }],
+      leagues: [
+        {
+          name: 'Coed 7s',
+          sport: 'soccer',
+          locations: ['Fields'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     for (const [authUserId, organizationId] of [
       ['admin-a', a],

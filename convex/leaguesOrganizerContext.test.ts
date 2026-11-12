@@ -4,8 +4,9 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { getOrganizerContext } from './leagues';
 import { FORBIDDEN_CODE } from './lib/forbidden';
-import { insertCustomLevel, insertTenant } from './lib/tenantWrites';
+import { insertCustomLevel, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -28,9 +29,25 @@ async function setup() {
         { name: 'Alpha Field', address: '1 Alpha St' },
       ],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field', 'Bravo Beach'] },
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Bravo Beach'] },
-        { name: 'Draft Softball', sport: 'softball', locations: ['Alpha Field'], status: 'draft' },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field', 'Bravo Beach'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Bravo Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft Softball',
+          sport: 'softball',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: defaultDivision('softball'),
+        },
       ],
     });
     const b = await insertTenant(ctx, {
@@ -121,7 +138,24 @@ describe('leagues.getOrganizerContext', () => {
       role: 'orgAdmin',
       organization: { name: 'Org A', slug: 'org-a' },
       organizationId: expect.any(String) as string,
+      division: {
+        gender: 'coed',
+        playersPerSide: 4,
+        level: 'rec',
+        ageGroup: 'adult',
+        label: 'Coed · 4v4 · Rec',
+      },
     });
+  });
+
+  test('requires the division in its result', () => {
+    // The registered function's JSON export is runtime-only, so its type does not declare it.
+    const registered = getOrganizerContext as unknown as { exportReturns: () => string };
+    const returns = JSON.parse(registered.exportReturns()) as {
+      value: { type: string; value?: { division?: { optional: boolean } } }[];
+    };
+    const league = returns.value.find((member) => member.type === 'object');
+    expect(league?.value?.division?.optional).toBe(false);
   });
 
   test('gives the league organizer assigned to the league the same, with their role', async () => {
@@ -182,12 +216,6 @@ describe('leagues.getOrganizerContext', () => {
       minimumRosterSize: 9,
       label: 'Coed · 7v7 · D (Rec)',
     });
-  });
-
-  test('gives no division for a league that has none', async () => {
-    const s = await setup();
-    const context = await s.as('admin-a').query(api.leagues.getOrganizerContext, L);
-    expect(context).not.toHaveProperty('division');
   });
 
   test('gives staff of a draft league the league with status draft', async () => {

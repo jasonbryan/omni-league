@@ -2,6 +2,7 @@ import { RESPONSE_INIT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { ServerErrorView } from '../server-error/server-error-view';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { NotSavedView } from './not-saved-view';
 
 function create(responseInit?: ResponseInit) {
@@ -36,6 +37,10 @@ describe('NotSavedView', () => {
     expect(link?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
     expect(link?.hasAttribute('aria-disabled')).toBe(false);
     expect(link?.querySelector('ng-icon[name="lucideRotateCw"]')).not.toBeNull();
+  });
+
+  it('draws its card as a bare helm card with the message layout', () => {
+    expectBareCard(create().firstElementChild, MESSAGE_CARD_LAYOUT);
   });
 
   it("uses the server-error view's card and button classes", () => {

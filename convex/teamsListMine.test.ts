@@ -5,7 +5,7 @@ import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 import { addRosterEntry, insertTeamWithCaptain, removeRosterEntry } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { TEAMS_LIST_MINE_LIMIT } from './teams';
 import { modules } from './test.setup';
@@ -49,14 +49,24 @@ async function setup() {
       organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Sunday Reverse Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
+        {
+          name: 'Sunday Reverse Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const riverbend = await insertTenant(ctx, {
       organization: { name: 'Riverbend Softball Association', slug: 'riverbend' },
       locations: [{ name: 'River Park', address: '9 River Rd' }],
       leagues: [
-        { name: 'Wednesday Coed Slow-Pitch', sport: 'softball', locations: ['River Park'] },
+        {
+          name: 'Wednesday Coed Slow-Pitch',
+          sport: 'softball',
+          locations: ['River Park'],
+          division: defaultDivision('softball'),
+        },
       ],
     });
     const sunday = await leagueOf(ctx, gulf, 'sunday-reverse-coed-4s');
@@ -114,6 +124,11 @@ describe('teams.listMine', () => {
         leagueName: 'Sunday Reverse Coed 4s',
         organizationName: 'Gulf Coast Sport & Social',
         role: 'captain',
+        seasonStartDate: '2030-06-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 1,
       },
       {
         teamId: s.rattlers,
@@ -122,6 +137,30 @@ describe('teams.listMine', () => {
         leagueName: 'Wednesday Coed Slow-Pitch',
         organizationName: 'Riverbend Softball Association',
         role: 'player',
+        seasonStartDate: '2030-03-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 2,
+      },
+    ]);
+  });
+
+  test('each caller gets only their own rows, with the season dates and roster progress', async () => {
+    const s = await setup();
+    expect(await listMineAs(s, 'y')).toEqual([
+      {
+        teamId: s.blockParty,
+        teamName: 'Block Party',
+        seasonName: 'Summer 2030',
+        leagueName: 'Sunday Reverse Coed 4s',
+        organizationName: 'Gulf Coast Sport & Social',
+        role: 'captain',
+        seasonStartDate: '2030-06-01',
+        seasonEndDate: '2031-12-30',
+        registrationDeadline: '2030-01-10',
+        minimumRosterSize: 4,
+        rosterCount: 1,
       },
     ]);
   });

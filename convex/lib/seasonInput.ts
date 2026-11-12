@@ -51,11 +51,6 @@ export interface SeasonInputError {
   message: string;
 }
 
-export interface LeagueFormatMissingError {
-  code: 'leagueFormatMissing';
-  message: string;
-}
-
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const DATE_LABELS: Record<SeasonDateField, string> = {
@@ -77,7 +72,6 @@ export const SEASON_MESSAGES = {
   endBeforeStart: 'The end date must be on or after the start date.',
   deadlineNotBeforeStart: (startDate: string) =>
     `The registration deadline must be before the start date, ${formatCalendarDate(startDate)}.`,
-  leagueFormatMissing: 'Set this league’s format in its details first.',
   maxTeamsInvalid: `Enter a whole number from ${MIN_MAX_TEAMS} to ${MAX_MAX_TEAMS}, or leave it blank.`,
   maxTeamsBelowCount: (teamCount: number) =>
     `${teamCount} teams are already registered. Enter ${teamCount} or more, or leave it blank.`,

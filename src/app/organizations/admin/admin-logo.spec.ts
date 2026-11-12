@@ -3,6 +3,7 @@ import { ConvexError } from 'convex/values';
 import { afterEach, vi } from 'vitest';
 import { LOGO_HINT } from '../../../../convex/lib/logoFile';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { expectBareCard } from '../../ui/testing/card';
 import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
@@ -79,6 +80,10 @@ describe('AdminDetails: the Logo section', () => {
 
   describe('without a logo', () => {
     beforeEach(() => open());
+
+    it('draws the panel in a bare helm card', () => {
+      expectBareCard(section(), 'mt-6 max-w-xl overflow-clip');
+    });
 
     it('has a Logo heading, the initials mark at 48px, and the upload control', () => {
       expect(text(section().querySelector('h2'))).toBe('Logo');

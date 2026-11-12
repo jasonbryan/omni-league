@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { LIST_MINE_LEAGUES_LIMIT } from './organizations';
-import { insertLeague, insertTenant } from './lib/tenantWrites';
+import { insertLeague, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -41,6 +41,7 @@ async function setup() {
         sport: 'soccer',
         locations: ['Alpha Field'],
         status,
+        division: defaultDivision('soccer'),
       });
       leagueIds[key] = leagueId;
     }
@@ -49,6 +50,7 @@ async function setup() {
         name: 'Sand 2s',
         sport: 'beachVolleyball',
         locations: ['B Field'],
+        division: defaultDivision('beachVolleyball'),
       })
     ).leagueId;
     const user = (authUserId: string) =>
@@ -242,6 +244,7 @@ describe('organizations.listMine: leagues', () => {
           name: `Extra ${String(i).padStart(3, '0')}`,
           sport: 'soccer',
           locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
         });
         ids.push(leagueId);
       }
@@ -269,6 +272,7 @@ describe('organizations.listMine: leagues', () => {
           name: `${prefix} ${String(i).padStart(3, '0')}`,
           sport: 'soccer',
           locations: [location],
+          division: defaultDivision('soccer'),
         });
         ids.push(leagueId);
       }

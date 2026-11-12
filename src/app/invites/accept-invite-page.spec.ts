@@ -11,6 +11,8 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { AcceptInvitePage } from './accept-invite-page';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY } from './invite-token-store';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
@@ -97,6 +99,50 @@ describe('AcceptInvitePage', () => {
     expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
+  describe('cards', () => {
+    const CONTAINER_LAYOUT = 'mx-auto w-full max-w-md overflow-hidden';
+
+    it('draws the checking skeleton, with its test id kept, in a bare helm card', async () => {
+      const { page, flush } = await open();
+      await flush();
+      const card = page.querySelector('[data-testid="invite-skeleton"]');
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(card, CONTAINER_LAYOUT);
+    });
+
+    it('draws the invite in a bare helm card', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(ORGANIZER);
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), CONTAINER_LAYOUT);
+    });
+
+    it('draws the invalid view in a bare helm card with the message layout', async () => {
+      const { page, flush } = await open({ token: null });
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
+    });
+
+    it('draws the accepted view in a bare helm card with the message layout', async () => {
+      const { page, emitInvite, signIn, accept, flush, call } = await open({ signedIn: true });
+      await emitInvite(ORGANIZER);
+      await signIn();
+      accept()?.click();
+      await flush();
+      call()?.resolve({
+        organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
+        role: 'leagueOrganizer',
+        leagueNames: ['Coed 7v7 Rec'],
+        leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+      });
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
+    });
+  });
+
   describe('no token', () => {
     it('shows the invalid view and never asks getByToken (a bookmarked /invites/accept)', async () => {
       const { page, flush, convex } = await open({ token: null });
@@ -120,6 +166,15 @@ describe('AcceptInvitePage', () => {
       const status = page.querySelector('main [role="status"]');
       expect(text(status)).toBe('Checking your invite…');
       expect(page.querySelector('h1')).toBeNull();
+    });
+
+    it('draws every box of the invite card skeleton through the skeleton, each with its own radius', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expectSkeletonBoxes(page.querySelector('main [data-testid="invite-skeleton"]')!, {
+        'rounded-lg': 2,
+        'rounded-md': 10,
+      });
     });
 
     it('shows a skeleton of the invite card (icon, heading, three detail rows, a button) and no spinner', async () => {

@@ -3,7 +3,12 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_MAX_ROWS } from './lib/publicList';
-import { insertOrganization, insertTenant, type LeagueSeed } from './lib/tenantWrites';
+import {
+  defaultDivision,
+  insertOrganization,
+  insertTenant,
+  type LeagueSeed,
+} from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -19,6 +24,7 @@ const league = (name: string, sport: LeagueSeed['sport'], status?: 'draft'): Lea
   name,
   sport,
   locations: [LOCATION.name],
+  division: defaultDivision(sport),
   ...(status && { status }),
 });
 

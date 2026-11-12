@@ -3,7 +3,9 @@ import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { LOCATION_MESSAGES } from '../../../../convex/lib/locationInput';
 import { ConvexConnection } from '../../core/data/convex';
+import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminLocations } from './admin-locations';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -92,6 +94,14 @@ describe('AdminLocations', () => {
       );
     });
 
+    it('draws the list and the add form as bare helm cards', async () => {
+      await open([]);
+      expectBareCards(page.querySelector('main')!, [
+        'overflow-hidden lg:col-span-2',
+        'overflow-hidden',
+      ]);
+    });
+
     it('loading: placeholder rows and a polite status, with the add form already there', async () => {
       await open();
       const panel = page.querySelector('section[aria-labelledby="locations-heading"]')!;
@@ -99,6 +109,11 @@ describe('AdminLocations', () => {
       expect(panel.querySelector('ul')).toBeNull();
       expect(panel.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(3);
       expect(page.querySelector('#add-location form')).not.toBeNull();
+    });
+
+    it('loading: every placeholder is drawn through the skeleton', async () => {
+      await open();
+      expectSkeletonBoxes(page.querySelector('main')!, { 'rounded-lg': 3, 'rounded-md': 6 });
     });
 
     it('loading: each placeholder row has a rounded-lg mark and rounded-md text bars', async () => {

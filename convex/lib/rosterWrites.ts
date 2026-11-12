@@ -781,7 +781,7 @@ export async function largestRoster(
     .first();
 }
 
-async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
+export async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
   const teams = await ctx.db
     .query('teams')
     .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', seasonId))
@@ -789,7 +789,7 @@ async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<numb
   return teams.length;
 }
 
-async function recountWaiting(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
+export async function recountWaiting(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
   const waiting = await ctx.db
     .query('waitlistEntries')
     .withIndex('by_seasonId_and_status_and_requestedAt', (q) =>

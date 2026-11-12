@@ -2,10 +2,10 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
-import { modules, setTeamCounts } from './test.setup';
+import { insertLeagueWithProgram, modules, setTeamCounts } from './test.setup';
 
 const season = (name: string, slug: string, startDate: string): NewSeason => ({
   name,
@@ -39,6 +39,7 @@ async function setup() {
           sport: 'soccer',
           locations: ['North Beach Sand Courts'],
           status: 'draft',
+          division: defaultDivision('soccer'),
         },
       ],
     });
@@ -50,6 +51,7 @@ async function setup() {
           name: 'Saturday Coed 6s',
           sport: 'beachVolleyball',
           locations: ['Driftwood Beach Courts'],
+          division: defaultDivision('beachVolleyball'),
         },
       ],
     });
@@ -65,11 +67,12 @@ async function insertBulk(t: Awaited<ReturnType<typeof setup>>, count: number, w
       .unique())!;
     const start = (await ctx.db.query('leagues').collect()).length;
     for (let i = start; i < start + count; i++) {
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         organizationId: organization._id,
         name: `Bulk ${i} ${words}`,
         slug: `bulk-${i}`,
         sport: 'softball',
+        ...defaultDivision('softball'),
         locationIds: [],
         status: 'published',
         searchText: `Bulk ${i} ${words}`,
@@ -214,11 +217,12 @@ describe('search.leagues', () => {
         .withIndex('by_slug', (q) => q.eq('slug', 'lakeshore'))
         .unique())!;
       for (let i = 0; i < SEARCH_RESULT_LIMIT + 1; i++) {
-        await ctx.db.insert('leagues', {
+        await insertLeagueWithProgram(ctx, {
           organizationId: organization._id,
           name: `Bulk ${i}`,
           slug: `bulk-${i}`,
           sport: 'softball',
+          ...defaultDivision('softball'),
           locationIds: [],
           status: 'published',
           searchText: `Bulk ${i} zebra`,
@@ -238,11 +242,12 @@ describe('search.leagues', () => {
         .withIndex('by_slug', (q) => q.eq('slug', 'lakeshore'))
         .unique())!;
       for (let i = 0; i < SEARCH_RESULT_LIMIT; i++) {
-        await ctx.db.insert('leagues', {
+        await insertLeagueWithProgram(ctx, {
           organizationId: organization._id,
           name: `Bulk ${i}`,
           slug: `bulk-${i}`,
           sport: 'softball',
+          ...defaultDivision('softball'),
           locationIds: [],
           status: 'published',
           searchText: `Bulk ${i} zebra`,

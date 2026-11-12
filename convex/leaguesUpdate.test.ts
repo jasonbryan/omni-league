@@ -502,7 +502,7 @@ describe('leagues.undoUpdate', () => {
       { ...earlier, league: { ...earlier.league, customLevelId: s.goldB } },
       { ...earlier, league: { ...earlier.league, playersPerSide: 40 } },
       { ...earlier, league: { ...earlier.league, name: ' ' } },
-      { ...earlier, league: { ...earlier.league, ageGroup: undefined } },
+      { ...earlier, league: { ...earlier.league, ageGroup: undefined as never } },
       {
         ...earlier,
         draftSeasons: [{ seasonId: s.fall, playersPerSide: 4, minimumRosterSize: 500 }],
@@ -574,49 +574,6 @@ describe('leagues.update edge cases', () => {
     expect(await stored(s)).toEqual(before);
   });
 
-  test('a league created without a division takes one on update, and Undo cannot take it away again', async () => {
-    const s = await setup();
-    const legacyId = await s.t.run(async (ctx) => {
-      await insertTenant(ctx, {
-        organization: { name: 'Org C', slug: 'org-c' },
-        locations: [{ name: 'Court', address: '1 Court Rd' }],
-        leagues: [{ name: 'Legacy', sport: 'beachVolleyball', locations: ['Court'] }],
-      });
-      const league = (await ctx.db.query('leagues').collect()).find((l) => l.name === 'Legacy')!;
-      const userId = await ctx.db.insert('users', {
-        authUserId: 'admin-c',
-        name: 'admin-c',
-        adultConfirmedAt: 1,
-      });
-      await ctx.db.insert('memberships', {
-        userId,
-        organizationId: league.organizationId,
-        role: 'orgAdmin',
-        leagueIds: [],
-      });
-      return league._id;
-    });
-    const adminC = s.t.withIdentity(identity('admin-c'));
-    const read = () => s.t.run((ctx) => ctx.db.get('leagues', legacyId));
-    expect((await read())!.playersPerSide).toBeUndefined();
-
-    const earlier = await adminC.mutation(api.leagues.update, {
-      leagueId: legacyId,
-      name: 'Legacy Sand',
-      gender: 'coed',
-      playersPerSide: 2,
-      level: 'b',
-      ageGroup: 'adult',
-    });
-    expect(earlier.league).toEqual({ name: 'Legacy' });
-    expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
-
-    await expect(
-      adminC.mutation(api.leagues.undoUpdate, { leagueId: legacyId, ...earlier }),
-    ).rejects.toThrow('Not allowed');
-    expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
-  });
-
   test('an Undo is refused when it would put a draft season’s minimum above its maximum roster size', async () => {
     const s = await setup();
     await s.admin.mutation(api.leagues.update, { ...sundayArgs(s), minimumRosterSize: 8 });
@@ -679,9 +636,9 @@ describe('leagues.update edge cases', () => {
       s.admin.mutation(api.leagues.undoUpdate, {
         leagueId: s.sundayId,
         ...earlier,
-        league: { name: 'Sunday Reverse Coed 4s' },
+        league: { name: 'Sunday Reverse Coed 4s' } as never,
       }),
-    ).rejects.toThrow('Not allowed');
+    ).rejects.toThrow('Missing required field');
     expect((await stored(s)).league).toMatchObject({ name: 'First', playersPerSide: 4 });
   });
 });
@@ -713,6 +670,20 @@ describe('leagues.update with expected values', () => {
     await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { playersPerSide: 6 }));
     await s.organizer.mutation(api.leagues.update, { ...sundayArgs(s), name: 'Renamed' });
     expect((await stored(s)).league).toMatchObject({ name: 'Renamed', playersPerSide: 4 });
+  });
+
+  test('refuses an expected that names only the league at argument validation, changing nothing', async () => {
+    const s = await setup();
+    const before = await stored(s);
+    await expect(
+      s.organizer.mutation(api.leagues.update, {
+        ...sundayArgs(s),
+        name: 'Typed by organizer',
+        // @ts-expect-error the expected details require the four division fields
+        expected: { name: 'Sunday Reverse Coed 4s' },
+      }),
+    ).rejects.toThrow(/Validator|validator/);
+    expect(await stored(s)).toEqual(before);
   });
 
   test.each([
@@ -819,46 +790,6 @@ describe('leagues.update with expected values', () => {
     const league = (await stored(s)).league!;
     expect(league.name).toBe('Renamed');
     expect(league.customLevelId).toBeUndefined();
-  });
-
-  test('a league without a division holds expected values that name only the league', async () => {
-    const s = await setup();
-    const legacyId = await s.t.run(async (ctx) => {
-      await insertTenant(ctx, {
-        organization: { name: 'Org C', slug: 'org-c' },
-        locations: [{ name: 'Court', address: '1 Court Rd' }],
-        leagues: [{ name: 'Legacy', sport: 'beachVolleyball', locations: ['Court'] }],
-      });
-      const league = (await ctx.db.query('leagues').collect()).find((l) => l.name === 'Legacy')!;
-      const userId = await ctx.db.insert('users', {
-        authUserId: 'admin-c',
-        name: 'admin-c',
-        adultConfirmedAt: 1,
-      });
-      await ctx.db.insert('memberships', {
-        userId,
-        organizationId: league.organizationId,
-        role: 'orgAdmin',
-        leagueIds: [],
-      });
-      return league._id;
-    });
-    const adminC = s.t.withIdentity(identity('admin-c'));
-    const args = {
-      leagueId: legacyId,
-      name: 'Legacy Sand',
-      gender: 'coed' as const,
-      playersPerSide: 2,
-      level: 'b' as const,
-      ageGroup: 'adult',
-    };
-    const data = await refusal(
-      adminC.mutation(api.leagues.update, { ...args, expected: { name: 'Older name' } }),
-    );
-    expect(data).toMatchObject({ code: 'changedSince', current: { name: 'Legacy' } });
-    expect(data.current).not.toHaveProperty('division');
-    await adminC.mutation(api.leagues.update, { ...args, expected: { name: 'Legacy' } });
-    expect((await s.t.run((ctx) => ctx.db.get('leagues', legacyId)))!.name).toBe('Legacy Sand');
   });
 
   test.each([0, 1, 2, 3, 4])(

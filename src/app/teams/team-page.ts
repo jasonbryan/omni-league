@@ -52,9 +52,12 @@ import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
 import { SeasonTeamsPanel } from './season-teams-panel';
 import { RenameMinorForm, type RenameMinorOutcome } from './rename-minor-form';
+import { TeamInviteLanding } from './team-invite-landing';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
+import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
@@ -63,10 +66,7 @@ interface RosterNotice {
   description?: string;
 }
 
-const FILL = 'bg-muted motion-safe:animate-pulse';
-const SKELETON = `rounded-md ${FILL}`;
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const BACK_LINK =
   'inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground pointer-coarse:min-h-11';
 const INLINE_LINK = 'underline underline-offset-4 hover:text-foreground';
@@ -82,6 +82,8 @@ export interface TeamPageNavigationState {
     AddMinorPanel,
     AdminAlert,
     HlmBadge,
+    HlmCard,
+    HlmSkeleton,
     NgIcon,
     NotFoundView,
     RemovePlayerDialog,
@@ -94,6 +96,7 @@ export interface TeamPageNavigationState {
     TeamPendingInvites,
   ],
   providers: [
+    TeamInviteLanding,
     provideIcons({
       lucideArrowLeft,
       lucideCircleCheck,
@@ -121,6 +124,8 @@ export interface TeamPageNavigationState {
         @case ('forbidden') {
           <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
             <div
+              hlmCard
+              size="bare"
               class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 ${PANEL}"
             >
               <span
@@ -146,25 +151,25 @@ export interface TeamPageNavigationState {
           <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
             <p role="status" class="sr-only">Loading the team.</p>
             <div aria-hidden="true" class="flex h-5 items-center pointer-coarse:h-11">
-              <div class="${SKELETON} h-4 w-28"></div>
+              <div hlmSkeleton class="rounded-md h-4 w-28"></div>
             </div>
             <div aria-hidden="true" class="mt-3">
-              <div class="${SKELETON} h-5 w-12"></div>
-              <div class="${SKELETON} mt-2 h-8 w-56 max-w-full"></div>
-              <div class="${SKELETON} mt-3 h-4 w-72 max-w-full"></div>
+              <div hlmSkeleton class="rounded-md h-5 w-12"></div>
+              <div hlmSkeleton class="rounded-md mt-2 h-8 w-56 max-w-full"></div>
+              <div hlmSkeleton class="rounded-md mt-3 h-4 w-72 max-w-full"></div>
             </div>
             <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
-              <div aria-hidden="true" class="${PANEL} lg:col-span-2">
+              <div aria-hidden="true" hlmCard size="bare" class="${PANEL} lg:col-span-2">
                 <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
-                  <div class="${SKELETON} h-5 w-24"></div>
+                  <div hlmSkeleton class="rounded-md h-5 w-24"></div>
                 </div>
                 <div class="divide-y divide-border">
                   @for (row of skeletonRows; track row) {
                     <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                      <div class="${FILL} size-9 shrink-0 rounded-full"></div>
+                      <div hlmSkeleton class="size-9 shrink-0 rounded-full"></div>
                       <div class="flex-1">
-                        <div class="${SKELETON} h-5 w-40 max-w-full"></div>
-                        <div class="${SKELETON} mt-2 h-5 w-20"></div>
+                        <div hlmSkeleton class="rounded-md h-5 w-40 max-w-full"></div>
+                        <div hlmSkeleton class="rounded-md mt-2 h-5 w-20"></div>
                       </div>
                     </div>
                   }
@@ -255,7 +260,7 @@ export interface TeamPageNavigationState {
               }
               <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
                 <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
-                  <section aria-labelledby="roster-heading" class="${PANEL}">
+                  <section aria-labelledby="roster-heading" hlmCard size="bare" class="${PANEL}">
                     <div
                       class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                     >
@@ -392,15 +397,25 @@ export interface TeamPageNavigationState {
                 <div class="flex flex-col gap-4 md:gap-6">
                   @if (fullPanel(); as full) {
                     <section
+                      #fullSection
                       [id]="full.id"
                       aria-labelledby="team-full-heading"
+                      hlmCard
+                      size="bare"
                       class="${PANEL}"
                       data-testid="team-full"
                     >
                       <div
                         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                       >
-                        <h2 id="team-full-heading" class="font-semibold">{{ full.heading }}</h2>
+                        <h2
+                          #fullHeading
+                          id="team-full-heading"
+                          tabindex="-1"
+                          class="rounded-sm font-semibold"
+                        >
+                          {{ full.heading }}
+                        </h2>
                       </div>
                       <div class="flex flex-col items-center px-6 py-10 text-center">
                         <span
@@ -578,6 +593,16 @@ export class TeamPage {
 
   private readonly registeredStatus = viewChild<AdminAlert>('registeredStatus');
   private readonly invitePanel = viewChild(TeamInvitePanel);
+  private readonly fullSection = viewChild<ElementRef<HTMLElement>>('fullSection');
+  private readonly fullHeading = viewChild<ElementRef<HTMLElement>>('fullHeading');
+  private readonly landing = inject(TeamInviteLanding);
+  /** The pending list sits above the invite panel, so landing before it answers would leave the panel moving. */
+  private readonly landingStep = computed<'wait' | 'nothing' | 'land'>(() => {
+    if (this.state() === 'loading') return 'wait';
+    if (!this.team()?.viewerCanManage) return 'nothing';
+    const answered = this.pending.value() !== undefined || this.pending.error() !== undefined;
+    return answered ? 'land' : 'wait';
+  });
   private readonly statusFocused = signal(false);
   private readonly removeDialog = viewChild(RemovePlayerDialog);
   private readonly rosterStatus = viewChild<AdminAlert>('rosterStatus');
@@ -606,6 +631,23 @@ export class TeamPage {
       if (!status || this.statusFocused()) return;
       this.statusFocused.set(true);
       status.focus();
+    });
+    effect(() => {
+      if (!this.landing.pending()) return;
+      const step = this.landingStep();
+      if (step === 'wait') return;
+      if (step === 'nothing') {
+        this.landing.settle();
+        return;
+      }
+      afterNextRender(
+        () => {
+          if (!this.landing.pending()) return;
+          this.showInvite();
+          this.landing.settle();
+        },
+        { injector: this.injector },
+      );
     });
   }
 
@@ -657,12 +699,21 @@ export class TeamPage {
   }
 
   protected jumpToPanel(event: MouseEvent): void {
-    if (!isPlainClick(event)) return;
+    if (isPlainClick(event) && this.showInvite()) event.preventDefault();
+  }
+
+  private showInvite(): boolean {
     const panel = this.invitePanel();
-    const section = panel?.scrollTarget();
-    if (!panel || !section) return;
-    event.preventDefault();
-    section.scrollIntoView();
-    panel.focusFirst();
+    const form = panel?.scrollTarget();
+    if (panel && form) {
+      form.scrollIntoView();
+      panel.focusFirst();
+      return true;
+    }
+    const note = this.fullSection()?.nativeElement;
+    if (!note || this.fullPanel()?.id !== 'invite') return false;
+    note.scrollIntoView();
+    this.fullHeading()?.nativeElement.focus({ preventScroll: true });
+    return true;
   }
 }

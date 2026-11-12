@@ -13,7 +13,7 @@ import {
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { TEAM_MESSAGES } from './lib/teamInput';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -33,7 +33,14 @@ async function setup() {
     const organizationId = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] }],
+      leagues: [
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const league = (await ctx.db
       .query('leagues')

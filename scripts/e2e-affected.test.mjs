@@ -398,6 +398,22 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['src/app/core/later-choice.spec.ts']), want());
   });
 
+  it('maps the fragment landing core to the specs of its three landings, and not to the full suite', () => {
+    const specs = specsFor(['src/app/core/fragment-landing.ts']);
+    for (const name of [
+      'organization-admin',
+      'league-management',
+      'team-invites',
+      'team-join',
+      'team-registration',
+      'app-home',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.ok(!specs.includes('FULL'));
+    assert.deepEqual(specsFor(['src/app/core/fragment-landing.spec.ts']), want());
+  });
+
   it('maps the not-found and offline views to the league page and season page specs that assert them', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
@@ -527,8 +543,6 @@ describe('selectSpecs: mapped areas', () => {
     const mockups = {
       '66-69-organization-leagues.html': 'organization-leagues-mockup',
       '125-126-seasons.html': 'league-management-mockup',
-      '141-app-leagues.html': 'app-leagues',
-      '130-app-teams.html': 'app-teams',
     };
     for (const [file, spec] of Object.entries(mockups)) {
       assert.deepEqual(specsFor([`design/mockups/${file}`]), want(`e2e/${spec}.spec.ts`), file);

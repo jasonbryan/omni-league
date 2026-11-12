@@ -4,10 +4,11 @@ import { ageGroupValidator, genderValidator, standardLevelValidator } from './li
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { programStatusValidator, programTypeValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatValidator, sportCountsValidator, sportValidator } from './lib/sports';
+import { sportCountsValidator, sportValidator } from './lib/sports';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
@@ -45,8 +46,8 @@ export default defineSchema({
     pendingInviteCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
-    sortName: v.optional(v.string()),
-    hasPublishedLeague: v.optional(v.boolean()),
+    sortName: v.string(),
+    hasPublishedLeague: v.boolean(),
     logoStorageId: v.optional(v.id('_storage')),
   })
     .index('by_slug', ['slug'])
@@ -98,16 +99,18 @@ export default defineSchema({
     sortName: v.optional(v.string()),
     status: v.optional(leagueStatusValidator),
     publishedSeasonCount: v.optional(v.number()),
-    gender: v.optional(genderValidator),
-    playersPerSide: v.optional(v.number()),
+    /** The league's `programs` row, kept in step by `convex/lib/tenantWrites.ts`. */
+    programId: v.id('programs'),
+    gender: genderValidator,
+    playersPerSide: v.number(),
     /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
-    level: v.optional(standardLevelValidator),
+    level: standardLevelValidator,
     customLevelId: v.optional(v.id('customLevels')),
-    ageGroup: v.optional(ageGroupValidator),
+    ageGroup: ageGroupValidator,
     /** Absent means `playersPerSide`; when set it is at least that, and at most `ROSTER_SIZE_INPUT_MAX`. */
     minimumRosterSize: v.optional(v.number()),
     /** The words a search finds the league by: its name, its organization's name, its locations' names, and City, state. */
-    searchText: v.optional(v.string()),
+    searchText: v.string(),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
@@ -120,12 +123,55 @@ export default defineSchema({
       'sortName',
     ])
     .index('by_status_and_sport_and_sortName', ['status', 'sport', 'sortName'])
-    // Whether any league still uses a custom level, so deleting one reads an index, not the table.
-    .index('by_customLevelId', ['customLevelId'])
     .searchIndex('search_searchText', {
       searchField: 'searchText',
       filterFields: ['status', 'sport'],
     }),
+
+  // The fields every program type shares, so a slug is unique across types and one index lists them. The tenant writers keep a league's row equal to the league.
+  programs: defineTable({
+    organizationId: v.id('organizations'),
+    type: programTypeValidator,
+    name: v.string(),
+    // `name` lowercased: Convex indexes sort case-sensitively.
+    sortName: v.string(),
+    slug: v.string(),
+    sport: sportValidator,
+    status: programStatusValidator,
+    locationIds: v.array(v.id('locations')),
+    gender: genderValidator,
+    playersPerSide: v.number(),
+    level: standardLevelValidator,
+    customLevelId: v.optional(v.id('customLevels')),
+    ageGroup: ageGroupValidator,
+    /** Set on a program of the league type. */
+    leagueId: v.optional(v.id('leagues')),
+  })
+    .index('by_organizationId_and_slug', ['organizationId', 'slug'])
+    .index('by_customLevelId', ['customLevelId'])
+    .index('by_organizationId_and_type_and_status_and_sortName', [
+      'organizationId',
+      'type',
+      'status',
+      'sortName',
+    ]),
+
+  // The tournament part of a program of type `tournament`; `programs` holds its name, slug, status, and division. Written only by `convex/lib/tenantWrites.ts`.
+  tournaments: defineTable({
+    programId: v.id('programs'),
+    organizationId: v.id('organizations'),
+    /** Calendar dates, `YYYY-MM-DD`; a one-day tournament ends on its start date. */
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    maximumTeams: v.number(),
+    /** The division's players per side. */
+    minimumRosterSize: v.number(),
+    structure: v.literal('bracket'),
+    bracketType: v.literal('single'),
+  })
+    .index('by_programId', ['programId'])
+    .index('by_organizationId_and_startDate', ['organizationId', 'startDate']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
@@ -155,8 +201,7 @@ export default defineSchema({
     endDate: v.string(),
     registrationDeadline: v.string(),
     /** The league's players per side when the season was created. */
-    playersPerSide: v.optional(v.number()),
-    format: v.optional(formatValidator),
+    playersPerSide: v.number(),
     minimumRosterSize: v.number(),
     status: seasonStatusValidator,
     /** Kept by `convex/lib/rosterWrites.ts`; absent on a season written before teams existed, which has none. */

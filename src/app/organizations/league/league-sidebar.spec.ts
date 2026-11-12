@@ -122,13 +122,21 @@ describe('LeagueSidebar', () => {
       [...lists[1].querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]),
     ).toEqual([['Public page', `/organizations/${GULF.slug}`]]);
     const labels = [...nav.querySelectorAll('a')].map((a) => text(a));
-    for (const absent of ['Overview', 'Locations', 'Staff', 'Details', 'View public page']) {
+    for (const absent of [
+      'Overview',
+      'Tournaments',
+      'Locations',
+      'Staff',
+      'Details',
+      'View public page',
+    ]) {
       expect(
         labels.some((label) => label?.includes(absent)),
         absent,
       ).toBe(false);
     }
     expect(nav.querySelector('.tabular-nums')).toBeNull();
+    expect(nav.textContent).not.toContain('Programs');
     expect(nav.textContent).not.toContain('Your organizations');
   });
 

@@ -43,26 +43,19 @@ import { InviteAlert, type InviteAlertKind } from '../invites/invite-alert';
 import { InviteOfflineAlert } from '../invites/invite-offline-alert';
 import { TeamInviteTokenStore } from '../invites/invite-token-store';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_CONTENT,
-  FIELD_ERROR,
-  FIELD_HORIZONTAL,
-  FIELD_SET,
-  INPUT,
-  LABEL,
-  LEGEND,
-} from '../organizations/admin/field-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { PageLoadStatus } from '../public-layout/page-load-status';
 import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Checkbox } from '../ui/checkbox';
+import { HlmFieldImports, HlmFieldSetImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
+import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 
 interface TeamInviteSummary {
   teamName: string;
@@ -150,6 +143,11 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
   imports: [
     Checkbox,
     FormField,
+    HlmCard,
+    HlmFieldImports,
+    HlmFieldSetImports,
+    HlmInputImports,
+    HlmSkeleton,
     HlmSpinner,
     InviteAlert,
     InviteOfflineAlert,
@@ -185,28 +183,26 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
               <div
                 data-testid="invite-skeleton"
                 data-page-loading
-                class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                hlmCard
+                size="bare"
+                class="mx-auto w-full max-w-md overflow-hidden"
               >
                 <p role="status" class="sr-only">Checking your invite…</p>
                 <div class="px-5 pt-6 md:px-8 md:pt-8">
                   <div
+                    hlmSkeleton
                     data-skeleton="icon"
                     aria-hidden="true"
-                    class="size-10 rounded-lg bg-muted motion-safe:animate-pulse"
+                    class="size-10 rounded-lg"
                   ></div>
+                  <div hlmSkeleton aria-hidden="true" class="mt-4 h-5 w-20 rounded-md"></div>
                   <div
-                    aria-hidden="true"
-                    class="mt-4 h-5 w-20 rounded-md bg-muted motion-safe:animate-pulse"
-                  ></div>
-                  <div
+                    hlmSkeleton
                     data-skeleton="heading"
                     aria-hidden="true"
-                    class="mt-1 h-8 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
+                    class="mt-1 h-8 w-64 max-w-full rounded-md"
                   ></div>
-                  <div
-                    aria-hidden="true"
-                    class="mt-2 h-5 w-full rounded-md bg-muted motion-safe:animate-pulse"
-                  ></div>
+                  <div hlmSkeleton aria-hidden="true" class="mt-2 h-5 w-full rounded-md"></div>
                 </div>
                 <div
                   aria-hidden="true"
@@ -214,27 +210,27 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                 >
                   @for (row of skeletonRows; track row) {
                     <div class="flex justify-between gap-x-4 px-3 py-2.5">
-                      <div
-                        data-skeleton="row"
-                        class="h-5 w-24 rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div class="h-5 w-32 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                      <div hlmSkeleton data-skeleton="row" class="h-5 w-24 rounded-md"></div>
+                      <div hlmSkeleton class="h-5 w-32 rounded-md"></div>
                     </div>
                   }
                 </div>
                 <div aria-hidden="true" class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
-                  <div class="h-5 w-40 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                  <div hlmSkeleton class="h-5 w-40 rounded-md"></div>
                   <div
+                    hlmSkeleton
                     data-skeleton="button"
                     aria-hidden="true"
-                    class="mt-4 h-9 w-full rounded-lg bg-muted motion-safe:animate-pulse"
+                    class="mt-4 h-9 w-full rounded-lg"
                   ></div>
                 </div>
               </div>
             }
             @case ('invalid') {
               <div
-                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                hlmCard
+                size="bare"
+                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
               >
                 <span
                   class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
@@ -257,7 +253,9 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
             @case ('accepted') {
               @if (joined(); as team) {
                 <div
-                  class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                  hlmCard
+                  size="bare"
+                  class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
                 >
                   <span
                     class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
@@ -287,9 +285,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
             }
             @default {
               @if (summary(); as invite) {
-                <div
-                  class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-                >
+                <div hlmCard size="bare" class="mx-auto w-full max-w-md overflow-hidden">
                   <div class="px-5 pt-6 md:px-8 md:pt-8">
                     <span
                       class="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground"
@@ -402,38 +398,32 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                             >.
                           </p>
                           <fieldset
+                            hlmFieldSet
                             id="choices"
-                            data-slot="field-set"
+                            class="mt-4"
                             [attr.aria-describedby]="
                               choiceError()
                                 ? 'choices-description choices-error'
                                 : 'choices-description'
                             "
                             [attr.data-invalid]="choiceError() ? 'true' : null"
-                            [class]="fieldSetClass + ' mt-4'"
                           >
                             <legend
-                              data-slot="field-legend"
-                              data-variant="label"
-                              [class]="legendClass + (choiceError() ? ' text-destructive' : '')"
+                              hlmFieldLegend
+                              variant="label"
+                              [class.text-destructive]="choiceError()"
                             >
                               Who’s joining?
                             </legend>
-                            <p
-                              data-slot="field-description"
-                              id="choices-description"
-                              [class]="descriptionClass + ' -mt-1.5'"
-                            >
+                            <p hlmFieldDescription id="choices-description" class="-mt-1.5">
                               Choose one or both.
                             </p>
                             <div data-slot="checkbox-group" class="grid gap-3">
                               <div
-                                role="group"
-                                data-slot="field"
-                                data-orientation="horizontal"
+                                hlmField
+                                orientation="horizontal"
                                 [attr.data-disabled]="selfBlocked() ? 'true' : null"
                                 [attr.data-matches-spartan-invalid]="choiceError() ? 'true' : null"
-                                [class]="fieldHorizontalClass"
                               >
                                 <app-checkbox
                                   #joinSelfBox
@@ -444,28 +434,19 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                                   [disabled]="selfBlocked() !== null"
                                   [showInvalid]="choiceError()"
                                 />
-                                <div data-slot="field-content" [class]="contentClass">
-                                  <label
-                                    for="join-self"
-                                    data-slot="field-label"
-                                    [class]="labelClass"
+                                <div hlmFieldContent>
+                                  <label hlmFieldLabel for="join-self"
                                     >Join the roster myself</label
                                   >
-                                  <p
-                                    data-slot="field-description"
-                                    id="join-self-description"
-                                    [class]="descriptionClass"
-                                  >
+                                  <p hlmFieldDescription id="join-self-description">
                                     {{ joinSelfDescription() }}
                                   </p>
                                 </div>
                               </div>
                               <div
-                                role="group"
-                                data-slot="field"
-                                data-orientation="horizontal"
+                                hlmField
+                                orientation="horizontal"
                                 [attr.data-matches-spartan-invalid]="choiceError() ? 'true' : null"
-                                [class]="fieldHorizontalClass"
                               >
                                 <app-checkbox
                                   #addMinorBox
@@ -475,30 +456,18 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                                   (checkedChange)="addMinor.set($event)"
                                   [showInvalid]="choiceError()"
                                 />
-                                <div data-slot="field-content" [class]="contentClass">
-                                  <label
-                                    for="join-minor"
-                                    data-slot="field-label"
-                                    [class]="labelClass"
+                                <div hlmFieldContent>
+                                  <label hlmFieldLabel for="join-minor"
                                     >Add a minor I’m responsible for</label
                                   >
-                                  <p
-                                    data-slot="field-description"
-                                    id="join-minor-description"
-                                    [class]="descriptionClass"
-                                  >
+                                  <p hlmFieldDescription id="join-minor-description">
                                     For a child who plays. Only their name is stored.
                                   </p>
                                 </div>
                               </div>
                             </div>
                             @if (choiceError()) {
-                              <div
-                                role="alert"
-                                data-slot="field-error"
-                                id="choices-error"
-                                [class]="errorClass"
-                              >
+                              <div hlmFieldError id="choices-error">
                                 <ng-icon
                                   name="lucideCircleAlert"
                                   class="mt-0.5 shrink-0 text-base"
@@ -512,26 +481,18 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                             @if (addMinor()) {
                               <div class="ps-6">
                                 <div
-                                  role="group"
-                                  data-slot="field"
-                                  data-orientation="vertical"
+                                  hlmField
                                   [attr.data-matches-spartan-invalid]="
                                     minor.error() ? 'true' : null
                                   "
                                   [attr.data-invalid]="minor.error() ? 'true' : null"
-                                  [class]="fieldClass"
                                 >
-                                  <label
-                                    for="minor-name"
-                                    data-slot="field-label"
-                                    [class]="labelClass"
-                                    >Minor’s name</label
-                                  >
+                                  <label hlmFieldLabel for="minor-name">Minor’s name</label>
                                   <input
+                                    hlmInput
                                     #minorInput
                                     id="minor-name"
                                     type="text"
-                                    data-slot="input"
                                     autocomplete="off"
                                     [formField]="minor.fields.name"
                                     (blur)="minor.left()"
@@ -545,23 +506,13 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                                     [attr.data-matches-spartan-invalid]="
                                       minor.error() ? 'true' : null
                                     "
-                                    [class]="inputClass"
                                   />
-                                  <p
-                                    data-slot="field-description"
-                                    id="minor-name-description"
-                                    [class]="descriptionClass"
-                                  >
+                                  <p hlmFieldDescription id="minor-name-description">
                                     Up to 60 characters. Players on other teams see their first name
                                     and last initial.
                                   </p>
                                   @if (minor.error(); as error) {
-                                    <div
-                                      role="alert"
-                                      data-slot="field-error"
-                                      id="minor-name-error"
-                                      [class]="errorClass"
-                                    >
+                                    <div hlmFieldError id="minor-name-error">
                                       <ng-icon
                                         name="lucideCircleAlert"
                                         class="mt-0.5 shrink-0 text-base"
@@ -625,15 +576,6 @@ export class JoinTeamPage {
   protected readonly returnToParams = { returnTo: JOIN_TEAM_PATH };
   protected readonly path = JOIN_TEAM_PATH;
   protected readonly offlineDescription = OFFLINE_DESCRIPTION;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
-  protected readonly fieldClass = FIELD;
-  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
-  protected readonly contentClass = FIELD_CONTENT;
-  protected readonly labelClass = LABEL;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly inputClass = INPUT;
-  protected readonly errorClass = FIELD_ERROR;
 
   /** Read again only when the guard captures another link while the page is open; a new token starts the page over. */
   private readonly token = linkedSignal({

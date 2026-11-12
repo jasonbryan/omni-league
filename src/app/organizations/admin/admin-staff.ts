@@ -48,6 +48,8 @@ import { formatDay } from './format-day';
 import { CAP_NOTE } from './note-classes';
 import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
+import { HlmCard } from '../../ui/card';
+import { HlmSkeleton } from '../../ui/skeleton';
 
 const EMAIL_THEN_LINK_THEN_ALERT = ['#email', '#invite-link-heading', '[data-slot="alert"]'];
 
@@ -102,6 +104,8 @@ const ROLE_LABEL: Record<Role, string> = {
     AdminAlert,
     AdminOfflineAlert,
     HlmBadge,
+    HlmCard,
+    HlmSkeleton,
     HlmSpinner,
     NgIcon,
     NgTemplateOutlet,
@@ -142,10 +146,7 @@ const ROLE_LABEL: Record<Role, string> = {
       </div>
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
-          <section
-            aria-labelledby="members-heading"
-            class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <section aria-labelledby="members-heading" hlmCard size="bare" class="overflow-hidden">
             <div
               class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
             >
@@ -198,26 +199,17 @@ const ROLE_LABEL: Record<Role, string> = {
               <div aria-hidden="true" class="divide-y divide-border">
                 @for (placeholder of placeholders; track placeholder) {
                   <div class="flex gap-3 px-4 py-3.5 md:px-5">
-                    <div
-                      class="size-9 shrink-0 rounded-full bg-muted motion-safe:animate-pulse"
-                    ></div>
+                    <div hlmSkeleton class="size-9 shrink-0 rounded-full"></div>
                     <div class="flex-1">
-                      <div
-                        class="h-4 w-40 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div
-                        class="mt-2 h-3.5 w-56 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
+                      <div hlmSkeleton class="h-4 w-40 max-w-full rounded-md"></div>
+                      <div hlmSkeleton class="mt-2 h-3.5 w-56 max-w-full rounded-md"></div>
                     </div>
                   </div>
                 }
               </div>
             }
           </section>
-          <section
-            aria-labelledby="pending-heading"
-            class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <section aria-labelledby="pending-heading" hlmCard size="bare" class="overflow-hidden">
             <div
               class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
             >
@@ -387,16 +379,10 @@ const ROLE_LABEL: Record<Role, string> = {
               <div aria-hidden="true" class="divide-y divide-border">
                 @for (placeholder of placeholders; track placeholder) {
                   <div class="flex gap-3 px-4 py-3.5 md:px-5">
-                    <div
-                      class="size-9 shrink-0 rounded-lg bg-muted motion-safe:animate-pulse"
-                    ></div>
+                    <div hlmSkeleton class="size-9 shrink-0 rounded-lg"></div>
                     <div class="flex-1">
-                      <div
-                        class="h-4 w-48 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
-                      <div
-                        class="mt-2 h-3.5 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
-                      ></div>
+                      <div hlmSkeleton class="h-4 w-48 max-w-full rounded-md"></div>
+                      <div hlmSkeleton class="mt-2 h-3.5 w-64 max-w-full rounded-md"></div>
                     </div>
                   </div>
                 }

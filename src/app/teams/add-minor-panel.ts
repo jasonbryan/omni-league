@@ -17,21 +17,15 @@ import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 import { api, injectMutation, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  INPUT,
-  LABEL,
-} from '../organizations/admin/field-classes';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm } from './minor-name-form';
+import { HlmCard } from '../ui/card';
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 
 export const ADD_MINOR_ALERTS = {
   failed: {
@@ -48,6 +42,9 @@ export const ADD_MINOR_ALERTS = {
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmCard,
+    HlmFieldImports,
+    HlmInputImports,
     HlmSpinner,
     MinorNameErrorText,
     MousePressKeepsFocus,
@@ -57,7 +54,13 @@ export const ADD_MINOR_ALERTS = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section id="add-minor" aria-labelledby="add-minor-heading" class="${PANEL}">
+    <section
+      id="add-minor"
+      aria-labelledby="add-minor-heading"
+      hlmCard
+      size="bare"
+      class="${PANEL}"
+    >
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >
@@ -99,23 +102,18 @@ export const ADD_MINOR_ALERTS = {
           For a child you’re responsible for. Only their name is stored, and you manage their place
           on the roster. Players on other teams see their first name and last initial.
         </p>
-        <div data-slot="field-group" [class]="fieldGroupClass">
+        <div hlmFieldGroup>
           <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
+            hlmField
             [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
             [attr.data-invalid]="form.error() ? 'true' : null"
-            [class]="fieldClass"
           >
-            <label for="minor-name" data-slot="field-label" [class]="labelClass"
-              >Minor’s name</label
-            >
+            <label hlmFieldLabel for="minor-name">Minor’s name</label>
             <input
+              hlmInput
               #nameInput
               id="minor-name"
               type="text"
-              data-slot="input"
               autocomplete="off"
               [formField]="form.fields.name"
               (blur)="form.left()"
@@ -125,13 +123,10 @@ export const ADD_MINOR_ALERTS = {
               [attr.aria-invalid]="form.error() ? 'true' : null"
               [attr.data-invalid]="form.error() ? 'true' : null"
               [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
-              [class]="inputClass"
             />
-            <p data-slot="field-description" id="minor-name-description" [class]="descriptionClass">
-              Up to 60 characters.
-            </p>
+            <p hlmFieldDescription id="minor-name-description">Up to 60 characters.</p>
             @if (form.error(); as error) {
-              <div role="alert" data-slot="field-error" id="minor-name-error" [class]="errorClass">
+              <div hlmFieldError id="minor-name-error">
                 <ng-icon
                   name="lucideCircleAlert"
                   class="mt-0.5 shrink-0 text-base"
@@ -175,12 +170,6 @@ export class AddMinorPanel {
   protected readonly alerts = ADD_MINOR_ALERTS;
   protected readonly added = signal<string | null>(null);
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
   protected readonly primaryButton = PRIMARY_BUTTON;
 
   private readonly nameInput = viewChild<ElementRef<HTMLInputElement>>('nameInput');

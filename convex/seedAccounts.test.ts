@@ -256,13 +256,18 @@ async function logoFiles(t: T) {
   });
 }
 
-const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 46, seasons: 7 };
+const DATA = {
+  organizations: 7,
+  locations: 25,
+  customLevels: 1,
+  leagues: 46,
+  seasons: 7,
+  tournaments: 1,
+};
 const NO_BACKFILL = {
   organizations: 0,
   locations: 0,
   leagues: 0,
-  seasons: 0,
-  leagueDivisions: 0,
   teamCounts: 0,
   pendingInviteCounts: 0,
   waitlistCounts: 0,
@@ -281,7 +286,6 @@ describe('seed:demo accounts: a new deployment', () => {
         ...DATA,
         logos: 1,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0, leagues: 0 },
         memberships: 5,
         invites: 1,
         teams: 6,
@@ -828,9 +832,9 @@ describe('seed:demo accounts: a second run', () => {
         customLevels: 0,
         leagues: 0,
         seasons: 0,
+        tournaments: 0,
         logos: 0,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0, leagues: 0 },
         memberships: 0,
         invites: 0,
         teams: 0,
@@ -958,7 +962,6 @@ describe('seed:demo accounts: the password', () => {
         ...DATA,
         logos: 1,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0, leagues: 0 },
         memberships: 0,
         invites: 1,
         teams: 0,

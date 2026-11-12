@@ -5,9 +5,9 @@ import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { ADMIN_LEAGUES_LIMIT } from './leagues';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertLeague, insertTenant } from './lib/tenantWrites';
+import { insertLeague, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields } from './test.setup';
 
 beforeEach(() => {
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
@@ -35,8 +35,19 @@ async function setup() {
         organization: { name, slug },
         locations: [{ name: FIELD, address: '1 Alpha St' }],
         leagues: [
-          { name: 'Published One', sport: 'soccer', locations: [FIELD] },
-          { name: 'Draft One', sport: 'soccer', locations: [FIELD], status: 'draft' },
+          {
+            name: 'Published One',
+            sport: 'soccer',
+            locations: [FIELD],
+            division: defaultDivision('soccer'),
+          },
+          {
+            name: 'Draft One',
+            sport: 'soccer',
+            locations: [FIELD],
+            status: 'draft',
+            division: defaultDivision('soccer'),
+          },
         ],
       });
     const organizationA = await tenant('Org A', 'org-a');
@@ -150,6 +161,7 @@ describe('leagues.draftCount', () => {
           sport: 'soccer',
           locations: [FIELD],
           status: 'draft',
+          division: defaultDivision('soccer'),
         });
       }
     });
@@ -189,6 +201,7 @@ describe('the draft league counter', () => {
         sport: 'soccer',
         locations: [FIELD],
         status: 'draft',
+        division: defaultDivision('soccer'),
       }),
     );
     await s.t.run((ctx) =>
@@ -196,6 +209,7 @@ describe('the draft league counter', () => {
         name: 'Seeded published',
         sport: 'soccer',
         locations: [FIELD],
+        division: defaultDivision('soccer'),
       }),
     );
     await expectCountersMatch(s);
@@ -246,10 +260,13 @@ describe('the draft league counter', () => {
         name: 'Legacy',
         sport: 'soccer',
         locations: [FIELD],
+        division: defaultDivision('soccer'),
       });
       const league = (await ctx.db.get('leagues', leagueId))!;
       await ctx.db.replace('leagues', leagueId, {
+        ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,

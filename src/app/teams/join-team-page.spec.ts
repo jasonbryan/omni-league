@@ -11,6 +11,9 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { captureTeamInviteToken } from '../invites/capture-invite-token';
 import { INVITE_TOKEN_KEY, TEAM_INVITE_TOKEN_KEY } from '../invites/invite-token-store';
 import { JoinTeamPage } from './join-team-page';
+import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 const TOKEN = 'teamtokenABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_abc';
@@ -169,6 +172,15 @@ describe('JoinTeamPage', () => {
   });
 
   describe('checking', () => {
+    it('draws every box of the invite card skeleton through the skeleton, each with its own radius', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expectSkeletonBoxes(page.querySelector('main [data-testid="invite-skeleton"]')!, {
+        'rounded-lg': 2,
+        'rounded-md': 14,
+      });
+    });
+
     it('shows a skeleton of the invite card with five detail rows and a status', async () => {
       const { page, flush, sub } = await open();
       await flush();
@@ -177,6 +189,43 @@ describe('JoinTeamPage', () => {
       expect(card?.querySelectorAll('[data-skeleton="row"]')).toHaveLength(5);
       expect(text(card?.querySelector('[role="status"]'))).toBe('Checking your invite…');
       expect(page.querySelector('h1')).toBeNull();
+    });
+  });
+
+  describe('cards', () => {
+    const CONTAINER_LAYOUT = 'mx-auto w-full max-w-md overflow-hidden';
+
+    it('draws the checking skeleton, with its test id kept, in a bare helm card', async () => {
+      const { page, flush } = await open();
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-testid="invite-skeleton"]'), CONTAINER_LAYOUT);
+    });
+
+    it('draws the invite in a bare helm card', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(INVITE);
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), CONTAINER_LAYOUT);
+    });
+
+    it('draws the invalid view in a bare helm card with the message layout', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({ status: 'invalid' });
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
+    });
+
+    it('draws the accepted view in a bare helm card with the message layout', async () => {
+      const { page, emitInvite, signIn, accept, flush, call } = await open({ signedIn: true });
+      await emitInvite(INVITE);
+      await signIn();
+      accept()?.click();
+      await flush();
+      call()?.resolve(JOINED);
+      await flush();
+      expect(page.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
+      expectBareCard(page.querySelector('[data-slot="card"]'), MESSAGE_CARD_LAYOUT);
     });
   });
 
@@ -323,6 +372,121 @@ describe('JoinTeamPage', () => {
       expect(text(page.querySelector('main p'))).toBe(
         'You and Lily Park are on the roster for Summer 2027. Tasha Greene is the captain.',
       );
+    });
+
+    describe('the field markup the helm directives draw', () => {
+      const choice = (id: string, invalid: boolean) => [
+        {
+          ...fieldShape(false, 'horizontal'),
+          attributes: {
+            ...fieldShape(false, 'horizontal').attributes,
+            ...(invalid ? { 'data-matches-spartan-invalid': 'true' } : {}),
+          },
+        },
+        shapeOf('field-content'),
+        shapeOf('field-label', { for: id }),
+        shapeOf('field-description', { id: `${id}-description` }),
+      ];
+
+      const shapes = (state: { choices?: boolean; minor?: 'valid' | 'invalid' }) => [
+        shapeOf(
+          'field-set',
+          {
+            id: 'choices',
+            'aria-describedby': state.choices
+              ? 'choices-description choices-error'
+              : 'choices-description',
+            ...(state.choices ? { 'data-invalid': 'true' } : {}),
+          },
+          'mt-4',
+        ),
+        shapeOf(
+          'field-legend',
+          { 'data-variant': 'label' },
+          state.choices ? 'text-destructive' : '',
+        ),
+        shapeOf('field-description', { id: 'choices-description' }, '-mt-1.5'),
+        ...choice('join-self', !!state.choices),
+        ...choice('join-minor', !!state.choices),
+        ...(state.choices ? [shapeOf('field-error', { id: 'choices-error' })] : []),
+        ...(state.minor
+          ? [
+              fieldShape(state.minor === 'invalid'),
+              shapeOf('field-label', { for: 'minor-name' }),
+              inputShape(
+                'minor-name',
+                {
+                  name: 'form.name',
+                  type: 'text',
+                  autocomplete: 'off',
+                  'aria-describedby':
+                    state.minor === 'invalid'
+                      ? 'minor-name-description minor-name-error'
+                      : 'minor-name-description',
+                },
+                state.minor === 'invalid',
+              ),
+              shapeOf('field-description', { id: 'minor-name-description' }),
+              ...(state.minor === 'invalid'
+                ? [shapeOf('field-error', { id: 'minor-name-error' })]
+                : []),
+            ]
+          : []),
+      ];
+
+      const form = (page: HTMLElement) =>
+        page.querySelector('form[aria-label="Accept the invite"]')!;
+
+      it('draws the same elements, class sets, and attributes with the defaults', async () => {
+        const { page } = await ready();
+        expect(formShapes(form(page))).toEqual(shapes({}));
+      });
+
+      it('marks both choices and the group invalid when none is chosen', async () => {
+        const { page, flush, accept } = await ready();
+        checkbox(page, 'join-self').click();
+        await flush();
+        accept()?.click();
+        await flush();
+        expect(formShapes(form(page))).toEqual(shapes({ choices: true }));
+      });
+
+      it('draws the Minor’s name field beside the choices', async () => {
+        const { page, flush } = await ready();
+        checkbox(page, 'join-minor').click();
+        await flush();
+        expect(formShapes(form(page))).toEqual(shapes({ minor: 'valid' }));
+      });
+
+      it('marks the Minor’s name invalid after an empty submit', async () => {
+        const { page, flush, accept } = await ready();
+        checkbox(page, 'join-minor').click();
+        await flush();
+        accept()?.click();
+        await flush();
+        expect(formShapes(form(page))).toEqual(shapes({ minor: 'invalid' }));
+      });
+
+      it('marks the Minor’s name invalid when the server refuses it', async () => {
+        const { page, flush, accept, call } = await ready();
+        checkbox(page, 'join-minor').click();
+        await flush();
+        typeMinor(page, 'theo  bell');
+        await flush();
+        accept()?.click();
+        await flush();
+        call()?.reject(
+          new ConvexError({
+            field: 'minorName',
+            code: 'minorInSeason',
+            minorName: 'Theo Bell',
+            teamName: 'Block Party',
+            message: 'Theo Bell is already on Block Party in this season.',
+          }),
+        );
+        await flush();
+        expect(formShapes(form(page))).toEqual(shapes({ minor: 'invalid' }));
+      });
     });
   });
 

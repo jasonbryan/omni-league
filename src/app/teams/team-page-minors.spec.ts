@@ -4,6 +4,8 @@ import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 
 const GET = 'teams:getForMember';
 const ADD_MINOR = 'rosterEntries:addMinor';
@@ -169,6 +171,72 @@ describe('TeamPage: minors', () => {
       expect(field('rename-name')).toBeNull();
     });
 
+    describe('the field markup the helm directives draw', () => {
+      const shapes = (invalid: boolean) => [
+        shapeOf('field-group', {}, 'mt-3'),
+        fieldShape(invalid),
+        shapeOf('field-label', { for: 'rename-name' }),
+        inputShape(
+          'rename-name',
+          {
+            name: 'form.name',
+            type: 'text',
+            autocomplete: 'off',
+            'aria-describedby': invalid
+              ? 'rename-name-description rename-name-error'
+              : 'rename-name-description',
+          },
+          invalid,
+        ),
+        shapeOf('field-description', { id: 'rename-name-description' }),
+        ...(invalid ? [shapeOf('field-error', { id: 'rename-name-error' })] : []),
+      ];
+
+      it('draws the same elements, class sets, and attributes when valid', async () => {
+        await openRename();
+        expect(formShapes(rows()[3])).toEqual(shapes(false));
+      });
+
+      it('marks the field invalid and ties its error to it after an empty submit', async () => {
+        await openRename();
+        await type('rename-name', '  ');
+        button(rows()[3], 'Save name')!.click();
+        await o.flush();
+        expect(formShapes(rows()[3])).toEqual(shapes(true));
+      });
+
+      it('marks the field invalid when the server refuses the name', async () => {
+        await openRename();
+        await type('rename-name', 'Elena Ruiz');
+        button(rows()[3], 'Save name')!.click();
+        await o.flush();
+        o.convex.calls[0].reject(
+          new ConvexError({
+            field: 'minorName',
+            code: 'minorInSeason',
+            minorName: 'Elena Ruiz',
+            teamName: 'Sand Sharks',
+            message: 'Elena Ruiz is already on Sand Sharks in this season.',
+          }),
+        );
+        await o.flush();
+        expect(formShapes(rows()[3])).toEqual(shapes(true));
+      });
+    });
+
+    it('offline at call time: the offline alert, and the name stays', async () => {
+      await openRename();
+      await type('rename-name', 'Theodore Bell');
+      button(rows()[3], 'Save name')!.click();
+      await o.flush();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(text(rows()[3].querySelector('[role="alert"]'))).toContain(
+        'The name is still here. Try again when you’re connected.',
+      );
+      expect(field('rename-name').value).toBe('Theodore Bell');
+    });
+
     it('Cancel closes the form and returns focus to Rename', async () => {
       await openRename();
       button(rows()[3], 'Cancel')!.click();
@@ -180,6 +248,11 @@ describe('TeamPage: minors', () => {
 
   describe('Add a minor', () => {
     const submit = () => button(addPanel()!, 'Add minor')!;
+
+    it('draws the panel as a bare helm card', async () => {
+      await open();
+      expectBareCard(addPanel(), 'overflow-hidden');
+    });
 
     it('is shown to anyone on the team, with its note and field', async () => {
       await open();
@@ -252,6 +325,58 @@ describe('TeamPage: minors', () => {
         'The name is still here. Try again when you’re connected.',
       );
       expect(field('minor-name').value).toBe('Nora Bell');
+    });
+
+    describe('the field markup the helm directives draw', () => {
+      const shapes = (invalid: boolean) => [
+        shapeOf('field-group'),
+        fieldShape(invalid),
+        shapeOf('field-label', { for: 'minor-name' }),
+        inputShape(
+          'minor-name',
+          {
+            name: 'form.name',
+            type: 'text',
+            autocomplete: 'off',
+            'aria-describedby': invalid
+              ? 'minor-name-description minor-name-error'
+              : 'minor-name-description',
+          },
+          invalid,
+        ),
+        shapeOf('field-description', { id: 'minor-name-description' }),
+        ...(invalid ? [shapeOf('field-error', { id: 'minor-name-error' })] : []),
+      ];
+
+      it('draws the same elements, class sets, and attributes when valid', async () => {
+        await open();
+        expect(formShapes(addPanel()!)).toEqual(shapes(false));
+      });
+
+      it('marks the field invalid and ties its error to it after an empty submit', async () => {
+        await open();
+        submit().click();
+        await o.flush();
+        expect(formShapes(addPanel()!)).toEqual(shapes(true));
+      });
+
+      it('marks the field invalid when the server refuses the name', async () => {
+        await open();
+        await type('minor-name', 'theo  bell');
+        submit().click();
+        await o.flush();
+        o.convex.calls[0].reject(
+          new ConvexError({
+            field: 'minorName',
+            code: 'minorInSeason',
+            minorName: 'Theo Bell',
+            teamName: 'Sand Sharks',
+            message: 'Theo Bell is already on Sand Sharks in this season.',
+          }),
+        );
+        await o.flush();
+        expect(formShapes(addPanel()!)).toEqual(shapes(true));
+      });
     });
   });
 });

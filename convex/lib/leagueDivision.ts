@@ -15,15 +15,11 @@ export type LeagueDivisionFields = Pick<
   'organizationId' | 'sport' | 'gender' | 'playersPerSide' | 'level' | 'ageGroup' | 'customLevelId'
 >;
 
-// A league not yet backfilled with a division has none.
 async function leagueDivisionInput(
   ctx: Pick<QueryCtx, 'db'>,
   league: LeagueDivisionFields,
-): Promise<DivisionLabelInput | undefined> {
+): Promise<DivisionLabelInput> {
   const { gender, playersPerSide, level, ageGroup, customLevelId } = league;
-  if (gender === undefined || playersPerSide === undefined || level === undefined) {
-    return undefined;
-  }
   const customLevel =
     customLevelId === undefined ? null : await ctx.db.get('customLevels', customLevelId);
   // A level of another organization or sport falls back to the standard level, so bad data cannot fail the page.
@@ -37,16 +33,15 @@ async function leagueDivisionInput(
     levelLabel: ownCustomLevel
       ? customLevelLabel(ownCustomLevel.name, ownCustomLevel.standardLevel, league.sport)
       : levelLabel(level),
-    ...(ageGroup !== undefined && { ageGroup }),
+    ageGroup,
   };
 }
 
 export async function leagueDivisionLabel(
   ctx: Pick<QueryCtx, 'db'>,
   league: LeagueDivisionFields,
-): Promise<string | undefined> {
-  const input = await leagueDivisionInput(ctx, league);
-  return input && divisionLabel(input);
+): Promise<string> {
+  return divisionLabel(await leagueDivisionInput(ctx, league));
 }
 
 export async function leagueDivisionSearchWords(
@@ -54,7 +49,6 @@ export async function leagueDivisionSearchWords(
   league: LeagueDivisionFields,
 ): Promise<string[]> {
   const input = await leagueDivisionInput(ctx, league);
-  if (!input) return [sportName(league.sport)];
   const alias = genderSearchAlias(input.gender, input.ageGroup);
   return [sportName(league.sport), ...divisionLabelParts(input), ...(alias ? [alias] : [])];
 }

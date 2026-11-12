@@ -14,9 +14,9 @@ import {
   type EnvironmentProviders,
 } from '@angular/core';
 import { AppUpdates } from '../core/service-worker/app-updates';
+import { FLOATING_CARD_CLASSES } from '../ui/card/card-classes';
 
-const CARD =
-  'fixed inset-x-3 bottom-3 z-40 rounded-xl bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-card-foreground shadow-lg ring-1 ring-foreground/10 sm:inset-x-auto sm:end-4 sm:bottom-4 sm:w-96';
+const CARD = `${FLOATING_CARD_CLASSES} fixed inset-x-3 bottom-3 z-40 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:inset-x-auto sm:end-4 sm:bottom-4 sm:w-96`;
 const BUTTON =
   "data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2";
 const RELOAD_BUTTON = `${BUTTON} bg-primary text-primary-foreground [a]:hover:bg-primary/90`;
@@ -33,7 +33,7 @@ const LATER_BUTTON = `${BUTTON} hover:bg-muted hover:text-foreground dark:hover:
   template: `
     @switch (updates.card()) {
       @case ('ready') {
-        <section #card aria-labelledby="update-title" [class]="cardClasses">
+        <section #card data-slot="card" aria-labelledby="update-title" [class]="cardClasses">
           <div class="flex items-start gap-3">
             <span
               class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
@@ -95,7 +95,13 @@ const LATER_BUTTON = `${BUTTON} hover:bg-muted hover:text-foreground dark:hover:
         </section>
       }
       @case ('unrecoverable') {
-        <section #card role="alert" aria-labelledby="update-title" [class]="cardClasses">
+        <section
+          #card
+          data-slot="card"
+          role="alert"
+          aria-labelledby="update-title"
+          [class]="cardClasses"
+        >
           <div class="flex items-start gap-3">
             <span
               class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive"

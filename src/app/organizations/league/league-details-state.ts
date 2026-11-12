@@ -47,7 +47,7 @@ export interface DetailsValues {
 
 export interface SavedDetails {
   name: string;
-  division?: SavedDivision | undefined;
+  division: SavedDivision;
 }
 
 export type ExpectedDetails = NonNullable<FunctionArgs<typeof api.leagues.update>['expected']>;
@@ -74,7 +74,7 @@ export interface CurrentLeague {
 export function savedDetails(name: string, division: OrganizerLeague['division']): SavedDetails {
   return {
     name,
-    division: division && {
+    division: {
       gender: division.gender,
       playersPerSide: division.playersPerSide,
       level: division.level,
@@ -86,8 +86,7 @@ export function savedDetails(name: string, division: OrganizerLeague['division']
   };
 }
 
-function expectedOf(name: string, division: SavedDivision | undefined): ExpectedDetails {
-  if (!division) return { name };
+function expectedOf(name: string, division: SavedDivision): ExpectedDetails {
   const { customLevelId, minimumRosterSize } = division;
   return {
     name,
@@ -104,7 +103,7 @@ function expectedOf(name: string, division: SavedDivision | undefined): Expected
 function currentLeagueOf(failure: unknown): CurrentLeague | null {
   if (!(failure instanceof ConvexError)) return null;
   const current = (failure.data as Record<string, unknown>)['current'] as
-    { name?: unknown; division?: OrganizerLeague['division'] } | undefined;
+    { name?: unknown; division: OrganizerLeague['division'] } | undefined;
   if (typeof current?.name !== 'string') return null;
   return { name: current.name, division: current.division };
 }
@@ -139,6 +138,8 @@ export class LeagueDetails {
   readonly announcement: Signal<readonly string[]>;
 
   private readonly baselineName = signal('');
+  // Held here because the division's own baseline is undefined in the create-a-league form.
+  private baselineDivision: SavedDivision | null = null;
   private readonly nameNote = linkedSignal<string, FieldNote | null>({
     source: () => this.model().name,
     computation: () => null,
@@ -223,10 +224,10 @@ export class LeagueDetails {
 
   load(saved: SavedDetails): void {
     this.baselineName.set(saved.name);
+    this.baselineDivision = saved.division;
     this.model.set({ name: saved.name });
     this.nameNote.set(null);
-    if (saved.division) this.division.load(saved.division);
-    else this.division.clear();
+    this.division.load(saved.division);
     this.fields().reset();
     this.alert.set(null);
     for (const field of DETAILS_FIELDS) this.shown[field].hide();
@@ -241,6 +242,8 @@ export class LeagueDetails {
     online: boolean,
     send: (values: DetailsValues, expected: ExpectedDetails) => Promise<Result>,
   ): Promise<DetailsSubmitOutcome<Result>> {
+    const baselineDivision = this.baselineDivision;
+    if (!baselineDivision) throw new Error('LeagueDetails.submit before load');
     this.alert.set(null);
     // Enter in Name submits before Name is left.
     this.fillDivisionFromName();
@@ -265,7 +268,7 @@ export class LeagueDetails {
     };
     this.submitting.set(true);
     try {
-      const result = await send(values, expectedOf(this.baselineName(), this.division.baseline));
+      const result = await send(values, expectedOf(this.baselineName(), baselineDivision));
       return { sent: true, values, result };
     } catch (failure) {
       return this.failed(failure);
@@ -312,7 +315,8 @@ export class LeagueDetails {
       }
       this.baselineName.set(newer.name);
     }
-    if (newer.division) this.division.takeSavedByOthers(newer.division);
+    this.baselineDivision = newer.division;
+    this.division.takeSavedByOthers(newer.division);
   }
 
   private showAlert(alert: DetailsAlertKind): DetailsSubmitOutcome<never> {

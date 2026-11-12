@@ -2,8 +2,11 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { forbiddenError, openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { expectBareCard, expectBareCards, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { TeamPage } from './team-page';
+import { routerLinkState } from '../ui/testing/router-link-state';
 
 @Component({ template: '<a id="go" href="/app/teams/team_sharks">go</a>' })
 class Start {}
@@ -58,6 +61,11 @@ describe('TeamPage', () => {
     expect(text(main().querySelector('[role="status"]'))).toBe('Loading the team.');
   });
 
+  it('while loading, every placeholder is drawn through the skeleton, each with its own radius', async () => {
+    await open();
+    expectSkeletonBoxes(main(), { 'rounded-full': 3, 'rounded-md': 11 });
+  });
+
   it('while loading, each roster avatar placeholder is rounded-full and its text bars are rounded-md', async () => {
     await open();
     const rows = main().querySelectorAll('[aria-hidden="true"] .divide-y > div');
@@ -69,6 +77,34 @@ describe('TeamPage', () => {
         ['rounded-md'],
       ]);
     }
+  });
+
+  it('draws the loading placeholder as a bare helm card, as the roster it stands for', async () => {
+    await open();
+    expectBareCards(main(), ['overflow-hidden lg:col-span-2']);
+  });
+
+  it('draws the roster as a bare helm card', async () => {
+    await open();
+    await answer(SHARKS);
+    expectBareCard(
+      main().querySelector('section[aria-labelledby="roster-heading"]'),
+      'overflow-hidden',
+    );
+  });
+
+  it('draws the no-access message in a bare helm card, with the panel overflow', async () => {
+    await open();
+    o.subscription(GET)!.fail(forbiddenError());
+    await o.flush();
+    expectBareCards(main(), [`${MESSAGE_CARD_LAYOUT} overflow-hidden`]);
+  });
+
+  it('sets no navigation state on its season link, so the season page shows the bars', async () => {
+    await open();
+    await answer(SHARKS);
+
+    expect(routerLinkState(o.harness.fixture, main().querySelector('h1 + p a'))).toBeUndefined();
   });
 
   it('shows the team, its links, the captain line, and the roster against the minimum', async () => {

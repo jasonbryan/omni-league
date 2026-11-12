@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
+import { routerLinkState } from '../../ui/testing/router-link-state';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -220,6 +221,14 @@ describe('LeagueManagement: publishing a season', () => {
   });
 
   describe('the result (state 19)', () => {
+    it('sets no navigation state on View season page, so the season page shows the bars', async () => {
+      await open();
+      await pressPublish(0);
+      await confirmAndPublish();
+
+      expect(routerLinkState(o.harness.fixture, notice()!.querySelector('a'))).toBeUndefined();
+    });
+
     it('closes the dialog, shows Published on the row without a button, and announces it in a status above the list with focus on it', async () => {
       await open();
       await pressPublish(0);

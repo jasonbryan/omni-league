@@ -15,7 +15,7 @@ import {
   insertTeamInvite,
   insertTeamWithCaptain,
 } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import { ORGANIZER_TEAMS_LIMIT } from './seasons';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -77,9 +77,25 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
-        { name: 'Mens 2s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
-        { name: 'Draft 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'], status: 'draft' },
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Mens 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Draft 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          status: 'draft',
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const b = await insertTenant(ctx, {

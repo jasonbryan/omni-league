@@ -79,7 +79,7 @@ describe('the league management page specs', () => {
   const OPEN_THE_PAGE = [
     'after-sign-in',
     'accept-invite',
-    'app-leagues',
+    'app-home',
     'organization-leagues',
     'touch-targets',
     'validate-on-blur',
@@ -745,6 +745,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/ui/button/hlm-button.token.ts': SHEET,
     'src/app/ui/button/hlm-button.ts': SHEET,
     'src/app/ui/button/index.ts': SHEET,
+    'src/app/ui/card/card-classes.ts': MAIN_SERVER,
     'src/app/ui/sheet/hlm-sheet-close.ts': SHEET,
     'src/app/ui/sheet/hlm-sheet-content.ts': SHEET,
     'src/app/ui/sheet/hlm-sheet-description.ts': SHEET,

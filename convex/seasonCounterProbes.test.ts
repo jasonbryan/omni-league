@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, leagueRequiredFields } from './test.setup';
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -32,7 +32,14 @@ async function league(t: T): Promise<Doc<'leagues'>> {
     await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+      ],
     });
     const organization = (await ctx.db
       .query('organizations')
@@ -86,7 +93,9 @@ const counter = async (t: T, leagueId: Id<'leagues'>) =>
 async function dropCounter(t: T, row: Doc<'leagues'>): Promise<void> {
   await t.run(async (ctx) => {
     await ctx.db.replace('leagues', row._id, {
+      ...leagueRequiredFields(row.sport, row.name),
       organizationId: row.organizationId,
+      programId: row.programId,
       name: row.name,
       slug: row.slug,
       sport: row.sport,

@@ -5,11 +5,11 @@ import { lucideUserRound } from '@ng-icons/lucide';
 import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { injectCurrentUrl } from './current-url';
+import { SKELETON_CLASSES } from '../ui/skeleton';
 import { initialsOf } from './initials';
 import { pathWithoutQueryOrTrailingSlash } from './url-path';
 
 const ACCOUNT_PATH = '/app/account';
-const PULSE = 'bg-muted motion-safe:animate-pulse';
 
 /**
  * `users.me` is asked only once Convex has accepted the token, so the first answer is the caller's own and a shared device never shows the previous user's email.
@@ -25,15 +25,24 @@ const PULSE = 'bg-muted motion-safe:animate-pulse';
       <span role="status" class="sr-only">Loading your account.</span>
       @if (variant() === 'sidebar') {
         <div aria-hidden="true" class="flex min-h-11 items-center gap-3 p-2">
-          <span [class]="pulse + ' size-9 shrink-0 rounded-full'"></span>
+          <span
+            data-slot="skeleton"
+            class="${SKELETON_CLASSES} size-9 shrink-0 rounded-full"
+          ></span>
           <span class="min-w-0 flex-1">
-            <span [class]="pulse + ' block h-4 w-28 max-w-full rounded-md'"></span>
-            <span [class]="pulse + ' mt-1.5 block h-3 w-36 max-w-full rounded-md'"></span>
+            <span
+              data-slot="skeleton"
+              class="${SKELETON_CLASSES} block h-4 w-28 max-w-full rounded-md"
+            ></span>
+            <span
+              data-slot="skeleton"
+              class="${SKELETON_CLASSES} mt-1.5 block h-3 w-36 max-w-full rounded-md"
+            ></span>
           </span>
         </div>
       } @else {
         <span aria-hidden="true" class="flex size-11 shrink-0 items-center justify-center">
-          <span [class]="pulse + ' size-9 rounded-full'"></span>
+          <span data-slot="skeleton" class="${SKELETON_CLASSES} size-9 rounded-full"></span>
         </span>
       }
     } @else if (variant() === 'sidebar') {
@@ -88,7 +97,6 @@ export class AccountRow {
   );
 
   protected readonly path = ACCOUNT_PATH;
-  protected readonly pulse = PULSE;
   protected readonly avatar =
     'flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-accent-foreground';
 

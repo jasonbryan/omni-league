@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertLeague, insertTenant } from './lib/tenantWrites';
+import { insertLeague, insertTenant, defaultDivision } from './lib/tenantWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 import schema from './schema';
-import { modules } from './test.setup';
+import { modules, organizationListFields } from './test.setup';
 
 function setup() {
   return convexTest(schema, modules);
@@ -77,11 +77,13 @@ describe('the sport filter at the page cap with real rows', () => {
             name,
             sport: 'soccer' as const,
             locations: ['Only Field'],
+            division: defaultDivision('soccer' as const),
           })),
           ...names('Soft', 12).map((name) => ({
             name,
             sport: 'softball' as const,
             locations: ['Only Field'],
+            division: defaultDivision('softball' as const),
           })),
         ],
       }),
@@ -161,6 +163,7 @@ describe('a league written before the backfill, then the backfill', () => {
   async function oldOrganization(t: T) {
     return t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
+        ...organizationListFields('Old Club'),
         name: 'Old Club',
         slug: 'old-club',
         leagueCount: 0,
@@ -183,9 +186,24 @@ describe('a league written before the backfill, then the backfill', () => {
     const t = setup();
     const organizationId = await oldOrganization(t);
     for (const league of [
-      { name: 'One', sport: 'soccer' as const, locations: ['Field A', 'Field A'] },
-      { name: 'Two', sport: 'soccer' as const, locations: ['Field A', 'Field B'] },
-      { name: 'Three', sport: 'softball' as const, locations: ['Field B'] },
+      {
+        name: 'One',
+        sport: 'soccer' as const,
+        locations: ['Field A', 'Field A'],
+        division: defaultDivision('soccer' as const),
+      },
+      {
+        name: 'Two',
+        sport: 'soccer' as const,
+        locations: ['Field A', 'Field B'],
+        division: defaultDivision('soccer' as const),
+      },
+      {
+        name: 'Three',
+        sport: 'softball' as const,
+        locations: ['Field B'],
+        division: defaultDivision('softball' as const),
+      },
     ]) {
       await t.run((ctx) => insertLeague(ctx, organizationId, league));
     }
@@ -215,7 +233,12 @@ describe('a league written before the backfill, then the backfill', () => {
     const t = setup();
     const organizationId = await oldOrganization(t);
     await t.run((ctx) =>
-      insertLeague(ctx, organizationId, { name: 'One', sport: 'soccer', locations: ['Field A'] }),
+      insertLeague(ctx, organizationId, {
+        name: 'One',
+        sport: 'soccer',
+        locations: ['Field A'],
+        division: defaultDivision('soccer'),
+      }),
     );
     await t.mutation(internal.seed.insertDemoData, {});
     const before = await stored(t, organizationId);
@@ -226,12 +249,11 @@ describe('a league written before the backfill, then the backfill', () => {
       customLevels: 0,
       leagues: 0,
       seasons: 0,
+      tournaments: 0,
       backfilled: {
         organizations: 0,
         locations: 0,
         leagues: 0,
-        seasons: 0,
-        leagueDivisions: 0,
         teamCounts: 0,
         pendingInviteCounts: 0,
         waitlistCounts: 0,
@@ -239,7 +261,6 @@ describe('a league written before the backfill, then the backfill', () => {
         staffInviteCounts: 0,
         draftLeagueCounts: 0,
       },
-      updated: { organizations: 0, leagues: 0 },
     });
     expect(await stored(t, organizationId)).toEqual(before);
   });
@@ -248,7 +269,12 @@ describe('a league written before the backfill, then the backfill', () => {
     const t = setup();
     const organizationId = await oldOrganization(t);
     await t.run((ctx) =>
-      insertLeague(ctx, organizationId, { name: 'One', sport: 'soccer', locations: ['Field A'] }),
+      insertLeague(ctx, organizationId, {
+        name: 'One',
+        sport: 'soccer',
+        locations: ['Field A'],
+        division: defaultDivision('soccer'),
+      }),
     );
     await t.mutation(internal.seed.insertDemoData, {});
     await t.run((ctx) =>
@@ -256,6 +282,7 @@ describe('a league written before the backfill, then the backfill', () => {
         name: 'Two',
         sport: 'soccer',
         locations: ['Field A', 'Field B'],
+        division: defaultDivision('soccer'),
       }),
     );
     const after = await stored(t, organizationId);
@@ -273,6 +300,7 @@ describe('a league written before the backfill, then the backfill', () => {
         name: 'One',
         sport: 'soccer',
         locations: ['Field A'],
+        division: defaultDivision('soccer'),
       });
       const field = await ctx.db
         .query('locations')
@@ -301,6 +329,7 @@ describe('a league written before the backfill, then the backfill', () => {
         name: 'One',
         sport: 'soccer',
         locations: ['Field A', 'Field B'],
+        division: defaultDivision('soccer'),
       });
       await ctx.db.patch('organizations', organizationId, { sportLeagueCounts: { soccer: 99 } });
     });
@@ -325,7 +354,12 @@ describe('several writes at once', () => {
     await Promise.all(
       ['a', 'b', 'c', 'd', 'e'].map((name) =>
         t.run((ctx) =>
-          insertLeague(ctx, organizationId, { name, sport: 'soccer', locations: ['Shared'] }),
+          insertLeague(ctx, organizationId, {
+            name,
+            sport: 'soccer',
+            locations: ['Shared'],
+            division: defaultDivision('soccer'),
+          }),
         ),
       ),
     );

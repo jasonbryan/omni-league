@@ -1093,6 +1093,7 @@ test.describe('Overview: the league count and the checklist', () => {
         /Switch organization/,
         'Overview',
         /^Leagues\d*$/,
+        'Tournaments',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',

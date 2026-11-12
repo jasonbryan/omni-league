@@ -5,6 +5,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { HomeSidebar } from './home-sidebar';
 
 interface Mine {
@@ -18,7 +19,12 @@ describe('HomeSidebar', () => {
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
 
-  async function open(url = '/app', mine?: Mine[]) {
+  interface MyTeam {
+    teamId: string;
+    teamName: string;
+  }
+
+  async function open(url = '/app', mine?: Mine[], teams?: MyTeam[]) {
     convex = new FakeConvexClient();
     const auth = new FakeAuthClient();
     TestBed.configureTestingModule({
@@ -36,6 +42,9 @@ describe('HomeSidebar', () => {
     if (mine) {
       convex.activeSubscriptions.find((s) => s.name === 'organizations:listMine')?.emit(mine);
     }
+    if (teams) {
+      convex.activeSubscriptions.find((s) => s.name === 'teams:listMine')?.emit(teams);
+    }
     await harness.fixture.whenStable();
     return harness.fixture.nativeElement as HTMLElement;
   }
@@ -50,7 +59,7 @@ describe('HomeSidebar', () => {
     expect(links(page)[0]).toEqual(['Omni League', '/']);
   });
 
-  it('asks organizations.listMine only once Convex has accepted the token', async () => {
+  it('asks organizations.listMine and teams.listMine only once Convex has accepted the token', async () => {
     convex = new FakeConvexClient();
     const auth = new FakeAuthClient();
     TestBed.configureTestingModule({
@@ -66,7 +75,10 @@ describe('HomeSidebar', () => {
     expect(convex.subscriptions).toEqual([]);
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
-    expect(convex.activeSubscriptions.map((s) => s.name)).toEqual(['organizations:listMine']);
+    expect(convex.activeSubscriptions.map((s) => s.name).sort()).toEqual([
+      'organizations:listMine',
+      'teams:listMine',
+    ]);
   });
 
   it('marks Home as the current page on /app only', async () => {
@@ -91,6 +103,7 @@ describe('HomeSidebar', () => {
     expect(links(page)).toEqual([
       ['Omni League', '/'],
       ['Home', '/app'],
+      ['Find a league', '/leagues'],
     ]);
   });
 
@@ -103,6 +116,7 @@ describe('HomeSidebar', () => {
     expect(links(page)).toEqual([
       ['Omni League', '/'],
       ['Home', '/app'],
+      ['Find a league', '/leagues'],
       ['Gulf Coast Sport & Social', '/app/organizations/gulf-coast'],
     ]);
   });
@@ -117,7 +131,7 @@ describe('HomeSidebar', () => {
       },
       { name: 'Empty Org', slug: 'empty', role: 'leagueOrganizer', leagues: [] },
     ]);
-    expect(links(page).slice(2)).toEqual([
+    expect(links(page).slice(3)).toEqual([
       ['Sunday Sports', '/app/organizations/sunday/leagues/reverse-coed-4s'],
       ['Empty Org', '/organizations/empty'],
     ]);
@@ -132,9 +146,97 @@ describe('HomeSidebar', () => {
     }
   });
 
-  it('shows a loading status, and no group, while the list loads', async () => {
+  it('draws the loading placeholder through the skeleton, rounded-lg', async () => {
+    const page = await open('/app');
+    expectSkeletonBoxes(page, { 'rounded-lg': 1 });
+  });
+
+  it('shows a loading status, and no group, while the lists load', async () => {
     const page = await open('/app');
     expect(page.querySelector('[role="status"]')?.textContent).toContain('Loading');
     expect(page.textContent).not.toContain('Your organizations');
+    expect(page.textContent).not.toContain('Your teams');
+  });
+
+  describe('Find a league and Your teams', () => {
+    const TEAMS = [
+      { teamId: 'k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e', teamName: 'Sand Sharks' },
+      { teamId: 'k1aces', teamName: 'Pair of Aces' },
+    ];
+
+    it('lists Find a league under Home, with aria-current on Home only', async () => {
+      const page = await open('/app', [], []);
+      expect(links(page).slice(1, 3)).toEqual([
+        ['Home', '/app'],
+        ['Find a league', '/leagues'],
+      ]);
+      expect(page.querySelectorAll('[aria-current]')).toHaveLength(1);
+      expect(page.querySelector('a[href="/app"]')?.getAttribute('aria-current')).toBe('page');
+      expect(page.querySelector('a[href="/leagues"]')?.getAttribute('aria-current')).toBeNull();
+    });
+
+    it('lists each team under a "Your teams" group, linking to its page', async () => {
+      const page = await open('/app', [], TEAMS);
+      const group = page.querySelector('ul[aria-label="Your teams"]');
+      expect(group).not.toBeNull();
+      expect(page.textContent).toContain('Your teams');
+      expect(
+        [...group!.querySelectorAll('a')].map((a) => [
+          a.textContent.trim(),
+          a.getAttribute('href'),
+        ]),
+      ).toEqual([
+        ['Sand Sharks', '/app/teams/k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e'],
+        ['Pair of Aces', '/app/teams/k1aces'],
+      ]);
+    });
+
+    it('puts Your teams before Your organizations', async () => {
+      const page = await open(
+        '/app',
+        [{ name: 'Gulf Coast', slug: 'gulf-coast', role: 'orgAdmin', leagues: [] }],
+        TEAMS,
+      );
+      expect(links(page).map(([name]) => name)).toEqual([
+        'Omni League',
+        'Home',
+        'Find a league',
+        'Sand Sharks',
+        'Pair of Aces',
+        'Gulf Coast',
+      ]);
+    });
+
+    it('has no "Your teams" group for a user on no team', async () => {
+      const page = await open('/app', [], []);
+      expect(page.textContent).not.toContain('Your teams');
+    });
+
+    it('encodes the team id in the link, so an id cannot change the path', async () => {
+      const page = await open('/app', [], [{ teamId: '../x?y', teamName: 'Odd' }]);
+      expect(page.querySelector('ul[aria-label="Your teams"] a')?.getAttribute('href')).toBe(
+        '/app/teams/..%2Fx%3Fy',
+      );
+    });
+
+    it('marks the team whose page is open as current, and Home as not', async () => {
+      const page = await open('/app/teams/k1aces', [], TEAMS);
+      const current = [...page.querySelectorAll('[aria-current]')];
+      expect(current.map((a) => a.textContent.trim())).toEqual(['Pair of Aces']);
+      expect(current[0]?.getAttribute('aria-current')).toBe('page');
+    });
+
+    it('keeps rows 44px tall on touch screens', async () => {
+      const page = await open('/app', [], TEAMS);
+      for (const link of page.querySelectorAll('a')) {
+        expect(link.className).toMatch(/(^|\s)(pointer-coarse:)?min-h-11(\s|$)/);
+      }
+    });
+
+    it('lists the groups that have answered while the other list still loads', async () => {
+      const page = await open('/app', undefined, TEAMS);
+      expect(page.querySelector('ul[aria-label="Your teams"]')).not.toBeNull();
+      expect(page.querySelector('[role="status"]')?.textContent).toContain('Loading');
+    });
   });
 });

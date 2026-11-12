@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules, setTeamCounts } from './test.setup';
 
@@ -26,9 +26,24 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Alpha', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Beta', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Gamma', sport: 'softball', locations: ['Alpha Field'] },
+        {
+          name: 'Alpha',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Beta',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Gamma',
+          sport: 'softball',
+          locations: ['Alpha Field'],
+          division: defaultDivision('softball'),
+        },
       ],
     });
   });

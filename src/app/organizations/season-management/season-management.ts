@@ -45,14 +45,14 @@ import { SeasonLimits } from './season-limits';
 import { SeasonWaitlistPanel } from './season-waitlist-panel';
 import { seasonManagementPath } from './season-management-path';
 import { teamRowLines } from './team-row-lines';
+import { HlmCard } from '../../ui/card';
 
 const LINE = 'flex items-start gap-1.5 text-sm text-muted-foreground';
 const LINE_ICON = 'mt-0.5 shrink-0 text-base';
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const PANEL_HEAD =
   'flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5';
-const TILE = `rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 px-3 py-3 md:px-4 md:py-4`;
+const TILE = 'px-3 py-3 md:px-4 md:py-4';
 const TILE_LABEL = 'flex items-center gap-2 text-xs font-medium text-muted-foreground md:text-sm';
 const TILE_ICON =
   'hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground md:flex';
@@ -81,6 +81,7 @@ function localDay(ms: number): string {
     AdminAlert,
     HlmBadge,
     HlmBreadcrumbImports,
+    HlmCard,
     NgIcon,
     PlaceFreeAgentDialog,
     RouterLink,
@@ -176,7 +177,7 @@ function localDay(ms: number): string {
           [waitlistCount]="waitlistCount()"
         />
         <dl class="mt-6 grid grid-cols-3 gap-3 md:gap-4">
-          <div [class]="tile">
+          <div hlmCard size="bare" [class]="tile">
             <dt [class]="tileLabel">
               <span [class]="tileIcon"
                 ><ng-icon name="lucideUsersRound" class="text-base" aria-hidden="true" /></span
@@ -191,7 +192,7 @@ function localDay(ms: number): string {
               }
             </dd>
           </div>
-          <div [class]="tile">
+          <div hlmCard size="bare" [class]="tile">
             <dt [class]="tileLabel">
               <span [class]="tileIcon"
                 ><ng-icon name="lucideUserRound" class="text-base" aria-hidden="true" /></span
@@ -199,7 +200,7 @@ function localDay(ms: number): string {
             </dt>
             <dd [class]="tileValue" data-testid="free-agent-count">{{ freeAgentCount() }}</dd>
           </div>
-          <div [class]="tile">
+          <div hlmCard size="bare" [class]="tile">
             <dt [class]="tileLabel">
               <span [class]="tileIcon"
                 ><ng-icon name="lucideListOrdered" class="text-base" aria-hidden="true" /></span
@@ -209,7 +210,12 @@ function localDay(ms: number): string {
           </div>
         </dl>
         <div class="mt-4 grid items-start gap-4 md:mt-6 md:gap-6 lg:grid-cols-3">
-          <section aria-labelledby="teams-heading" [class]="panel + ' lg:col-span-2'">
+          <section
+            hlmCard
+            size="bare"
+            aria-labelledby="teams-heading"
+            [class]="panel + ' lg:col-span-2'"
+          >
             <div [class]="panelHead">
               <h2 id="teams-heading" class="font-semibold">Teams</h2>
             </div>
@@ -293,6 +299,8 @@ function localDay(ms: number): string {
           />
           <section
             id="free-agents"
+            hlmCard
+            size="bare"
             aria-labelledby="free-agents-heading"
             [class]="panel + ' lg:col-start-3 lg:row-span-2 lg:row-start-1'"
           >

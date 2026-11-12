@@ -866,7 +866,7 @@ test.describe('offline navigation inside the app (production build against the l
 
     await setOffline(context, false);
     await expect(accountRowName(page, user)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('region', { name: 'Your teams' })).toContainText('No teams yet');
+    await expect(page.getByRole('main')).toContainText("You're not on a team yet");
     const details = account.getByRole('region', { name: 'Your details' });
     await expect(details).toContainText(user.name, { timeout: 20_000 });
     await expect(details).toContainText(user.email);
@@ -918,7 +918,7 @@ test.describe('offline navigation inside the app (production build against the l
       '/api/auth/get-session',
     );
     await expect(
-      page.getByRole('status').filter({ hasText: 'Loading your teams.' }),
+      page.getByRole('status').filter({ hasText: 'Loading your teams and registrations.' }),
     ).toBeAttached();
     await expect(page.getByRole('main')).not.toBeEmpty();
     expect(Date.now() - loadedAt).toBeLessThan(3_000);

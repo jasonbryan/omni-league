@@ -1,33 +1,39 @@
 import { DOCUMENT } from '@angular/common';
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { onLaterChoiceOrScroll } from '../../core/later-choice';
-import { pathOf } from '../league/league-landing';
-import { AdminContext } from './admin-context';
-import { adminPath } from './admin-path';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  type ActivatedRouteSnapshot,
+} from '@angular/router';
+import { onLaterChoiceOrScroll } from './later-choice';
 
-const LEAGUES_SECTION = 'leagues';
-const CREATE_LEAGUE_FRAGMENT = 'create-league';
+export interface FragmentLandingRule {
+  readonly atLoad: (snapshot: ActivatedRouteSnapshot) => boolean;
+  /** Angular keeps the page when only its path changes, so each later arrival is judged again. */
+  readonly atArrival: (path: string, fragment: string | null) => boolean;
+}
+
+export function pathOf(url: string): string {
+  const end = url.search(/[?#]/);
+  return end === -1 ? url : url.slice(0, end);
+}
 
 /**
- * Provided by the admin area, which renders its pages only once it is ready, so it starts at each arrival
- * and sees a later choice or scroll while the admin area is still loading, before the Leagues page exists.
+ * A page injects its subclass in its constructor, so it listens from the arrival and sees a later choice
+ * or scroll while the page's data is still loading, before the section to land on exists.
  */
-@Injectable()
-export class CreateLeagueLanding {
+export abstract class FragmentLanding {
   private readonly document = inject(DOCUMENT);
   private readonly router = inject(Router);
-  private readonly context = inject(AdminContext);
   private listening = new AbortController();
   private shownPath: string | null = null;
   readonly pending = signal(false);
 
-  constructor() {
+  protected constructor(rule: FragmentLandingRule) {
     inject(DestroyRef).onDestroy(() => this.listening.abort());
-    const snapshot = inject(ActivatedRoute).snapshot;
-    const section = snapshot.firstChild?.url.map((segment) => segment.path).join('/');
-    this.arm(section === LEAGUES_SECTION && snapshot.fragment === CREATE_LEAGUE_FRAGMENT);
+    this.arm(rule.atLoad(inject(ActivatedRoute).snapshot));
     this.router.events.pipe(takeUntilDestroyed()).subscribe((event) => {
       if (!(event instanceof NavigationEnd)) return;
       const path = pathOf(event.urlAfterRedirects);
@@ -35,10 +41,7 @@ export class CreateLeagueLanding {
       this.shownPath = path;
       if (!arrived) return;
       const fragment = this.router.parseUrl(event.urlAfterRedirects).fragment;
-      this.arm(
-        path === adminPath(this.context.slug(), LEAGUES_SECTION) &&
-          fragment === CREATE_LEAGUE_FRAGMENT,
-      );
+      this.arm(rule.atArrival(path, fragment));
     });
   }
 

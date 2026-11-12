@@ -26,18 +26,14 @@ import { RevealOnFocus } from '../core/forms/reveal-on-focus';
 import { api, injectAction, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  INPUT,
-  LABEL,
-} from '../organizations/admin/field-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { HlmFieldImports } from '../ui/field';
+import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
+import { HlmTextareaImports } from '../ui/textarea';
 import { TEAM_INVITE_FORM_ALERTS, TeamInviteForm } from './team-invite-form';
+import { HlmCard } from '../ui/card';
 
 interface CreatedInvite {
   email: string;
@@ -47,10 +43,7 @@ interface CreatedInvite {
 
 type CopyOutcome = 'copied' | 'blocked' | null;
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
-const TEXTAREA =
-  'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
+const PANEL = 'overflow-hidden';
 
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
@@ -59,7 +52,11 @@ const TEXTAREA =
     AdminAlert,
     AdminOfflineAlert,
     FormField,
+    HlmCard,
+    HlmFieldImports,
+    HlmInputImports,
     HlmSpinner,
+    HlmTextareaImports,
     MousePressKeepsFocus,
     NgIcon,
     RevealOnFocus,
@@ -77,7 +74,14 @@ const TEXTAREA =
   host: { class: 'block' },
   template: `
     @if (created(); as invite) {
-      <section id="invite" #section aria-labelledby="invite-link-heading" class="${PANEL}">
+      <section
+        id="invite"
+        #section
+        aria-labelledby="invite-link-heading"
+        hlmCard
+        size="bare"
+        class="${PANEL}"
+      >
         <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
           <h2 #linkHeading id="invite-link-heading" tabindex="-1" class="rounded-sm font-semibold">
             Invite link ready
@@ -95,27 +99,17 @@ const TEXTAREA =
             description="If it’s lost, revoke the invite and create a new one."
             class="mt-4"
           />
-          <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
-            [class]="fieldClass + ' mt-5'"
-          >
-            <label
-              for="invite-link"
-              data-slot="field-label"
-              class="flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none"
-              >Invite link</label
-            >
+          <div hlmField class="mt-5">
+            <label hlmFieldLabel for="invite-link">Invite link</label>
             <textarea
+              hlmTextarea
               id="invite-link"
               appRevealOnFocus
               readonly
               rows="3"
               spellcheck="false"
               aria-describedby="copy-status"
-              data-slot="textarea"
-              [class]="textareaClass"
+              class="resize-none font-mono break-all"
               [value]="invite.link"
             ></textarea>
           </div>
@@ -162,7 +156,14 @@ const TEXTAREA =
         </div>
       </section>
     } @else {
-      <section id="invite" #section aria-labelledby="invite-heading" class="${PANEL}">
+      <section
+        id="invite"
+        #section
+        aria-labelledby="invite-heading"
+        hlmCard
+        size="bare"
+        class="${PANEL}"
+      >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
         >
@@ -195,21 +196,18 @@ const TEXTAREA =
           <p id="invite-note" class="mb-5 text-sm text-muted-foreground">
             Omni League doesn’t email invites yet. You’ll get a link to send them yourself.
           </p>
-          <div data-slot="field-group" [class]="fieldGroupClass">
+          <div hlmFieldGroup>
             <div
-              role="group"
-              data-slot="field"
-              data-orientation="vertical"
+              hlmField
               [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
               [attr.data-invalid]="form.error() ? 'true' : null"
-              [class]="fieldClass"
             >
-              <label for="email" data-slot="field-label" [class]="labelClass">Email</label>
+              <label hlmFieldLabel for="email">Email</label>
               <input
+                hlmInput
                 #email
                 id="email"
                 type="email"
-                data-slot="input"
                 autocomplete="off"
                 spellcheck="false"
                 autocapitalize="none"
@@ -221,14 +219,13 @@ const TEXTAREA =
                 [attr.aria-invalid]="form.error() ? 'true' : null"
                 [attr.data-invalid]="form.error() ? 'true' : null"
                 [attr.data-matches-spartan-invalid]="form.error() ? 'true' : null"
-                [class]="inputClass"
               />
-              <p data-slot="field-description" id="email-description" [class]="descriptionClass">
+              <p hlmFieldDescription id="email-description">
                 Only an account with this email address can accept. A pending invite doesn’t count
                 toward the roster.
               </p>
               @if (form.error(); as error) {
-                <div role="alert" data-slot="field-error" id="email-error" [class]="errorClass">
+                <div hlmFieldError id="email-error">
                   <ng-icon
                     name="lucideCircleAlert"
                     class="mt-0.5 shrink-0 text-base"
@@ -273,13 +270,6 @@ export class TeamInvitePanel {
   protected readonly form = new TeamInviteForm();
   protected readonly alerts = TEAM_INVITE_FORM_ALERTS;
 
-  protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly fieldClass = FIELD;
-  protected readonly labelClass = LABEL;
-  protected readonly inputClass = INPUT;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly errorClass = FIELD_ERROR;
-  protected readonly textareaClass = TEXTAREA;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;

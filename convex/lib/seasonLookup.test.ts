@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import schema from '../schema';
 import { modules } from '../test.setup';
 import { findLeagueBySlugs, findSeasonBySlugs } from './seasonLookup';
-import { insertSeason, insertTenant } from './tenantWrites';
+import { insertSeason, insertTenant, defaultDivision } from './tenantWrites';
 
 const SEASON = {
   name: 'Fall 2026',
@@ -23,15 +23,38 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Field', address: '1 Field St' }],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Field'] },
-        { name: 'Draft League', sport: 'soccer', locations: ['Field'], status: 'draft' },
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Field'] },
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Field'],
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Draft League',
+          sport: 'soccer',
+          locations: ['Field'],
+          status: 'draft',
+          division: defaultDivision('soccer'),
+        },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '2 B St' }],
-      leagues: [{ name: 'Sand 2s', sport: 'beachVolleyball', locations: ['B Field'] }],
+      leagues: [
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['B Field'],
+          division: defaultDivision('beachVolleyball'),
+        },
+      ],
     });
     const league = await ctx.db
       .query('leagues')

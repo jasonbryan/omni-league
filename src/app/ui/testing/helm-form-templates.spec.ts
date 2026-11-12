@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CONTENT_CLASSES,
@@ -92,7 +92,7 @@ interface Parts {
   handWritten?: string[];
 }
 
-const ADMIN_FORMS: Record<string, Parts> = {
+const FORMS: Record<string, Parts> = {
   'src/app/organizations/admin/admin-details.ts': {
     inputs: 2,
     fields: 2,
@@ -113,6 +113,18 @@ const ADMIN_FORMS: Record<string, Parts> = {
     labels: 3,
     descriptions: 3,
     errors: 3,
+    contents: 1,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 1,
+    handWritten: ['field-set'],
+  },
+  'src/app/organizations/admin/tournament-create-form.ts': {
+    inputs: 4,
+    fields: 5,
+    labels: 5,
+    descriptions: 5,
+    errors: 5,
     contents: 1,
     fieldSets: 1,
     legends: 1,
@@ -183,6 +195,39 @@ const ADMIN_FORMS: Record<string, Parts> = {
     legends: 1,
     horizontal: 1,
   },
+  'src/app/teams/add-minor-panel.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+  },
+  'src/app/teams/rename-minor-form.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+  },
+  'src/app/teams/join-team-page.ts': {
+    inputs: 1,
+    fields: 3,
+    labels: 3,
+    descriptions: 4,
+    errors: 2,
+    contents: 2,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 2,
+  },
+  'src/app/teams/team-invite-panel.ts': {
+    inputs: 1,
+    fields: 2,
+    labels: 2,
+    descriptions: 1,
+    errors: 1,
+    textareas: 1,
+  },
 };
 
 const FIELD_CONSTANTS = [
@@ -199,7 +244,7 @@ const FIELD_CONSTANTS = [
   'FIELD_NOTE',
 ];
 
-describe.each(Object.entries(ADMIN_FORMS))('%s', (path, expected) => {
+describe.each(Object.entries(FORMS))('%s', (path, expected) => {
   const source = readFileSync(join(process.cwd(), path), 'utf8');
   const want = {
     inputs: 0,
@@ -253,5 +298,14 @@ describe.each(Object.entries(ADMIN_FORMS))('%s', (path, expected) => {
       /data-slot="(field-group|field|field-label|input|field-description|field-content|field-error|field-set|field-legend|textarea)"/g,
     );
     expect([...written].map((match) => match[1]).sort()).toEqual(want.handWritten);
+  });
+});
+
+describe('organizations/admin/field-classes.ts', () => {
+  const path = join(process.cwd(), 'src/app/organizations/admin/field-classes.ts');
+  const source = existsSync(path) ? readFileSync(path, 'utf8') : '';
+
+  it.each(FIELD_CONSTANTS)('does not export %s', (name) => {
+    expect(source).not.toMatch(new RegExp(`export const ${name}\\b`));
   });
 });

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { AuthService } from '../core/auth/auth.service';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import {
   FakeConvexClient,
@@ -9,7 +10,12 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
+import { BUTTON_BASE, BUTTON_SIZE_LARGE } from '../ui/button/button-classes';
+import { SKELETON_CLASSES } from '../ui/skeleton/hlm-skeleton';
 import { expectBadge } from '../ui/testing/badge';
+import { expectBareCard } from '../ui/testing/card';
+import { radiusClasses } from '../ui/testing/radius-classes';
+import { routerLinkState } from '../ui/testing/router-link-state';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -66,6 +72,12 @@ const section = (harness: RouterTestingHarness) =>
   host(harness).querySelector('#registration-open');
 const heroLink = (harness: RouterTestingHarness) =>
   host(harness).querySelector<HTMLAnchorElement>('main a[href$="#registration-open"]');
+const heroPlaceholder = (harness: RouterTestingHarness) =>
+  host(harness).querySelector<HTMLElement>('[data-hero-actions] > span[aria-hidden="true"]');
+const heroManage = (harness: RouterTestingHarness) =>
+  [...host(harness).querySelectorAll('[data-hero-actions] > a')].filter(
+    (link) => text(link) === 'Manage',
+  );
 const rowStatus = (harness: RouterTestingHarness, n: number) =>
   [...(host(harness).querySelector(`#league-${n} p:last-of-type`)?.children ?? [])].map(text);
 const COED_7V7 = {
@@ -183,6 +195,12 @@ describe('the Registration open section', () => {
       ]);
     });
 
+    it('draws each card as a bare helm card on its list item', () => {
+      const cards = [...(section(harness)?.querySelectorAll(':scope > ul > li') ?? [])];
+      expect(cards).toHaveLength(2);
+      for (const card of cards) expectBareCard(card, 'flex flex-col p-5');
+    });
+
     it('shows the sport, league, season, dates, division and team size, locations, and deadline', () => {
       const card = section(harness)?.querySelector(':scope > ul > li');
       expect(text(card?.querySelector('[data-slot="badge"]'))).toBe('Soccer');
@@ -206,6 +224,34 @@ describe('the Registration open section', () => {
       expect(links.map((a) => a.getAttribute('href'))).toEqual([href, `${href}#registration`]);
       expect(text(links[1])).toBe('Register for Coed 7v7 Rec, Summer 2027');
       expect(links[1].getAttribute('data-slot')).toBe('button');
+    });
+
+    describe('the links to a season page', () => {
+      const SEVEN_V_SEVEN_NAMES = {
+        organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+        league: { slug: 'coed-7v7-rec', name: 'Coed 7v7 Rec', sportName: 'Soccer' },
+        season: { slug: 'summer-2027', name: 'Summer 2027' },
+      };
+      const stateOf = (anchor: Element | null | undefined) =>
+        routerLinkState(harness.fixture, anchor);
+
+      it('gives the open season card’s title the organization, league, and season names as navigation state', () => {
+        const title = section(harness)?.querySelector(':scope > ul > li h3 a');
+
+        expect(stateOf(title)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
+
+      it('gives the open season card’s Register button the same names', () => {
+        const register = section(harness)?.querySelector(':scope > ul > li a[data-slot="button"]');
+
+        expect(stateOf(register)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
+
+      it('gives the league row’s Register link the names of its open season', () => {
+        const register = host(harness).querySelector('#league-1 a[href$="#registration"]');
+
+        expect(stateOf(register)).toEqual(SEVEN_V_SEVEN_NAMES);
+      });
     });
 
     it('leaves out a season whose deadline has passed', () => {
@@ -522,11 +568,97 @@ describe('the Registration open section', () => {
       );
       expect(section(harness)?.querySelectorAll('li')).toHaveLength(0);
       expect(heroLink(harness)).toBeNull();
+      const placeholder = heroPlaceholder(harness);
+      expect(placeholder?.getAttribute('data-slot')).toBe('skeleton');
+      expect(placeholder?.classList).toContain('bg-muted');
+      expect(radiusClasses(placeholder)).toEqual(['rounded-lg']);
       expect(text(host(harness).querySelector('#leagues h2'))).toBe('Leagues');
       subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);
       expect(section(harness)?.querySelector('[role="status"]')).toBeNull();
       expect(section(harness)?.querySelectorAll(':scope > ul > li')).toHaveLength(2);
+    });
+  });
+
+  describe('the hero placeholder for the Register button while the open seasons load', () => {
+    const REGISTER_LABEL = 'Register for a season';
+
+    async function loading(): Promise<RouterTestingHarness> {
+      const harness = await open();
+      const results = queryResults(withSeasons(OPEN));
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      return harness;
+    }
+
+    it('takes the classes of the large Register button with no colour, so its box has the button width', async () => {
+      const placeholder = heroPlaceholder(await loading());
+      expect([...(placeholder?.classList ?? [])].sort()).toEqual(
+        [
+          ...new Set([
+            ...BUTTON_BASE.split(' '),
+            ...BUTTON_SIZE_LARGE.split(' '),
+            ...SKELETON_CLASSES.split(' '),
+          ]),
+        ].sort(),
+      );
+      for (const colour of ['bg-primary', 'text-primary-foreground', 'rounded-md']) {
+        expect(placeholder?.classList, colour).not.toContain(colour);
+      }
+    });
+
+    it('holds the label and the icon box of the button invisibly', async () => {
+      const placeholder = heroPlaceholder(await loading());
+      expect(text(placeholder)).toBe(REGISTER_LABEL);
+      const label = [...(placeholder?.children ?? [])].find(
+        (child) => text(child) === REGISTER_LABEL,
+      );
+      expect(label?.classList).toContain('invisible');
+      const icon = placeholder?.querySelector('ng-icon[data-icon="inline-end"]');
+      expect(icon?.classList).toContain('invisible');
+    });
+
+    async function loadingSoftballAfterAllSports(): Promise<RouterTestingHarness> {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons([])));
+      await harness.navigateByUrl(`${ORG}/sports/softball`);
+      await settle(harness);
+      const results = sportQueryResults(withSeasons([]), 'softball');
+      for (const name of Object.keys(results).filter((key) => key !== OPEN_SEASONS)) {
+        subscription(name).emit(results[name]);
+      }
+      await settle(harness);
+      return harness;
+    }
+
+    async function signInAsAdmin(harness: RouterTestingHarness): Promise<void> {
+      TestBed.inject(AuthService).onChange(true);
+      await settle(harness);
+      subscription('organizations:viewerIsOrgAdmin').emit(true);
+      await settle(harness);
+    }
+
+    it('shows no placeholder when the open seasons expected are none', async () => {
+      const harness = await loadingSoftballAfterAllSports();
+      expect(section(harness)?.querySelector('app-open-seasons-skeleton')).not.toBeNull();
+      expect(heroPlaceholder(harness)).toBeNull();
+      expect(host(harness).querySelector('[data-hero-actions]')).not.toBeNull();
+    });
+
+    it('keeps Manage for an org admin beside the placeholder', async () => {
+      const harness = await loading();
+      await signInAsAdmin(harness);
+      expect(heroManage(harness)).toHaveLength(1);
+      expect(heroPlaceholder(harness)).not.toBeNull();
+    });
+
+    it('keeps Manage for an org admin when no placeholder shows', async () => {
+      const harness = await loadingSoftballAfterAllSports();
+      await signInAsAdmin(harness);
+      expect(heroManage(harness)).toHaveLength(1);
+      expect(heroPlaceholder(harness)).toBeNull();
     });
   });
 

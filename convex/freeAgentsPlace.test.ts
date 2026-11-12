@@ -12,7 +12,7 @@ import {
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { TEAM_MESSAGES } from './lib/teamInput';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -46,6 +46,7 @@ async function setup() {
           name,
           sport: 'beachVolleyball' as const,
           locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball' as const),
         })),
       });
     const a = await tenant('org-a', ['Coed 4s', 'Mens 2s']);

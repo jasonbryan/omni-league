@@ -8,10 +8,12 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { Shell } from '../shell';
 import { initialsOf } from '../shell/initials';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 
 @Component({
   selector: 'app-account-settings-page',
-  imports: [AdminAlert, NgIcon, Shell],
+  imports: [AdminAlert, HlmCard, HlmSkeleton, NgIcon, Shell],
   providers: [provideIcons({ lucideLogOut })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -19,8 +21,10 @@ import { OUTLINE_BUTTON } from '../ui/button/button-classes';
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
         <h1 class="text-2xl font-semibold tracking-tight">Account settings</h1>
         <section
+          hlmCard
+          size="bare"
           aria-labelledby="account-details-heading"
-          class="mt-4 max-w-xl overflow-hidden md:mt-6 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="mt-4 max-w-xl overflow-hidden md:mt-6"
         >
           <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-5">
             <h2 id="account-details-heading" class="font-semibold">Your details</h2>
@@ -41,14 +45,10 @@ import { OUTLINE_BUTTON } from '../ui/button/button-classes';
             } @else if (loading()) {
               <p role="status" class="sr-only">Loading your account details.</p>
               <div aria-hidden="true" class="flex items-center gap-3">
-                <div class="bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-full"></div>
+                <div hlmSkeleton class="size-10 shrink-0 rounded-full"></div>
                 <div class="flex-1">
-                  <div
-                    class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-40 max-w-full"
-                  ></div>
-                  <div
-                    class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-56 max-w-full"
-                  ></div>
+                  <div hlmSkeleton class="rounded-md h-4 w-40 max-w-full"></div>
+                  <div hlmSkeleton class="rounded-md mt-2 h-3.5 w-56 max-w-full"></div>
                 </div>
               </div>
             } @else if (name(); as name) {

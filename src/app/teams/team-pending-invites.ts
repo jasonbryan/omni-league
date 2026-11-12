@@ -23,6 +23,8 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import { formatDay } from '../organizations/admin/format-day';
 import { DESTRUCTIVE_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
+import { HlmSkeleton } from '../ui/skeleton';
 
 export interface PendingInviteRow {
   inviteId: Id<'teamInvites'>;
@@ -32,22 +34,19 @@ export interface PendingInviteRow {
 
 type Notice = { kind: 'revoked'; email: string } | { kind: 'failed' } | { kind: 'offline' };
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
-const FILL = 'bg-muted motion-safe:animate-pulse';
-const SKELETON = `rounded-md ${FILL}`;
+const PANEL = 'overflow-hidden';
 
 /** Revoke acts at once, with no confirmation; the status above the list takes focus, because the button that had it is gone. */
 @Component({
   selector: 'app-team-pending-invites',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, HlmCard, HlmSkeleton, NgIcon],
   providers: [
     provideIcons({ lucideBan, lucideClock, lucideClockAlert, lucideMail, lucideMailCheck }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section aria-labelledby="pending-heading" class="${PANEL}">
+    <section aria-labelledby="pending-heading" hlmCard size="bare" class="${PANEL}">
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >
@@ -161,10 +160,10 @@ const SKELETON = `rounded-md ${FILL}`;
         <div aria-hidden="true" class="divide-y divide-border">
           @for (placeholder of placeholders; track placeholder) {
             <div class="flex gap-3 px-4 py-3.5 md:px-5">
-              <div class="${FILL} size-9 shrink-0 rounded-lg"></div>
+              <div hlmSkeleton class="size-9 shrink-0 rounded-lg"></div>
               <div class="flex-1">
-                <div class="${SKELETON} h-5 w-48 max-w-full"></div>
-                <div class="${SKELETON} mt-2 h-5 w-36 max-w-full"></div>
+                <div hlmSkeleton class="rounded-md h-5 w-48 max-w-full"></div>
+                <div hlmSkeleton class="rounded-md mt-2 h-5 w-36 max-w-full"></div>
               </div>
             </div>
           }

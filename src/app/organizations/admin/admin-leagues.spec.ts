@@ -8,7 +8,9 @@ import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses, radiusClasses } from '../../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import {
   adminRoutes,
@@ -147,6 +149,13 @@ describe('AdminLeagues', () => {
       );
     });
 
+    it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {
+      await open([]);
+      const main = page.querySelector('main')!;
+      expectBareCards(main, ['overflow-hidden lg:col-span-2', 'overflow-clip focus:outline-none']);
+      expect(main.querySelector('#create-league')!.getAttribute('tabindex')).toBe('-1');
+    });
+
     it('loading: placeholder rows and a polite status, with the create panel already there', async () => {
       await open(undefined, null);
       const panel = page.querySelector('section[aria-labelledby="leagues-heading"]')!;
@@ -155,6 +164,13 @@ describe('AdminLeagues', () => {
       expect(panel.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(3);
       expect(text(page.querySelector('#create-league h2'))).toBe('Create a league');
       expect(page.querySelector('#create-league form')).toBeNull();
+    });
+
+    it('loading: every league row placeholder is drawn through the skeleton', async () => {
+      await open(undefined, null);
+      expectSkeletonBoxes(page.querySelector('section[aria-labelledby="leagues-heading"]')!, {
+        'rounded-md': 6,
+      });
     });
 
     it('none yet (state 2): the empty state', async () => {
@@ -593,6 +609,16 @@ describe('AdminLeagues', () => {
         await locationsArrive();
         expect(skeleton()).toBeNull();
         expect(text(section())).not.toContain('Loading the locations.');
+      });
+
+      it('while the locations load, every box of the form skeleton is drawn through the skeleton', async () => {
+        await open([], null);
+        expectSkeletonBoxes(skeleton()!, {
+          'rounded-full': 3,
+          'rounded-lg': 2,
+          'rounded-md': 13,
+          'rounded-sm': 1,
+        });
       });
 
       it('while the locations load, the inputs are rounded-lg, the chips rounded-full, and the checkbox rounded-sm', async () => {

@@ -31,7 +31,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { HlmBadge } from '../../ui/badge';
 import { LeagueCreateForm } from './league-create-form';
 import {
@@ -40,14 +40,23 @@ import {
   type PublishTarget,
 } from './publish-league-dialog';
 import { injectSectionJump } from './section-jump';
+import { HlmCard } from '../../ui/card';
+import { HlmSkeleton } from '../../ui/skeleton';
 
-const FILL = 'bg-muted motion-safe:animate-pulse';
-const PULSE = `rounded-md ${FILL}`;
 const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="alert"]'];
 
 @Component({
   selector: 'app-admin-leagues',
-  imports: [AdminAlert, HlmBadge, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
+  imports: [
+    AdminAlert,
+    HlmBadge,
+    HlmCard,
+    HlmSkeleton,
+    LeagueCreateForm,
+    NgIcon,
+    PublishLeagueDialog,
+    RouterLink,
+  ],
   providers: [
     provideIcons({
       lucideCircleCheck,
@@ -85,7 +94,9 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="leagues-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
+          hlmCard
+          size="bare"
+          class="overflow-hidden lg:col-span-2"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -202,12 +213,14 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 <div class="flex gap-3 px-4 py-3.5 md:px-5">
                   <div class="flex-1">
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-48 max-w-full"
+                      class="rounded-md h-4 w-48 max-w-full"
                     ></div>
                     <div
+                      hlmSkeleton
                       aria-hidden="true"
-                      class="rounded-md bg-muted motion-safe:animate-pulse mt-2 h-3.5 w-64 max-w-full"
+                      class="rounded-md mt-2 h-3.5 w-64 max-w-full"
                     ></div>
                   </div>
                 </div>
@@ -220,7 +233,9 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
           id="create-league"
           tabindex="-1"
           aria-labelledby="create-league-heading"
-          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 focus:outline-none"
+          hlmCard
+          size="bare"
+          class="overflow-clip focus:outline-none"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -271,51 +286,61 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               class="px-4 py-4 md:px-5 md:py-5"
             >
               <div class="mb-5">
-                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-full"></div></div>
-                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-24"></div></div>
+                <div class="flex h-5 items-center">
+                  <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
+                </div>
+                <div class="flex h-5 items-center">
+                  <div hlmSkeleton class="rounded-md h-3.5 w-24"></div>
+                </div>
               </div>
               <div class="flex flex-col gap-5">
                 @for (field of skeletonFields; track field) {
                   <div class="flex flex-col gap-2">
-                    <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-16"></div></div>
+                    <div class="flex h-5 items-center">
+                      <div hlmSkeleton class="rounded-md h-3.5 w-16"></div>
+                    </div>
                     <div
+                      hlmSkeleton
                       data-slot="skeleton-input"
-                      class="${FILL} h-9 w-full rounded-lg pointer-coarse:h-11"
+                      class="h-9 w-full rounded-lg pointer-coarse:h-11"
                     ></div>
                     <div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-full"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
                       </div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-full"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-full"></div>
                       </div>
                       <div class="flex h-5 items-center">
-                        <div class="${PULSE} h-3.5 w-24"></div>
+                        <div hlmSkeleton class="rounded-md h-3.5 w-24"></div>
                       </div>
                     </div>
                   </div>
                 }
                 <div>
                   <div class="mb-1.5 flex h-5 items-center">
-                    <div class="${PULSE} h-3.5 w-16"></div>
+                    <div hlmSkeleton class="rounded-md h-3.5 w-16"></div>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     @for (chip of skeletonChips; track chip) {
                       <div
+                        hlmSkeleton
                         data-slot="skeleton-chip"
-                        class="${FILL} h-9 w-24 rounded-full pointer-coarse:h-11"
+                        class="h-9 w-24 rounded-full pointer-coarse:h-11"
                       ></div>
                     }
                   </div>
                 </div>
                 <div>
-                  <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-20"></div></div>
+                  <div class="flex h-5 items-center">
+                    <div hlmSkeleton class="rounded-md h-3.5 w-20"></div>
+                  </div>
                   <div
                     data-slot="skeleton-location"
                     class="mt-3 flex h-5 items-center gap-3 pointer-coarse:h-11"
                   >
-                    <div class="${FILL} size-4 shrink-0 rounded-sm"></div>
-                    <div class="${PULSE} h-3.5 w-48 max-w-full"></div>
+                    <div hlmSkeleton class="size-4 shrink-0 rounded-sm"></div>
+                    <div hlmSkeleton class="rounded-md h-3.5 w-48 max-w-full"></div>
                   </div>
                 </div>
               </div>
@@ -331,7 +356,7 @@ export class AdminLeagues {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly landing = inject(CreateLeagueLanding);
+  private readonly landing = inject(CreateFormLanding);
 
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;

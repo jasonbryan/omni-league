@@ -8,6 +8,7 @@ import { overlayPanes } from './support/overlay';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser } from './support/users';
+import { homeHeading } from './support/home';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -85,7 +86,7 @@ test.describe('the phone sheet on the admin area', () => {
       document.querySelector<HTMLAnchorElement>('nav a[href="/app"]')?.click();
     });
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
     await expect(dialogOf(page)).toHaveCount(0);
     await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
     await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);

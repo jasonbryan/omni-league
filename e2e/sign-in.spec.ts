@@ -12,6 +12,7 @@ import { accountByEmail, newUser, seedUser, type TestUser } from './support/user
 import { screenshot } from './support/screenshot';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import { topBarFind } from './support/top-bar-find';
+import { homeHeading } from './support/home';
 
 const LOCAL_ONLY = 'seeds a user or the throttle on the local Convex backend';
 const SIGN_IN_PATH = '/api/auth/sign-in/email';
@@ -156,7 +157,7 @@ test.describe('sign-in', () => {
       const tokens = tokensSettled(page);
       await signInAs(page, user, '/sign-in?returnTo=%2Fapp');
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+      await expect(homeHeading(page)).toBeVisible();
       await expect(
         page.getByRole('link', { name: `Account settings: ${user.name}` }),
       ).toBeVisible();
@@ -201,7 +202,7 @@ test.describe('sign-in', () => {
         const tokens = tokensSettled(page);
         await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+        await expect(homeHeading(page)).toBeVisible();
         await tokens;
         expect(offSite).toEqual([]);
       },

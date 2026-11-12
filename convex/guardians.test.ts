@@ -7,7 +7,7 @@ import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { MAX_MINORS_PER_GUARDIAN_IN_SEASON } from './lib/minorName';
 import { addMinorEntry, addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
-import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import { insertSeason, insertTenant, type NewSeason, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -65,8 +65,18 @@ async function setup() {
       organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
       locations: [{ name: 'Alpha Beach', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 4s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
-        { name: 'Mens 2s', sport: 'beachVolleyball', locations: ['Alpha Beach'] },
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
+        {
+          name: 'Mens 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Beach'],
+          division: defaultDivision('beachVolleyball'),
+        },
       ],
     });
     const league = async (slug: string) =>

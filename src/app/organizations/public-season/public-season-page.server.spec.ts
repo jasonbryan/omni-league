@@ -21,6 +21,7 @@ import {
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
 import { slotsOf } from '../../ui/testing/helm-slots';
+import { expectBareCard } from '../../ui/testing/card';
 import {
   NO_TEAMS,
   seasonQueryResults,
@@ -227,6 +228,18 @@ describe('PublicSeasonPage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
+  it('renders the loaded page with no skeleton and no navigation state, since a server request carries none', async () => {
+    const { body } = await render(SEASON_PATH, answer());
+
+    expect(body.querySelector('[data-testid="season-skeleton"]')).toBeNull();
+    expect(text(body.querySelector('main h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+    expect([...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map(text)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Sunday Reverse Coed 4s',
+      'Summer 2027',
+    ]);
+  });
+
   it('writes one description tag that matches og:description', async () => {
     const { head } = await render(SEASON_PATH, answer());
     const description = meta(head, 'og:description');
@@ -249,6 +262,13 @@ describe('PublicSeasonPage server render', () => {
     expect(order.every((position) => position > 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(text(body.querySelector('main'))).not.toMatch(/\$|price|fee/i);
+  });
+
+  it('puts the registration card’s slot, size, and classes in the raw HTML as static attributes', async () => {
+    const { body } = await render(SEASON_PATH, answer());
+    const cards = body.querySelectorAll('main #registration [data-slot="card"]');
+    expect(cards).toHaveLength(1);
+    expectBareCard(cards[0], 'min-h-66 sm:min-h-58 p-5 md:p-6 lg:sticky lg:top-24 lg:min-h-0');
   });
 
   it('renders the closed card with the link to the league’s open season when the clock is past the deadline', async () => {
@@ -375,6 +395,11 @@ describe('PublicSeasonPage server render', () => {
       `${SEASON_PATH}?page=2#teams`,
     ]);
     expect(html.indexOf('id="details-heading"')).toBeLessThan(html.indexOf('id="teams"'));
+  });
+
+  it('puts the Teams panel’s slot, size, and classes in the raw HTML as static attributes', async () => {
+    const { body } = await render(SEASON_PATH, answer());
+    expectBareCard(body.querySelector('main section#teams'), 'scroll-mt-20 overflow-hidden');
   });
 
   it('?page=2 asks for page 2 and writes names 6 and 7, the range, and a canonical and og:url ending ?page=2', async () => {

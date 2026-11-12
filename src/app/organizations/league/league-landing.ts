@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { pathOf } from '../../core/fragment-landing';
 import { onLaterChoiceOrScroll } from '../../core/later-choice';
 
 export type LandingTarget =
@@ -20,11 +21,6 @@ function targetOfFragment(fragment: string | null): LandingTarget | null {
   } catch {
     return { kind: 'season', slug };
   }
-}
-
-export function pathOf(url: string): string {
-  const end = url.search(/[?#]/);
-  return end === -1 ? url : url.slice(0, end);
 }
 
 /**

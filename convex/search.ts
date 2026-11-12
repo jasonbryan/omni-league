@@ -10,7 +10,6 @@ import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
   searchOrganizationsValidator,
-  type PublicLeagueFacets,
   type SearchLeagues,
   type SearchLeaguesBySport,
   type SearchOrganizations,
@@ -27,15 +26,8 @@ export const SEARCH_RESULT_LIMIT = 50;
 
 export const SEARCH_SCAN_LIMIT = 200;
 
-/** Every league gets one, even with no division values, so the facets count the leagues. */
-function facetOf(league: Doc<'leagues'>): PublicLeagueFacets[number] {
-  const { gender, playersPerSide, level, ageGroup } = league;
-  return {
-    ...(gender !== undefined && { gender }),
-    ...(playersPerSide !== undefined && { playersPerSide }),
-    ...(level !== undefined && { level }),
-    ...(ageGroup !== undefined && { ageGroup }),
-  };
+function facetOf({ gender, playersPerSide, level, ageGroup }: Doc<'leagues'>) {
+  return { gender, playersPerSide, level, ageGroup };
 }
 
 async function searchRows(
@@ -64,7 +56,7 @@ async function searchRows(
       slug: league.slug,
       sportName: sportName(league.sport),
       locationNames: await leagueLocationNames(ctx, organization, league),
-      ...(label !== undefined && { divisionLabel: label }),
+      divisionLabel: label,
       seasons: await leagueRowSeasons(ctx, league),
     });
   }
@@ -89,7 +81,7 @@ export const leagues = query({
       .take(SEARCH_SCAN_LIMIT);
     const filters = filtersInScope(args, sport);
     const passes = (league: Doc<'leagues'>) => matchesDivisionFilters(league, filters);
-    const kept = scanned.filter((league) => matchesEveryWord(league.searchText ?? '', q));
+    const kept = scanned.filter((league) => matchesEveryWord(league.searchText, q));
     const matched = kept.filter(passes);
     const facets = kept.map(facetOf);
     const rows = await searchRows(ctx, matched.slice(0, SEARCH_RESULT_LIMIT));
@@ -97,7 +89,7 @@ export const leagues = query({
     // Leagues that hold every word but fail the division filters mean fewer words would not help.
     if (kept.length > 0) return { rows, more, facets };
     const suggestions = suggestFewerWords(
-      scanned.filter(passes).map((league) => league.searchText ?? ''),
+      scanned.filter(passes).map((league) => league.searchText),
       q,
     );
     return suggestions.length === 0 ? { rows, more, facets } : { rows, more, facets, suggestions };

@@ -6,11 +6,18 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { hlm } from '../ui/utils';
 import { LOAD_SHELL_SHEET, Shell } from './shell';
 import { skipLinkHref } from './skip-link';
 import { LOAD_PAGE } from './follow-link';
-import { PendingTestPage, PlainTestPage, SidebarTestPage } from './testing/test-pages';
+import {
+  BarTitleSidebarTestPage,
+  BarTitleTestPage,
+  PendingTestPage,
+  PlainTestPage,
+  SidebarTestPage,
+} from './testing/test-pages';
 
 function emptyRouter(): Router {
   TestBed.configureTestingModule({ providers: [provideRouter([])] });
@@ -194,6 +201,16 @@ describe('Shell', () => {
       expect(host(harness).querySelector('header p')?.textContent).toBe('Test organization');
     });
 
+    it('shows barTitle when the page gives one', async () => {
+      const harness = await render(BarTitleTestPage);
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
+    });
+
+    it("shows barTitle over the page's organization", async () => {
+      const harness = await render(BarTitleSidebarTestPage);
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
+    });
+
     it('has no Sign in link and no link to the public home', async () => {
       const harness = await render(PlainTestPage);
       expect(host(harness).querySelector('a[href^="/sign-in"]')).toBeNull();
@@ -245,6 +262,15 @@ describe('Shell', () => {
       expect(host(harness).querySelector('nav')).toBeNull();
       expect(column(harness).querySelector('[role="status"]')?.textContent).toContain('Loading');
       expect(column(harness).querySelector('app-account-row')).not.toBeNull();
+    });
+
+    it('draws the loading skeleton through the skeleton, with the mark rounded-lg, the bars rounded-md, and the account avatar rounded-full', async () => {
+      const harness = await render(PendingTestPage);
+      expectSkeletonBoxes(column(harness), {
+        'rounded-lg': 1,
+        'rounded-md': 8,
+        'rounded-full': 1,
+      });
     });
 
     it('shapes the loading skeleton as the loaded sidebar: a head with a mark and two bars, 4 rows, and the account row', async () => {

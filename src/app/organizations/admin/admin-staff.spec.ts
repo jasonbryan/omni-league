@@ -3,6 +3,7 @@ import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { INVITE_MESSAGES, INVITE_RESTORE_WINDOW_MS } from '../../../../convex/lib/inviteInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
 import { AdminStaff } from './admin-staff';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -23,6 +24,7 @@ import {
 } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBareCards } from '../../ui/testing/card';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
@@ -398,6 +400,15 @@ describe('AdminStaff', () => {
       expect(section.querySelector('ul')).toBeNull();
     });
 
+    it('loading: every placeholder is drawn through the skeleton, each with its own radius', async () => {
+      await open();
+      expectSkeletonBoxes(page.querySelector('main')!, {
+        'rounded-full': 3,
+        'rounded-lg': 3,
+        'rounded-md': 12,
+      });
+    });
+
     it('loading: placeholders and polite statuses', async () => {
       await open();
       const membersSection = page.querySelector('section[aria-labelledby="members-heading"]')!;
@@ -765,6 +776,25 @@ describe('AdminStaff', () => {
         await o.flush();
         expect(document.activeElement).not.toBe(input('email'));
       });
+    });
+  });
+
+  describe('cards', () => {
+    it('draws the members, pending, and invite panels as bare helm cards, the invite panel still focusable and outline-free', async () => {
+      await openFull();
+      const main = page.querySelector('main')!;
+      expectBareCards(main, [
+        'overflow-hidden',
+        'overflow-hidden',
+        'overflow-hidden focus:outline-none',
+      ]);
+      expect(main.querySelector('#invite')!.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('draws the invite link panel as a bare helm card', async () => {
+      await openFull();
+      await createInvite();
+      expectBareCards(page.querySelector('#invite')!.parentElement!, ['overflow-hidden']);
     });
   });
 

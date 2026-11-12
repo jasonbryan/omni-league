@@ -5,6 +5,7 @@ import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { expectOnScreen } from './support/sticky-footer';
@@ -100,18 +101,16 @@ async function adminNav(page: Page, organizationName: string): Promise<Locator> 
 }
 
 test.describe('the admin area: entry and navigation', () => {
-  test('an org admin reaches Locations from /app through Manage and the navigation', async ({
+  test('an org admin reaches Locations from /app through the sidebar and the navigation', async ({
     page,
   }) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    const row = page
-      .getByRole('region', { name: 'Your organizations' })
-      .getByRole('listitem')
-      .filter({
-        hasText: tenant.name,
-      });
-    await row.getByRole('link', { name: `Manage ${tenant.name}` }).click();
+    const account = isDesktop(page) ? page : await openMenu(page);
+    await account
+      .getByRole('navigation', { name: 'Your account' })
+      .getByRole('link', { name: tenant.name })
+      .click();
     await expect(page).toHaveURL(`${baseURL}${base}`);
     await expect(page).toHaveTitle(`Overview | ${tenant.name} | Omni League`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
@@ -138,6 +137,7 @@ test.describe('the admin area: entry and navigation', () => {
         /Switch organization/,
         'Overview',
         /^Leagues\d*$/,
+        'Tournaments',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',
@@ -191,6 +191,24 @@ test.describe('the admin area: entry and navigation', () => {
       );
     },
   );
+});
+
+test.describe('the admin area: while the organization loads', () => {
+  test('the loading skeleton pulses only while the visitor allows motion', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    const held = await holdQueries(page, ['organizations:getAdminContext']);
+    await page.goto(base);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const bar = page.locator('app-admin-loading [data-slot="skeleton"]').first();
+    const animationName = () => bar.evaluate((element) => getComputedStyle(element).animationName);
+
+    await expect.poll(animationName).toBe('pulse');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(animationName).toBe('none');
+
+    held.release();
+    await expect(main(page).getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  });
 });
 
 test.describe('Overview', () => {

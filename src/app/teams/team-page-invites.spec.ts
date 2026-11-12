@@ -4,9 +4,12 @@ import { INVITE_MESSAGES } from '../../../convex/lib/inviteInput';
 import { TEAM_INVITE_MESSAGES } from '../../../convex/lib/teamInviteInput';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
+import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 
 const GET = 'teams:getForMember';
 const LIST_PENDING = 'teamInvites:listPending';
@@ -17,6 +20,39 @@ const ROUTES = [{ path: 'app/teams/:teamId', component: TeamPage }];
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const TOKEN = 'Qm7Zp2vXr9LkT4cW1yNe8HsA0dUfGj3bVo6iRqKx5Ey';
+
+const LINK_LABEL_CLASSES =
+  'flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none';
+const LINK_LABEL_ADDITIONS = [
+  '*:data-[slot=field]:p-2.5',
+  'dark:has-data-checked:bg-primary/10',
+  'dark:has-data-checked:border-primary/20',
+  'group-data-[disabled=true]/field:opacity-50',
+  'group-data-[disabled=true]:opacity-50',
+  'group-data-[disabled=true]:pointer-events-none',
+  'group/field-label',
+  'has-[>[data-slot=field]]:border',
+  'has-[>[data-slot=field]]:flex-col',
+  'has-[>[data-slot=field]]:rounded-lg',
+  'has-[>[data-slot=field]]:w-full',
+  'has-data-checked:bg-primary/5',
+  'has-data-checked:border-primary/30',
+  'peer-disabled:cursor-not-allowed',
+  'peer-disabled:opacity-50',
+  'peer/field-label',
+].join(' ');
+const LINK_TEXTAREA_CLASSES =
+  'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
+const LINK_TEXTAREA_ADDITIONS = [
+  'dark:data-[matches-spartan-invalid=true]:border-destructive/50',
+  'dark:data-[matches-spartan-invalid=true]:ring-destructive/40',
+  'dark:disabled:bg-input/80',
+  'data-[matches-spartan-invalid=true]:border-destructive',
+  'data-[matches-spartan-invalid=true]:ring-3',
+  'data-[matches-spartan-invalid=true]:ring-destructive/20',
+  'disabled:bg-input/50',
+].join(' ');
+const sorted = (classes: string) => classes.split(/\s+/).filter(Boolean).sort();
 
 const SHARKS = {
   name: 'Sand Sharks',
@@ -50,8 +86,8 @@ describe('TeamPage: invites', () => {
     vi.restoreAllMocks();
   });
 
-  async function open(team: object = SHARKS, pending: object | null = PENDING) {
-    o = await openAdmin(ROUTES, URL);
+  async function open(team: object = SHARKS, pending: object | null = PENDING, url = URL) {
+    o = await openAdmin(ROUTES, url);
     o.acceptToken();
     await o.flush();
     o.subscription(GET)!.emit(team);
@@ -91,6 +127,11 @@ describe('TeamPage: invites', () => {
     o.convex.calls[0].resolve({ inviteId: 'ti_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
     await o.flush();
   }
+
+  it('while the pending list loads, every placeholder is drawn through the skeleton', async () => {
+    await open(SHARKS, null);
+    expectSkeletonBoxes(pendingSection()!, { 'rounded-lg': 2, 'rounded-md': 4 });
+  });
 
   it('while the pending list loads, each row mark is rounded-lg and its text bars are rounded-md', async () => {
     await open(SHARKS, null);
@@ -178,6 +219,77 @@ describe('TeamPage: invites', () => {
     await o.flush();
     expect(pendingSection()?.textContent).toContain('The pending invites could not be loaded.');
     expect(email()).not.toBeNull();
+  });
+
+  describe('the invite jump and the #invite landing', () => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+    let scrolled: ReturnType<typeof vi.fn<() => void>>;
+
+    beforeEach(() => {
+      // jsdom has no scrollIntoView.
+      scrolled = vi.fn<() => void>();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+    afterEach(() => {
+      if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+      else delete (Element.prototype as Partial<Element>).scrollIntoView;
+    });
+
+    const jump = () =>
+      [...main().querySelectorAll<HTMLAnchorElement>('a')].find(
+        (a) => text(a) === 'Invite players',
+      )!;
+
+    it('the Invite players link scrolls to the invite form and focuses the email field, as the landing does', async () => {
+      await open();
+      jump().click();
+      expect(scrolled.mock.contexts).toEqual([email().closest('section')]);
+      expect(document.activeElement).toBe(email());
+    });
+
+    it('opened at #invite, lands on the form once the pending list has answered', async () => {
+      await open(SHARKS, null, `${URL}#invite`);
+      expect(scrolled).not.toHaveBeenCalled();
+      o.subscription(LIST_PENDING)!.emit(PENDING);
+      await o.flush();
+      expect(scrolled.mock.contexts).toEqual([email().closest('section')]);
+      expect(document.activeElement).toBe(email());
+    });
+
+    it('a pending list that changes after the landing neither scrolls nor moves focus', async () => {
+      await open(SHARKS, PENDING, `${URL}#invite`);
+      scrolled.mockClear();
+      (document.activeElement as HTMLElement).blur();
+      o.subscription(LIST_PENDING)!.emit({ rows: PENDING.rows.slice(0, 1), total: 1 });
+      await o.flush();
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(email());
+    });
+
+    it('a member who cannot manage the team opened at #invite gets no scroll and no focus change', async () => {
+      await open(
+        { ...SHARKS, viewerIsCaptain: false, viewerCanManage: false },
+        null,
+        `${URL}#invite`,
+      );
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(email());
+      expect(main().contains(document.activeElement)).toBe(false);
+    });
+  });
+
+  describe('cards', () => {
+    it('draws the pending list and the invite form as bare helm cards', async () => {
+      await open();
+      expectBareCard(pendingSection(), 'overflow-hidden');
+      expectBareCard(main().querySelector('#invite'), 'overflow-hidden');
+    });
+
+    it('draws the invite link as a bare helm card', async () => {
+      await open();
+      await createInvite();
+      expectBareCard(main().querySelector('#invite'), 'overflow-hidden');
+    });
   });
 
   describe('creating an invite', () => {
@@ -329,6 +441,74 @@ describe('TeamPage: invites', () => {
       copyButton().click();
       await o.flush();
       expect(text(copyStatus())).toBe('Couldn’t copy. Select the link and copy it.');
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const shapes = (invalid: boolean) => [
+      shapeOf('field-group'),
+      fieldShape(invalid),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          name: 'form.email',
+          type: 'email',
+          autocomplete: 'off',
+          'aria-describedby': invalid ? 'email-description email-error' : 'email-description',
+        },
+        invalid,
+      ),
+      shapeOf('field-description', { id: 'email-description' }),
+      ...(invalid ? [shapeOf('field-error', { id: 'email-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(false));
+    });
+
+    it('marks Email invalid and ties its error to it after an empty submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(true));
+    });
+
+    it('marks Email invalid when the server refuses the address', async () => {
+      await open();
+      await type('kai.nakamura@example.com');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'email',
+          code: 'alreadyInvited',
+          message: TEAM_INVITE_MESSAGES.alreadyInvited('kai.nakamura@example.com'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(true));
+    });
+
+    it('draws the invite link with a vertical field, the label, and the read-only textarea', async () => {
+      await open();
+      await createInvite();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual([
+        shapeOf('field', { 'data-orientation': 'vertical' }, 'mt-5'),
+        {
+          ...shapeOf('field-label', { for: 'invite-link' }),
+          classes: sorted(`${LINK_LABEL_CLASSES} ${LINK_LABEL_ADDITIONS}`),
+        },
+        {
+          ...shapeOf('textarea', {
+            id: 'invite-link',
+            readonly: '',
+            'aria-describedby': 'copy-status',
+          }),
+          classes: sorted(`${LINK_TEXTAREA_CLASSES} ${LINK_TEXTAREA_ADDITIONS}`),
+        },
+      ]);
+      expect(linkBox().getAttribute('spellcheck')).toBe('false');
+      expect(linkBox().getAttribute('rows')).toBe('3');
     });
   });
 
