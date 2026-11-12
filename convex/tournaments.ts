@@ -43,6 +43,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requireOrgAdmin(ctx, args.organizationId);
     const locationIds = [...new Set(args.locationIds)];
+    const endDate = args.endDate ?? '';
     const refusal = firstTournamentError(
       checkTournamentFields({
         name: args.name,
@@ -53,7 +54,7 @@ export const create = mutation({
         ageGroup: args.ageGroup,
         locationCount: locationIds.length,
         startDate: args.startDate,
-        endDate: args.endDate ?? '',
+        endDate,
         registrationDeadline: args.registrationDeadline,
         maximumTeams: args.maximumTeams,
       }),
@@ -94,7 +95,7 @@ export const create = mutation({
         ageGroup: ageGroupValidator.members.find((member) => member.value === args.ageGroup)!.value,
       },
       startDate: args.startDate,
-      endDate: args.endDate ?? args.startDate,
+      endDate: endDate === '' ? args.startDate : endDate,
       registrationDeadline: args.registrationDeadline,
       maximumTeams: args.maximumTeams,
     });

@@ -197,6 +197,18 @@ describe('tournaments.create', () => {
     });
   });
 
+  test('an empty end date is a one-day tournament too, never stored as empty', async () => {
+    const s = await setup();
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      ...valid(s),
+      endDate: '',
+    });
+    expect(await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId))).toMatchObject({
+      startDate: '2027-01-16',
+      endDate: '2027-01-16',
+    });
+  });
+
   test('the minimum roster size is the division’s players per side', async () => {
     const s = await setup();
     const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
