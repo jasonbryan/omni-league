@@ -50,7 +50,7 @@ const FIND_ROOT_GAINS =
 const RETRY_LINK =
   'col-start-2 mt-1 inline-flex w-fit items-center rounded-md font-medium text-foreground underline underline-offset-4 pointer-coarse:min-h-11';
 
-/** The root keeps its `max-w-xl`; `extra` is the margin the caller adds. The description's colour turns `text-destructive/90` through the root's descendant rule. */
+/** The root keeps its `max-w-xl`; `extra` is the margin the caller adds. The description's colour turns destructive through the root's descendant rule. */
 export function expectFindAlert(box: Element | null | undefined, extra = ''): void {
   const root = present(box);
   expect(root.getAttribute('data-slot')).toBe('alert');

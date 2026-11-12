@@ -6,8 +6,8 @@
 //   `hlm-alert-dialog-cancel`, which wrap `HlmButton`, because the dialogs' buttons use the `button-classes.ts` constants; and the
 //   portal and trigger, because the dialogs open through `open()`;
 // - static classes, so a chunk that uses them carries no class-merging code: one host `class` per part, in place of `classes()`;
-// - the content has Nova's colours, ring, radius, padding, gap, and widths, with `shadow-xl` added and no `outline-none` or open and
-//   close animation, because the CDK's global position strategy centres the pane and the content is its child in normal flow;
+// - the content takes Nova's colours, ring, radius, padding, gap, and widths, plus `shadow-xl`, and leaves out Nova's open and close
+//   animation and helm's outline reset;
 // - the media is `bg-accent text-accent-foreground`, where Nova's is `bg-muted`;
 // - the footer carries the Nova footer's `bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4` with helm's flex classes;
 // - the title and description use brain's alert-dialog directives as host directives, as upstream does.
