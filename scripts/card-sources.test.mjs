@@ -10,20 +10,6 @@ const uiDir = join(appDir, 'ui');
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
 const PENDING = [
-  'src/app/account/account-settings-page.ts',
-  'src/app/account/home-notifications.ts',
-  'src/app/notifications/notifications-page.ts',
-  'src/app/organizations/admin/admin-attention.ts',
-  'src/app/organizations/admin/admin-details.ts',
-  'src/app/organizations/admin/admin-leagues.ts',
-  'src/app/organizations/admin/admin-loading.ts',
-  'src/app/organizations/admin/admin-locations.ts',
-  'src/app/organizations/admin/admin-logo.ts',
-  'src/app/organizations/admin/admin-no-access.ts',
-  'src/app/organizations/admin/admin-open-seasons.ts',
-  'src/app/organizations/admin/admin-overview.ts',
-  'src/app/organizations/admin/admin-staff.ts',
-  'src/app/organizations/admin/staff-invite-panel.ts',
   'src/app/organizations/league/league-loading.ts',
   'src/app/organizations/league/league-management.ts',
   'src/app/organizations/league/league-no-access.ts',

@@ -48,6 +48,7 @@ import { formatDay } from './format-day';
 import { CAP_NOTE } from './note-classes';
 import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
+import { HlmCard } from '../../ui/card';
 
 const EMAIL_THEN_LINK_THEN_ALERT = ['#email', '#invite-link-heading', '[data-slot="alert"]'];
 
@@ -102,6 +103,7 @@ const ROLE_LABEL: Record<Role, string> = {
     AdminAlert,
     AdminOfflineAlert,
     HlmBadge,
+    HlmCard,
     HlmSpinner,
     NgIcon,
     NgTemplateOutlet,
@@ -142,10 +144,7 @@ const ROLE_LABEL: Record<Role, string> = {
       </div>
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
-          <section
-            aria-labelledby="members-heading"
-            class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <section aria-labelledby="members-heading" hlmCard size="bare" class="overflow-hidden">
             <div
               class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
             >
@@ -214,10 +213,7 @@ const ROLE_LABEL: Record<Role, string> = {
               </div>
             }
           </section>
-          <section
-            aria-labelledby="pending-heading"
-            class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-          >
+          <section aria-labelledby="pending-heading" hlmCard size="bare" class="overflow-hidden">
             <div
               class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
             >

@@ -30,6 +30,7 @@ import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { HlmFieldImports } from '../../ui/field';
 import { HlmInputImports } from '../../ui/input';
 import { HlmSpinner } from '../../ui/spinner';
+import { HlmCard } from '../../ui/card';
 
 type Notice =
   | { kind: 'saved'; previous: string | null }
@@ -54,14 +55,15 @@ function cityStateRefusal(failure: unknown): string | null {
 @Component({
   selector: 'app-admin-details',
   imports: [
-    HlmSpinner,
-    MousePressKeepsFocus,
     AdminAlert,
     AdminLogo,
     AdminOfflineAlert,
     FormField,
+    HlmCard,
     HlmFieldImports,
     HlmInputImports,
+    HlmSpinner,
+    MousePressKeepsFocus,
     NgIcon,
     NgTemplateOutlet,
     StickyFooter,
@@ -85,7 +87,9 @@ function cityStateRefusal(failure: unknown): string | null {
       </div>
       <section
         aria-labelledby="details-heading"
-        class="mt-6 max-w-xl overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+        hlmCard
+        size="bare"
+        class="mt-6 max-w-xl overflow-clip"
       >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

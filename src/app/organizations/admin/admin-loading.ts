@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { HlmCard } from '../../ui/card';
 
 const FILL = 'bg-muted motion-safe:animate-pulse';
 const PULSE = `rounded-md ${FILL}`;
 
 @Component({
   selector: 'app-admin-loading',
+  imports: [HlmCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
@@ -12,10 +14,7 @@ const PULSE = `rounded-md ${FILL}`;
     <div aria-hidden="true" class="${PULSE} h-4 w-40"></div>
     <div aria-hidden="true" class="${PULSE} mt-3 h-8 w-56"></div>
     <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
-      <div
-        aria-hidden="true"
-        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
-      >
+      <div aria-hidden="true" hlmCard size="bare" class="overflow-hidden lg:col-span-2">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div aria-hidden="true" class="${PULSE} h-5 w-24"></div>
         </div>
@@ -31,10 +30,7 @@ const PULSE = `rounded-md ${FILL}`;
           }
         </div>
       </div>
-      <div
-        aria-hidden="true"
-        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-      >
+      <div aria-hidden="true" hlmCard size="bare" class="overflow-hidden">
         <div class="border-b border-border px-4 py-3 md:px-5">
           <div aria-hidden="true" class="${PULSE} h-5 w-32"></div>
         </div>
