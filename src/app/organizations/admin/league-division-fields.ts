@@ -87,7 +87,7 @@ export interface OwnCustomLevel {
         [error]="errors().format()"
         (chosen)="chooseFormat($event)"
       />
-      @if (minimumRosterSizeEditable()) {
+      @if (program() === 'league') {
         @if (minimumShown()) {
           <div
             hlmField
@@ -216,9 +216,8 @@ export class LeagueDivisionFields {
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly errors = input.required<DivisionErrors>();
   readonly formatDescription = input.required<string>();
+  /** A tournament's minimum roster size is its format's, so its form has no minimum field. */
   readonly program = input<'league' | 'tournament'>('league');
-  /** A tournament's minimum roster size is its format's, so its form leaves the field out. */
-  readonly minimumRosterSizeEditable = input(true);
   readonly canAddCustomLevel = input(true);
   readonly ownCustomLevel = input<OwnCustomLevel | null>(null);
   /** Ids are page-wide: a page holding another form with the same fields gives this one a prefix. */

@@ -27,7 +27,7 @@ const ROUTES = adminRoutes(AdminArea, [{ path: 'tournaments', component: AdminTo
 const URL = `/app/organizations/${COASTAL.slug}/tournaments`;
 const LIST_TOURNAMENTS = 'tournaments:listForOrganization';
 const CREATE = 'tournaments:create';
-const IS_AVAILABLE = 'leagues:isSlugAvailable';
+const IS_AVAILABLE = 'tournaments:isSlugAvailable';
 const tokens = (value: string) => value.split(' ').sort();
 
 const TOURNAMENTS = [
@@ -592,7 +592,7 @@ describe('AdminTournaments', () => {
       await o.flush();
     };
 
-    it('asks leagues.isSlugAvailable with the organization id, which reads the leagues and every program of the organization, and says Available', async () => {
+    it('asks tournaments.isSlugAvailable with the organization id, and says Available', async () => {
       await open([]);
       await type('name', 'Winter Doubles Classic');
       await pause();

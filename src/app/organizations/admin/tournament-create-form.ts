@@ -247,7 +247,6 @@ const FOCUS_SELECTOR: Record<
             <app-league-division-fields
               class="mt-5"
               program="tournament"
-              [minimumRosterSizeEditable]="false"
               [division]="form.division"
               [sport]="sport"
               [organizationId]="organizationId()"
@@ -433,9 +432,8 @@ export class TournamentCreateForm {
   readonly locations = input.required<readonly { locationId: Id<'locations'>; name: string }[]>();
 
   protected readonly online = injectOnline();
-  // A tournament's slug is unique among the organization's leagues and programs, which is what this reads.
   private readonly webAddress = injectSlugAvailability({
-    query: api.leagues.isSlugAvailable,
+    query: api.tournaments.isSlugAvailable,
     slug: (): string => this.form.model().slug,
     scope: () => ({ organizationId: this.organizationId() }),
   });

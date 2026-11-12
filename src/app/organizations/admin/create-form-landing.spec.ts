@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { AdminArea } from './admin-area';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { adminRoutes, COASTAL, GET_ADMIN_CONTEXT, openAdmin } from './testing/admin-harness';
 
 @Component({ template: '<p id="child">child</p>' })
@@ -16,7 +16,7 @@ const BASE = `/app/organizations/${COASTAL.slug}`;
 const LEAGUES = `${BASE}/leagues`;
 const TOURNAMENTS = `${BASE}/tournaments`;
 
-describe('CreateLeagueLanding', () => {
+describe('CreateFormLanding', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
   let o: Opened;
 
@@ -27,7 +27,7 @@ describe('CreateLeagueLanding', () => {
     await o.flush();
   }
 
-  const landing = () => o.harness.routeDebugElement!.injector.get(CreateLeagueLanding);
+  const landing = () => o.harness.routeDebugElement!.injector.get(CreateFormLanding);
   const arrive = async (url: string) => {
     await o.harness.navigateByUrl(url);
     await o.flush();

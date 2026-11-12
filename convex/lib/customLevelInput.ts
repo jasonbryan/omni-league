@@ -35,7 +35,7 @@ export const CUSTOM_LEVEL_MESSAGES = {
     `You can have at most ${MAX_CUSTOM_LEVELS_PER_SPORT} custom levels for ${lowerSportName(sport)}.`,
   standardLevelEmpty: (name: string) =>
     `Choose the standard level ${name === '' ? 'it' : name} matches, so players can filter for it.`,
-  inUse: (name: string) => `A league uses ${name}.`,
+  inUse: (name: string) => `A league or tournament uses ${name}.`,
 } as const;
 
 export function normalizeCustomLevelName(name: string): string {

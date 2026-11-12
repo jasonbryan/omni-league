@@ -3,6 +3,8 @@ import { expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
+import { failFirstAnswer } from './support/fail-first-answer';
+import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -157,6 +159,54 @@ test.describe('Tournaments: creating a draft', () => {
         'winter-doubles-classic is already taken. Choose another web address.',
       );
     });
+  });
+});
+
+test.describe('Tournaments: the failure states', () => {
+  test('a list that fails to load shows the alert and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { url } = await memberOf(page, 'orgAdmin');
+    await failFirstAnswer(page, 'tournaments:listForOrganization');
+    await page.goto(url);
+    const alert = page.locator('section[aria-labelledby="tournaments-heading"] [role="alert"]');
+    await expect(alert).toContainText('The tournaments could not be loaded.');
+    await screenshot(page, testInfo, 'tournaments-load-error');
+    await expectAccessible(page);
+  });
+
+  test('a create the server fails keeps the input, and the alert passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { url } = await memberOf(page, 'orgAdmin');
+    await failMutation(page, 'tournaments:create');
+    await page.goto(url);
+    await fillValid(page, 'Winter Doubles Classic');
+    await submit(page).click();
+    const alert = form(page).getByRole('alert');
+    await expect(alert).toContainText('The tournament could not be created.');
+    await expect(page.locator('#name')).toHaveValue('Winter Doubles Classic');
+    await screenshot(page, testInfo, 'tournaments-create-error');
+    await expectAccessible(page);
+  });
+
+  test('pressing Create offline shows the offline alert, keeps the input, and passes the axe helper', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { url } = await memberOf(page, 'orgAdmin');
+    await page.goto(url);
+    await fillValid(page, 'Winter Doubles Classic');
+    await context.setOffline(true);
+    await expect(submit(page)).toHaveAttribute('aria-disabled', 'true');
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
+    await submit(page).click({ force: true });
+    const alert = form(page).getByRole('alert');
+    await expect(alert).toContainText("You're offline. Nothing was sent.");
+    await expect(page.locator('#name')).toHaveValue('Winter Doubles Classic');
+    await screenshot(page, testInfo, 'tournaments-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
   });
 });
 

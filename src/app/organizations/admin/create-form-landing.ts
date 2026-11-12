@@ -17,7 +17,7 @@ const CREATE_FORM_FRAGMENTS: Readonly<Record<string, string>> = {
  * and sees a later choice or scroll while the admin area is still loading, before the page with the form exists.
  */
 @Injectable()
-export class CreateLeagueLanding {
+export class CreateFormLanding {
   private readonly document = inject(DOCUMENT);
   private readonly router = inject(Router);
   private readonly context = inject(AdminContext);

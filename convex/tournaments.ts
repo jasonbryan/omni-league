@@ -2,6 +2,7 @@ import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdmin } from './lib/access';
+import { isChoosableSlug } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { programStatusValidator } from './lib/programs';
 import { sportValidator, type Sport } from './lib/sports';
@@ -19,6 +20,17 @@ function refuse(error: TournamentInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...error });
 }
+
+export const isSlugAvailable = query({
+  args: { organizationId: v.id('organizations'), slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    return (
+      isChoosableSlug(args.slug) && !(await leagueSlugTaken(ctx, args.organizationId, args.slug))
+    );
+  },
+});
 
 export const create = mutation({
   args: {

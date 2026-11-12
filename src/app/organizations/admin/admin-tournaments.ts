@@ -33,7 +33,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
-import { CreateLeagueLanding } from './create-league-landing';
+import { CreateFormLanding } from './create-form-landing';
 import { injectSectionJump } from './section-jump';
 import { TournamentCreateForm } from './tournament-create-form';
 
@@ -233,7 +233,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
 export class AdminTournaments {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
-  private readonly landing = inject(CreateLeagueLanding);
+  private readonly landing = inject(CreateFormLanding);
 
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;

@@ -92,11 +92,11 @@ export const remove = mutation({
     const level = await ctx.db.get('customLevels', customLevelId);
     if (!level) throw new Error('Not allowed');
     await requireOrgAdmin(ctx, level.organizationId);
-    const leagueUsing = await ctx.db
-      .query('leagues')
+    const programUsing = await ctx.db
+      .query('programs')
       .withIndex('by_customLevelId', (q) => q.eq('customLevelId', customLevelId))
       .first();
-    if (leagueUsing) {
+    if (programUsing) {
       refuse({
         field: 'name',
         code: 'inUse',

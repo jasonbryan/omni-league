@@ -462,7 +462,6 @@ describe('tournaments.create', () => {
     const available = (slug: string) =>
       s.adminA.query(api.leagues.isSlugAvailable, { organizationId: s.organizationA, slug });
     expect(await available('winter-doubles-classic')).toBe(false);
-    expect(await available('spring-doubles-classic')).toBe(true);
     expect(
       await refusal(
         s.adminA.mutation(api.leagues.create, {
@@ -489,6 +488,48 @@ describe('tournaments.create', () => {
       );
     }
     expect(await snapshot(s.t)).toEqual(before);
+  });
+});
+
+describe('tournaments.isSlugAvailable', () => {
+  const available = (s: Setup, slug: string) =>
+    s.adminA.query(api.tournaments.isSlugAvailable, { organizationId: s.organizationA, slug });
+
+  test('is true for a free web address and false for one a league, a tournament, or another program holds', async () => {
+    const s = await setup();
+    await s.adminA.mutation(api.tournaments.create, valid(s));
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert('programs', tournamentProgramFields(s.organizationA, 'summer-open'));
+    });
+    expect(await available(s, 'spring-doubles-classic')).toBe(true);
+    expect(await available(s, 'coed-7v7')).toBe(false);
+    expect(await available(s, 'winter-doubles-classic')).toBe(false);
+    expect(await available(s, 'summer-open')).toBe(false);
+  });
+
+  test('is false for an address no one could choose, and true for the same one in another organization', async () => {
+    const s = await setup();
+    expect(await available(s, 'new')).toBe(false);
+    expect(await available(s, 'ab')).toBe(false);
+    expect(
+      await s.adminB.query(api.tournaments.isSlugAvailable, {
+        organizationId: s.organizationB,
+        slug: 'coed-7v7',
+      }),
+    ).toBe(true);
+  });
+
+  test('refuses every caller who is not an org admin of the organization', async () => {
+    const s = await setup();
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.query(api.tournaments.isSlugAvailable, {
+          organizationId: s.organizationA,
+          slug: 'spring-open',
+        }),
+        label,
+      ).rejects.toThrow(message);
+    }
   });
 });
 
