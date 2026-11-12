@@ -41,7 +41,8 @@ const chip = (page: Page, name: string) =>
   form(page)
     .locator('label')
     .filter({ has: page.getByRole('radio', { name, exact: true }) });
-const chipFace = (page: Page, name: string) => chip(page, name).locator('span');
+const chipFace = (page: Page, name: string) =>
+  radio(page, name).locator('xpath=ancestor::brn-radio');
 const focusRingStyle = (face: Locator) => face.evaluate((el) => getComputedStyle(el).outlineStyle);
 
 test.describe('Leagues: the division', () => {
@@ -237,7 +238,10 @@ test.describe('Leagues: the division chips', () => {
     await expect(format).toHaveAccessibleDescription(
       /Choose a format\. Players filter leagues by it\.$/,
     );
-    await expect(radio(page, '2v2')).toHaveAttribute('aria-invalid', 'true');
+    for (const chipName of ['2v2', '3v3']) {
+      await expect(radio(page, chipName)).toHaveAttribute('aria-describedby', 'format-error');
+      await expect(radio(page, chipName)).not.toHaveAttribute('aria-invalid');
+    }
     await expect(
       form(page).getByRole('alert').filter({ hasText: 'Choose a format' }),
     ).toBeVisible();
