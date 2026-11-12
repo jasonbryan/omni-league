@@ -64,7 +64,7 @@ describe('HlmBadge', () => {
     expect(classes).not.toContain('border-transparent');
   });
 
-  it('keeps today’s colours for the local variants', () => {
+  it('gives the local variants the app’s badge colours', () => {
     expect(render('outline-destructive').classes).toEqual(
       expect.arrayContaining(['border-border', 'text-destructive']),
     );
