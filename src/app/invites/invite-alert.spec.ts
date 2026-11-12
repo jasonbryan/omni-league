@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { InviteAlert } from './invite-alert';
 
 @Component({
@@ -54,6 +55,14 @@ describe('the invite alert kinds', () => {
     const [error, notice, info, full] = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll('[data-slot="alert"]'),
     );
+    const focusRing = 'outline-offset-2 focus:outline-2 focus:outline-ring';
+    expectAlertClasses(error, 'destructive', focusRing);
+    expectAlertClasses(notice, 'neutral', focusRing);
+    expectAlertClasses(info, 'neutral', focusRing);
+    expectAlertClasses(full, 'neutral', focusRing);
+    expectAlertSlots(error);
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('tabindex')).toBe('-1');
     expect(error.className).toContain('text-destructive');
     expect(notice.className).not.toContain('text-destructive');
     expect(info.className).not.toContain('text-destructive');
