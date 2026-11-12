@@ -16,7 +16,7 @@ import {
   defaultDivision,
 } from './lib/tenantWrites';
 import schema from './schema';
-import { modules, leagueRequiredFields } from './test.setup';
+import { insertLeagueWithProgram, modules, leagueRequiredFields } from './test.setup';
 
 const DIVISION = { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' } as const;
 
@@ -283,7 +283,7 @@ describe('searchText upkeep', () => {
     const location = await locationNamed(t, organizationId, 'Harbor Fields');
     await t.run(async (ctx) => {
       for (let i = 0; i < MAX_LEAGUES_SEARCH_UPDATED; i++) {
-        await ctx.db.insert('leagues', {
+        await insertLeagueWithProgram(ctx, {
           ...leagueRequiredFields('soccer', `Bulk ${String(i).padStart(3, '0')}`),
           organizationId,
           name: `Bulk ${String(i).padStart(3, '0')}`,

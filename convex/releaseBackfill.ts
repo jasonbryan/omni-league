@@ -8,7 +8,6 @@ import { BACKFILL_TEAM_COUNT_SCAN_LIMIT, recountTeams, recountWaiting } from './
 import {
   BACKFILL_SCAN_LIMIT,
   backfillOrganizationTenantFields,
-  ensureProgramOfLeague,
   recountDraftLeagues,
   recountPublishedSeasons,
   sortName,
@@ -19,28 +18,19 @@ import {
 const phaseValidator = v.union(
   v.literal('locations'),
   v.literal('leagues'),
-  v.literal('programs'),
   v.literal('organizations'),
   v.literal('seasons'),
   v.literal('teams'),
 );
 type Phase = Infer<typeof phaseValidator>;
 
-// Leagues run before programs and organizations, because a program copies a league's status and an organization's counts read it.
-const PHASES: readonly Phase[] = [
-  'locations',
-  'leagues',
-  'programs',
-  'organizations',
-  'seasons',
-  'teams',
-];
+// Leagues run before organizations, because an organization's counts read them.
+const PHASES: readonly Phase[] = ['locations', 'leagues', 'organizations', 'seasons', 'teams'];
 
-// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A program reads one row, the one that may hold its slug.
+// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one.
 export const BATCH_SIZE: Record<Phase, number> = {
   locations: 100,
   leagues: 10,
-  programs: 100,
   organizations: 2,
   seasons: 5,
   teams: 100,
@@ -49,7 +39,6 @@ export const BATCH_SIZE: Record<Phase, number> = {
 const backfilledValidator = v.object({
   locations: v.number(),
   leagues: v.number(),
-  programs: v.number(),
   organizations: v.number(),
   staffCounts: v.number(),
   staffInviteCounts: v.number(),
@@ -64,7 +53,6 @@ function noneBackfilled(): Backfilled {
   return {
     locations: 0,
     leagues: 0,
-    programs: 0,
     organizations: 0,
     staffCounts: 0,
     staffInviteCounts: 0,
@@ -202,15 +190,6 @@ async function backfillPhase(
         .query('leagues')
         .paginate(paginationOpts);
       for (const league of page) await backfillLeague(ctx, league, backfilled);
-      return { continueCursor, isDone };
-    }
-    case 'programs': {
-      const { page, continueCursor, isDone } = await ctx.db
-        .query('leagues')
-        .paginate(paginationOpts);
-      for (const league of page) {
-        if (await ensureProgramOfLeague(ctx, league)) backfilled.programs++;
-      }
       return { continueCursor, isDone };
     }
     case 'organizations': {
