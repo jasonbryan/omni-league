@@ -9,6 +9,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignUpPage } from './sign-up-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -605,6 +606,8 @@ describe('SignUpPage', () => {
         'Failed to check password. Please try again later.',
       );
       expect(box?.querySelector('[data-slot="alert-description"]')).toBeNull();
+      expectAlertSlots(box, false);
+      expectAlertClasses(box, 'destructive', 'mb-5');
       expect(document.activeElement).toBe(box);
       expect(input('email').value).toBe(EMAIL);
 
@@ -654,6 +657,8 @@ describe('SignUpPage', () => {
         expect(alertText('description')).toBe(
           'Several sign-ups came from this network in a short time. No account was created.',
         );
+        expectAlertSlots(alert());
+        expectAlertClasses(alert(), 'destructive', 'mb-5');
         expect(document.activeElement).toBe(alert());
         expect(input('name').value).toBe(NAME);
         expect(input('email').value).toBe(EMAIL);

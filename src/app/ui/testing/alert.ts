@@ -41,3 +41,27 @@ export function expectAlertSlots(box: Element | null | undefined, withDescriptio
     withDescription ? ['alert', 'alert-title', 'alert-description'] : ['alert', 'alert-title'],
   );
 }
+
+// The Find error alerts before they moved to helm: they differ from the other error alerts by the changes below.
+const FIND_BEFORE =
+  "group/alert relative grid w-full gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-start text-sm text-destructive has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
+const FIND_ROOT_GAINS =
+  'has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 *:data-[slot=alert-description]:text-destructive/90';
+const RETRY_LINK =
+  'col-start-2 mt-1 inline-flex w-fit items-center rounded-md font-medium text-foreground underline underline-offset-4 pointer-coarse:min-h-11';
+
+/** The root keeps its `max-w-xl`; `extra` is the margin the caller adds. The description's colour turns `text-destructive/90` through the root's descendant rule. */
+export function expectFindAlert(box: Element | null | undefined, extra = ''): void {
+  const root = present(box);
+  expect(root.getAttribute('data-slot')).toBe('alert');
+  expect(root.getAttribute('role')).toBe('alert');
+  expect(sortedClasses(root)).toEqual(
+    tokens(`${FIND_BEFORE} ${FIND_ROOT_GAINS} max-w-xl ${extra}`),
+  );
+  const title = root.querySelector('[data-slot="alert-title"]');
+  const description = root.querySelector('[data-slot="alert-description"]');
+  expect(title && sortedClasses(title)).toEqual(tokens(TITLE));
+  expect(description && sortedClasses(description)).toEqual(tokens(DESCRIPTION));
+  expect(slotsOf(root)).toEqual(['alert', 'alert-title', 'alert-description']);
+  expect(sortedClasses(root.querySelector('a')!)).toEqual(tokens(RETRY_LINK));
+}
