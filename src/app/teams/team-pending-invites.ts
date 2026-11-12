@@ -23,6 +23,7 @@ import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
 import { formatDay } from '../organizations/admin/format-day';
 import { DESTRUCTIVE_BUTTON } from '../ui/button/button-classes';
+import { HlmCard } from '../ui/card';
 
 export interface PendingInviteRow {
   inviteId: Id<'teamInvites'>;
@@ -32,22 +33,21 @@ export interface PendingInviteRow {
 
 type Notice = { kind: 'revoked'; email: string } | { kind: 'failed' } | { kind: 'offline' };
 
-const PANEL =
-  'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'overflow-hidden';
 const FILL = 'bg-muted motion-safe:animate-pulse';
 const SKELETON = `rounded-md ${FILL}`;
 
 /** Revoke acts at once, with no confirmation; the status above the list takes focus, because the button that had it is gone. */
 @Component({
   selector: 'app-team-pending-invites',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, HlmCard, NgIcon],
   providers: [
     provideIcons({ lucideBan, lucideClock, lucideClockAlert, lucideMail, lucideMailCheck }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section aria-labelledby="pending-heading" class="${PANEL}">
+    <section aria-labelledby="pending-heading" hlmCard size="bare" class="${PANEL}">
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >

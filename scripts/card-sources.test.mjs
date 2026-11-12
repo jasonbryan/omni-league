@@ -9,15 +9,7 @@ const uiDir = join(appDir, 'ui');
 
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
-const PENDING = [
-  'src/app/teams/add-minor-panel.ts',
-  'src/app/teams/join-team-page.ts',
-  'src/app/teams/register-card.ts',
-  'src/app/teams/season-teams-panel.ts',
-  'src/app/teams/team-invite-panel.ts',
-  'src/app/teams/team-page.ts',
-  'src/app/teams/team-pending-invites.ts',
-];
+const PENDING = [];
 
 function* sourceFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -45,7 +37,7 @@ const withCardSurface = () =>
     .sort();
 
 describe('hand-written card surfaces', () => {
-  it('are absent outside src/app/ui, apart from the signed-in pages still to move', () => {
+  it('are absent outside src/app/ui', () => {
     assert.deepEqual(withCardSurface(), PENDING);
   });
 

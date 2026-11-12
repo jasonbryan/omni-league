@@ -54,6 +54,7 @@ import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
+import { HlmCard } from '../ui/card';
 
 interface TeamInviteSummary {
   teamName: string;
@@ -141,6 +142,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
   imports: [
     Checkbox,
     FormField,
+    HlmCard,
     HlmFieldImports,
     HlmFieldSetImports,
     HlmInputImports,
@@ -179,7 +181,9 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
               <div
                 data-testid="invite-skeleton"
                 data-page-loading
-                class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                hlmCard
+                size="bare"
+                class="mx-auto w-full max-w-md overflow-hidden"
               >
                 <p role="status" class="sr-only">Checking your invite…</p>
                 <div class="px-5 pt-6 md:px-8 md:pt-8">
@@ -228,7 +232,9 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
             }
             @case ('invalid') {
               <div
-                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                hlmCard
+                size="bare"
+                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
               >
                 <span
                   class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
@@ -251,7 +257,9 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
             @case ('accepted') {
               @if (joined(); as team) {
                 <div
-                  class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                  hlmCard
+                  size="bare"
+                  class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12"
                 >
                   <span
                     class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
@@ -281,9 +289,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
             }
             @default {
               @if (summary(); as invite) {
-                <div
-                  class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-                >
+                <div hlmCard size="bare" class="mx-auto w-full max-w-md overflow-hidden">
                   <div class="px-5 pt-6 md:px-8 md:pt-8">
                     <span
                       class="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground"
