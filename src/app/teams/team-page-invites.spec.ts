@@ -7,6 +7,7 @@ import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { TeamPage } from './team-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 
 const GET = 'teams:getForMember';
 const LIST_PENDING = 'teamInvites:listPending';
@@ -17,6 +18,14 @@ const ROUTES = [{ path: 'app/teams/:teamId', component: TeamPage }];
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const TOKEN = 'Qm7Zp2vXr9LkT4cW1yNe8HsA0dUfGj3bVo6iRqKx5Ey';
+
+const LINK_LABEL_CLASSES =
+  'flex w-fit items-center gap-2 text-sm leading-snug font-medium select-none';
+const LINK_LABEL_ADDITIONS = '';
+const LINK_TEXTAREA_CLASSES =
+  'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
+const LINK_TEXTAREA_ADDITIONS = '';
+const sorted = (classes: string) => classes.split(/\s+/).filter(Boolean).sort();
 
 const SHARKS = {
   name: 'Sand Sharks',
@@ -329,6 +338,74 @@ describe('TeamPage: invites', () => {
       copyButton().click();
       await o.flush();
       expect(text(copyStatus())).toBe('Couldn’t copy. Select the link and copy it.');
+    });
+  });
+
+  describe('the field markup the helm directives draw', () => {
+    const shapes = (invalid: boolean) => [
+      shapeOf('field-group'),
+      fieldShape(invalid),
+      shapeOf('field-label', { for: 'email' }),
+      inputShape(
+        'email',
+        {
+          name: 'form.email',
+          type: 'email',
+          autocomplete: 'off',
+          'aria-describedby': invalid ? 'email-description email-error' : 'email-description',
+        },
+        invalid,
+      ),
+      shapeOf('field-description', { id: 'email-description' }),
+      ...(invalid ? [shapeOf('field-error', { id: 'email-error' })] : []),
+    ];
+
+    it('draws the same elements, class sets, and attributes when valid', async () => {
+      await open();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(false));
+    });
+
+    it('marks Email invalid and ties its error to it after an empty submit', async () => {
+      await open();
+      await submit();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(true));
+    });
+
+    it('marks Email invalid when the server refuses the address', async () => {
+      await open();
+      await type('kai.nakamura@example.com');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'email',
+          code: 'alreadyInvited',
+          message: TEAM_INVITE_MESSAGES.alreadyInvited('kai.nakamura@example.com'),
+        }),
+      );
+      await o.flush();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual(shapes(true));
+    });
+
+    it('draws the invite link with a vertical field, the label, and the read-only textarea', async () => {
+      await open();
+      await createInvite();
+      expect(formShapes(main().querySelector('#invite')!)).toEqual([
+        shapeOf('field', { 'data-orientation': 'vertical' }, 'mt-5'),
+        {
+          ...shapeOf('field-label', { for: 'invite-link' }),
+          classes: sorted(`${LINK_LABEL_CLASSES} ${LINK_LABEL_ADDITIONS}`),
+        },
+        {
+          ...shapeOf('textarea', {
+            id: 'invite-link',
+            readonly: '',
+            'aria-describedby': 'copy-status',
+          }),
+          classes: sorted(`${LINK_TEXTAREA_CLASSES} ${LINK_TEXTAREA_ADDITIONS}`),
+        },
+      ]);
+      expect(linkBox().getAttribute('spellcheck')).toBe('false');
+      expect(linkBox().getAttribute('rows')).toBe('3');
     });
   });
 
