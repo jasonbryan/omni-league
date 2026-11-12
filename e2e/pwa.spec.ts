@@ -918,7 +918,7 @@ test.describe('offline navigation inside the app (production build against the l
       '/api/auth/get-session',
     );
     await expect(
-      page.getByRole('status').filter({ hasText: 'Loading your teams.' }),
+      page.getByRole('status').filter({ hasText: 'Loading your teams and registrations.' }),
     ).toBeAttached();
     await expect(page.getByRole('main')).not.toBeEmpty();
     expect(Date.now() - loadedAt).toBeLessThan(3_000);

@@ -51,6 +51,14 @@ const BAYSIDE = {
   role: 'guardian',
 };
 const COACHED = { ...PAIR_OF_ACES, teamId: 'k1coached', teamName: 'Coached Crew', role: 'coach' };
+const WAITING = {
+  freeAgentId: 'k1fa',
+  leagueName: 'Coed 7v7 Rec',
+  seasonName: 'Summer 2027',
+  organizationName: 'Gulf Coast Sport & Social',
+  registrationDeadline: '2027-05-19',
+  seasonStartDate: '2027-06-06',
+};
 const ORGANIZATION = {
   name: 'Coastal Bend Rec Club',
   slug: 'coastal-bend-rec-club',
@@ -92,18 +100,22 @@ describe('AccountPage', () => {
     teams: unknown[] | undefined,
     organizations: unknown[] | undefined = [],
     me: { name: string } | undefined = { name: 'Tasha Greene' },
+    freeAgents: unknown[] | undefined = [],
+    now = NOW,
   ) {
-    await open();
+    await open(now);
     accept();
     for (const subscription of convex.activeSubscriptions) {
       const value =
         subscription.name === 'teams:listMine'
           ? teams
-          : subscription.name === 'organizations:listMine'
-            ? organizations
-            : subscription.name === 'users:me'
-              ? me
-              : undefined;
+          : subscription.name === 'freeAgents:listMine'
+            ? freeAgents
+            : subscription.name === 'organizations:listMine'
+              ? organizations
+              : subscription.name === 'users:me'
+                ? me
+                : undefined;
       if (value !== undefined) subscription.emit(value);
     }
     await harness.fixture.whenStable();
@@ -119,12 +131,15 @@ describe('AccountPage', () => {
       [...card.querySelectorAll('dt')].map((dt) => [text(dt) ?? '', text(dt.nextElementSibling)]),
     );
   const cards = () => [...main().querySelectorAll('section[aria-labelledby="teams-heading"] li')];
+  const freeAgentSection = () =>
+    main().querySelector('section[aria-labelledby="free-agent-heading"]');
+  const freeAgentCards = () => [...(freeAgentSection()?.querySelectorAll('li') ?? [])];
   const nextStepRegion = () => main().querySelector('section[aria-labelledby="next-heading"]');
 
   afterEach(() => vi.useRealTimers());
 
   describe('data', () => {
-    it('asks users.me, teams.listMine and organizations.listMine only once Convex has accepted the token', async () => {
+    it('asks users.me, teams.listMine, freeAgents.listMine and organizations.listMine only once Convex has accepted the token', async () => {
       await open();
       TestBed.tick();
       expect(convex.subscriptions).toEqual([]);
@@ -132,6 +147,7 @@ describe('AccountPage', () => {
       const asked = convex.activeSubscriptions.map((s) => s.name);
       expect(asked).toContain('users:me');
       expect(asked.filter((name) => name === 'teams:listMine').length).toBeGreaterThan(0);
+      expect(asked.filter((name) => name === 'freeAgents:listMine').length).toBeGreaterThan(0);
       expect(asked.filter((name) => name === 'organizations:listMine').length).toBeGreaterThan(0);
     });
   });
@@ -216,6 +232,7 @@ describe('AccountPage', () => {
       accept();
       for (const subscription of convex.activeSubscriptions) {
         if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
+        if (subscription.name === 'freeAgents:listMine') subscription.emit([]);
         if (subscription.name === 'organizations:listMine') subscription.emit([]);
       }
       await harness.fixture.whenStable();
@@ -367,6 +384,120 @@ describe('AccountPage', () => {
     });
   });
 
+  describe('Free agent', () => {
+    it('is an h2 over a card naming the league and season, the organization, and a Waiting badge', async () => {
+      await show([SAND_SHARKS], [], undefined, [WAITING]);
+      expect(heading(2, 'Free agent')).toBeTruthy();
+      expect(freeAgentSection()?.getAttribute('aria-labelledby')).toBe('free-agent-heading');
+      expect(freeAgentCards()).toHaveLength(1);
+      const [card] = freeAgentCards();
+      expect(text(card?.querySelector('p'))).toBe('Coed 7v7 Rec · Summer 2027');
+      const badge = card?.querySelector('[data-slot="badge"]');
+      expect(text(badge)).toBe('Waiting');
+      expectBadge(badge, 'muted', 'default');
+      expect(badge?.querySelector('ng-icon')?.getAttribute('name')).toBe('lucideClock');
+    });
+
+    it('sits under the team cards and above the organization prompt', async () => {
+      await show([SAND_SHARKS], [], undefined, [WAITING]);
+      const order = [...main().querySelectorAll('main > div > *')].map((element) =>
+        element.tagName.toLowerCase(),
+      );
+      expect(order.indexOf('app-home-free-agents')).toBe(order.indexOf('app-home-team-cards') + 1);
+      expect(order.indexOf('app-home-run-a-league')).toBe(
+        order.indexOf('app-home-free-agents') + 2,
+      );
+    });
+
+    it('names the deadline while registration is open', async () => {
+      await show([SAND_SHARKS], [], undefined, [WAITING]);
+      expect(text(freeAgentCards()[0]?.querySelectorAll('p')[1])).toBe(
+        'Gulf Coast Sport & Social. An organizer places you on a team before May 19, 2027.',
+      );
+    });
+
+    it.each([
+      ['on the deadline day', Date.UTC(2027, 4, 19, 15), true],
+      ['in the last hour of the deadline day at UTC-12', Date.UTC(2027, 4, 20, 11, 59), true],
+      ['once the deadline day has ended at UTC-12', Date.UTC(2027, 4, 20, 12), false],
+      ['long after the deadline', Date.UTC(2027, 5, 1), false],
+    ])('reads the note %s with the date only while registration is open', async (_, now, open) => {
+      await show([SAND_SHARKS], [], undefined, [WAITING], now);
+      expect(text(freeAgentCards()[0]?.querySelectorAll('p')[1])).toBe(
+        open
+          ? 'Gulf Coast Sport & Social. An organizer places you on a team before May 19, 2027.'
+          : 'Gulf Coast Sport & Social. An organizer places you on a team.',
+      );
+    });
+
+    it('treats a season that has started as closed, though its deadline is still ahead', async () => {
+      const lateDeadline = { ...WAITING, registrationDeadline: '2027-06-10' };
+      await show([SAND_SHARKS], [], undefined, [lateDeadline], Date.UTC(2027, 5, 7));
+      expect(text(freeAgentCards()[0]?.querySelectorAll('p')[1])).toBe(
+        'Gulf Coast Sport & Social. An organizer places you on a team.',
+      );
+    });
+
+    it('lists one card for each waiting registration', async () => {
+      const second = {
+        ...WAITING,
+        freeAgentId: 'k2fa',
+        leagueName: 'Wednesday Coed Slow-Pitch',
+        organizationName: 'Riverbend Softball Association',
+      };
+      await show([SAND_SHARKS], [], undefined, [WAITING, second]);
+      expect(freeAgentCards().map((card) => text(card.querySelector('p')))).toEqual([
+        'Coed 7v7 Rec · Summer 2027',
+        'Wednesday Coed Slow-Pitch · Summer 2027',
+      ]);
+    });
+
+    it('shows no section while there is no waiting registration', async () => {
+      await show([SAND_SHARKS]);
+      expect(freeAgentSection()).toBeNull();
+      expect(heading(2, 'Free agent')).toBeUndefined();
+    });
+
+    it('is the home of a user whose only registration is a waiting free agent: no new-user state, no team cards', async () => {
+      await show([], [], undefined, [WAITING]);
+      expect(heading(2, "You're not on a team yet")).toBeUndefined();
+      expect(main().textContent).not.toContain('Find a league, then register');
+      expect(text(page.querySelector('main > div > p'))).toBe('Your teams and registrations.');
+      expect(heading(2, 'Your teams')).toBeUndefined();
+      expect(nextStepRegion()).toBeNull();
+      expect(freeAgentCards()).toHaveLength(1);
+      expect(
+        main().querySelector('section[aria-labelledby="app-notifications-heading"]'),
+      ).not.toBeNull();
+    });
+
+    it('offers "Run a league?" to a free agent with no organization', async () => {
+      await show([], [], undefined, [WAITING]);
+      expect(main().textContent).toContain('Run a league?');
+    });
+
+    it('follows the live query: a registration made while the home is open takes the new-user state away', async () => {
+      await show([], []);
+      expect(heading(2, "You're not on a team yet")).toBeTruthy();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'freeAgents:listMine') subscription.emit([WAITING]);
+      }
+      await harness.fixture.whenStable();
+      expect(heading(2, "You're not on a team yet")).toBeUndefined();
+      expect(freeAgentCards()).toHaveLength(1);
+    });
+
+    it('sets the title at 16px, over the 14px the card sets', async () => {
+      await show([SAND_SHARKS], [], undefined, [WAITING]);
+      expect(freeAgentCards()[0]?.querySelector('p')?.classList).toContain('text-base');
+    });
+
+    it('wraps long names inside the card', async () => {
+      await show([SAND_SHARKS], [], undefined, [{ ...WAITING, leagueName: 'L'.repeat(60) }]);
+      expect(freeAgentCards()[0]?.querySelector('p')?.className).toContain('wrap-anywhere');
+    });
+  });
+
   describe('Notifications', () => {
     it('links to the notifications page from a Notifications panel, named Manage notifications', async () => {
       await show([SAND_SHARKS]);
@@ -390,7 +521,9 @@ describe('AccountPage', () => {
     it('shows the skeleton and a polite status while the teams load, with no card', async () => {
       await open();
       accept();
-      expect(text(main().querySelector('[role="status"]'))).toBe('Loading your teams.');
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
       expect(cards()).toHaveLength(0);
       expect(main().querySelector('main > div a, a[data-slot="button"]')).toBeNull();
       const placeholders = main().querySelectorAll('[data-slot="home-skeleton-card"]');
@@ -412,7 +545,23 @@ describe('AccountPage', () => {
         if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
       }
       await harness.fixture.whenStable();
-      expect(text(main().querySelector('[role="status"]'))).toBe('Loading your teams.');
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
+      expect(cards()).toHaveLength(0);
+    });
+
+    it('keeps the skeleton while the free agent rows are still loading, so the card never arrives late', async () => {
+      await open();
+      accept();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
+        if (subscription.name === 'organizations:listMine') subscription.emit([]);
+      }
+      await harness.fixture.whenStable();
+      expect(text(main().querySelector('[role="status"]'))).toBe(
+        'Loading your teams and registrations.',
+      );
       expect(cards()).toHaveLength(0);
     });
 
@@ -425,6 +574,23 @@ describe('AccountPage', () => {
   });
 
   describe('error', () => {
+    it('shows the same alert when the free agent rows fail, and no team card', async () => {
+      await open();
+      accept();
+      for (const subscription of convex.activeSubscriptions) {
+        if (subscription.name === 'teams:listMine') subscription.emit([SAND_SHARKS]);
+        if (subscription.name === 'freeAgents:listMine') {
+          subscription.fail(new Error('Server Error'));
+        }
+      }
+      await harness.fixture.whenStable();
+      const alert = main().querySelector('[role="alert"]');
+      expect(text(alert)).toContain('Your teams and registrations could not be loaded.');
+      expect(text(alert?.querySelector('a'))).toBe('Try again');
+      expect(cards()).toHaveLength(0);
+      expect(freeAgentSection()).toBeNull();
+    });
+
     it('shows an alert with Try again in place of the cards, and keeps Notifications', async () => {
       await open();
       accept();
@@ -436,7 +602,7 @@ describe('AccountPage', () => {
       await harness.fixture.whenStable();
       expect(main().querySelector('[role="status"]')).toBeNull();
       const alert = main().querySelector('[role="alert"]');
-      expect(text(alert)).toContain('Your teams could not be loaded.');
+      expect(text(alert)).toContain('Your teams and registrations could not be loaded.');
       expect(text(alert)).toContain('Check your connection.');
       expect(alert?.textContent).not.toContain('Server Error');
       const retry = alert?.querySelector('a');
