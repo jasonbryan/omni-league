@@ -842,7 +842,10 @@ async function uniqueLeagueSlug(
   }
 }
 
-async function recountPublishedSeasons(ctx: MutationCtx, leagueId: Id<'leagues'>): Promise<number> {
+export async function recountPublishedSeasons(
+  ctx: MutationCtx,
+  leagueId: Id<'leagues'>,
+): Promise<number> {
   const published = await ctx.db
     .query('seasons')
     .withIndex('by_leagueId_and_status_and_startDate', (q) =>
@@ -870,6 +873,75 @@ async function unsetOrganizationListFields(
       hasPublishedLeague: published !== null,
     }),
   };
+}
+
+/** Throws at the scan limit, because a recount that stops there would be short. */
+export async function backfillOrganizationTenantFields(
+  ctx: MutationCtx,
+  organization: Doc<'organizations'>,
+): Promise<boolean> {
+  const countersSet =
+    organization.leagueCount !== undefined &&
+    organization.locationCount !== undefined &&
+    organization.sportLeagueCounts !== undefined &&
+    organization.sportLocationCounts !== undefined;
+  const organizationId = organization._id;
+  if (countersSet) {
+    if (organization.sortName !== undefined && organization.hasPublishedLeague !== undefined) {
+      return false;
+    }
+    await ctx.db.patch(
+      'organizations',
+      organizationId,
+      await unsetOrganizationListFields(ctx, organization),
+    );
+    return true;
+  }
+  const locations = await ctx.db
+    .query('locations')
+    .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
+    .take(BACKFILL_SCAN_LIMIT);
+  const leagues = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
+    .take(BACKFILL_SCAN_LIMIT);
+  if (locations.length >= BACKFILL_SCAN_LIMIT || leagues.length >= BACKFILL_SCAN_LIMIT) {
+    throw new Error(
+      `Organization ${JSON.stringify(organization.slug)} has ${BACKFILL_SCAN_LIMIT} or more locations or leagues, so its counters cannot be recounted in one change`,
+    );
+  }
+  // Recount from no rows, so a row left by an earlier partial run is not counted twice.
+  const existingRows = await ctx.db
+    .query('sportLocations')
+    .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+      q.eq('organizationId', organizationId),
+    )
+    .take(BACKFILL_SCAN_LIMIT);
+  for (const row of existingRows) await ctx.db.delete('sportLocations', row._id);
+  const sportLeagueCounts: SportCounts = {};
+  const sportLocationCounts: SportCounts = {};
+  const leaguesPerLocation = new Map<string, number>();
+  for (const league of leagues) {
+    if (league.status !== 'published') continue;
+    sportLeagueCounts[league.sport] = (sportLeagueCounts[league.sport] ?? 0) + 1;
+    for (const locationId of new Set(league.locationIds)) {
+      const key = `${league.sport}/${locationId}`;
+      leaguesPerLocation.set(key, (leaguesPerLocation.get(key) ?? 0) + 1);
+    }
+  }
+  for (const [key, leagueCount] of leaguesPerLocation) {
+    const [sport, locationId] = key.split('/') as [Sport, Id<'locations'>];
+    await ctx.db.insert('sportLocations', { organizationId, sport, locationId, leagueCount });
+    sportLocationCounts[sport] = (sportLocationCounts[sport] ?? 0) + 1;
+  }
+  await ctx.db.patch('organizations', organizationId, {
+    leagueCount: leagues.filter((league) => league.status === 'published').length,
+    locationCount: locations.length,
+    sportLeagueCounts,
+    sportLocationCounts,
+    ...(await unsetOrganizationListFields(ctx, organization)),
+  });
+  return true;
 }
 
 export const backfilledValidator = v.object({
@@ -915,64 +987,7 @@ export async function backfillTenantFields(
     backfilled.leagues++;
   }
   for (const organization of await ctx.db.query('organizations').take(BACKFILL_SCAN_LIMIT)) {
-    const countersSet =
-      organization.leagueCount !== undefined &&
-      organization.locationCount !== undefined &&
-      organization.sportLeagueCounts !== undefined &&
-      organization.sportLocationCounts !== undefined;
-    const organizationId = organization._id;
-    if (countersSet) {
-      if (organization.sortName !== undefined && organization.hasPublishedLeague !== undefined) {
-        continue;
-      }
-      await ctx.db.patch(
-        'organizations',
-        organizationId,
-        await unsetOrganizationListFields(ctx, organization),
-      );
-      backfilled.organizations++;
-      continue;
-    }
-    const locations = await ctx.db
-      .query('locations')
-      .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
-      .take(BACKFILL_SCAN_LIMIT);
-    const leagues = await ctx.db
-      .query('leagues')
-      .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
-      .take(BACKFILL_SCAN_LIMIT);
-    // Recount from no rows, so a row left by an earlier partial run is not counted twice.
-    const existingRows = await ctx.db
-      .query('sportLocations')
-      .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
-        q.eq('organizationId', organizationId),
-      )
-      .take(BACKFILL_SCAN_LIMIT);
-    for (const row of existingRows) await ctx.db.delete('sportLocations', row._id);
-    const sportLeagueCounts: SportCounts = {};
-    const sportLocationCounts: SportCounts = {};
-    const leaguesPerLocation = new Map<string, number>();
-    for (const league of leagues) {
-      if (league.status !== 'published') continue;
-      sportLeagueCounts[league.sport] = (sportLeagueCounts[league.sport] ?? 0) + 1;
-      for (const locationId of new Set(league.locationIds)) {
-        const key = `${league.sport}/${locationId}`;
-        leaguesPerLocation.set(key, (leaguesPerLocation.get(key) ?? 0) + 1);
-      }
-    }
-    for (const [key, leagueCount] of leaguesPerLocation) {
-      const [sport, locationId] = key.split('/') as [Sport, Id<'locations'>];
-      await ctx.db.insert('sportLocations', { organizationId, sport, locationId, leagueCount });
-      sportLocationCounts[sport] = (sportLocationCounts[sport] ?? 0) + 1;
-    }
-    await ctx.db.patch('organizations', organizationId, {
-      leagueCount: leagues.filter((league) => league.status === 'published').length,
-      locationCount: locations.length,
-      sportLeagueCounts,
-      sportLocationCounts,
-      ...(await unsetOrganizationListFields(ctx, organization)),
-    });
-    backfilled.organizations++;
+    if (await backfillOrganizationTenantFields(ctx, organization)) backfilled.organizations++;
   }
   return backfilled;
 }

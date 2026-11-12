@@ -147,6 +147,12 @@ Anyone holding the password can sign in to any preview or staging backend as a d
 
 **Every change keeps the seed current (#230).** An issue that adds or changes a table, a field, or a user-visible feature has a Demo data criterion, and its PR updates `convex/seed.ts` to deliver it ([dev cycle](dev-cycle.md), Phases 1, 4, 5, and 6). `convex/seedCoverage.test.ts` runs `seed:demo` on an empty `convex-test` backend, with the Better Auth component registered, throwaway auth variables, and a mocked breach check, and fails when a schema table has no rows and is not in its `SEED_EXCEPTIONS` map (table name to reason), when an exception names no table, or when a second run changes any table's row count or `_id`s. An exception needs a reason the reviewer accepts. It runs in `test:convex`, so `ci` needs no extra step.
 
+## Release backfill
+
+`seed:demo` backfills counters on preview and staging only, so rows that exist on production before the first release that reads a counter need `releaseBackfill:run` (`convex/releaseBackfill.ts`). It is internal, so only `npx convex run` and other Convex functions call it, and it has no preview check: the deployer runs it on production once, as a step the release PR or deploy request lists.
+
+It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`) and `sortName` and `hasPublishedLeague`; season `teamCount` and `waitlistCount`; team `pendingInviteCount`. It sets only what is unset, so a second run changes nothing and a run that stops partway continues on the next. A row whose recount reaches `BACKFILL_SCAN_LIMIT` fails the run with a message naming it, instead of storing a short count. It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result. The division fields, `searchText`, and `seasons.format` are not counters and stay with their own steps.
+
 ## Web Push keys
 
 Each deployment that sends push notifications has its own VAPID key pair ([ADR 0013](../decisions/0013-pwa-stack.md) section 6):
