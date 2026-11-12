@@ -651,6 +651,13 @@ describe('AdminTournaments', () => {
       expect(panel().querySelector('[data-slot="skeleton"]')).toBeNull();
     });
 
+    it('while the locations and the source both load, the status names the source', async () => {
+      await open(TOURNAMENTS, null, COPY_URL);
+      expect(text(panel().querySelector('[role="status"]'))).toBe(
+        'Loading the tournament to copy.',
+      );
+    });
+
     it('fills the name, the next free web address, the sport, the division, the location, and the maximum, and leaves the dates blank', async () => {
       await openCopy(COPY);
       expect(input('name').value).toBe('Winter Doubles Classic');

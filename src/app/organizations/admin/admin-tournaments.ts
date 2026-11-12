@@ -301,7 +301,7 @@ export class AdminTournaments {
     () => this.locationsLoading() || (this.copyLoading() && (this.locations()?.length ?? 0) > 0),
   );
   protected readonly loadingStatus = computed(() =>
-    this.locationsLoading() ? 'Loading the locations.' : 'Loading the tournament to copy.',
+    this.copyLoading() ? 'Loading the tournament to copy.' : 'Loading the locations.',
   );
   protected readonly createPath = computed(
     () => `${adminPath(this.context.slug(), 'tournaments')}#create-tournament`,
