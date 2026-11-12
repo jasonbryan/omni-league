@@ -8,12 +8,7 @@ import {
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideInfo, lucideListOrdered, lucideUsers } from '@ng-icons/lucide';
-import {
-  ALERT_DESCRIPTION,
-  ALERT_DESTRUCTIVE,
-  ALERT_NEUTRAL,
-  ALERT_TITLE,
-} from '../organizations/admin/admin-alert';
+import { HlmAlert, HlmAlertDescription, HlmAlertTitle } from '../ui/alert';
 
 /** `notice` is a refusal the user resolves themselves, such as signing in with another account: neutral, with the alert icon. `full` is a refusal because the team has no room, and `waitlist` one because the person's own team is on the waitlist. */
 export type InviteAlertKind = 'error' | 'notice' | 'info' | 'full' | 'waitlist';
@@ -21,15 +16,22 @@ export type InviteAlertKind = 'error' | 'notice' | 'info' | 'full' | 'waitlist';
 /** Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
 @Component({
   selector: 'app-invite-alert',
-  imports: [NgIcon],
+  imports: [HlmAlert, HlmAlertDescription, HlmAlertTitle, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideInfo, lucideListOrdered, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <div #box data-slot="alert" role="alert" tabindex="-1" [class]="classes()">
+    <div
+      #box
+      hlmAlert
+      [variant]="variant()"
+      role="alert"
+      tabindex="-1"
+      class="outline-offset-2 focus:outline-2 focus:outline-ring"
+    >
       <ng-icon [name]="icon()" aria-hidden="true" />
-      <div data-slot="alert-title" [class]="titleClass">{{ title() }}</div>
-      <div data-slot="alert-description" [class]="descriptionClass">{{ description() }}</div>
+      <div hlmAlertTitle>{{ title() }}</div>
+      <div hlmAlertDescription>{{ description() }}</div>
     </div>
   `,
 })
@@ -40,12 +42,8 @@ export class InviteAlert {
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
 
-  protected readonly titleClass = ALERT_TITLE;
-  protected readonly descriptionClass = ALERT_DESCRIPTION;
-
-  protected readonly classes = computed(
-    () =>
-      `${this.kind() === 'error' ? ALERT_DESTRUCTIVE : ALERT_NEUTRAL} outline-offset-2 focus:outline-2 focus:outline-ring`,
+  protected readonly variant = computed(() =>
+    this.kind() === 'error' ? 'destructive' : 'default',
   );
   protected readonly icon = computed(() => {
     const icons = {

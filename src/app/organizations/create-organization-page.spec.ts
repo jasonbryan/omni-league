@@ -10,6 +10,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { CreateOrganizationPage } from './create-organization-page';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -602,6 +603,10 @@ describe('CreateOrganizationPage', () => {
       expect(box?.querySelector('[data-slot="alert-description"]')?.textContent?.trim()).toBe(
         "Your details are still here. Try again when you're connected.",
       );
+      expectAlertSlots(box);
+      expectAlertClasses(box, 'destructive', 'mb-5');
+      expect(box?.getAttribute('role')).toBe('alert');
+      expect(box?.getAttribute('tabindex')).toBe('-1');
       expect(document.activeElement).toBe(box);
       expect(input('name').value).toBe(NAME);
       expect(input('slug').value).toBe(SLUG);

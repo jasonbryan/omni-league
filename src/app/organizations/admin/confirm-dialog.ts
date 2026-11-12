@@ -16,24 +16,15 @@ import { NgIcon } from '@ng-icons/core';
 import {
   BrnAlertDialog,
   BrnAlertDialogContent,
-  BrnAlertDialogDescription,
   BrnAlertDialogOverlay,
-  BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
 import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import { injectOnline } from '../../core/data/convex';
+import { HlmAlertDialogImports } from '../../ui/alert-dialog';
 import { HlmSpinner } from '../../ui/spinner';
 import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
-import {
-  ALERT_DIALOG_CONTENT,
-  ALERT_DIALOG_DESCRIPTION,
-  ALERT_DIALOG_FOOTER,
-  ALERT_DIALOG_HEADER,
-  ALERT_DIALOG_MEDIA,
-  ALERT_DIALOG_TITLE,
-} from './alert-dialog-classes';
 import type { AlertText, AlertTexts, OfflineAlertText } from './alert-text';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 
@@ -65,9 +56,8 @@ const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_au
     AdminOfflineAlert,
     BrnAlertDialog,
     BrnAlertDialogContent,
-    BrnAlertDialogDescription,
     BrnAlertDialogOverlay,
-    BrnAlertDialogTitle,
+    HlmAlertDialogImports,
     HlmSpinner,
     NgIcon,
     NgTemplateOutlet,
@@ -85,24 +75,17 @@ const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_au
       <brn-alert-dialog-overlay class="bg-foreground/50" />
       <div
         *brnAlertDialogContent
-        data-slot="alert-dialog-content"
-        data-size="default"
+        hlmAlertDialogContent
         tabindex="-1"
-        [class]="contentClass()"
+        [class]="bodyClass()"
         (keydown.escape)="cancel()"
       >
-        <div data-slot="alert-dialog-header" [class]="headerClass">
-          <div data-slot="alert-dialog-media" [class]="mediaClass">
+        <div hlmAlertDialogHeader>
+          <div hlmAlertDialogMedia>
             <ng-icon [name]="icon()" aria-hidden="true" />
           </div>
-          <h2 brnAlertDialogTitle data-slot="alert-dialog-title" [class]="titleClass">
-            {{ heading() }}
-          </h2>
-          <div
-            brnAlertDialogDescription
-            data-slot="alert-dialog-description"
-            [class]="descriptionClass"
-          >
+          <h2 hlmAlertDialogTitle>{{ heading() }}</h2>
+          <div hlmAlertDialogDescription>
             <ng-content />
             @if (!withBody()) {
               <ng-container *ngTemplateOutlet="alertView; context: { margin: 'mt-3' }" />
@@ -115,7 +98,7 @@ const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_au
             <ng-container *ngTemplateOutlet="alertView; context: { margin: 'mt-4' }" />
           </div>
         }
-        <div data-slot="alert-dialog-footer" [class]="footerClass">
+        <div hlmAlertDialogFooter>
           <button
             [attr.id]="cancelId()"
             type="button"
@@ -182,16 +165,9 @@ export class ConfirmDialog {
   readonly closed = output();
 
   protected readonly online = injectOnline();
-  protected readonly headerClass = ALERT_DIALOG_HEADER;
-  protected readonly mediaClass = ALERT_DIALOG_MEDIA;
-  protected readonly titleClass = ALERT_DIALOG_TITLE;
-  protected readonly descriptionClass = ALERT_DIALOG_DESCRIPTION;
-  protected readonly footerClass = ALERT_DIALOG_FOOTER;
   protected readonly cancelClass = OUTLINE_BUTTON;
 
-  protected readonly contentClass = computed(() =>
-    this.withBody() ? `${ALERT_DIALOG_CONTENT} ${BODY_CONTENT}` : ALERT_DIALOG_CONTENT,
-  );
+  protected readonly bodyClass = computed(() => (this.withBody() ? BODY_CONTENT : ''));
   protected readonly focusTarget = computed(() => {
     const cancelId = this.cancelId();
     return this.autoFocus() ?? (cancelId ? `#${cancelId}` : 'first-tabbable');
