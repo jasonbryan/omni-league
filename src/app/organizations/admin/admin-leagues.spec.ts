@@ -97,16 +97,12 @@ describe('AdminLeagues', () => {
   }
 
   async function chooseSport(key: string) {
-    const radio = sport(key);
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    sport(key).click();
     await o.harness.fixture.whenStable();
   }
 
   async function chooseFormat(count: number) {
-    const radio = input(`format-${count}`);
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    input(`format-${count}`).click();
     await o.harness.fixture.whenStable();
   }
 
@@ -121,9 +117,9 @@ describe('AdminLeagues', () => {
   }
 
   async function fill() {
-    await type('name', 'Sunday Reverse Coed 4s');
     await chooseSport('beachVolleyball');
     await chooseFormat(4);
+    await type('name', 'Sunday Reverse Coed 4s');
     await toggleLocation(1);
   }
 
@@ -878,7 +874,7 @@ describe('AdminLeagues', () => {
         ['sport-soccer', 'sport', 'soccer', false],
         ['sport-softball', 'sport', 'softball', false],
       ]);
-      expect(radios.map((r) => text(page.querySelector(`label[for="${r.id}"]`)))).toEqual([
+      expect(radios.map((r) => text(r.closest('label')))).toEqual([
         'Beach volleyball',
         'Soccer',
         'Softball',
@@ -934,7 +930,8 @@ describe('AdminLeagues', () => {
       );
       expect(page.querySelector('#sport-error')?.getAttribute('role')).toBe('alert');
       expect(page.querySelector('#locations-error')?.getAttribute('role')).toBe('alert');
-      expect(sport('soccer').getAttribute('aria-invalid')).toBe('true');
+      expect(sport('soccer').getAttribute('aria-describedby')).toBe('sport-error');
+      expect(sport('soccer').hasAttribute('aria-invalid')).toBe(false);
       expect(location(1).getAttribute('aria-invalid')).toBe('true');
       expect(document.activeElement).toBe(input('name'));
       expect(calls()).toEqual([]);

@@ -3,18 +3,15 @@ import {
   Component,
   ElementRef,
   computed,
+  inject,
   input,
   output,
-  viewChildren,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert } from '@ng-icons/lucide';
-import {
-  CHIP_CHOICE_INPUT_CLASSES,
-  CHIP_CHOICE_LABEL_CLASSES,
-  CHIP_CHOICE_WRAPPER_CLASSES,
-} from '../../ui/chip/chip-classes';
+import { CHIP_CHOICE_WRAPPER_CLASSES, RADIO_CHIP_CLASSES } from '../../ui/chip/chip-classes';
 import { HlmFieldImports } from '../../ui/field';
+import { HlmRadioGroupImports } from '../../ui/radio-group';
 import { FieldNoteText, type FieldNote } from './field-note';
 
 export interface ChipOption {
@@ -22,9 +19,12 @@ export interface ChipOption {
   label: string;
 }
 
+// The radio group is an inner div, not the fieldset: brain binds `data-invalid` and `aria-invalid` on its host, which would collide
+// with the fieldset's own `data-invalid`. Brain's radio binds no `aria-invalid` on its input, so while the error shows each radio
+// is described by it, and a screen reader on any chip hears it.
 @Component({
   selector: 'app-chip-radio-group',
-  imports: [FieldNoteText, HlmFieldImports, NgIcon],
+  imports: [FieldNoteText, HlmFieldImports, HlmRadioGroupImports, NgIcon],
   providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -34,25 +34,34 @@ export interface ChipOption {
       [attr.aria-describedby]="describedBy()"
       [attr.data-invalid]="error() ? 'true' : null"
     >
-      <legend class="mb-1.5 text-sm font-medium" [class.text-destructive]="!!error()">
+      <legend
+        [id]="name() + '-legend'"
+        class="mb-1.5 text-sm font-medium"
+        [class.text-destructive]="!!error()"
+      >
         {{ legend() }}
       </legend>
-      <div class="flex flex-wrap gap-2">
-        @for (option of options(); track option.key) {
-          <label [attr.for]="name() + '-' + option.key" [class]="wrapperClass"
-            ><input
-              #radio
-              type="radio"
-              [id]="name() + '-' + option.key"
-              [name]="name()"
-              [value]="option.key"
-              [checked]="value() === option.key"
-              [attr.aria-invalid]="error() ? 'true' : null"
-              (change)="chosen.emit(option.key)"
-              [class]="inputClass"
-            /><span [class]="chipClass">{{ option.label }}</span></label
-          >
-        }
+      <div
+        hlmRadioGroup
+        [name]="name()"
+        [value]="value()"
+        [attr.aria-labelledby]="name() + '-legend'"
+        (valueChange)="chosen.emit($any($event))"
+      >
+        <div class="flex flex-wrap gap-2">
+          @for (option of options(); track option.key) {
+            <!-- eslint-disable-next-line @angular-eslint/template/label-has-associated-control -- the input is rendered inside hlm-radio, out of the rule's sight -->
+            <label [class]="wrapperClass">
+              <hlm-radio
+                [inputId]="name() + '-' + option.key"
+                [value]="option.key"
+                [aria-describedby]="error() ? name() + '-error' : undefined"
+                [class]="chipClass"
+                >{{ option.label }}</hlm-radio
+              >
+            </label>
+          }
+        </div>
       </div>
       @if (description(); as text) {
         <p [id]="name() + '-description'" [class]="descriptionClass">{{ text }}</p>
@@ -81,12 +90,11 @@ export class ChipRadioGroup {
   readonly chosen = output<string>();
 
   protected readonly wrapperClass = CHIP_CHOICE_WRAPPER_CLASSES;
-  protected readonly inputClass = CHIP_CHOICE_INPUT_CLASSES;
-  protected readonly chipClass = CHIP_CHOICE_LABEL_CLASSES;
+  protected readonly chipClass = RADIO_CHIP_CLASSES;
   protected readonly descriptionClass =
     'mt-2 text-muted-foreground text-start text-sm leading-normal font-normal';
 
-  private readonly radios = viewChildren<ElementRef<HTMLInputElement>>('radio');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly describedBy = computed(() => {
     const ids = [
@@ -98,6 +106,6 @@ export class ChipRadioGroup {
   });
 
   focus(): void {
-    this.radios()[0]?.nativeElement.focus();
+    this.host.nativeElement.querySelector<HTMLInputElement>('brn-radio input')?.focus();
   }
 }

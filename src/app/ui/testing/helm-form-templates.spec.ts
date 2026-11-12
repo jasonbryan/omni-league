@@ -143,7 +143,7 @@ const ADMIN_FORMS: Record<string, Parts> = {
     errors: 2,
     handWritten: ['input'],
   },
-  'src/app/organizations/admin/chip-radio-group.ts': { nativeInputs: 1, errors: 1 },
+  'src/app/organizations/admin/chip-radio-group.ts': { errors: 1 },
   'src/app/organizations/admin/staff-invite-panel.ts': {
     inputs: 1,
     fields: 5,

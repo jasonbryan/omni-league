@@ -4,8 +4,10 @@ import {
   CHIP_CHOICE_INPUT_CLASSES,
   CHIP_CHOICE_LABEL_CLASSES,
   CHIP_CHOICE_WRAPPER_CLASSES,
+  RADIO_CHIP_CLASSES,
   chipLinkClasses,
 } from './chip-classes';
+import { RADIO_CLASSES } from '../radio-group/radio-classes';
 
 const names = (classes: string): string[] => classes.split(/\s+/);
 
@@ -137,6 +139,85 @@ describe('choice chip classes', () => {
 
   it('anchors the hidden input to its chip', () => {
     expect(names(CHIP_CHOICE_WRAPPER_CLASSES)).toEqual(['relative', 'inline-flex']);
+  });
+});
+
+describe('radio chip classes', () => {
+  const radio = names(RADIO_CHIP_CLASSES);
+
+  it('is 36px on fine pointers and 44px on touch screens, at least 44px wide with the label centred on touch screens only', () => {
+    expect(radio).toEqual(
+      expect.arrayContaining([
+        FINE_POINTER_HEIGHT,
+        COARSE_POINTER_HEIGHT,
+        COARSE_POINTER_WIDTH,
+        COARSE_POINTER_CENTRED,
+        'rounded-full',
+        'border',
+      ]),
+    );
+    expect(radio).not.toContain('h-11');
+    expect(radio).not.toContain('min-w-11');
+    expect(radio).not.toContain('justify-center');
+  });
+
+  it('undoes the margin and the 1rem width of the radio classes it follows', () => {
+    expect(RADIO_CLASSES).toContain('mt-0.5');
+    expect(RADIO_CLASSES).toContain('size-4');
+    expect(radio).toEqual(expect.arrayContaining(['mt-0!', 'w-auto']));
+  });
+
+  it('fills the checked chip with data-[checked=true]:, because brain gives an unchecked radio data-checked="false"', () => {
+    expect(radio).toEqual(
+      expect.arrayContaining([
+        'data-[checked=true]:border-foreground',
+        'data-[checked=true]:bg-foreground',
+        'data-[checked=true]:text-background',
+      ]),
+    );
+    expect(radio.filter((name) => name.startsWith('data-checked:'))).toEqual([]);
+  });
+
+  it('hovers only an unchecked chip', () => {
+    expect(radio).toContain('not-data-[checked=true]:hover:bg-muted');
+    expect(radio).not.toContain('hover:bg-muted');
+  });
+
+  it('takes the focus ring on keyboard focus from the radio classes it follows', () => {
+    expect(names(RADIO_CLASSES)).toEqual(
+      expect.arrayContaining([
+        'has-focus-visible:outline-2',
+        'has-focus-visible:outline-offset-2',
+        'has-focus-visible:outline-ring',
+      ]),
+    );
+    expect(radio.filter((name) => name.startsWith('has-focus-visible:'))).toEqual([]);
+  });
+
+  it('shows the ring on any focus of the input in WebKit only', () => {
+    const webkit = 'supports-[-webkit-backdrop-filter:none]';
+    expect(radio).toEqual(
+      expect.arrayContaining([
+        `${webkit}:has-[input:focus]:outline-2`,
+        `${webkit}:has-[input:focus]:outline-offset-2`,
+        `${webkit}:has-[input:focus]:outline-ring`,
+      ]),
+    );
+    expect(radio.filter((name) => name.startsWith('has-[input:focus]:'))).toEqual([]);
+  });
+
+  it('keeps the checked state a Highlight fill in forced colors, and focus a system-colour outline', () => {
+    for (const fill of FORCED_COLORS_FILL) {
+      expect(radio).toContain(`data-[checked=true]:forced-colors:${fill}`);
+    }
+    expect(radio).toContain('has-[input:focus-visible]:forced-colors:outline-[CanvasText]');
+    expect(
+      radio.filter((name) => name.includes('forced-colors') && name.includes('outline-2')),
+    ).toEqual([]);
+  });
+
+  it('has no gap, because brain’s empty indicator is hidden and the text is the only child', () => {
+    expect(radio.filter((name) => name.startsWith('gap-'))).toEqual([]);
   });
 });
 
