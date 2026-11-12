@@ -486,6 +486,11 @@ describe('AccountPage', () => {
       expect(freeAgentCards()).toHaveLength(1);
     });
 
+    it('sets the title at 16px, over the 14px the card sets', async () => {
+      await show([SAND_SHARKS], [], undefined, [WAITING]);
+      expect(freeAgentCards()[0]?.querySelector('p')?.classList).toContain('text-base');
+    });
+
     it('wraps long names inside the card', async () => {
       await show([SAND_SHARKS], [], undefined, [{ ...WAITING, leagueName: 'L'.repeat(60) }]);
       expect(freeAgentCards()[0]?.querySelector('p')?.className).toContain('wrap-anywhere');

@@ -29,7 +29,7 @@ export interface HomeFreeAgent {
           <li hlmCard>
             <div hlmCardContent class="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div class="min-w-0 flex-1">
-                <p class="font-medium wrap-anywhere">
+                <p class="text-base font-medium wrap-anywhere">
                   {{ card.leagueName }} &middot; {{ card.seasonName }}
                 </p>
                 <p class="mt-0.5 text-sm text-muted-foreground wrap-anywhere">{{ card.note }}</p>
