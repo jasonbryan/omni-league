@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By, Title } from '@angular/platform-browser';
-import { provideRouter, RouterLink } from '@angular/router';
+import { provideRouter, Router, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../../core/data/convex';
 import {
@@ -31,7 +31,7 @@ const PATH = `${LEAGUE_PATH}/seasons/summer-2027`;
 
 let client: FakeConvexClient;
 
-async function open(url = PATH): Promise<RouterTestingHarness> {
+async function open(url = PATH, state?: Record<string, unknown>): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
@@ -45,7 +45,8 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
       { provide: CONVEX_CLIENT, useValue: client },
     ],
   });
-  const harness = await RouterTestingHarness.create(url);
+  const harness = await RouterTestingHarness.create(state === undefined ? url : undefined);
+  if (state !== undefined) await TestBed.inject(Router).navigateByUrl(url, { state });
   TestBed.tick();
   return harness;
 }
@@ -165,6 +166,189 @@ describe('PublicSeasonPage queries', () => {
     );
     expect(icons.length).toBeGreaterThan(0);
     expect(allRadiusClasses(icons)).toEqual(Array.from(icons, () => ['rounded-lg']));
+  });
+});
+
+describe('PublicSeasonPage skeleton names', () => {
+  const NAMES = {
+    organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+    league: {
+      slug: 'sunday-reverse-coed-4s',
+      name: 'Sunday Reverse Coed 4s',
+      sportName: 'Beach volleyball',
+    },
+    season: { slug: 'summer-2027', name: 'Summer 2027' },
+  };
+  const SKELETON = '[data-testid="season-skeleton"]';
+  const CRUMBS = '[data-testid="skeleton-breadcrumb"]';
+  const HEADING = '[data-testid="season-skeleton-heading"]';
+  const FALL_2027 = {
+    name: 'Fall 2027',
+    slug: 'fall-2027',
+    startDate: '2027-09-12',
+    registrationDeadline: '2027-09-05',
+  };
+  const FALL_PATH = `${LEAGUE_PATH}/seasons/fall-2027`;
+  const FALL_NAMES = { ...NAMES, season: { slug: 'fall-2027', name: 'Fall 2027' } };
+
+  async function loading(state?: Record<string, unknown>): Promise<HTMLElement> {
+    const harness = await open(PATH, state);
+    await settle(harness);
+    return host(harness).querySelector<HTMLElement>(SKELETON)!;
+  }
+
+  const crumbTexts = (skeleton: Element) =>
+    [...skeleton.querySelectorAll(`${CRUMBS} li > span`)].map(text);
+
+  it('shows the names the navigation carried, in place of the bars, while the data is on its way', async () => {
+    const skeleton = await loading(NAMES);
+
+    expect(crumbTexts(skeleton)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Sunday Reverse Coed 4s',
+      'Summer 2027',
+    ]);
+    expect(text(skeleton.querySelector(HEADING))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+    expect(skeleton.querySelector('[data-testid="skeleton-breadcrumb-row"]')).toBeNull();
+    expect(text(skeleton.querySelector('[role="status"]'))).toBe('Loading the season.');
+  });
+
+  it.each([
+    ['another season’s slug', { ...NAMES, season: { ...NAMES.season, slug: 'fall-2027' } }],
+    ['another league’s slug', { ...NAMES, league: { ...NAMES.league, slug: 'saturday-coed-6s' } }],
+    [
+      'another organization’s slug',
+      { ...NAMES, organization: { ...NAMES.organization, slug: 'lakeshore-sand-league' } },
+    ],
+    ['a season name that is not text', { ...NAMES, season: { ...NAMES.season, name: 4 } }],
+    ['no season', { organization: NAMES.organization, league: NAMES.league }],
+    ['the team page’s state', { registered: true }],
+  ])('shows the bars for %s', async (_, state) => {
+    const skeleton = await loading(state);
+
+    expect(skeleton.querySelector(CRUMBS)).toBeNull();
+    expect(text(skeleton.querySelector(HEADING))).toBe('');
+    expect(skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]')).toHaveLength(2);
+  });
+
+  it('shows the bars when the navigation carried no state', async () => {
+    const skeleton = await loading();
+
+    expect(skeleton.querySelector(CRUMBS)).toBeNull();
+    expect(skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]')).toHaveLength(2);
+  });
+
+  it('sets its breadcrumb and heading with the classes of the loaded ones, so both take the same height', async () => {
+    const harness = await open(PATH, NAMES);
+    await settle(harness);
+    const skeleton = host(harness).querySelector<HTMLElement>(SKELETON)!;
+    const placeholders = {
+      list: skeleton.querySelector(CRUMBS)?.className,
+      heading: skeleton.querySelector(HEADING)?.className,
+      crumbs: [...skeleton.querySelectorAll(`${CRUMBS} li > span`)].map((span) => span.className),
+    };
+
+    emit();
+    await settle(harness);
+    const loaded = {
+      list: host(harness).querySelector('nav[aria-label="Breadcrumb"] ol')?.className,
+      heading: host(harness).querySelector('main h1')?.className,
+      crumbs: [...host(harness).querySelectorAll('nav[aria-label="Breadcrumb"] li > a')].map(
+        (link) => link.className,
+      ),
+    };
+
+    const classSet = (className: string | undefined) => new Set(className?.split(/\s+/));
+    expect(classSet(loaded.list)).toEqual(classSet(placeholders.list));
+    expect(placeholders.heading).toBe(loaded.heading);
+    expect(placeholders.crumbs).toHaveLength(3);
+    for (const [i, className] of placeholders.crumbs.entries()) {
+      for (const name of classSet(className)) expect(classSet(loaded.crumbs[i])).toContain(name);
+    }
+  });
+
+  describe('when the page is reused for another season', () => {
+    async function followedToFall(): Promise<{
+      harness: RouterTestingHarness;
+      skeleton: () => HTMLElement | null;
+    }> {
+      vi.setSystemTime(at('2027-07-01'));
+      const harness = await open(PATH, NAMES);
+      emit(
+        seasonQueryResults({
+          season: {
+            ...SUMMER_2027,
+            league: { ...SUMMER_2027.league, upcomingSeasons: [FALL_2027] },
+          },
+        }),
+      );
+      await settle(harness);
+      expect(text(host(harness).querySelector('main h1'))).toBe(
+        'Sunday Reverse Coed 4s · Summer 2027',
+      );
+      const next = card(harness)?.querySelector<HTMLAnchorElement>('a');
+      expect(next?.getAttribute('href')).toBe(FALL_PATH);
+      next?.click();
+      await settle(harness);
+      return {
+        harness,
+        skeleton: () => host(harness).querySelector<HTMLElement>(SKELETON),
+      };
+    }
+
+    it('shows the next season’s names, not the first season’s, from the link’s state', async () => {
+      const { skeleton } = await followedToFall();
+
+      expect(crumbTexts(skeleton()!)).toEqual([
+        'Gulf Coast Sport & Social',
+        'Sunday Reverse Coed 4s',
+        'Fall 2027',
+      ]);
+      expect(text(skeleton()?.querySelector(HEADING))).toBe('Sunday Reverse Coed 4s · Fall 2027');
+    });
+
+    it('keeps the next season’s names after its navigation has ended and before its query answers', async () => {
+      const { harness, skeleton } = await followedToFall();
+      expect(TestBed.inject(Router).currentNavigation()).toBeNull();
+
+      TestBed.tick();
+      await harness.fixture.whenStable();
+
+      expect(text(skeleton()?.querySelector(HEADING))).toBe('Sunday Reverse Coed 4s · Fall 2027');
+      expect(skeleton()?.querySelector('[data-testid="skeleton-breadcrumb-row"]')).toBeNull();
+    });
+
+    it('shows the bars when the next season is reached with no state, since the first season’s names do not match', async () => {
+      const harness = await open(PATH, NAMES);
+      emit();
+      await settle(harness);
+
+      await TestBed.inject(Router).navigateByUrl(FALL_PATH);
+      await settle(harness);
+
+      const skeleton = host(harness).querySelector<HTMLElement>(SKELETON);
+      expect(skeleton?.querySelector(CRUMBS)).toBeNull();
+      expect(skeleton?.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]')).toHaveLength(2);
+    });
+
+    it('gives the link to the next season the three names and the next season as navigation state', async () => {
+      vi.setSystemTime(at('2027-07-01'));
+      const harness = await open();
+      emit(
+        seasonQueryResults({
+          season: {
+            ...SUMMER_2027,
+            league: { ...SUMMER_2027.league, upcomingSeasons: [FALL_2027] },
+          },
+        }),
+      );
+      await settle(harness);
+      const link = harness.fixture.debugElement.query(
+        By.css(`#registration a[href="${FALL_PATH}"]`),
+      );
+
+      expect(link.injector.get(RouterLink).state).toEqual(FALL_NAMES);
+    });
   });
 });
 

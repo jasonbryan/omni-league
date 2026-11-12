@@ -4,14 +4,14 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi } from 
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { BACKFILL_TEAM_COUNT_SCAN_LIMIT } from './lib/rosterWrites';
-import { BACKFILL_SCAN_LIMIT, programSlugTaken } from './lib/tenantWrites';
+import { BACKFILL_SCAN_LIMIT } from './lib/tenantWrites';
 import { BATCH_SIZE } from './releaseBackfill';
 import schema from './schema';
 import {
+  insertLeagueWithProgram,
   modules,
   leagueRequiredFields,
   organizationListFields,
-  tournamentProgramFields,
 } from './test.setup';
 
 type T = ReturnType<typeof setup>;
@@ -23,7 +23,6 @@ function setup() {
 const ZERO = {
   locations: 0,
   leagues: 0,
-  programs: 0,
   organizations: 0,
   staffCounts: 0,
   staffInviteCounts: 0,
@@ -69,7 +68,7 @@ async function insertTenantWithoutCounters(
     }
     const leagueIds: Id<'leagues'>[] = [];
     const league = async (name: string, status?: 'draft' | 'published') =>
-      ctx.db.insert('leagues', {
+      insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', name),
         organizationId,
         name,
@@ -216,7 +215,6 @@ describe('the release backfill', () => {
       ...ZERO,
       locations: 2,
       leagues: 4,
-      programs: 4,
       organizations: 1,
       staffCounts: 1,
       staffInviteCounts: 1,
@@ -229,7 +227,6 @@ describe('the release backfill', () => {
       organization: (await ctx.db.get('organizations', tenant.organizationId))!,
       locations: await ctx.db.query('locations').collect(),
       leagues: await ctx.db.query('leagues').collect(),
-      programs: await ctx.db.query('programs').collect(),
       season: (await ctx.db.get('seasons', full.seasonId))!,
       teams: await ctx.db.query('teams').collect(),
       sportLocations: await ctx.db.query('sportLocations').collect(),
@@ -259,7 +256,6 @@ describe('the release backfill', () => {
     );
     expect(after.leagues.find((league) => league.name === 'Old 0')?.status).toBe('published');
     expect(after.leagues.find((league) => league.name === 'Draft 0')?.status).toBe('draft');
-    expect(after.programs).toHaveLength(4);
     expect(after.season).toMatchObject({ teamCount: 3, waitlistCount: 2 });
     expect(after.teams.every((team) => team.pendingInviteCount === 0)).toBe(true);
   });
@@ -330,246 +326,6 @@ describe('the release backfill', () => {
     expect(result.backfilled).toMatchObject({ leagues: 1, organizations: 1, teamCounts: 1 });
   });
 
-  describe('the programs pass', () => {
-    test('gives every league its program, with the league’s fields and the status the league pass set', async () => {
-      const t = setup();
-      const tenant = await insertTenantWithoutCounters(t, 'legacy', {
-        published: 1,
-        draft: 1,
-        unstatused: 1,
-      });
-
-      const result = await t.action(internal.releaseBackfill.run, {});
-
-      expect(result.backfilled.programs).toBe(3);
-      await t.run(async (ctx) => {
-        const leagues = await ctx.db.query('leagues').collect();
-        const programs = await ctx.db.query('programs').collect();
-        expect(programs).toHaveLength(3);
-        for (const league of leagues) {
-          const program = programs.find((row) => row.leagueId === league._id);
-          expect(league.programId, league.name).toBe(program?._id);
-          expect(program, league.name).toMatchObject({
-            organizationId: tenant.organizationId,
-            type: 'league',
-            name: league.name,
-            sortName: league.name.toLowerCase(),
-            slug: league.slug,
-            sport: 'soccer',
-            status: league.status,
-            locationIds: tenant.locationIds,
-            gender: league.gender,
-            playersPerSide: league.playersPerSide,
-            level: league.level,
-            ageGroup: league.ageGroup,
-          });
-        }
-        expect(programs.find((row) => row.name === 'Old 0')?.status).toBe('published');
-        expect(programs.find((row) => row.name === 'Draft 0')?.status).toBe('draft');
-      });
-    });
-
-    test('copies a custom level to the program', async () => {
-      const t = setup();
-      const tenant = await insertTenantWithoutCounters(t, 'custom', { published: 1 });
-      const customLevelId = await t.run(async (ctx) => {
-        const id = await ctx.db.insert('customLevels', {
-          organizationId: tenant.organizationId,
-          sport: 'soccer',
-          name: 'Gold',
-          nameKey: 'gold',
-          standardLevel: 'rec',
-          createdAt: 1,
-        });
-        await ctx.db.patch('leagues', tenant.leagueIds[0], { customLevelId: id });
-        return id;
-      });
-
-      await t.action(internal.releaseBackfill.run, {});
-
-      const program = await t.run(async (ctx) => {
-        const league = await ctx.db.get('leagues', tenant.leagueIds[0]);
-        return ctx.db.get('programs', league!.programId!);
-      });
-      expect(program?.customLevelId).toBe(customLevelId);
-    });
-
-    test('gives leagues of different organizations the same slug each its own program', async () => {
-      const t = setup();
-      const a = await insertTenantWithoutCounters(t, 'org-one', { published: 1 });
-      const b = await insertTenantWithoutCounters(t, 'org-two', { published: 1 });
-
-      await t.action(internal.releaseBackfill.run, {});
-
-      await t.run(async (ctx) => {
-        for (const tenant of [a, b]) {
-          expect(await programSlugTaken(ctx, tenant.organizationId, 'published-0')).toBe(true);
-          const program = await ctx.db.get(
-            'programs',
-            (await ctx.db.get('leagues', tenant.leagueIds[0]))!.programId!,
-          );
-          expect(program?.organizationId).toBe(tenant.organizationId);
-        }
-        expect(await ctx.db.query('programs').collect()).toHaveLength(2);
-      });
-    });
-
-    test('changes nothing on a second run, and leaves a league that already has a program alone', async () => {
-      const t = setup();
-      const tenant = await insertTenantWithoutCounters(t, 'again', { published: 2 });
-      const linked = tenant.leagueIds[0];
-      const existing = await t.run(async (ctx) => {
-        const league = (await ctx.db.get('leagues', linked))!;
-        const programId = await ctx.db.insert('programs', {
-          ...tournamentProgramFields(tenant.organizationId, league.slug),
-          type: 'league',
-          leagueId: linked,
-          name: 'Kept as it was',
-        });
-        await ctx.db.patch('leagues', linked, { programId });
-        return programId;
-      });
-
-      const first = await t.action(internal.releaseBackfill.run, {});
-      const afterFirst = await snapshot(t);
-      const second = await t.action(internal.releaseBackfill.run, {});
-
-      expect(first.backfilled.programs).toBe(1);
-      expect(second.backfilled).toEqual(ZERO);
-      expect(await snapshot(t)).toEqual(afterFirst);
-      const kept = await t.run((ctx) => ctx.db.get('programs', existing));
-      expect(kept?.name).toBe('Kept as it was');
-      expect(afterFirst.programs).toHaveLength(2);
-    });
-
-    test('leaves a tournament, its program, and its slug alone, and gives only the league a program', async () => {
-      const t = setup();
-      const tenant = await insertTenantWithoutCounters(t, 'mixed', { published: 1 });
-      const tournament = await t.run(async (ctx) => {
-        const programId = await ctx.db.insert(
-          'programs',
-          tournamentProgramFields(tenant.organizationId, 'winter-open'),
-        );
-        const tournamentId = await ctx.db.insert('tournaments', {
-          programId,
-          organizationId: tenant.organizationId,
-          startDate: '2027-01-16',
-          endDate: '2027-01-16',
-          registrationDeadline: '2027-01-09',
-          maximumTeams: 8,
-          minimumRosterSize: 4,
-          structure: 'bracket',
-          bracketType: 'single',
-        });
-        return {
-          program: (await ctx.db.get('programs', programId))!,
-          row: (await ctx.db.get('tournaments', tournamentId))!,
-        };
-      });
-
-      const first = await t.action(internal.releaseBackfill.run, {});
-      const second = await t.action(internal.releaseBackfill.run, {});
-
-      expect(first.backfilled.programs).toBe(1);
-      expect(second.backfilled).toEqual(ZERO);
-      await t.run(async (ctx) => {
-        expect(await ctx.db.get('programs', tournament.program._id)).toEqual(tournament.program);
-        expect(await ctx.db.get('tournaments', tournament.row._id)).toEqual(tournament.row);
-        const programs = await ctx.db.query('programs').collect();
-        expect(programs.map((program) => program.type).sort()).toEqual(['league', 'tournament']);
-      });
-    });
-
-    test('picks up where an interrupted pass stopped, without a second program for a league', async () => {
-      const t = setup();
-      const leagues = BATCH_SIZE.programs + 1;
-      const tenant = await insertTenantWithoutCounters(t, 'interrupted', { published: leagues });
-      await t.mutation(internal.releaseBackfill.backfillBatch, { phase: 'leagues', cursor: null });
-      const first = await t.mutation(internal.releaseBackfill.backfillBatch, {
-        phase: 'programs',
-        cursor: null,
-      });
-      expect(first.isDone).toBe(false);
-      expect(first.backfilled.programs).toBeGreaterThan(0);
-      expect(first.backfilled.programs).toBeLessThanOrEqual(BATCH_SIZE.programs);
-
-      const result = await t.action(internal.releaseBackfill.run, {});
-
-      expect(first.backfilled.programs + result.backfilled.programs).toBe(leagues);
-      await t.run(async (ctx) => {
-        const programs = await ctx.db.query('programs').collect();
-        expect(programs).toHaveLength(leagues);
-        expect(new Set(programs.map((program) => program.leagueId)).size).toBe(leagues);
-        for (const leagueId of tenant.leagueIds) {
-          const league = await ctx.db.get('leagues', leagueId);
-          expect(league?.programId, league?.name).toBeDefined();
-        }
-      });
-    });
-
-    test('covers more leagues than one batch holds', async () => {
-      const t = setup();
-      const leagues = BATCH_SIZE.programs * 2 + 1;
-      await insertTenantWithoutCounters(t, 'bulk', { published: leagues });
-
-      const result = await t.action(internal.releaseBackfill.run, {});
-
-      expect(result.backfilled.programs).toBe(leagues);
-      const unlinked = await t.run(async (ctx) => {
-        const rows = await ctx.db.query('leagues').collect();
-        return rows.filter((league) => league.programId === undefined).length;
-      });
-      expect(unlinked).toBe(0);
-    });
-
-    test('a league whose slug another program of the organization holds fails the run and gets no program', async () => {
-      const t = setup();
-      const tenant = await insertTenantWithoutCounters(t, 'clash', { published: 1 });
-      await t.run(async (ctx) => {
-        await ctx.db.insert(
-          'programs',
-          tournamentProgramFields(tenant.organizationId, 'published-0'),
-        );
-      });
-
-      await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(
-        /slug "published-0" is held by another program/,
-      );
-
-      const league = await t.run((ctx) => ctx.db.get('leagues', tenant.leagueIds[0]));
-      expect(league?.programId).toBeUndefined();
-    });
-
-    test('a run that fails at the scan limit keeps the programs it made, and the repeat adds none', async () => {
-      const t = setup();
-      const { organizationId, leagueIds } = await insertTenantWithoutCounters(t, 'many', {
-        published: 2,
-      });
-      await t.run(async (ctx) => {
-        for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
-          await ctx.db.insert('locations', {
-            organizationId,
-            name: `Field ${i}`,
-            address: '3 Main St',
-          });
-        }
-      });
-
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await expect(t.action(internal.releaseBackfill.run, {})).rejects.toThrow(
-          /cannot be recounted in one change/,
-        );
-        await t.run(async (ctx) => {
-          expect(await ctx.db.query('programs').collect()).toHaveLength(2);
-          for (const leagueId of leagueIds) {
-            expect((await ctx.db.get('leagues', leagueId))?.programId).toBeDefined();
-          }
-        });
-      }
-      await expectCountersUnset(t, organizationId);
-    });
-  });
-
   describe('batching', () => {
     test('a batch of rows that each recount to the scan limit stays inside the documents one transaction may read', () => {
       const readLimit = 16_384;
@@ -577,7 +333,6 @@ describe('the release backfill', () => {
         organizations: 6,
         seasons: 2,
         leagues: 1,
-        programs: 0,
         locations: 0,
         teams: 0,
       };
@@ -680,7 +435,7 @@ describe('the release backfill', () => {
       const { organizationId } = await insertTenantWithoutCounters(t, 'many-leagues');
       await t.run(async (ctx) => {
         for (let i = 0; i < BACKFILL_SCAN_LIMIT; i++) {
-          await ctx.db.insert('leagues', {
+          await insertLeagueWithProgram(ctx, {
             ...leagueRequiredFields('soccer', `League ${i}`),
             organizationId,
             name: `League ${i}`,

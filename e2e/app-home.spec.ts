@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { formatCalendarDate } from '../convex/lib/seasonInput';
 import { checkReflow, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -6,6 +6,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { goHomeBySidebar } from './support/go-home';
 import { homeHeading } from './support/home';
 import { expectLinkHeights, pointerOf } from './support/link-heights';
 import { screenshot } from './support/screenshot';
@@ -412,44 +413,201 @@ test.describe('/app: a free agent waiting to be placed', () => {
   });
 });
 
+const skeleton = {
+  heading: (page: Page) => page.locator('[data-slot="home-skeleton-heading"]'),
+  card: (page: Page) => page.locator('[data-slot="home-skeleton-card"]').first(),
+  nextStep: (page: Page) => page.locator('[data-slot="home-skeleton-next-step"]'),
+  newUserCard: (page: Page) => page.locator('[data-slot="home-skeleton-new-user-card"]'),
+};
+
+const topOf = async (locator: Locator) => (await locator.boundingBox())!.y;
+
+async function expectWhereItStood(arrived: Locator, stoodAt: number, what: string) {
+  const now = await topOf(arrived);
+  expect(Math.abs(now - stoodAt), `${what} moved from ${stoodAt} to ${now}`).toBeLessThanOrEqual(4);
+}
+
+async function expectLoadingStatus(page: Page) {
+  await expect(homeHeading(page)).toBeVisible();
+  await expect(main(page).getByRole('status')).toHaveText('Loading your teams and registrations.');
+  await expect(main(page).getByRole('link')).toHaveCount(0);
+}
+
+async function expectSkeletonAccessible(page: Page) {
+  await expectAccessible(page);
+  expect(await checkReflow(page)).toMatchObject({ passed: true });
+}
+
+async function seedPlayerOnTeam(user: TestUser) {
+  const tenant = await gulfCoast();
+  const captain = await seedUser(newUser('Captain'));
+  const aces = await seedTeam(tenant, THURSDAY, 'Pair of Aces', captain);
+  await addToTeam(aces, user);
+  return tenant;
+}
+
+async function loadHeld(page: Page, query: string) {
+  const held = await holdQueries(page, [query]);
+  await page.goto('/app');
+  await expect.poll(() => held.isHolding()).toBe(true);
+  return held;
+}
+
+/** `page.goto` reloads the page and loses what the tab holds in memory. */
+async function goInTab(page: Page, path: string) {
+  await page.evaluate((target) => {
+    history.pushState(null, '', target);
+    dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+  await expect(page).toHaveURL(`${baseURL}${path}`);
+}
+
 test.describe('/app: while the teams load', () => {
-  test('shows the skeleton and a status, and the cards arrive where the skeleton stood', async ({
+  test('a user with a next step sees a skeleton with no next-step block, and the heading does not move when the answer arrives', async ({
+    page,
+  }) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedTashasTeams(user);
+    const held = await loadHeld(page, 'teams:listMine');
+
+    await expectLoadingStatus(page);
+    await expect(skeleton.nextStep(page)).toHaveCount(0);
+    const headingTop = await topOf(homeHeading(page));
+
+    held.release();
+    await expect(nextStep(page)).toBeVisible();
+    await expect(main(page).getByRole('status')).toHaveCount(0);
+    expect(await topOf(homeHeading(page))).toBe(headingTop);
+  });
+
+  test('the Your teams heading and first card arrive where the skeleton stood', async ({
+    page,
+  }, testInfo) => {
+    const user = tasha();
+    await signUp(page, user);
+    await seedPlayerOnTeam(user);
+    const held = await loadHeld(page, 'teams:listMine');
+
+    await expectLoadingStatus(page);
+    await expect(skeleton.nextStep(page)).toHaveCount(0);
+    await screenshot(page, testInfo, '300-home-loading');
+    await expectSkeletonAccessible(page);
+
+    const placeholder = { heading: skeleton.heading(page), card: skeleton.card(page) };
+    const [headingTop, cardTop] = [await topOf(placeholder.heading), await topOf(placeholder.card)];
+    held.release();
+    await expect(teams(page)).toBeVisible();
+    await expect(main(page).getByRole('status')).toHaveCount(0);
+    await expectWhereItStood(teams(page).getByRole('heading', { level: 2 }), headingTop, 'heading');
+    await expectWhereItStood(teams(page).getByRole('listitem').first(), cardTop, 'first card');
+  });
+
+  test('the Free agent heading and card arrive where the skeleton stood', async ({ page }) => {
+    const user = tasha();
+    await signUp(page, user);
+    const tenant = await gulfCoast();
+    await waitInSeason(tenant, SUNDAY, user);
+    const held = await loadHeld(page, 'freeAgents:listMine');
+
+    await expectLoadingStatus(page);
+    const placeholder = { heading: skeleton.heading(page), card: skeleton.card(page) };
+    const [headingTop, cardTop] = [await topOf(placeholder.heading), await topOf(placeholder.card)];
+    held.release();
+    await expect(freeAgent(page)).toBeVisible();
+    await expectWhereItStood(
+      freeAgent(page).getByRole('heading', { level: 2 }),
+      headingTop,
+      'heading',
+    );
+    await expectWhereItStood(freeAgent(page).getByRole('listitem').first(), cardTop, 'first card');
+  });
+
+  test('back on Home from Account settings in the same tab, a user with a next step sees the next-step block, and the cards arrive where the skeleton stood', async ({
     page,
   }, testInfo) => {
     const user = tasha();
     await signUp(page, user);
     await seedTashasTeams(user);
-    const held = await holdQueries(page, ['teams:listMine']);
-    await page.goto('/app');
+    const held = await holdQueries(page, ['teams:listMine'], {
+      watchFromStart: false,
+      holdFromStart: false,
+    });
+    await openHome(page, 'Hi, Tasha');
+    await expect(nextStep(page)).toBeVisible();
+
+    await page.getByRole('link', { name: /^Account settings: / }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Account settings' })).toBeVisible();
+    held.watchNewSubscriptions();
+    held.holdNextAnswer();
+    await goHomeBySidebar(page);
     await expect.poll(() => held.isHolding()).toBe(true);
 
-    await expect(homeHeading(page)).toBeVisible();
-    await expect(main(page).getByRole('status')).toHaveText(
-      'Loading your teams and registrations.',
-    );
-    await expect(main(page).getByRole('link')).toHaveCount(0);
-    const heading = page.locator('[data-slot="home-skeleton-heading"]');
-    const card = page.locator('[data-slot="home-skeleton-card"]').first();
-    const placeholder = {
-      heading: (await heading.boundingBox())!,
-      card: (await card.boundingBox())!,
-    };
-    await screenshot(page, testInfo, '300-home-loading');
+    await expectLoadingStatus(page);
+    await expect(skeleton.nextStep(page)).toBeVisible();
+    await screenshot(page, testInfo, '300-home-loading-next-step');
+    await expectSkeletonAccessible(page);
+    const placeholder = { block: skeleton.nextStep(page), heading: skeleton.heading(page) };
+    const [blockTop, headingTop] = [
+      await topOf(placeholder.block),
+      await topOf(placeholder.heading),
+    ];
+    held.release();
+    await expect(nextStep(page)).toBeVisible();
+    await expectWhereItStood(nextStep(page), blockTop, 'next-step block');
+    await expectWhereItStood(teams(page).getByRole('heading', { level: 2 }), headingTop, 'heading');
+  });
 
+  test('a team registered in the tab drops the remembered new-user shape, and the skeleton is the default list', async ({
+    page,
+  }) => {
+    const user = tasha();
+    const tenant = await gulfCoast();
+    const held = await holdQueries(page, ['teams:listMine'], {
+      watchFromStart: false,
+      holdFromStart: false,
+    });
+    await signUp(page, user);
+    await expect(
+      main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
+    ).toBeVisible();
+
+    await goInTab(page, `/app/register/${tenant.slug}/${slugOf(SUNDAY)}/${SUMMER.slug}/team`);
+    await page.locator('#team-name').fill('Sand Sharks');
+    await page.getByRole('button', { name: 'Register team' }).click();
+    await expect(page).toHaveURL(new RegExp(`^${baseURL}/app/teams/[^/]+$`), { timeout: 20_000 });
+    held.watchNewSubscriptions();
+    held.holdNextAnswer();
+    await goHomeBySidebar(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+
+    await expectLoadingStatus(page);
+    await expect(skeleton.newUserCard(page)).toHaveCount(0);
+    await expect(skeleton.nextStep(page)).toHaveCount(0);
+    await expect(skeleton.heading(page)).toBeVisible();
     held.release();
     await expect(teams(page)).toBeVisible();
-    await expect(main(page).getByRole('status')).toHaveCount(0);
-    const arrived = {
-      heading: (await teams(page).getByRole('heading', { level: 2 }).boundingBox())!,
-      card: (await teams(page).getByRole('listitem').first().boundingBox())!,
-    };
-    expect(
-      Math.abs(arrived.heading.y - placeholder.heading.y),
-      `heading moved from ${placeholder.heading.y} to ${arrived.heading.y}`,
-    ).toBeLessThanOrEqual(4);
-    expect(Math.abs(arrived.card.y - placeholder.card.y), 'first card moved').toBeLessThanOrEqual(
-      4,
-    );
+  });
+
+  test('a visitor who signs up with no returnTo sees the new-user skeleton, and its card arrives where the skeleton stood', async ({
+    page,
+  }, testInfo) => {
+    const held = await holdQueries(page, ['teams:listMine']);
+    await signUp(page, tasha());
+    await expect.poll(() => held.isHolding()).toBe(true);
+
+    await expectLoadingStatus(page);
+    await expect(skeleton.newUserCard(page)).toHaveCount(1);
+    await expect(skeleton.heading(page)).toHaveCount(0);
+    await expect(skeleton.nextStep(page)).toHaveCount(0);
+    await screenshot(page, testInfo, '300-home-loading-new-user');
+    await expectSkeletonAccessible(page);
+    const cardTop = await topOf(skeleton.newUserCard(page));
+
+    held.release();
+    const arrived = main(page).locator('section[aria-labelledby="start-heading"]');
+    await expect(arrived).toBeVisible();
+    await expectWhereItStood(arrived, cardTop, 'first card');
   });
 });
 

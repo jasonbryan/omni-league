@@ -157,25 +157,24 @@ read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY
 npx convex run releaseBackfill:run
 ```
 
-It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result, plus `programs`: `locations`, `leagues`, `programs`, `organizations`, `staffCounts`, `staffInviteCounts`, `draftLeagueCounts`, `teamCounts`, `waitlistCounts`, `pendingInviteCounts`. Then `unset CONVEX_DEPLOY_KEY`.
+It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result: `locations`, `leagues`, `organizations`, `staffCounts`, `staffInviteCounts`, `draftLeagueCounts`, `teamCounts`, `waitlistCounts`, `pendingInviteCounts`. Then `unset CONVEX_DEPLOY_KEY`.
 
-**What it does.** It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; programs, one `programs` row of type `league` for each league without a `programId`, copied from the league, with `leagues.programId` set to it; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`); season `teamCount` and `waitlistCount`; team `pendingInviteCount`. It sets only what is unset, and gives a league that already has a program none, so a second run changes nothing and a run that stops partway (network, timeout) is repeated with the same command and continues.
+**What it does.** It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`); season `teamCount` and `waitlistCount`; team `pendingInviteCount`. It sets only what is unset, so a second run changes nothing and a run that stops partway (network, timeout) is repeated with the same command and continues.
 
 **Check afterwards.**
 
 1. Run the same command again. Every number in `backfilled` is `0`.
-2. In the production dashboard, no `organizations` row lacks `leagueCount`, `locationCount`, `staffCount`, `pendingInviteCount`, `draftLeagueCount`, `sportLeagueCounts`, or `sportLocationCounts`; no `leagues` row lacks `sortName`, `status`, `publishedSeasonCount`, or `programId`, and the `programs` table holds one row of type `league` per league (a tournament's row, of type `tournament`, is not the backfill's); no `seasons` row lacks `teamCount` or `waitlistCount`; no `teams` row lacks `pendingInviteCount`; no `locations` row lacks `sortName`.
+2. In the production dashboard, no `organizations` row lacks `leagueCount`, `locationCount`, `staffCount`, `pendingInviteCount`, `draftLeagueCount`, `sportLeagueCounts`, or `sportLocationCounts`; no `leagues` row lacks `sortName`, `status`, or `publishedSeasonCount`; no `seasons` row lacks `teamCount` or `waitlistCount`; no `teams` row lacks `pendingInviteCount`; no `locations` row lacks `sortName`.
 3. Spot-check one organization: `leagueCount` equals its published leagues, `draftLeagueCount` its draft leagues, `staffCount` its memberships, `pendingInviteCount` its `pending` invites.
 
-**Failures.** A recount that reaches its scan limit (`BACKFILL_SCAN_LIMIT`, `BACKFILL_TEAM_COUNT_SCAN_LIMIT`) would store a short count, so the run fails instead and the batch writes nothing. Three messages name the row, the first two from a recount and the last from the programs pass:
+**Failures.** A recount that reaches its scan limit (`BACKFILL_SCAN_LIMIT`, `BACKFILL_TEAM_COUNT_SCAN_LIMIT`) would store a short count, so the run fails instead and the batch writes nothing. Two messages name the row, both from a recount:
 
 - `reaches the scan limit`: a league, season, or organization has that many rows to count (published seasons, teams, waiting entries, memberships, pending invites, or draft leagues).
 - `cannot be recounted in one change`: an organization has that many locations, leagues, or sport location rows.
-- `is held by another program`: a league has no program, and another program of its organization holds its slug, so a second program would share it. The programs pass runs before the organization counters and each batch commits alone, so the programs it made stay, and the run stops at that league.
 
 Each of these stops the run at that row, and repeating it fails the same way. The owner reports it as a bug and does not repeat the run.
 
-The division fields, `searchText`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. If the production deploy fails schema validation on one of these fields, nothing is published; the owner stops the release and reports it, because this backfill cannot repair it.
+The division fields, `searchText`, `leagues.programId`, `seasons.playersPerSide`, and the organization's `sortName` and `hasPublishedLeague` are required in the schema (#239, #334), so this function does not set them. A production row that lacks one, or a season that still holds `format`, fails schema validation at `npx convex deploy`, before this function exists on production. Every production row is written by code that sets them, so the first release needs no step for them. If the production deploy fails schema validation on one of these fields, nothing is published; the owner stops the release and reports it, because this backfill cannot repair it.
 
 ## Web Push keys
 

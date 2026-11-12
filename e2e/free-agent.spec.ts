@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
+import { goHomeBySidebar } from './support/go-home';
+import { holdQueries } from './support/hold-queries';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
@@ -154,6 +156,44 @@ test.describe('register as a free agent', () => {
       'href',
       `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN}`,
     );
+  });
+
+  test('signed out: after signing up from the season page and registering, Home in the same tab shows the default skeleton, not the new-user one', async ({
+    page,
+  }) => {
+    const tenant = await seed();
+    const path = registerPath(tenant, OPEN);
+    const held = await holdQueries(page, ['freeAgents:listMine'], {
+      watchFromStart: false,
+      holdFromStart: false,
+    });
+    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN}`);
+    await page
+      .locator('#registration')
+      .getByRole('link', { name: 'Register as a free agent' })
+      .click();
+    await page.getByRole('main').getByRole('link', { name: 'Create an account' }).click();
+    const user = newUser('FreeAgent');
+    await page.locator('#name').fill(user.name);
+    await page.locator('#email').fill(user.email);
+    await page.locator('#password').fill(user.password);
+    await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
+    await page.getByRole('button', { name: /Create account/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+    await registerButton(page).click();
+    await expect(card(page)).toContainText('You’re registered as a free agent.');
+
+    held.watchNewSubscriptions();
+    held.holdNextAnswer();
+    await goHomeBySidebar(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByRole('main').getByRole('status')).toHaveText(
+      'Loading your teams and registrations.',
+    );
+    await expect(page.locator('[data-slot="home-skeleton-heading"]')).toBeVisible();
+    await expect(page.locator('[data-slot="home-skeleton-new-user-card"]')).toHaveCount(0);
+    held.release();
+    await expect(page.getByRole('region', { name: 'Free agent' })).toBeVisible();
   });
 
   test('closed: past the deadline and from the start date, the route shows the closed state and no button', async ({

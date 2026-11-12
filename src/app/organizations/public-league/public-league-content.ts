@@ -34,6 +34,7 @@ import { FULL_BADGE_TEXT, soonestClosingOpenSeason } from '../season-status';
 import { seasonStatus } from './league-seasons';
 import { CRUMB_BOX, CRUMB_LINK, CRUMB_LIST, LEAGUE_HEADING } from './public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
+import { publicPageNames } from './public-page-names';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -112,6 +113,7 @@ function plural(count: number, noun: string): string {
                   <h3 class="text-lg font-semibold tracking-tight">
                     <a
                       [routerLink]="card.href"
+                      [state]="card.names"
                       class="rounded-md hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                       >{{ card.name }}</a
                     >
@@ -149,6 +151,7 @@ function plural(count: number, noun: string): string {
                 </div>
                 <a
                   [routerLink]="card.href"
+                  [state]="card.names"
                   fragment="registration"
                   data-slot="button"
                   [class]="registerButton + ' w-full md:w-auto'"
@@ -193,6 +196,7 @@ function plural(count: number, noun: string): string {
                         <h3 class="font-medium">
                           <a
                             [routerLink]="season.href"
+                            [state]="season.names"
                             class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
                             >{{ season.name }}</a
                           >
@@ -345,6 +349,7 @@ export class PublicLeagueContent {
     return {
       name: season.name,
       href: publicSeasonPath(league.organization.slug, league.slug, season.slug),
+      names: publicPageNames({ organization: league.organization, league, season }),
       dates: seasonDates(season.startDate, season.endDate),
       teams: league.divisionLabel
         ? `${league.divisionLabel}, ${minimum}`
@@ -360,6 +365,7 @@ export class PublicLeagueContent {
       name: season.name,
       slug: season.slug,
       href: publicSeasonPath(league.organization.slug, league.slug, season.slug),
+      names: publicPageNames({ organization: league.organization, league, season }),
       dates: seasonDates(season.startDate, season.endDate),
       status: seasonStatus(season, this.now()),
     }));

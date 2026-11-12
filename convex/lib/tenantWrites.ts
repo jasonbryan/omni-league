@@ -781,19 +781,29 @@ async function insertLeagueRow(
     locationIds: league.locationIds,
     ...league.division,
   });
-  const leagueId = await ctx.db.insert('leagues', {
-    organizationId,
+  const row = {
     name: league.name,
-    slug: league.slug,
     sport: league.sport,
     locationIds: league.locationIds,
+    status,
+    ...divisionFields(league.division),
+  };
+  const programId = await ctx.db.insert('programs', {
+    ...programFieldsOfLeague(row),
+    organizationId,
+    type: 'league',
+    slug: league.slug,
+  });
+  const leagueId = await ctx.db.insert('leagues', {
+    ...row,
+    organizationId,
+    slug: league.slug,
     sortName: sortName(league.name),
     searchText,
-    status,
     publishedSeasonCount: 0,
-    ...divisionFields(league.division),
+    programId,
   });
-  await insertProgramOfLeague(ctx, (await ctx.db.get('leagues', leagueId))!);
+  await ctx.db.patch('programs', programId, { leagueId });
   if (status === 'draft') await changeDraftLeagueCount(ctx, organizationId, 1);
   if (status === 'published') {
     await markHasPublishedLeague(ctx, organizationId);
@@ -869,7 +879,20 @@ export async function leagueSlugTaken(
 }
 
 // Every writer of a league's name, status, locations, or division calls `syncProgramOfLeague` after the league patch, so a new writer must too.
-function programFieldsOfLeague(league: Doc<'leagues'>) {
+function programFieldsOfLeague(
+  league: Pick<
+    Doc<'leagues'>,
+    | 'name'
+    | 'sport'
+    | 'status'
+    | 'locationIds'
+    | 'gender'
+    | 'playersPerSide'
+    | 'level'
+    | 'customLevelId'
+    | 'ageGroup'
+  >,
+) {
   return {
     name: league.name,
     sortName: sortName(league.name),
@@ -885,39 +908,9 @@ function programFieldsOfLeague(league: Doc<'leagues'>) {
   };
 }
 
-async function insertProgramOfLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
-  const programId = await ctx.db.insert('programs', {
-    ...programFieldsOfLeague(league),
-    organizationId: league.organizationId,
-    type: 'league',
-    slug: league.slug,
-    leagueId: league._id,
-  });
-  await ctx.db.patch('leagues', league._id, { programId });
-}
-
-/** Throws when another program of the organization holds the league's slug, so two programs never share one. */
-export async function ensureProgramOfLeague(
-  ctx: MutationCtx,
-  league: Doc<'leagues'>,
-): Promise<boolean> {
-  if (league.programId !== undefined) return false;
-  if (await programSlugTaken(ctx, league.organizationId, league.slug)) {
-    throw new Error(
-      `League ${league._id} cannot get a program: slug ${JSON.stringify(league.slug)} is held by another program of its organization`,
-    );
-  }
-  await insertProgramOfLeague(ctx, league);
-  return true;
-}
-
 async function syncProgramOfLeague(ctx: MutationCtx, leagueId: Id<'leagues'>): Promise<void> {
   const league = await ctx.db.get('leagues', leagueId);
   if (!league) throw new Error('No league has this id');
-  if (league.programId === undefined) {
-    await ensureProgramOfLeague(ctx, league);
-    return;
-  }
   await ctx.db.patch('programs', league.programId, programFieldsOfLeague(league));
 }
 

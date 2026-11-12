@@ -100,7 +100,7 @@ export default defineSchema({
     status: v.optional(leagueStatusValidator),
     publishedSeasonCount: v.optional(v.number()),
     /** The league's `programs` row, kept in step by `convex/lib/tenantWrites.ts`. */
-    programId: v.optional(v.id('programs')),
+    programId: v.id('programs'),
     gender: genderValidator,
     playersPerSide: v.number(),
     /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
@@ -123,7 +123,6 @@ export default defineSchema({
       'sortName',
     ])
     .index('by_status_and_sport_and_sortName', ['status', 'sport', 'sortName'])
-    .index('by_customLevelId', ['customLevelId'])
     .searchIndex('search_searchText', {
       searchField: 'searchText',
       filterFields: ['status', 'sport'],

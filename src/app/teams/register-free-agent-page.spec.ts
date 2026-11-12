@@ -10,6 +10,7 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { RegisterFreeAgentPage } from './register-free-agent-page';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { expectPendingSpinner } from '../ui/testing/spinner';
+import { routerLinkState } from '../ui/testing/router-link-state';
 
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
@@ -159,6 +160,23 @@ describe('RegisterFreeAgentPage', () => {
       expect(linkNamed('Back to the season page')?.getAttribute('href')).toBe(SEASON_PATH);
       expect(page.querySelector('form')).toBeNull();
       expect(page.textContent).not.toContain('Registration for this season is closed.');
+    });
+
+    it.each([
+      ['waiting', WAITING],
+      ['closed', SUMMER],
+    ])('%s: sets no navigation state on the links to the season page', async (_, season) => {
+      await open({ now: AFTER_DEADLINE });
+      await answer(season);
+      const links = [...page.querySelectorAll('main a')].filter(
+        (a) => a.getAttribute('href') === SEASON_PATH,
+      );
+
+      expect(links).toHaveLength(2);
+      expect(links.map((link) => routerLinkState(harness.fixture, link))).toEqual([
+        undefined,
+        undefined,
+      ]);
     });
 
     it('a waiting captain: the waitlist position with a link to the team route, and no form', async () => {

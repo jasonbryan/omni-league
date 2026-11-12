@@ -263,10 +263,10 @@ describe('the draft league counter', () => {
         division: defaultDivision('soccer'),
       });
       const league = (await ctx.db.get('leagues', leagueId))!;
-      await ctx.db.delete('programs', league.programId!);
       await ctx.db.replace('leagues', leagueId, {
         ...leagueRequiredFields(league.sport, league.name),
         organizationId: league.organizationId,
+        programId: league.programId,
         name: league.name,
         slug: league.slug,
         sport: league.sport,

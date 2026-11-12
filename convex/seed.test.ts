@@ -14,7 +14,12 @@ import { sportName } from './lib/sports';
 import { insertLeague, insertLocation, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
 import * as seed from './seed';
-import { modules, leagueRequiredFields, organizationListFields } from './test.setup';
+import {
+  insertLeagueWithProgram,
+  modules,
+  leagueRequiredFields,
+  organizationListFields,
+} from './test.setup';
 
 function setup() {
   return convexTest(schema, modules);
@@ -148,7 +153,7 @@ async function insertRaw(t: T): Promise<void> {
       address: '1 Old Road',
     });
     await ctx.db.insert('locations', { organizationId, name: 'Other Field', address: '2 Road' });
-    await ctx.db.insert('leagues', {
+    await insertLeagueWithProgram(ctx, {
       ...leagueRequiredFields('softball', 'Beta League'),
       organizationId,
       name: 'Beta League',
@@ -156,7 +161,7 @@ async function insertRaw(t: T): Promise<void> {
       sport: 'softball',
       locationIds: [],
     });
-    await ctx.db.insert('leagues', {
+    await insertLeagueWithProgram(ctx, {
       ...leagueRequiredFields('soccer', 'alpha League'),
       organizationId,
       name: 'alpha League',
@@ -936,7 +941,7 @@ describe('seed:demo', () => {
         ['Two', 'soccer', [a, b]],
         ['Three', 'softball', [b]],
       ] as const) {
-        await ctx.db.insert('leagues', {
+        await insertLeagueWithProgram(ctx, {
           ...leagueRequiredFields(sport, name),
           organizationId,
           name,
@@ -1362,7 +1367,7 @@ describe('seed:demo and league status', () => {
         name: 'Bare Field',
         address: '1 Road',
       });
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'Legacy One'),
         organizationId: bare,
         name: 'Legacy One',
@@ -1370,7 +1375,7 @@ describe('seed:demo and league status', () => {
         sport: 'soccer',
         locationIds: [field],
       });
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('softball', 'Legacy Draft'),
         organizationId: bare,
         name: 'Legacy Draft',
@@ -1394,7 +1399,7 @@ describe('seed:demo and league status', () => {
         address: '2 Road',
         sortName: 'counted field',
       });
-      await ctx.db.insert('leagues', {
+      await insertLeagueWithProgram(ctx, {
         ...leagueRequiredFields('soccer', 'Counted League'),
         organizationId: counted,
         name: 'Counted League',

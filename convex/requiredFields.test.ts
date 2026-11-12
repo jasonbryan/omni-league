@@ -41,6 +41,7 @@ const LEAGUE_FIELDS = [
   'level',
   'ageGroup',
   'searchText',
+  'programId',
 ] as const satisfies readonly (keyof Doc<'leagues'>)[];
 const ORGANIZATION_FIELDS = ['sortName', 'hasPublishedLeague'] as const;
 
@@ -91,20 +92,36 @@ async function withOrganization(t: T) {
 }
 
 describe('the schema', () => {
-  const league = (organizationId: Doc<'organizations'>['_id']) => ({
-    organizationId,
-    name: 'League',
-    slug: 'league',
-    sport: 'beachVolleyball' as const,
-    locationIds: [],
-    searchText: 'league',
-    ...COED_4S,
-  });
+  async function league(t: T, organizationId: Doc<'organizations'>['_id']) {
+    const programId = await t.run((ctx) =>
+      ctx.db.insert('programs', {
+        organizationId,
+        type: 'league',
+        name: 'League',
+        sortName: 'league',
+        slug: 'league',
+        sport: 'beachVolleyball',
+        status: 'draft',
+        locationIds: [],
+        ...COED_4S,
+      }),
+    );
+    return {
+      organizationId,
+      name: 'League',
+      slug: 'league',
+      sport: 'beachVolleyball' as const,
+      locationIds: [],
+      searchText: 'league',
+      programId,
+      ...COED_4S,
+    };
+  }
 
   test.each(LEAGUE_FIELDS)('refuses a league with no %s', async (field) => {
     const t = setup();
     const { organizationId } = await withOrganization(t);
-    const row: Record<string, unknown> = league(organizationId);
+    const row: Record<string, unknown> = await league(t, organizationId);
     delete row[field];
     await expect(t.run((ctx) => ctx.db.insert('leagues', row as Doc<'leagues'>))).rejects.toThrow();
   });
@@ -112,14 +129,16 @@ describe('the schema', () => {
   test('keeps minimumRosterSize and customLevelId optional on a league', async () => {
     const t = setup();
     const { organizationId } = await withOrganization(t);
-    await t.run((ctx) => ctx.db.insert('leagues', league(organizationId)));
+    const row = await league(t, organizationId);
+    await t.run((ctx) => ctx.db.insert('leagues', row));
     expect(await t.run((ctx) => ctx.db.query('leagues').collect())).toHaveLength(1);
   });
 
   test.each(['playersPerSide'] as const)('refuses a season with no %s', async (field) => {
     const t = setup();
     const { organizationId } = await withOrganization(t);
-    const leagueId = await t.run((ctx) => ctx.db.insert('leagues', league(organizationId)));
+    const leagueRow = await league(t, organizationId);
+    const leagueId = await t.run((ctx) => ctx.db.insert('leagues', leagueRow));
     const row: Record<string, unknown> = {
       organizationId,
       leagueId,
@@ -135,7 +154,8 @@ describe('the schema', () => {
   test('refuses a season that holds a format', async () => {
     const t = setup();
     const { organizationId } = await withOrganization(t);
-    const leagueId = await t.run((ctx) => ctx.db.insert('leagues', league(organizationId)));
+    const leagueRow = await league(t, organizationId);
+    const leagueId = await t.run((ctx) => ctx.db.insert('leagues', leagueRow));
     await expect(
       t.run((ctx) =>
         ctx.db.insert('seasons', {
