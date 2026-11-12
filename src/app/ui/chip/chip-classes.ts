@@ -38,7 +38,6 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
   FORCED_COLORS_CHOICE_FOCUS,
 ].join(' ');
 
-// The chip drawn by the radio group's `brn-radio`, which holds the native input.
 // The helm radio classes come first and nothing merges classes: `mt-0!` beats their `mt-0.5`, which a plain zero margin sorts before,
 // and the fill is `data-[checked=true]:` so it matches the specificity of their `has-checked:` fill and comes later in the stylesheet
 // (spartan's `data-checked:` is a zero-specificity `:where()`). Their keyboard focus ring stays; this adds the WebKit and forced-colours cases.
