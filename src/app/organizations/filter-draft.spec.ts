@@ -29,7 +29,7 @@ describe('draftLeagueCount', () => {
     expect(sand(filters({ gender: ['mens'], playersPerSide: [6] }))).toBe(0);
   });
 
-  it('is the total with no filter, so a league with no division values still counts', () => {
+  it('is the total with no filter, not the number of facets', () => {
     expect(sand(NO_DIVISION_FILTERS)).toBe(7);
     expect(draftLeagueCount([], NO_DIVISION_FILTERS, SAND_COUNTS, undefined, 3)).toBe(3);
   });

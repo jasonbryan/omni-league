@@ -206,14 +206,6 @@ describe('checkSeasonFields and firstSeasonError', () => {
   });
 });
 
-describe('SEASON_MESSAGES', () => {
-  test('tells the organizer where to set the format', () => {
-    expect(SEASON_MESSAGES.leagueFormatMissing).toBe(
-      'Set this league’s format in its details first.',
-    );
-  });
-});
-
 describe('seasonIsFull and seasonHasRoom', () => {
   test.each([
     [{ teamCount: 2, maxTeams: 2 }, true, false],

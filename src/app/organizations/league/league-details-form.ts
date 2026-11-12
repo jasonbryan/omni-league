@@ -61,24 +61,16 @@ type Status = { kind: 'saved'; earlier: Earlier } | { kind: 'restored' };
 const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
 
 function savedFromEarlier({ league }: Earlier): SavedDetails {
-  const { gender, playersPerSide, level, ageGroup } = league;
-  const complete =
-    gender !== undefined &&
-    playersPerSide !== undefined &&
-    level !== undefined &&
-    ageGroup !== undefined;
   return {
     name: league.name,
-    division: complete
-      ? {
-          gender,
-          playersPerSide,
-          level,
-          customLevelId: league.customLevelId,
-          ageGroup,
-          minimumRosterSize: league.minimumRosterSize,
-        }
-      : undefined,
+    division: {
+      gender: league.gender,
+      playersPerSide: league.playersPerSide,
+      level: league.level,
+      customLevelId: league.customLevelId,
+      ageGroup: league.ageGroup,
+      minimumRosterSize: league.minimumRosterSize,
+    },
   };
 }
 
@@ -290,7 +282,7 @@ export class LeagueDetailsForm implements OnInit {
   >({
     source: () => this.league().division,
     computation: (division, previous) =>
-      division?.customLevel
+      division.customLevel
         ? { ...division.customLevel, standardLevel: division.level }
         : (previous?.value ?? null),
   });
@@ -303,8 +295,7 @@ export class LeagueDetailsForm implements OnInit {
     const status = this.status();
     if (status?.kind !== 'saved') return false;
     const { league, written } = status.earlier;
-    const hasDivision = league.gender !== undefined;
-    return hasDivision && (this.leagueHolds(written) || this.leagueHolds(league));
+    return this.leagueHolds(written) || this.leagueHolds(league);
   });
 
   protected readonly nameDescribedBy = computed(() =>
@@ -349,12 +340,12 @@ export class LeagueDetailsForm implements OnInit {
     const { name, division } = this.league();
     return (
       values.name === name &&
-      values.gender === division?.gender &&
-      values.playersPerSide === division?.playersPerSide &&
-      values.level === division?.level &&
-      values.customLevelId === division?.customLevel?.customLevelId &&
-      values.ageGroup === division?.ageGroup &&
-      values.minimumRosterSize === division?.minimumRosterSize
+      values.gender === division.gender &&
+      values.playersPerSide === division.playersPerSide &&
+      values.level === division.level &&
+      values.customLevelId === division.customLevel?.customLevelId &&
+      values.ageGroup === division.ageGroup &&
+      values.minimumRosterSize === division.minimumRosterSize
     );
   }
 

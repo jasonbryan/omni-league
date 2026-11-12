@@ -399,7 +399,7 @@ export const getOrganizerContext = query({
       role: roleValidator,
       organization: v.object({ name: v.string(), slug: v.string() }),
       organizationId: v.id('organizations'),
-      division: v.optional(organizerDivisionValidator),
+      division: organizerDivisionValidator,
     }),
   ),
   handler: async (ctx, args) => {
