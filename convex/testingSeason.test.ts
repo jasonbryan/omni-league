@@ -4,7 +4,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { internal } from './_generated/api';
 import schema from './schema';
-import { modules } from './test.setup';
+import { insertTournamentProgram, modules } from './test.setup';
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -221,6 +221,44 @@ describe('testing:addLeagueOrganizer', () => {
       leagueSlugs: ['coed-7v7', 'sand-2s'],
     });
     expect((await memberships(t))[0]?.leagueIds).toHaveLength(2);
+  }, 30_000);
+
+  test('assigns tournaments by web address, with no league', async () => {
+    const t = await seeded();
+    const programIds = await t.run(async (ctx) => {
+      const organization = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', TENANT.organization.slug))
+        .unique())!;
+      return [
+        await insertTournamentProgram(ctx, organization._id, 'Gulf Open', 'gulf-open'),
+        await insertTournamentProgram(ctx, organization._id, 'Other Open', 'other-open'),
+      ];
+    });
+    await t.mutation(internal.testing.addLeagueOrganizer, {
+      ...ARGS,
+      leagueSlugs: [],
+      tournamentSlugs: ['gulf-open'],
+    });
+    expect(await memberships(t)).toMatchObject([{ leagueIds: [], programIds: [programIds[0]] }]);
+  }, 30_000);
+
+  test('throws, writing nothing, for a tournament that is unknown, of another organization, or a league’s web address', async () => {
+    const t = await seeded();
+    await t.run(async (ctx) => {
+      const other = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', OTHER.organization.slug))
+        .unique())!;
+      await insertTournamentProgram(ctx, other._id, 'Other Open', 'other-open');
+    });
+    for (const slug of ['nope', 'other-open', 'coed-7v7']) {
+      await expect(
+        t.mutation(internal.testing.addLeagueOrganizer, { ...ARGS, tournamentSlugs: [slug] }),
+        slug,
+      ).rejects.toThrow(/No tournament/);
+    }
+    expect(await memberships(t)).toEqual([]);
   }, 30_000);
 
   test('throws, writing nothing, for an unknown organization, account, or league, a league of another organization, and a second membership', async () => {

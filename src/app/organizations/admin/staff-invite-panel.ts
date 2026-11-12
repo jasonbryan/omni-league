@@ -5,6 +5,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  computed,
   inject,
   input,
   signal,
@@ -41,6 +42,22 @@ import { HlmCard } from '../../ui/card';
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
   name: string;
+}
+
+export interface InviteTournamentChoice {
+  programId: Id<'programs'>;
+  name: string;
+}
+
+interface PickerGroup {
+  id: 'leagues' | 'tournaments';
+  legend: string;
+  items: {
+    controlId: string;
+    name: string;
+    checked: boolean;
+    toggle: (checked: boolean) => void;
+  }[];
 }
 
 interface CreatedInvite {
@@ -173,7 +190,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
         >
           <h2 id="invite-heading" class="font-semibold">Invite staff</h2>
         </div>
-        @if (leagues(); as leagues) {
+        @if (ready()) {
           <form
             novalidate
             aria-labelledby="invite-heading"
@@ -268,7 +285,9 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                         >League organizer</label
                       >
                       <p hlmFieldDescription id="role-organizer-description">
-                        Runs only the leagues you choose.
+                        Runs only the
+                        {{ form.tournamentsOffered() ? 'leagues and tournaments' : 'leagues' }}
+                        you choose.
                       </p>
                     </div>
                   </div>
@@ -295,59 +314,66 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                 }
               </fieldset>
               @if (form.role() === 'leagueOrganizer') {
-                <fieldset
-                  hlmFieldSet
-                  id="leagues"
-                  [attr.aria-describedby]="
-                    form.errors.leagues()
-                      ? 'leagues-description leagues-error'
-                      : 'leagues-description'
-                  "
-                  [attr.data-invalid]="form.errors.leagues() ? 'true' : null"
-                  (focusout)="form.leftGroup('leagues', $event)"
-                >
-                  <legend
-                    hlmFieldLegend
-                    variant="label"
-                    [class.text-destructive]="form.errors.leagues()"
-                  >
-                    Leagues
-                  </legend>
-                  <p hlmFieldDescription id="leagues-description" class="-mt-1.5">
-                    Choose one or more.
-                  </p>
-                  <div data-slot="checkbox-group" class="grid gap-3">
-                    @for (league of leagues; track league.leagueId; let i = $index) {
-                      <div
-                        hlmField
-                        orientation="horizontal"
-                        [attr.data-matches-spartan-invalid]="form.errors.leagues() ? 'true' : null"
+                <div class="contents" (focusout)="form.leftGroup('leagues', $event)">
+                  @for (group of groups(); track group.id; let first = $first; let last = $last) {
+                    <fieldset
+                      hlmFieldSet
+                      [id]="group.id"
+                      [attr.aria-describedby]="describedBy(first)"
+                      [attr.data-invalid]="form.errors.leagues() ? 'true' : null"
+                    >
+                      <legend
+                        hlmFieldLegend
+                        variant="label"
+                        [class.text-destructive]="form.errors.leagues()"
                       >
-                        <app-checkbox
-                          [controlId]="'league-' + (i + 1)"
-                          [checked]="form.selected().has(league.leagueId)"
-                          (checkedChange)="form.toggleLeague(league.leagueId, $event)"
-                          [showInvalid]="!!form.errors.leagues()"
-                        />
-                        <div hlmFieldContent>
-                          <label hlmFieldLabel [attr.for]="'league-' + (i + 1)">{{
-                            league.name
-                          }}</label>
-                        </div>
+                        {{ group.legend }}
+                      </legend>
+                      @if (first) {
+                        <p hlmFieldDescription id="leagues-description" class="-mt-1.5">
+                          {{
+                            form.tournamentsOffered()
+                              ? 'Choose one or more leagues or tournaments.'
+                              : 'Choose one or more.'
+                          }}
+                        </p>
+                      }
+                      <div data-slot="checkbox-group" class="grid gap-3">
+                        @for (item of group.items; track item.controlId) {
+                          <div
+                            hlmField
+                            orientation="horizontal"
+                            [attr.data-matches-spartan-invalid]="
+                              form.errors.leagues() ? 'true' : null
+                            "
+                          >
+                            <app-checkbox
+                              [controlId]="item.controlId"
+                              [checked]="item.checked"
+                              (checkedChange)="item.toggle($event)"
+                              [showInvalid]="!!form.errors.leagues()"
+                            />
+                            <div hlmFieldContent>
+                              <label hlmFieldLabel [attr.for]="item.controlId">{{
+                                item.name
+                              }}</label>
+                            </div>
+                          </div>
+                        }
                       </div>
-                    }
-                  </div>
-                  @if (form.errors.leagues(); as error) {
-                    <div hlmFieldError id="leagues-error">
-                      <ng-icon
-                        name="lucideCircleAlert"
-                        class="mt-0.5 shrink-0 text-base"
-                        aria-hidden="true"
-                      />
-                      <span>{{ error }}</span>
-                    </div>
+                      @if (last && form.errors.leagues(); as error) {
+                        <div hlmFieldError id="leagues-error">
+                          <ng-icon
+                            name="lucideCircleAlert"
+                            class="mt-0.5 shrink-0 text-base"
+                            aria-hidden="true"
+                          />
+                          <span>{{ error }}</span>
+                        </div>
+                      }
+                    </fieldset>
                   }
-                </fieldset>
+                </div>
               }
             </div>
             <button
@@ -370,12 +396,16 @@ type CopyOutcome = 'copied' | 'blocked' | null;
               {{ form.submitting() ? 'Creating the invite link.' : '' }}
             </p>
           </form>
-        } @else if (leaguesFailed()) {
+        } @else if (leaguesFailed() || tournamentsFailed()) {
           <div class="px-4 py-4 md:px-5">
             <app-admin-alert
               #leaguesAlert
               kind="error"
-              title="The leagues could not be loaded."
+              [title]="
+                leaguesFailed()
+                  ? 'The leagues could not be loaded.'
+                  : 'The tournaments could not be loaded.'
+              "
               description="Check your connection and try again."
             />
           </div>
@@ -394,15 +424,57 @@ export class StaffInvitePanel {
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
   readonly leagues = input<readonly InviteLeagueChoice[] | undefined>();
+  readonly tournaments = input<readonly InviteTournamentChoice[] | undefined>();
   readonly leaguesFailed = input(false);
+  readonly tournamentsFailed = input(false);
 
   protected readonly online = injectOnline();
-  protected readonly form = new InviteForm(() => (this.leagues() ?? []).map((l) => l.leagueId));
+  protected readonly form = new InviteForm(
+    () => (this.leagues() ?? []).map((l) => l.leagueId),
+    () => (this.tournaments() ?? []).map((t) => t.programId),
+  );
   protected readonly alerts = INVITE_FORM_ALERTS;
 
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;
+
+  protected readonly ready = computed(
+    () => this.leagues() !== undefined && this.tournaments() !== undefined,
+  );
+
+  protected readonly groups = computed<PickerGroup[]>(() => {
+    const leagues = this.leagues() ?? [];
+    const tournaments = this.tournaments() ?? [];
+    const selected = this.form.selected();
+    const selectedTournaments = this.form.selectedTournaments();
+    const groups: PickerGroup[] = [];
+    if (leagues.length > 0) {
+      groups.push({
+        id: 'leagues',
+        legend: 'Leagues',
+        items: leagues.map(({ leagueId, name }, index) => ({
+          controlId: `league-${index + 1}`,
+          name,
+          checked: selected.has(leagueId),
+          toggle: (checked) => this.form.toggleLeague(leagueId, checked),
+        })),
+      });
+    }
+    if (tournaments.length > 0) {
+      groups.push({
+        id: 'tournaments',
+        legend: 'Tournaments',
+        items: tournaments.map(({ programId, name }, index) => ({
+          controlId: `tournament-${index + 1}`,
+          name,
+          checked: selectedTournaments.has(programId),
+          toggle: (checked) => this.form.toggleTournament(programId, checked),
+        })),
+      });
+    }
+    return groups;
+  });
 
   protected readonly created = signal<CreatedInvite | null>(null);
   protected readonly copied = signal<CopyOutcome>(null);
@@ -425,6 +497,14 @@ export class StaffInvitePanel {
 
   scrollTarget(): HTMLElement | undefined {
     return this.section()?.nativeElement;
+  }
+
+  protected describedBy(first: boolean): string | null {
+    const ids = [
+      first ? 'leagues-description' : null,
+      this.form.errors.leagues() ? 'leagues-error' : null,
+    ];
+    return ids.filter((id) => id !== null).join(' ') || null;
   }
 
   protected async submit(event: Event): Promise<void> {

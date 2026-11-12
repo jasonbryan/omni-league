@@ -13,6 +13,7 @@ interface Mine {
   slug: string;
   role: 'orgAdmin' | 'leagueOrganizer';
   leagues: { name: string; slug: string }[];
+  tournaments?: { name: string; slug: string }[];
 }
 
 describe('HomeSidebar', () => {
@@ -134,6 +135,29 @@ describe('HomeSidebar', () => {
     expect(links(page).slice(3)).toEqual([
       ['Sunday Sports', '/app/organizations/sunday/leagues/reverse-coed-4s'],
       ['Empty Org', '/organizations/empty'],
+    ]);
+  });
+
+  it('links a league organizer with only tournaments to their first tournament, and one with leagues to their first league', async () => {
+    const page = await open('/app', [
+      {
+        name: 'Gulf Coast',
+        slug: 'gulf-coast',
+        role: 'leagueOrganizer',
+        leagues: [],
+        tournaments: [{ name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' }],
+      },
+      {
+        name: 'Sunday Sports',
+        slug: 'sunday',
+        role: 'leagueOrganizer',
+        leagues: [{ name: 'Reverse Coed 4s', slug: 'reverse-coed-4s' }],
+        tournaments: [{ name: 'Winter Classic', slug: 'winter-classic' }],
+      },
+    ]);
+    expect(links(page).slice(3)).toEqual([
+      ['Gulf Coast', '/app/organizations/gulf-coast/tournaments/gulf-coast-beach-open'],
+      ['Sunday Sports', '/app/organizations/sunday/leagues/reverse-coed-4s'],
     ]);
   });
 

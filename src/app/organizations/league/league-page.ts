@@ -41,7 +41,10 @@ import { LeagueSidebar } from './league-sidebar';
                   }"
                 />
               } @else {
-                <app-league-sidebar [league]="league" />
+                <app-league-sidebar
+                  [organization]="league.organization"
+                  [here]="{ kind: 'league', name: league.name, slug: league.slug }"
+                />
               }
             </ng-template>
           }

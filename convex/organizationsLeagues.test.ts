@@ -5,7 +5,7 @@ import type { Id } from './_generated/dataModel';
 import { LIST_MINE_LEAGUES_LIMIT } from './organizations';
 import { insertLeague, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { insertTournamentProgram, modules } from './test.setup';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -233,6 +233,132 @@ describe('organizations.listMine: leagues', () => {
     expect(theirs.map((row) => row.leagues)).toEqual([[{ name: 'M Other', slug: 'm-other' }]]);
     expect(JSON.stringify(theirs)).not.toMatch(/Coed Soccer|beach 2s|L Draft/);
     expect(JSON.stringify(mine)).not.toContain('M Other');
+  });
+
+  describe('tournaments', () => {
+    async function assignPrograms(
+      t: Setup['t'],
+      organizationId: Id<'organizations'>,
+      programIds: Id<'programs'>[],
+      leagueIds?: Id<'leagues'>[],
+    ) {
+      await t.run(async (ctx) => {
+        const membership = (await ctx.db.query('memberships').collect()).find(
+          (m) => m.organizationId === organizationId && m.role === 'leagueOrganizer',
+        )!;
+        await ctx.db.patch('memberships', membership._id, {
+          programIds,
+          ...(leagueIds && { leagueIds }),
+        });
+      });
+    }
+    const program = (
+      t: Setup['t'],
+      organizationId: Id<'organizations'>,
+      name: string,
+      slug: string,
+    ) => t.run((ctx) => insertTournamentProgram(ctx, organizationId, name, slug));
+
+    test('an organizer’s row lists their assigned tournaments in sort-name order', async () => {
+      const { t, as, organizationA } = await setup();
+      const winter = await program(t, organizationA, 'winter Classic', 'winter-classic');
+      const gulf = await program(
+        t,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      );
+      await assignPrograms(t, organizationA, [winter, gulf]);
+      const [row] = await as('organizer').query(api.organizations.listMine, {});
+      expect(row?.tournaments).toEqual([
+        { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+        { name: 'winter Classic', slug: 'winter-classic' },
+      ]);
+      expect(row?.leagues).toHaveLength(3);
+    });
+
+    test('a tournament-only organizer’s row lists no leagues', async () => {
+      const { t, as, organizationA } = await setup();
+      const gulf = await program(
+        t,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      );
+      await assignPrograms(t, organizationA, [gulf], []);
+      await expect(as('organizer').query(api.organizations.listMine, {})).resolves.toEqual([
+        {
+          name: 'Org A',
+          slug: 'org-a',
+          role: 'leagueOrganizer',
+          leagues: [],
+          tournaments: [{ name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' }],
+        },
+      ]);
+    });
+
+    test('a row with no assigned tournament has no tournaments field, and an org admin’s never has one', async () => {
+      const { t, as, organizationA } = await setup();
+      const gulf = await program(
+        t,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      );
+      const [mine] = await as('organizer').query(api.organizations.listMine, {});
+      expect('tournaments' in mine).toBe(false);
+      await t.run(async (ctx) => {
+        const admin = (await ctx.db.query('memberships').collect()).find(
+          (m) => m.organizationId === organizationA && m.role === 'orgAdmin',
+        )!;
+        await ctx.db.patch('memberships', admin._id, { programIds: [gulf] });
+      });
+      const [row] = await as('admin').query(api.organizations.listMine, {});
+      expect('tournaments' in row).toBe(false);
+    });
+
+    test('drops an assigned id that is another organization’s, a league’s, or gone', async () => {
+      const { t, as, organizationA, organizationB } = await setup();
+      const gulf = await program(
+        t,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      );
+      const foreign = await program(t, organizationB, 'B Open', 'b-open');
+      const gone = await program(t, organizationA, 'Gone', 'gone');
+      await t.run(async (ctx) => ctx.db.delete('programs', gone));
+      const leagueProgram = await t.run(
+        async (ctx) => (await ctx.db.query('leagues').first())!.programId,
+      );
+      await assignPrograms(t, organizationA, [gulf, foreign, leagueProgram, gone]);
+      const [row] = await as('organizer').query(api.organizations.listMine, {});
+      expect(row?.tournaments).toEqual([
+        { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+      ]);
+    });
+
+    test('shares the LIST_MINE_LEAGUES_LIMIT budget with leagues, which come first', async () => {
+      const { t, as, organizationA } = await setup();
+      const programs = await t.run(async (ctx) => {
+        const ids: Id<'programs'>[] = [];
+        for (let i = 0; i < LIST_MINE_LEAGUES_LIMIT; i++) {
+          ids.push(
+            await insertTournamentProgram(
+              ctx,
+              organizationA,
+              `Open ${String(i).padStart(3, '0')}`,
+              `open-${i}`,
+            ),
+          );
+        }
+        return ids;
+      });
+      await assignPrograms(t, organizationA, programs);
+      const [row] = await as('organizer').query(api.organizations.listMine, {});
+      expect(row?.leagues).toHaveLength(3);
+      expect(row?.tournaments).toHaveLength(LIST_MINE_LEAGUES_LIMIT - 3);
+    });
   });
 
   test('reads no more than LIST_MINE_LEAGUES_LIMIT assigned ids of a membership', async () => {

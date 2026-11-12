@@ -11,6 +11,7 @@ import {
 import { AuthService } from '../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { adminPath } from '../organizations/admin/admin-path';
+import { tournamentPath } from '../organizations/admin/tournament-path';
 import { teamPath } from '../teams/team-paths';
 import { SKELETON_CLASSES } from '../ui/skeleton';
 import { injectCurrentUrl } from './current-url';
@@ -157,14 +158,17 @@ export class HomeSidebar {
     }));
   });
   protected readonly organizations = computed(() =>
-    (this.mine.value() ?? []).map(({ name, slug, role, leagues }) => {
+    (this.mine.value() ?? []).map(({ name, slug, role, leagues, tournaments }) => {
       const first = leagues[0];
+      const firstTournament = tournaments?.[0];
       const path =
         role === 'orgAdmin'
           ? adminPath(slug)
           : first
             ? `/app/organizations/${encodeURIComponent(slug)}/leagues/${encodeURIComponent(first.slug)}`
-            : `/organizations/${encodeURIComponent(slug)}`;
+            : firstTournament
+              ? tournamentPath(slug, firstTournament.slug)
+              : `/organizations/${encodeURIComponent(slug)}`;
       return { name, slug, path };
     }),
   );

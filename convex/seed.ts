@@ -861,6 +861,7 @@ interface DemoMembership {
   organizationSlug: string;
   role: Role;
   leagueSlugs: readonly string[];
+  tournamentSlugs?: readonly string[];
 }
 
 /**
@@ -895,6 +896,7 @@ export const DEMO_ACCOUNTS: Readonly<
         organizationSlug: 'gulf-coast-sport-social',
         role: 'leagueOrganizer',
         leagueSlugs: ['sunday-reverse-coed-4s'],
+        tournamentSlugs: ['gulf-coast-beach-open'],
       },
     ],
   },
@@ -1104,6 +1106,25 @@ async function leagueIdsBySlugs(
   return ids;
 }
 
+async function tournamentProgramIdsBySlugs(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  slugs: readonly string[],
+): Promise<Id<'programs'>[] | null> {
+  const ids: Id<'programs'>[] = [];
+  for (const slug of slugs) {
+    const program = await ctx.db
+      .query('programs')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', organizationId).eq('slug', slug),
+      )
+      .unique();
+    if (program?.type !== 'tournament') return null;
+    ids.push(program._id);
+  }
+  return ids;
+}
+
 /** So a run stores the file only once. */
 export const demoLogoNeeded = internalQuery({
   args: {},
@@ -1203,8 +1224,20 @@ export const grantDemoMemberships = internalMutation({
         .unique();
       if (existing) continue;
       const leagueIds = await leagueIdsBySlugs(ctx, organization._id, membership.leagueSlugs);
-      if (!leagueIds) continue;
-      await insertMembership(ctx, user._id, organization._id, membership.role, leagueIds);
+      const programIds = await tournamentProgramIdsBySlugs(
+        ctx,
+        organization._id,
+        membership.tournamentSlugs ?? [],
+      );
+      if (!leagueIds || !programIds) continue;
+      await insertMembership(
+        ctx,
+        user._id,
+        organization._id,
+        membership.role,
+        leagueIds,
+        programIds,
+      );
       inserted++;
     }
     return inserted;

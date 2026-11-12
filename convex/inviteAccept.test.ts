@@ -7,9 +7,9 @@ import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { insertTenant, defaultDivision } from './lib/tenantWrites';
-import { requireLeagueOrganizer, requireOrgAdmin } from './lib/access';
+import { requireLeagueOrganizer, requireOrgAdmin, requireProgramOrganizer } from './lib/access';
 import schema from './schema';
-import { modules } from './test.setup';
+import { insertTournamentProgram, modules } from './test.setup';
 
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
 
@@ -111,6 +111,14 @@ async function setup() {
       coed: await leagueIn(organizationA, 'Coed 7v7'),
       sand: await leagueIn(organizationA, 'Sand 2s'),
       other: await leagueIn(organizationB, 'Other Sand'),
+      gulf: await insertTournamentProgram(
+        ctx,
+        organizationA,
+        'Gulf Coast Beach Open',
+        'gulf-coast-beach-open',
+      ),
+      winter: await insertTournamentProgram(ctx, organizationA, 'Winter Classic', 'winter-classic'),
+      tournamentB: await insertTournamentProgram(ctx, organizationB, 'B Open', 'b-open'),
       adminA: await person('admin-a', { organizationId: organizationA, role: 'orgAdmin' }),
       dana: await person('dana', null),
       eli: await person('eli', null),
@@ -135,12 +143,14 @@ const invite = (
   email: string,
   role: Role = 'orgAdmin',
   leagueIds: Id<'leagues'>[] = [],
+  programIds?: Id<'programs'>[],
 ) =>
   s.asAdminA.action(api.invites.create, {
     organizationId: s.organizationA,
     email,
     role,
     leagueIds,
+    ...(programIds && { programIds }),
   });
 
 const membershipsOf = (s: Setup, userId: Id<'users'>) =>
@@ -447,6 +457,134 @@ describe('invites.accept', () => {
     await expect(
       s.t.withIdentity(identity('ghost')).mutation(api.invites.accept, { token }),
     ).rejects.toThrow('Sign in required');
+  });
+});
+
+describe('invites.getByToken with tournaments', () => {
+  test('names the tournaments of the invite, and an invite with none has no field for them', async () => {
+    const s = await setup();
+    const withTournaments = await invite(
+      s,
+      'dana@example.test',
+      'leagueOrganizer',
+      [s.coed],
+      [s.gulf, s.winter],
+    );
+    expect(await s.t.query(api.invites.getByToken, { token: withTournaments.token })).toEqual({
+      status: 'valid',
+      organizationName: 'Org A',
+      role: 'leagueOrganizer',
+      leagueNames: ['Coed 7v7'],
+      tournamentNames: ['Gulf Coast Beach Open', 'Winter Classic'],
+      expiresAt: NOW + INVITE_LIFETIME_MS,
+    });
+    const tournamentOnly = await invite(s, 'eli@example.test', 'leagueOrganizer', [], [s.gulf]);
+    expect(await s.t.query(api.invites.getByToken, { token: tournamentOnly.token })).toMatchObject({
+      leagueNames: [],
+      tournamentNames: ['Gulf Coast Beach Open'],
+    });
+  });
+
+  test('the slugs are not in what it shows a visitor', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [], [s.gulf]);
+    const text = JSON.stringify(await s.t.query(api.invites.getByToken, { token }));
+    expect(text).not.toMatch(/gulf-coast-beach-open|slug/i);
+  });
+});
+
+describe('invites.accept with tournaments', () => {
+  test('a tournament-only invite creates a membership that runs that tournament only', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [], [s.gulf]);
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect(result).toEqual({
+      organizationName: 'Org A',
+      organizationSlug: 'org-a',
+      role: 'leagueOrganizer',
+      leagueNames: [],
+      leagues: [],
+      tournamentNames: ['Gulf Coast Beach Open'],
+      tournaments: [{ name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' }],
+    });
+    const [membership] = await membershipsOf(s, s.dana.userId);
+    expect(membership).toMatchObject({
+      role: 'leagueOrganizer',
+      leagueIds: [],
+      programIds: [s.gulf],
+    });
+    await s.asDana.run(async (ctx) => {
+      await expect(requireProgramOrganizer(ctx, s.gulf)).resolves.toBeDefined();
+      await expect(requireProgramOrganizer(ctx, s.winter)).rejects.toThrow('Not allowed');
+      await expect(requireProgramOrganizer(ctx, s.tournamentB)).rejects.toThrow('Not allowed');
+      await expect(requireOrgAdmin(ctx, s.organizationA)).rejects.toThrow('Not allowed');
+    });
+  });
+
+  test('leagues and tournaments are granted together', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed], [s.gulf]);
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect(result.leagues).toEqual([{ name: 'Coed 7v7', slug: 'coed-7v7' }]);
+    expect(result.tournaments).toEqual([
+      { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+    ]);
+    expect((await membershipsOf(s, s.dana.userId))[0]).toMatchObject({
+      leagueIds: [s.coed],
+      programIds: [s.gulf],
+    });
+  });
+
+  test('an invite with no tournaments leaves the membership and the answer as they were', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect('tournaments' in result).toBe(false);
+    expect('tournamentNames' in result).toBe(false);
+    expect('programIds' in (await membershipsOf(s, s.dana.userId))[0]).toBe(false);
+  });
+
+  test('a tournament deleted since the invite is left out of the grant', async () => {
+    const s = await setup();
+    const { token } = await invite(
+      s,
+      'dana@example.test',
+      'leagueOrganizer',
+      [s.coed],
+      [s.gulf, s.winter],
+    );
+    await s.t.run(async (ctx) => {
+      await ctx.db.delete('programs', s.winter);
+    });
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect(result.tournaments).toEqual([
+      { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+    ]);
+    expect((await membershipsOf(s, s.dana.userId))[0]?.programIds).toEqual([s.gulf]);
+  });
+
+  test('a tournament of another organization named in the stored invite is left out of the grant', async () => {
+    const s = await setup();
+    const { token, inviteId } = await invite(
+      s,
+      'dana@example.test',
+      'leagueOrganizer',
+      [],
+      [s.gulf],
+    );
+    await s.t.run((ctx) =>
+      ctx.db.patch('invites', inviteId, { programIds: [s.gulf, s.tournamentB] }),
+    );
+    await s.asDana.mutation(api.invites.accept, { token });
+    expect((await membershipsOf(s, s.dana.userId))[0]?.programIds).toEqual([s.gulf]);
+  });
+
+  test('an org admin accept grants no programs', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test');
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect('tournaments' in result).toBe(false);
+    expect('programIds' in (await membershipsOf(s, s.dana.userId))[0]).toBe(false);
   });
 });
 

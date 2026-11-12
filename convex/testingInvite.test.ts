@@ -7,7 +7,7 @@ import { hashInviteToken } from './lib/inviteToken';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { modules } from './test.setup';
+import { insertTournamentProgram, modules } from './test.setup';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -83,6 +83,39 @@ describe('testing:addInvite', () => {
       organizationName: 'Org A',
       leagueNames: ['Coed 7v7'],
     });
+  });
+
+  test('names tournaments, which the invite then lists by name', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const programId = await t.run(async (ctx) => {
+      const organization = (await ctx.db.query('organizations').first())!;
+      return insertTournamentProgram(ctx, organization._id, 'Gulf Coast Beach Open', 'gulf-open');
+    });
+    const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    await t.mutation(internal.testing.addInvite, {
+      ...INVITE,
+      leagueNames: [],
+      tournamentNames: ['Gulf Coast Beach Open'],
+      expiresAt: Date.now() + 60_000,
+      token,
+    });
+    const [row] = await t.run((ctx) => ctx.db.query('invites').collect());
+    expect(row).toMatchObject({ leagueIds: [], programIds: [programId] });
+    expect(await t.query(api.invites.getByToken, { token })).toMatchObject({
+      status: 'valid',
+      leagueNames: [],
+      tournamentNames: ['Gulf Coast Beach Open'],
+    });
+  });
+
+  test('refuses a tournament that does not exist', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    await expect(
+      t.mutation(internal.testing.addInvite, { ...INVITE, tournamentNames: ['Missing'] }),
+    ).rejects.toThrow(/No tournament/);
+    expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
   });
 
   test('refuses an unknown organization or league', async () => {

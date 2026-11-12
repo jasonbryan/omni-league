@@ -11,6 +11,7 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { attentionValidator, getAttention as readAttention } from './lib/adminAttention';
+import { assignablePrograms } from './lib/assignedPrograms';
 import {
   hasOrgAdminRole,
   requireOrgAdmin,
@@ -350,6 +351,21 @@ async function assignedLeagues(
   return { leagues: leagues.map(({ name, slug }) => ({ name, slug })), reads: ids.length };
 }
 
+async function assignedTournaments(
+  ctx: QueryCtx,
+  membership: Doc<'memberships'>,
+  budget: number,
+): Promise<{ tournaments: { name: string; slug: string }[]; reads: number }> {
+  if (membership.role !== 'leagueOrganizer') return { tournaments: [], reads: 0 };
+  const ids = [...new Set(membership.programIds ?? [])].slice(0, budget);
+  const programs = await assignablePrograms(ctx, membership.organizationId, ids);
+  programs.sort((x, y) => (x.sortName < y.sortName ? -1 : x.sortName > y.sortName ? 1 : 0));
+  return {
+    tournaments: programs.map(({ name, slug }) => ({ name, slug })),
+    reads: ids.length,
+  };
+}
+
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
 export const listMine = query({
   args: {},
@@ -359,6 +375,8 @@ export const listMine = query({
       slug: v.string(),
       role: roleValidator,
       leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
+      // Absent when the organizer runs no tournament.
+      tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
     }),
   ),
   handler: async (ctx) => {
@@ -384,11 +402,18 @@ export const listMine = query({
     for (const { membership, organization } of organizations) {
       const { leagues, reads } = await assignedLeagues(ctx, membership, budget);
       budget -= reads;
+      const { tournaments, reads: tournamentReads } = await assignedTournaments(
+        ctx,
+        membership,
+        budget,
+      );
+      budget -= tournamentReads;
       rows.push({
         name: organization.name,
         slug: organization.slug,
         role: membership.role,
         leagues,
+        ...(tournaments.length > 0 && { tournaments }),
       });
     }
     return rows;

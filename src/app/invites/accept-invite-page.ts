@@ -53,6 +53,7 @@ interface InviteSummary {
   organizationName: string;
   role: Role;
   leagueNames: string[];
+  tournamentNames?: string[] | undefined;
   expiresAt?: number;
 }
 
@@ -60,6 +61,7 @@ interface InviteSummary {
 interface AcceptedInvite extends InviteSummary {
   organizationSlug?: string;
   leagues?: { name: string; slug: string }[];
+  tournaments?: { name: string; slug: string }[] | undefined;
 }
 
 type View = 'checking' | 'loadFailed' | 'invalid' | 'signedOut' | 'ready' | 'accepted';
@@ -81,6 +83,12 @@ const REFUSALS = {
 } as const satisfies AlertTexts<Exclude<Refusal, 'alreadyMember'>>;
 
 const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
+
+function runsWhat(leagues: number, tournaments: number): string {
+  if (leagues > 0 && tournaments > 0) return 'leagues and tournaments';
+  if (tournaments > 0) return tournaments > 1 ? 'tournaments' : 'a tournament';
+  return leagues > 1 ? 'leagues' : 'a league';
+}
 
 function refusalCode(failure: unknown): AcceptRefusal | null {
   if (!(failure instanceof ConvexError)) return null;
@@ -255,6 +263,14 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                           {{ invite.leagueNames.length === 1 ? 'League' : 'Leagues' }}
                         </dt>
                         <dd class="font-medium sm:text-end">{{ leagueList() }}</dd>
+                      </div>
+                    }
+                    @if (tournamentNames().length > 0) {
+                      <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                        <dt class="text-muted-foreground">
+                          {{ tournamentNames().length === 1 ? 'Tournament' : 'Tournaments' }}
+                        </dt>
+                        <dd class="font-medium sm:text-end">{{ tournamentList() }}</dd>
                       </div>
                     }
                     @if (expires(); as expires) {
@@ -457,10 +473,12 @@ export class AcceptInvitePage {
     if (invite?.role === 'orgAdmin') {
       return 'You’re invited to help manage the organization as an org admin.';
     }
-    const many = (invite?.leagueNames.length ?? 0) > 1;
-    return `You’re invited to run ${many ? 'leagues' : 'a league'} as a league organizer.`;
+    const what = runsWhat(invite?.leagueNames.length ?? 0, this.tournamentNames().length);
+    return `You’re invited to run ${what} as a league organizer.`;
   });
   protected readonly leagueList = computed(() => LIST.format(this.summary()?.leagueNames ?? []));
+  protected readonly tournamentNames = computed(() => this.summary()?.tournamentNames ?? []);
+  protected readonly tournamentList = computed(() => LIST.format(this.tournamentNames()));
   protected readonly expires = computed(() => {
     const at = this.summary()?.expiresAt;
     return at === undefined ? null : formatDay(at);
@@ -468,7 +486,8 @@ export class AcceptInvitePage {
   protected readonly acceptedLine = computed(() => {
     const done = this.accepted();
     if (done?.role === 'orgAdmin') return 'You’re an org admin.';
-    return `You’re a league organizer for ${LIST.format(done?.leagueNames ?? [])}.`;
+    const names = [...(done?.leagueNames ?? []), ...(done?.tournaments ?? []).map((t) => t.name)];
+    return `You’re a league organizer for ${LIST.format(names)}.`;
   });
 
   /** The link holds slugs only, never the token. */
@@ -482,11 +501,20 @@ export class AcceptInvitePage {
           link: ['/app', 'organizations', organization],
         };
       }
-      const [league, ...others] = done.leagues ?? [];
-      if (league && others.length === 0) {
+      const leagues = done.leagues ?? [];
+      const tournaments = done.tournaments ?? [];
+      const [league] = leagues;
+      const [tournament] = tournaments;
+      if (league && leagues.length === 1 && tournaments.length === 0) {
         return {
           label: `Open ${league.name}`,
           link: ['/app', 'organizations', organization, 'leagues', league.slug],
+        };
+      }
+      if (tournament && tournaments.length === 1 && leagues.length === 0) {
+        return {
+          label: `Open ${tournament.name}`,
+          link: ['/app', 'organizations', organization, 'tournaments', tournament.slug],
         };
       }
     }

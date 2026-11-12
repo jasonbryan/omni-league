@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronsUpDown, lucideGlobe, lucideTrophy } from '@ng-icons/lucide';
+import { lucideChevronsUpDown, lucideGlobe, lucideSwords, lucideTrophy } from '@ng-icons/lucide';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 import {
@@ -14,7 +14,7 @@ import {
   SIDEBAR_ROW_CURRENT,
 } from '../../shell/sidebar-classes';
 import { initials } from '../initials';
-import type { OrganizerLeague } from './league-context';
+import { tournamentPath } from '../admin/tournament-path';
 import { leaguePath } from './league-path';
 
 const compareNames = (x: string, y: string) => {
@@ -23,43 +23,82 @@ const compareNames = (x: string, y: string) => {
   return a < b ? -1 : a > b ? 1 : 0;
 };
 
+interface Named {
+  name: string;
+  slug: string;
+}
+
+/** The page the organizer is on: the sidebar keeps its row even when the organizer's list does not hold it. */
+export interface SidebarPage extends Named {
+  kind: 'league' | 'tournament';
+}
+
+function withPage(assigned: readonly Named[], page: Named | null): Named[] {
+  return page === null || assigned.some((item) => item.slug === page.slug)
+    ? [...assigned]
+    : [...assigned, page].sort((x, y) => compareNames(x.name, y.name));
+}
+
 /** The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`: the list takes its name from `aria-label`. */
 @Component({
   selector: 'app-league-sidebar',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideChevronsUpDown, lucideGlobe, lucideTrophy })],
+  providers: [provideIcons({ lucideChevronsUpDown, lucideGlobe, lucideSwords, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <nav [attr.aria-label]="league().organization.name + ' leagues'" class="flex flex-col gap-4">
+    <nav [attr.aria-label]="organization().name + ' ' + navTopic()" class="flex flex-col gap-4">
       <a routerLink="/app" [class]="head"
         ><span aria-hidden="true" [class]="mark">{{ initials() }}</span
         ><span class="min-w-0 flex-1"
-          ><span class="block truncate text-sm font-semibold">{{ league().organization.name }}</span
+          ><span class="block truncate text-sm font-semibold">{{ organization().name }}</span
           ><span class="block text-xs text-muted-foreground">League organizer</span></span
         ><ng-icon
           name="lucideChevronsUpDown"
           class="shrink-0 text-base text-muted-foreground"
           aria-hidden="true"
       /></a>
-      <div>
-        <p [class]="groupLabel">Your leagues</p>
-        <ul role="list" aria-label="Your leagues" class="mt-1 flex flex-col gap-0.5">
-          @for (item of leagues(); track item.slug) {
-            <li>
-              <a
-                [routerLink]="item.path"
-                [attr.aria-current]="item.isCurrent ? current() : null"
-                [class]="item.isCurrent ? currentRow : row"
-                ><ng-icon
-                  name="lucideTrophy"
-                  [class]="item.isCurrent ? currentIcon : icon"
-                  aria-hidden="true"
-                /><span class="min-w-0 flex-1">{{ item.name }}</span></a
-              >
-            </li>
-          }
-        </ul>
-      </div>
+      @if (leagues().length > 0) {
+        <div>
+          <p [class]="groupLabel">Your leagues</p>
+          <ul role="list" aria-label="Your leagues" class="mt-1 flex flex-col gap-0.5">
+            @for (item of leagues(); track item.slug) {
+              <li>
+                <a
+                  [routerLink]="item.path"
+                  [attr.aria-current]="item.isCurrent ? current() : null"
+                  [class]="item.isCurrent ? currentRow : row"
+                  ><ng-icon
+                    name="lucideTrophy"
+                    [class]="item.isCurrent ? currentIcon : icon"
+                    aria-hidden="true"
+                  /><span class="min-w-0 flex-1">{{ item.name }}</span></a
+                >
+              </li>
+            }
+          </ul>
+        </div>
+      }
+      @if (tournaments().length > 0) {
+        <div>
+          <p [class]="groupLabel">Your tournaments</p>
+          <ul role="list" aria-label="Your tournaments" class="mt-1 flex flex-col gap-0.5">
+            @for (item of tournaments(); track item.slug) {
+              <li>
+                <a
+                  [routerLink]="item.path"
+                  [attr.aria-current]="item.isCurrent ? current() : null"
+                  [class]="item.isCurrent ? currentRow : row"
+                  ><ng-icon
+                    name="lucideSwords"
+                    [class]="item.isCurrent ? currentIcon : icon"
+                    aria-hidden="true"
+                  /><span class="min-w-0 flex-1">{{ item.name }}</span></a
+                >
+              </li>
+            }
+          </ul>
+        </div>
+      }
       <ul role="list" class="flex flex-col gap-0.5 border-t border-sidebar-border pt-4">
         <li>
           <a [routerLink]="publicPath()" [class]="row"
@@ -74,7 +113,8 @@ const compareNames = (x: string, y: string) => {
   `,
 })
 export class LeagueSidebar {
-  readonly league = input.required<OrganizerLeague>();
+  readonly organization = input.required<Named>();
+  readonly here = input.required<SidebarPage>();
   /** `true` on a page inside the league, such as a season's, where the league's row is not the page itself. */
   readonly current = input<'page' | 'true'>('page');
 
@@ -92,22 +132,44 @@ export class LeagueSidebar {
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
 
-  protected readonly initials = computed(() => initials(this.league().organization.name));
+  private readonly mineHere = computed(() =>
+    this.mine.value()?.find((row) => row.slug === this.organization().slug),
+  );
+
+  protected readonly initials = computed(() => initials(this.organization().name));
   protected readonly leagues = computed(() => {
-    const { name, slug, organization } = this.league();
-    const assigned =
-      this.mine.value()?.find((row) => row.slug === organization.slug)?.leagues ?? [];
-    const all = assigned.some((item) => item.slug === slug)
-      ? assigned
-      : [...assigned, { name, slug }].sort((x, y) => compareNames(x.name, y.name));
-    return all.map((item) => ({
+    const here = this.here();
+    const org = this.organization().slug;
+    return withPage(this.mineHere()?.leagues ?? [], here.kind === 'league' ? here : null).map(
+      (item) => ({
+        name: item.name,
+        slug: item.slug,
+        path: leaguePath(org, item.slug),
+        isCurrent: here.kind === 'league' && item.slug === here.slug,
+      }),
+    );
+  });
+  protected readonly tournaments = computed(() => {
+    const here = this.here();
+    const org = this.organization().slug;
+    return withPage(
+      this.mineHere()?.tournaments ?? [],
+      here.kind === 'tournament' ? here : null,
+    ).map((item) => ({
       name: item.name,
       slug: item.slug,
-      path: leaguePath(organization.slug, item.slug),
-      isCurrent: item.slug === slug,
+      path: tournamentPath(org, item.slug),
+      isCurrent: here.kind === 'tournament' && item.slug === here.slug,
     }));
   });
+  protected readonly navTopic = computed(() =>
+    this.tournaments().length === 0
+      ? 'leagues'
+      : this.leagues().length === 0
+        ? 'tournaments'
+        : 'leagues and tournaments',
+  );
   protected readonly publicPath = computed(
-    () => `/organizations/${encodeURIComponent(this.league().organization.slug)}`,
+    () => `/organizations/${encodeURIComponent(this.organization().slug)}`,
   );
 }
