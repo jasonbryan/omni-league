@@ -32,9 +32,9 @@ import {
   maxTeamsSavedText,
   maxTeamsSummary,
 } from './limit-text';
+import { HlmCard } from '../../ui/card';
 
-const PANEL =
-  'mt-6 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
+const PANEL = 'mt-6 overflow-hidden';
 
 type Limit = LimitSpec['field'];
 
@@ -48,12 +48,12 @@ interface LimitRow {
 
 @Component({
   selector: 'app-season-limits',
-  imports: [AdminAlert, LimitEditForm, NgIcon],
+  imports: [AdminAlert, HlmCard, LimitEditForm, NgIcon],
   providers: [provideIcons({ lucidePencil, lucideUsers, lucideUsersRound })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <section aria-labelledby="limits-heading" [class]="panel">
+    <section hlmCard size="bare" aria-labelledby="limits-heading" [class]="panel">
       <div class="border-b border-border px-4 py-3 md:px-5">
         <h2 id="limits-heading" class="font-semibold">Limits</h2>
       </div>

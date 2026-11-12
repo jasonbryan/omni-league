@@ -10,13 +10,6 @@ const uiDir = join(appDir, 'ui');
 const CARD_SURFACE = ['bg-card', 'ring-foreground/10'];
 
 const PENDING = [
-  'src/app/organizations/league/league-loading.ts',
-  'src/app/organizations/league/league-management.ts',
-  'src/app/organizations/league/league-no-access.ts',
-  'src/app/organizations/season-management/season-limits.ts',
-  'src/app/organizations/season-management/season-loading.ts',
-  'src/app/organizations/season-management/season-management.ts',
-  'src/app/organizations/season-management/season-waitlist-panel.ts',
   'src/app/teams/add-minor-panel.ts',
   'src/app/teams/join-team-page.ts',
   'src/app/teams/register-card.ts',
