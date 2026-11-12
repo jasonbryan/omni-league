@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { allRadiusClasses } from '../testing/radius-classes';
-import { HlmSkeleton } from './hlm-skeleton';
+import { HlmSkeleton, SKELETON_CLASSES } from './hlm-skeleton';
 
 @Component({
   imports: [HlmSkeleton],
@@ -15,10 +15,10 @@ describe('HlmSkeleton', () => {
     fixture.detectChanges();
     const element = (fixture.nativeElement as HTMLElement).querySelector('span')!;
     expect(element.getAttribute('data-slot')).toBe('skeleton');
-    expect(element.classList).toContain('motion-safe:animate-pulse');
-    expect(element.classList).toContain('bg-muted');
-    expect(element.classList).not.toContain('rounded-md');
-    expect(element.classList).not.toContain('block');
+    expect(SKELETON_CLASSES).toBe('bg-muted motion-safe:animate-pulse');
+    expect([...element.classList].sort()).toEqual(
+      [...SKELETON_CLASSES.split(' '), 'h-4', 'rounded-full'].sort(),
+    );
     expect(allRadiusClasses([element])).toEqual([['rounded-full']]);
   });
 });
