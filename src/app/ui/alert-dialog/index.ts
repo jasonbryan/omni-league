@@ -6,9 +6,10 @@
 //   `hlm-alert-dialog-cancel`, which wrap `HlmButton`, because the dialogs' buttons use the `button-classes.ts` constants; and the
 //   portal and trigger, because the dialogs open through `open()`;
 // - static classes, so a chunk that uses them carries no class-merging code: one host `class` per part, in place of `classes()`;
-// - the content takes Nova's colours, ring, radius, padding, gap, and widths, plus `shadow-xl`, and leaves out Nova's open and close
-//   animation and helm's outline reset;
+// - the content takes Nova's colours, ring, radius, padding, gap, and default-size widths, plus `shadow-xl`, and leaves out Nova's
+//   small-size width, open and close animation, and helm's outline reset;
 // - the media is `bg-accent text-accent-foreground`, where Nova's is `bg-muted`;
+// - the description takes the title's second-column rule for a dialog with media, which Nova gives the title only;
 import { HlmAlertDialogContent } from './hlm-alert-dialog-content';
 import { HlmAlertDialogDescription } from './hlm-alert-dialog-description';
 import { HlmAlertDialogFooter } from './hlm-alert-dialog-footer';

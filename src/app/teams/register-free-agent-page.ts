@@ -318,7 +318,6 @@ export class RegisterFreeAgentPage {
   protected readonly messages = FREE_AGENT_MESSAGES;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  // The ring shows on the status that takes focus after a press, because the pressed button has gone.
   protected readonly online = injectOnline();
   private readonly now = injectNow();
 

@@ -41,7 +41,6 @@ export function expectAlertSlots(box: Element | null | undefined, withDescriptio
   );
 }
 
-// The Find error alerts' own root classes. The destructive variant adds `FIND_ROOT_GAINS` to them.
 const FIND_ROOT =
   "group/alert relative grid w-full gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-start text-sm text-destructive has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
 const FIND_ROOT_GAINS =
