@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   checkInviteEmail,
-  checkInviteLeagues,
+  checkInviteAssignments,
   INVITE_LIFETIME_MS,
   INVITE_MESSAGES,
   MAX_INVITE_EMAIL_LENGTH,
@@ -53,13 +53,23 @@ describe('inviteInput', () => {
     expect(checkInviteEmail(long)).toMatchObject({ ok: false });
   });
 
-  test('refuses a league organizer with no league', () => {
-    expect(checkInviteLeagues(0)).toEqual({
+  test('refuses a league organizer with no league, and with no league or tournament once tournaments are offered', () => {
+    expect(checkInviteAssignments(0, 0, false)).toEqual({
       field: 'leagues',
       code: 'leaguesEmpty',
       message: 'Choose at least one league.',
     });
-    expect(checkInviteLeagues(1)).toBeNull();
+    expect(checkInviteAssignments(0, 0, true)).toEqual({
+      field: 'leagues',
+      code: 'leaguesEmpty',
+      message: 'Choose at least one league or tournament.',
+    });
+  });
+
+  test('accepts a league organizer with a league, a tournament, or both', () => {
+    expect(checkInviteAssignments(1, 0, false)).toBeNull();
+    expect(checkInviteAssignments(0, 1, true)).toBeNull();
+    expect(checkInviteAssignments(2, 3, true)).toBeNull();
   });
 
   test('the server messages name the address', () => {

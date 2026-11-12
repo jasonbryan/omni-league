@@ -35,6 +35,7 @@ import {
 } from '../../core/data/convex';
 import { injectNowAtDeadlines } from '../../core/now-at-deadlines';
 import { MainFocusRecord } from '../../core/replaced-focus';
+import { compareNames } from '../compare-names';
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { HlmSpinner } from '../../ui/spinner';
@@ -131,7 +132,8 @@ const ROLE_LABEL: Record<Role, string> = {
           <p class="text-sm font-medium text-muted-foreground">{{ organization.name }}</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">Staff</h1>
           <p class="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Org admins manage everything here. League organizers run the leagues you assign them.
+            Org admins manage everything here. League organizers run the leagues and tournaments you
+            assign them.
           </p>
         </div>
         <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
@@ -181,10 +183,8 @@ const ROLE_LABEL: Record<Role, string> = {
                       </p>
                       <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                         <span hlmBadge variant="secondary">{{ roleLabel(row.role) }}</span>
-                        @if (row.leagueNames.length > 0) {
-                          <span class="text-muted-foreground"
-                            >&ngsp;for {{ row.leagueNames.join(', ') }}</span
-                          >
+                        @if (assigned(row); as names) {
+                          <span class="text-muted-foreground">&ngsp;for {{ names }}</span>
                         }
                       </p>
                     </div>
@@ -306,8 +306,8 @@ const ROLE_LABEL: Record<Role, string> = {
                         <h3 class="font-medium break-words">{{ row.email }}</h3>
                         <p class="mt-0.5 text-sm text-muted-foreground">
                           {{ roleLabel(row.role) }}
-                          @if (row.leagueNames.length > 0) {
-                            for {{ row.leagueNames.join(', ') }}
+                          @if (assigned(row); as names) {
+                            for {{ names }}
                           }
                         </p>
                         @if (row.expired) {
@@ -395,6 +395,8 @@ const ROLE_LABEL: Record<Role, string> = {
           [organizationName]="organization.name"
           [leagues]="leagueChoices()"
           [leaguesFailed]="leaguesFailed()"
+          [tournaments]="tournamentChoices()"
+          [tournamentsFailed]="tournamentsFailed()"
         />
       </div>
     }
@@ -474,10 +476,16 @@ export class AdminStaff {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
+  private readonly tournamentList = injectQuery(api.tournaments.listForOrganization, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
   protected readonly memberRows = computed(() => this.memberList.value());
   protected readonly membersFailed = computed(() => this.memberList.error() !== undefined);
   protected readonly pendingFailed = computed(() => this.pendingList.error() !== undefined);
   protected readonly leaguesFailed = computed(() => this.leagueList.error() !== undefined);
+  protected readonly tournamentsFailed = computed(() => this.tournamentList.error() !== undefined);
 
   private readonly now = injectNowAtDeadlines(
     () => this.pendingList.value()?.map((row) => row.expiresAt) ?? [],
@@ -509,6 +517,13 @@ export class AdminStaff {
 
   protected readonly leagueChoices = computed(() =>
     this.leagueList.value()?.map(({ leagueId, name }) => ({ leagueId, name })),
+  );
+
+  protected readonly tournamentChoices = computed(() =>
+    this.tournamentList
+      .value()
+      ?.map(({ programId, name }) => ({ programId, name }))
+      .sort((x, y) => compareNames(x.name, y.name)),
   );
 
   protected readonly invitePath = computed(
@@ -548,6 +563,13 @@ export class AdminStaff {
 
   protected roleLabel(role: Role): string {
     return ROLE_LABEL[role];
+  }
+
+  protected assigned(row: {
+    leagueNames: string[];
+    tournamentNames?: string[] | undefined;
+  }): string {
+    return [...row.leagueNames, ...(row.tournamentNames ?? [])].join(', ');
   }
 
   protected jumpToPanel(event: MouseEvent): void {

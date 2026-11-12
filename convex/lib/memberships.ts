@@ -40,12 +40,14 @@ export async function insertMembership(
   organizationId: Id<'organizations'>,
   role: Role,
   leagueIds: Id<'leagues'>[] = [],
+  programIds: Id<'programs'>[] = [],
 ): Promise<Id<'memberships'>> {
   const membershipId = await ctx.db.insert('memberships', {
     userId,
     organizationId,
     role,
     leagueIds,
+    ...(programIds.length > 0 && { programIds }),
   });
   await changeStaffCount(ctx, organizationId, 1);
   return membershipId;

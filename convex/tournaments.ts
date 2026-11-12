@@ -1,10 +1,17 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import {
+  requireOrgAdmin,
+  requireUser,
+  requireProgramOrganizer,
+  requireProgramOrganizerOrForbidden,
+  requireStaffOrForbidden,
+} from './lib/access';
 import { isChoosableSlug, slugify } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { programStatusValidator } from './lib/programs';
+import { roleValidator } from './lib/roles';
 import { getTournamentPublicPageReturns, type PublicTournamentPage } from './lib/publicPage';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { tournamentDetailsValidator } from './lib/tournamentDetails';
@@ -150,6 +157,7 @@ export const listForOrganization = query({
   returns: v.array(
     v.object({
       tournamentId: v.id('tournaments'),
+      programId: v.id('programs'),
       name: v.string(),
       slug: v.string(),
       startDate: v.string(),
@@ -170,6 +178,7 @@ export const listForOrganization = query({
       if (program?.organizationId !== organizationId) continue;
       rows.push({
         tournamentId: tournament._id,
+        programId: program._id,
         name: program.name,
         slug: program.slug,
         startDate: tournament.startDate,
@@ -189,7 +198,7 @@ export const publish = mutation({
     await requireUser(ctx);
     const tournament = await ctx.db.get('tournaments', tournamentId);
     if (!tournament) throw new Error('Not allowed');
-    await requireOrgAdmin(ctx, tournament.organizationId);
+    await requireProgramOrganizer(ctx, tournament.programId);
     await publishTournament(ctx, tournament);
     return null;
   },
@@ -201,6 +210,8 @@ export const getForManagement = query({
     v.null(),
     v.object({
       tournamentId: v.id('tournaments'),
+      organizationId: v.id('organizations'),
+      role: roleValidator,
       status: programStatusValidator,
       ...tournamentDetailsValidator.fields,
     }),
@@ -209,11 +220,17 @@ export const getForManagement = query({
     const organization = await findOrganizationBySlug(ctx, orgSlug);
     // Null for any caller: the public page already shows whether the organization exists.
     if (!organization) return null;
-    await requireOrgAdminOrForbidden(ctx, organization._id);
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
-    if (!found) return null;
+    if (!found) {
+      // Only staff learn that a web address is unused.
+      await requireStaffOrForbidden(ctx, organization._id);
+      return null;
+    }
+    const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
     return {
       tournamentId: found.tournament._id,
+      organizationId: organization._id,
+      role: membership.role,
       status: found.program.status,
       ...(await tournamentDetails(ctx, organization, found)),
     };

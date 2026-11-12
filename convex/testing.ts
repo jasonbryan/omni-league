@@ -260,9 +260,10 @@ export const addLeagueOrganizer = internalMutation({
     organizationSlug: v.string(),
     email: v.string(),
     leagueSlugs: v.array(v.string()),
+    tournamentSlugs: v.optional(v.array(v.string())),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, email, leagueSlugs }) => {
+  handler: async (ctx, { organizationSlug, email, leagueSlugs, tournamentSlugs = [] }) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
     const user = await userByEmail(ctx, email);
@@ -278,7 +279,27 @@ export const addLeagueOrganizer = internalMutation({
       if (!league) throw new Error(`No league has the slug ${JSON.stringify(slug)}`);
       leagueIds.push(league._id);
     }
-    await insertMembership(ctx, user._id, organization._id, 'leagueOrganizer', leagueIds);
+    const programIds = [];
+    for (const slug of tournamentSlugs) {
+      const program = await ctx.db
+        .query('programs')
+        .withIndex('by_organizationId_and_slug', (q) =>
+          q.eq('organizationId', organization._id).eq('slug', slug),
+        )
+        .unique();
+      if (program?.type !== 'tournament') {
+        throw new Error(`No tournament has the slug ${JSON.stringify(slug)}`);
+      }
+      programIds.push(program._id);
+    }
+    await insertMembership(
+      ctx,
+      user._id,
+      organization._id,
+      'leagueOrganizer',
+      leagueIds,
+      programIds,
+    );
     return null;
   },
 });
@@ -973,11 +994,15 @@ export const addInvite = internalMutation({
     email: v.string(),
     role: roleValidator,
     leagueNames: v.optional(v.array(v.string())),
+    tournamentNames: v.optional(v.array(v.string())),
     expiresAt: v.number(),
     token: v.optional(v.string()),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, email, role, leagueNames = [], expiresAt, token }) => {
+  handler: async (
+    ctx,
+    { organizationSlug, email, role, leagueNames = [], tournamentNames = [], expiresAt, token },
+  ) => {
     assertTestDeployment();
     const organization = await ctx.db
       .query('organizations')
@@ -997,11 +1022,25 @@ export const addInvite = internalMutation({
       if (!league) throw new Error(`No league named ${JSON.stringify(name)}`);
       leagueIds.push(league._id);
     }
+    const programIds = [];
+    for (const name of tournamentNames) {
+      const program = (
+        await ctx.db
+          .query('programs')
+          .withIndex('by_organizationId_and_type_and_status_and_sortName', (q) =>
+            q.eq('organizationId', organization._id).eq('type', 'tournament'),
+          )
+          .collect()
+      ).find((row) => row.name === name);
+      if (!program) throw new Error(`No tournament named ${JSON.stringify(name)}`);
+      programIds.push(program._id);
+    }
     await insertPendingInvite(ctx, {
       organizationId: organization._id,
       email: normaliseInviteEmail(email),
       role,
       leagueIds,
+      ...(programIds.length > 0 && { programIds }),
       tokenHash: await hashInviteToken(token ?? generateInviteToken()),
       expiresAt,
     });

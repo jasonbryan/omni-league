@@ -10,10 +10,11 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { requireOrgAdmin, requireUser } from './lib/access';
+import { assignablePrograms } from './lib/assignedPrograms';
 import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import {
   checkInviteEmail,
-  checkInviteLeagues,
+  checkInviteAssignments,
   INVITE_LIFETIME_MS,
   INVITE_MESSAGES,
   INVITE_RESTORE_WINDOW_MS,
@@ -43,6 +44,7 @@ export const create = action({
     email: v.string(),
     role: roleValidator,
     leagueIds: v.array(v.id('leagues')),
+    programIds: v.optional(v.array(v.id('programs'))),
   },
   returns: v.object({
     inviteId: v.id('invites'),
@@ -72,23 +74,34 @@ async function checkInviteAllowed(
     email: string;
     role: Role;
     leagueIds: Id<'leagues'>[];
+    programIds?: Id<'programs'>[] | undefined;
   },
-  invalidLeague: () => never,
-): Promise<{ email: string; leagueIds: Id<'leagues'>[] }> {
+  invalidAssignment: () => never,
+): Promise<{ email: string; leagueIds: Id<'leagues'>[]; programIds: Id<'programs'>[] }> {
   const checked = checkInviteEmail(args.email);
   if (!checked.ok) refuse(checked.error);
   const { email } = checked;
 
   const leagueIds = [...new Set(args.leagueIds)];
+  const requestedProgramIds = [...new Set(args.programIds)];
   if (args.role === 'orgAdmin') {
-    if (leagueIds.length > 0) throw new Error('An org admin invite carries no leagues');
+    if (leagueIds.length > 0 || requestedProgramIds.length > 0) {
+      throw new Error('An org admin invite carries no leagues or programs');
+    }
   } else {
-    const leaguesError = checkInviteLeagues(leagueIds.length);
-    if (leaguesError) refuse(leaguesError);
+    // A caller that sends `programIds` offers tournaments, so its message names them.
+    const assignmentsError = checkInviteAssignments(
+      leagueIds.length,
+      requestedProgramIds.length,
+      args.programIds !== undefined,
+    );
+    if (assignmentsError) refuse(assignmentsError);
     for (const id of leagueIds) {
       const league = await ctx.db.get('leagues', id);
-      if (league?.organizationId !== args.organizationId) invalidLeague();
+      if (league?.organizationId !== args.organizationId) invalidAssignment();
     }
+    const programs = await assignablePrograms(ctx, args.organizationId, requestedProgramIds);
+    if (programs.length !== requestedProgramIds.length) invalidAssignment();
   }
 
   const authUserId = await authUserIdByEmail(ctx, email);
@@ -127,7 +140,7 @@ async function checkInviteAllowed(
       message: INVITE_MESSAGES.alreadyInvited(email),
     });
   }
-  return { email, leagueIds };
+  return { email, leagueIds, programIds: requestedProgramIds };
 }
 
 export const insertPending = internalMutation({
@@ -136,12 +149,13 @@ export const insertPending = internalMutation({
     email: v.string(),
     role: roleValidator,
     leagueIds: v.array(v.id('leagues')),
+    programIds: v.optional(v.array(v.id('programs'))),
     tokenHash: v.string(),
   },
   returns: v.object({ inviteId: v.id('invites'), expiresAt: v.number() }),
   handler: async (ctx, args) => {
     await requireOrgAdmin(ctx, args.organizationId);
-    const { email, leagueIds } = await checkInviteAllowed(ctx, args, () => {
+    const { email, leagueIds, programIds } = await checkInviteAllowed(ctx, args, () => {
       throw new Error('Not allowed');
     });
 
@@ -151,6 +165,7 @@ export const insertPending = internalMutation({
       email,
       role: args.role,
       leagueIds,
+      ...(programIds.length > 0 && { programIds }),
       tokenHash: args.tokenHash,
       expiresAt,
     });
@@ -235,6 +250,7 @@ export const listPending = query({
       email: v.string(),
       role: roleValidator,
       leagueNames: v.array(v.string()),
+      tournamentNames: v.optional(v.array(v.string())),
       expiresAt: v.number(),
     }),
   ),
@@ -261,11 +277,15 @@ export const listPending = query({
         const name = await nameOf(id);
         if (name !== null) leagueNames.push(name);
       }
+      const tournamentNames = (
+        await assignablePrograms(ctx, organizationId, invite.programIds)
+      ).map((program) => program.name);
       rows.push({
         inviteId: invite._id,
         email: invite.email,
         role: invite.role,
         leagueNames,
+        ...(tournamentNames.length > 0 && { tournamentNames }),
         expiresAt: invite.expiresAt,
       });
     }
@@ -278,6 +298,7 @@ const inviteSummaryFields = {
   organizationName: v.string(),
   role: roleValidator,
   leagueNames: v.array(v.string()),
+  tournamentNames: v.optional(v.array(v.string())),
 };
 
 // `invalid` does not tell an unknown, revoked, expired, or accepted token apart.
@@ -296,6 +317,8 @@ async function summarise(
   leagueIds: Id<'leagues'>[];
   leagueNames: string[];
   leagues: { name: string; slug: string }[];
+  programIds: Id<'programs'>[];
+  tournaments: { name: string; slug: string }[];
 }> {
   const organization = await ctx.db.get('organizations', invite.organizationId);
   const leagueIds: Id<'leagues'>[] = [];
@@ -309,12 +332,15 @@ async function summarise(
       leagues.push({ name: league.name, slug: league.slug });
     }
   }
+  const programs = await assignablePrograms(ctx, invite.organizationId, invite.programIds);
   return {
     organizationName: organization?.name ?? '',
     organizationSlug: organization?.slug ?? '',
     leagueIds,
     leagueNames,
     leagues,
+    programIds: programs.map((program) => program._id),
+    tournaments: programs.map(({ name, slug }) => ({ name, slug })),
   };
 }
 
@@ -329,12 +355,13 @@ export const getByToken = query({
   handler: async (ctx, { token }) => {
     const invite = await findUsableInvite(ctx, token, Date.now());
     if (!invite) return { status: 'invalid' as const };
-    const { organizationName, leagueNames } = await summarise(ctx, invite);
+    const { organizationName, leagueNames, tournaments } = await summarise(ctx, invite);
     return {
       status: 'valid' as const,
       organizationName,
       role: invite.role,
       leagueNames,
+      ...(tournaments.length > 0 && { tournamentNames: tournaments.map(({ name }) => name) }),
       expiresAt: invite.expiresAt,
     };
   },
@@ -346,6 +373,7 @@ export const accept = mutation({
     ...inviteSummaryFields,
     organizationSlug: v.string(),
     leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
+    tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
   }),
   handler: async (ctx, { token }) => {
     const user = await requireUser(ctx);
@@ -365,18 +393,35 @@ export const accept = mutation({
       .unique();
     if (existing) refuseAccept('alreadyMember');
 
-    const { organizationName, organizationSlug, leagueIds, leagueNames, leagues } = await summarise(
-      ctx,
-      invite,
-    );
+    const {
+      organizationName,
+      organizationSlug,
+      leagueIds,
+      leagueNames,
+      leagues,
+      programIds,
+      tournaments,
+    } = await summarise(ctx, invite);
+    const isOrgAdmin = invite.role === 'orgAdmin';
     await insertMembership(
       ctx,
       user._id,
       invite.organizationId,
       invite.role,
-      invite.role === 'orgAdmin' ? [] : leagueIds,
+      isOrgAdmin ? [] : leagueIds,
+      isOrgAdmin ? [] : programIds,
     );
     await setInviteStatus(ctx, invite._id, { status: 'accepted' });
-    return { organizationName, organizationSlug, role: invite.role, leagueNames, leagues };
+    return {
+      organizationName,
+      organizationSlug,
+      role: invite.role,
+      leagueNames,
+      leagues,
+      ...(tournaments.length > 0 && {
+        tournamentNames: tournaments.map(({ name }) => name),
+        tournaments,
+      }),
+    };
   },
 });
