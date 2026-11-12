@@ -157,6 +157,23 @@ export default defineSchema({
       'sortName',
     ]),
 
+  // The tournament part of a program of type `tournament`; `programs` holds its name, slug, status, and division. Written only by `convex/lib/tenantWrites.ts`.
+  tournaments: defineTable({
+    programId: v.id('programs'),
+    organizationId: v.id('organizations'),
+    /** Calendar dates, `YYYY-MM-DD`; a one-day tournament ends on its start date. */
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    maximumTeams: v.number(),
+    /** The division's players per side. */
+    minimumRosterSize: v.number(),
+    structure: v.literal('bracket'),
+    bracketType: v.literal('single'),
+  })
+    .index('by_programId', ['programId'])
+    .index('by_organizationId_and_startDate', ['organizationId', 'startDate']),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.

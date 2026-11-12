@@ -53,8 +53,10 @@ import {
   insertCustomLevel,
   insertLeague,
   insertLocation,
+  insertDraftTournament,
   insertSeason,
   insertTenant,
+  programSlugTaken,
   seasonSlugTaken,
   type DivisionSeed,
   type NewSeason,
@@ -611,12 +613,74 @@ function runSeason(demo: RunSeason, today: string): NewSeason {
   };
 }
 
+interface DemoTournament {
+  organizationSlug: string;
+  name: string;
+  slug: string;
+  sport: Sport;
+  locations: readonly string[];
+  division: Pick<DivisionSeed, 'gender' | 'playersPerSide' | 'level' | 'ageGroup'>;
+  startDaysFromRun: number;
+  endDaysFromRun: number;
+  deadlineDaysFromRun: number;
+  maximumTeams: number;
+}
+
+// Dated from the run, so a new deployment shows the draft ahead of its dates. Insert-only like the rest, so a preview reused across pushes keeps the dates of its first run.
+export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Winter Doubles Classic',
+    slug: 'winter-doubles-classic',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 60,
+    endDaysFromRun: 61,
+    deadlineDaysFromRun: 53,
+    maximumTeams: 16,
+  },
+];
+
+async function ensureTournament(
+  ctx: MutationCtx,
+  demo: DemoTournament,
+  today: string,
+): Promise<boolean> {
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization || (await programSlugTaken(ctx, organization._id, demo.slug))) return false;
+  const locationIds: Id<'locations'>[] = [];
+  for (const name of demo.locations) {
+    const location = await ctx.db
+      .query('locations')
+      .withIndex('by_organizationId_and_name', (q) =>
+        q.eq('organizationId', organization._id).eq('name', name),
+      )
+      .first();
+    if (!location) return false;
+    locationIds.push(location._id);
+  }
+  await insertDraftTournament(ctx, organization._id, {
+    name: demo.name,
+    slug: demo.slug,
+    sport: demo.sport,
+    locationIds,
+    division: demo.division,
+    startDate: addCalendarDays(today, demo.startDaysFromRun),
+    endDate: addCalendarDays(today, demo.endDaysFromRun),
+    registrationDeadline: addCalendarDays(today, demo.deadlineDaysFromRun),
+    maximumTeams: demo.maximumTeams,
+  });
+  return true;
+}
+
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
   customLevels: v.number(),
   leagues: v.number(),
   seasons: v.number(),
+  tournaments: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
     teamCounts: v.number(),
@@ -688,7 +752,14 @@ export const insertDemoData = internalMutation({
   returns: resultValidator,
   handler: async (ctx) => {
     assertPreviewDeployment();
-    const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
+    const inserted = {
+      organizations: 0,
+      locations: 0,
+      customLevels: 0,
+      leagues: 0,
+      seasons: 0,
+      tournaments: 0,
+    };
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
       teamCounts: await backfillSeasonTeamCounts(ctx),
@@ -746,6 +817,9 @@ export const insertDemoData = internalMutation({
       if (await seasonSlugTaken(ctx, found.league._id, demo.slug)) continue;
       await insertSeason(ctx, found.league, runSeason(demo, today), 'published');
       inserted.seasons++;
+    }
+    for (const demo of DEMO_TOURNAMENTS) {
+      if (await ensureTournament(ctx, demo, today)) inserted.tournaments++;
     }
     return { ...inserted, backfilled };
   },

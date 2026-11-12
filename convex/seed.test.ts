@@ -22,7 +22,14 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 46, seasons: 7 };
+const ROWS = {
+  organizations: 7,
+  locations: 25,
+  customLevels: 1,
+  leagues: 46,
+  seasons: 7,
+  tournaments: 1,
+};
 const NONE = {
   organizations: 0,
   locations: 0,
@@ -34,7 +41,14 @@ const NONE = {
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
 };
-const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
+const NO_ROWS = {
+  organizations: 0,
+  locations: 0,
+  customLevels: 0,
+  leagues: 0,
+  seasons: 0,
+  tournaments: 0,
+};
 const FULL = { ...ROWS, backfilled: NONE };
 
 async function counts(t: T) {
@@ -44,6 +58,7 @@ async function counts(t: T) {
     customLevels: (await ctx.db.query('customLevels').collect()).length,
     leagues: (await ctx.db.query('leagues').collect()).length,
     seasons: (await ctx.db.query('seasons').collect()).length,
+    tournaments: (await ctx.db.query('tournaments').collect()).length,
   }));
 }
 
@@ -640,6 +655,7 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
+      tournaments: ROWS.tournaments,
       backfilled: NONE,
     });
 
@@ -772,6 +788,7 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues + 1,
       seasons: ROWS.seasons,
+      tournaments: ROWS.tournaments,
     });
   });
 
@@ -797,6 +814,7 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues,
       seasons: ROWS.seasons,
+      tournaments: ROWS.tournaments,
       backfilled: {
         organizations: 2,
         locations: 3,
@@ -988,6 +1006,7 @@ describe('seed:demo', () => {
       DEMO,
       DEMO_SEASONS,
       DEMO_RUN_SEASONS,
+      DEMO_TOURNAMENTS,
       DEMO_ACCOUNTS,
       DEMO_ACCOUNT_DOMAIN,
       DEMO_TEAM_SEASON,
@@ -1003,6 +1022,7 @@ describe('seed:demo', () => {
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
+    expect(Array.isArray(DEMO_TOURNAMENTS)).toBe(true);
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual([
       'admin',
       'organizer',
@@ -1076,7 +1096,9 @@ describe('seed:demo league programs', () => {
     await t.mutation(internal.seed.insertDemoData, {});
     const { leagues, programs } = await t.run(async (ctx) => ({
       leagues: await ctx.db.query('leagues').collect(),
-      programs: await ctx.db.query('programs').collect(),
+      programs: (await ctx.db.query('programs').collect()).filter(
+        (program) => program.type === 'league',
+      ),
     }));
     expect(programs).toHaveLength(ROWS.leagues);
     for (const league of leagues) {
@@ -1096,6 +1118,91 @@ describe('seed:demo league programs', () => {
         ageGroup: league.ageGroup,
       });
     }
+  });
+});
+
+describe('seed:demo tournaments', () => {
+  async function winterDoublesClassic(t: T) {
+    return t.run(async (ctx) => {
+      const organization = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'gulf-coast-sport-social'))
+        .unique();
+      const program = await ctx.db
+        .query('programs')
+        .withIndex('by_organizationId_and_slug', (q) =>
+          q.eq('organizationId', organization!._id).eq('slug', 'winter-doubles-classic'),
+        )
+        .unique();
+      const tournaments = await ctx.db.query('tournaments').collect();
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization!._id).eq('name', 'North Beach Sand Courts'),
+        )
+        .unique();
+      return {
+        organizationId: organization!._id,
+        location: location!._id,
+        program,
+        tournaments,
+        tournament: tournaments.find((row) => row.programId === program?._id),
+      };
+    });
+  }
+
+  test('adds the draft Winter Doubles Classic of Gulf Coast Sport & Social, dated after the run, and a second run adds none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const second = await t.mutation(internal.seed.insertDemoData, {});
+    expect(second.tournaments).toBe(0);
+    const { organizationId, location, program, tournaments, tournament } =
+      await winterDoublesClassic(t);
+    expect(tournaments).toHaveLength(1);
+    expect(program).toMatchObject({
+      organizationId,
+      type: 'tournament',
+      name: 'Winter Doubles Classic',
+      sport: 'beachVolleyball',
+      status: 'draft',
+      locationIds: [location],
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'open',
+      ageGroup: 'adult',
+    });
+    expect(tournament).toMatchObject({
+      organizationId,
+      maximumTeams: 16,
+      minimumRosterSize: 2,
+      structure: 'bracket',
+      bracketType: 'single',
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(tournament!.registrationDeadline > today).toBe(true);
+    expect(tournament!.startDate > tournament!.registrationDeadline).toBe(true);
+    expect(tournament!.endDate >= tournament!.startDate).toBe(true);
+  });
+
+  test('adds none where a program already holds its web address', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
+        locations: [{ name: 'North Beach Sand Courts', address: '1 Sand Ln' }],
+        leagues: [
+          {
+            name: 'Winter Doubles Classic',
+            sport: 'beachVolleyball',
+            locations: ['North Beach Sand Courts'],
+            division: defaultDivision('beachVolleyball'),
+          },
+        ],
+      });
+    });
+    const result = await t.mutation(internal.seed.insertDemoData, {});
+    expect(result.tournaments).toBe(0);
+    expect((await winterDoublesClassic(t)).tournaments).toHaveLength(0);
   });
 });
 
