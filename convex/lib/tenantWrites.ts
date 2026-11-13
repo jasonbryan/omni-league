@@ -323,7 +323,7 @@ export async function insertLeague(
     }
     locationIds.push(location._id);
   }
-  const slug = await uniqueLeagueSlug(ctx, organizationId, slugify(league.name));
+  const slug = await nextFreeSlug(ctx, organizationId, slugify(league.name));
   const division = await resolveDivision(ctx, organizationId, league.sport, league.division);
   const leagueId = await insertLeagueRow(
     ctx,
@@ -953,8 +953,8 @@ async function countLeagueInSport(
   });
 }
 
-async function uniqueLeagueSlug(
-  ctx: MutationCtx,
+export async function nextFreeSlug(
+  ctx: Pick<QueryCtx, 'db'>,
   organizationId: Id<'organizations'>,
   base: string,
 ): Promise<string> {

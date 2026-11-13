@@ -28,6 +28,7 @@ const URL = `/app/organizations/${COASTAL.slug}/tournaments`;
 const LIST_TOURNAMENTS = 'tournaments:listForOrganization';
 const CREATE = 'tournaments:create';
 const IS_AVAILABLE = 'tournaments:isSlugAvailable';
+const GET_FOR_COPY = 'tournaments:getForCopy';
 const tokens = (value: string) => value.split(' ').sort();
 
 const TOURNAMENTS = [
@@ -601,6 +602,202 @@ describe('AdminTournaments', () => {
         );
         expect(input('name').value).toBe('Winter Doubles Classic');
       });
+    });
+  });
+
+  describe('copying a tournament', () => {
+    const COPY_URL = `${URL}?copyOf=winter-doubles-classic#create-tournament`;
+    const COPY = {
+      name: 'Winter Doubles Classic',
+      slug: 'winter-doubles-classic-2',
+      sport: 'beachVolleyball',
+      locationIds: ['loc_pelican'],
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'open',
+      ageGroup: 'adult',
+      maximumTeams: 16,
+      structure: 'bracket',
+      bracketType: 'single',
+    };
+    const copySubscription = () => o.subscription(GET_FOR_COPY);
+    const note = () => form().querySelector<HTMLElement>('[data-slot="copy-note"]');
+    const divisionStatus = () =>
+      text(form().querySelector('fieldset [role="status"]:not(.sr-only)'));
+    const panel = () => page.querySelector<HTMLElement>('#create-tournament')!;
+
+    async function openCopy(source?: unknown, url = COPY_URL) {
+      await open(TOURNAMENTS, COASTAL_LOCATIONS, url);
+      if (source !== undefined) copySubscription()!.emit(source);
+      await o.flush();
+    }
+
+    it('asks tournaments.getForCopy with the organization slug and the copyOf web address', async () => {
+      await openCopy();
+      expect(copySubscription()!.args).toEqual({
+        organizationSlug: COASTAL.slug,
+        slug: 'winter-doubles-classic',
+      });
+    });
+
+    it('while the source loads, the form’s fields wait behind a skeleton with a polite status', async () => {
+      await openCopy();
+      expect(form()).toBeNull();
+      expect(text(panel().querySelector('[role="status"]'))).toBe(
+        'Loading the tournament to copy.',
+      );
+      expect(panel().querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+      copySubscription()!.emit(COPY);
+      await o.flush();
+      expect(form()).not.toBeNull();
+      expect(panel().querySelector('[data-slot="skeleton"]')).toBeNull();
+    });
+
+    it('while the locations and the source both load, the status names the source', async () => {
+      await open(TOURNAMENTS, null, COPY_URL);
+      expect(text(panel().querySelector('[role="status"]'))).toBe(
+        'Loading the tournament to copy.',
+      );
+    });
+
+    it('fills the name, the next free web address, the sport, the division, the location, and the maximum, and leaves the dates blank', async () => {
+      await openCopy(COPY);
+      expect(input('name').value).toBe('Winter Doubles Classic');
+      expect(input('slug').value).toBe('winter-doubles-classic-2');
+      expect(input('sport-beachVolleyball').checked).toBe(true);
+      expect(input('format-2').checked).toBe(true);
+      expect(input('level-open').checked).toBe(true);
+      expect(location(1).getAttribute('aria-checked')).toBe('true');
+      expect(location(2).getAttribute('aria-checked')).toBe('false');
+      expect(input('maximum-teams').value).toBe('16');
+      for (const id of ['start-date', 'end-date', 'registration-deadline']) {
+        expect(input(id).value, id).toBe('');
+      }
+      for (const id of ['name', 'slug']) expect(error(id), id).toBeNull();
+    });
+
+    it('says what was copied and what was not, above the fields', async () => {
+      await openCopy(COPY);
+      expect(text(note())).toBe(
+        'Copied from Winter Doubles Classic. Enter the dates and the registration deadline. Teams, the bracket, and results are not copied.',
+      );
+    });
+
+    it('requires the dates: a submit shows their messages, focuses the start date, and sends nothing', async () => {
+      await openCopy(COPY);
+      await submit();
+      expect(error('start-date')).toBe('Enter the start date.');
+      expect(error('registration-deadline')).not.toBeNull();
+      expect(document.activeElement).toBe(input('start-date'));
+      expect(calls().filter(([name]) => name === CREATE)).toEqual([]);
+    });
+
+    it('creates a new draft from the copy once the dates are entered, with the offered address', async () => {
+      await openCopy(COPY);
+      await type('start-date', '2028-01-15');
+      await type('registration-deadline', '2028-01-08');
+      await submit();
+      expect(calls().filter(([name]) => name === CREATE)).toEqual([
+        [
+          CREATE,
+          {
+            organizationId: COASTAL.organizationId,
+            name: 'Winter Doubles Classic',
+            slug: 'winter-doubles-classic-2',
+            sport: 'beachVolleyball',
+            locationIds: ['loc_pelican'],
+            gender: 'coed',
+            playersPerSide: 2,
+            level: 'open',
+            ageGroup: 'adult',
+            startDate: '2028-01-15',
+            registrationDeadline: '2028-01-08',
+            maximumTeams: 16,
+          },
+        ],
+      ]);
+    });
+
+    it('keeps the copied division when its name states another, on leaving Name and on submit', async () => {
+      await openCopy({ ...COPY, name: 'Winter 4v4 BB Classic' });
+      await leave('name');
+      expect(input('format-2').checked).toBe(true);
+      expect(input('level-open').checked).toBe(true);
+      expect(divisionStatus()).toBe('');
+      await type('start-date', '2028-01-15');
+      await type('registration-deadline', '2028-01-08');
+      await submit();
+      expect(o.convex.calls.find((c) => c.name === CREATE)!.args).toMatchObject({
+        name: 'Winter 4v4 BB Classic',
+        playersPerSide: 2,
+        level: 'open',
+      });
+    });
+
+    it('fills the division from a new name that states one, once the copy is renamed', async () => {
+      await openCopy(COPY);
+      await type('name', 'Summer 4v4 BB Classic');
+      await leave('name');
+      expect(input('format-4').checked).toBe(true);
+      expect(input('level-bb').checked).toBe(true);
+      expect(divisionStatus()).toBe(
+        'Format and level were filled in from the name. Change any that are wrong.',
+      );
+    });
+
+    it('keeps a custom level, so the new tournament sends it', async () => {
+      await openCopy({ ...COPY, level: 'rec', customLevelId: 'cl_sandy' });
+      await type('start-date', '2028-01-15');
+      await type('registration-deadline', '2028-01-08');
+      await submit();
+      expect(o.convex.calls.find((c) => c.name === CREATE)!.args).toMatchObject({
+        level: 'rec',
+        customLevelId: 'cl_sandy',
+      });
+    });
+
+    it('renaming the copy updates its web address until the address is edited', async () => {
+      await openCopy(COPY);
+      await type('name', 'Winter Doubles Classic 2028');
+      expect(input('slug').value).toBe('winter-doubles-classic-2028');
+    });
+
+    it('does not undo the user’s edits when the source answers again', async () => {
+      await openCopy(COPY);
+      await type('name', 'Spring Doubles');
+      await type('maximum-teams', '8');
+      copySubscription()!.emit({ ...COPY, maximumTeams: 32 });
+      await o.flush();
+      expect(input('name').value).toBe('Spring Doubles');
+      expect(input('maximum-teams').value).toBe('8');
+    });
+
+    it('opens an empty form with no note and no alert for an unknown or another organization’s web address', async () => {
+      await openCopy(null);
+      expect(form()).not.toBeNull();
+      expect(input('name').value).toBe('');
+      expect(input('slug').value).toBe('');
+      expect(input('maximum-teams').value).toBe('');
+      expect(note()).toBeNull();
+      expect(panel().querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('opens an empty form with an alert when the source fails to load, never the error message', async () => {
+      await openCopy();
+      copySubscription()!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(form()).not.toBeNull();
+      expect(input('name').value).toBe('');
+      expect(text(panel().querySelector('[role="alert"]'))).toBe(
+        'The tournament to copy could not be loaded. The form is empty. Check your connection and reload to try again.',
+      );
+      expect(page.textContent).not.toContain('secret');
+    });
+
+    it('the plain Tournaments page has no note and an empty form', async () => {
+      await open([]);
+      expect(note()).toBeNull();
+      expect(input('name').value).toBe('');
     });
   });
 

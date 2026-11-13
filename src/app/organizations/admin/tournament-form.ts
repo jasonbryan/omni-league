@@ -1,5 +1,6 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
+import type { FunctionReturnType } from 'convex/server';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
@@ -12,7 +13,7 @@ import {
   type TournamentField,
   type TournamentInputError,
 } from '../../../../convex/lib/tournamentInput';
-import { ConvexOfflineError } from '../../core/data/convex';
+import { ConvexOfflineError, type api } from '../../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
@@ -45,6 +46,8 @@ export interface TournamentCreateValues {
   registrationDeadline: string;
   maximumTeams: number;
 }
+
+export type TournamentCopy = NonNullable<FunctionReturnType<typeof api.tournaments.getForCopy>>;
 
 export type TournamentFormAlertKind = 'offline' | 'failed';
 
@@ -109,6 +112,8 @@ export class TournamentForm {
   private readonly clientErrors: Signal<Partial<Record<TournamentField, TournamentInputError>>>;
   private readonly shown: Record<TournamentField, ShownUntilValid>;
   private readonly locationsChanged = signal(false);
+  // The source's name, whose division the copy already holds.
+  private copiedName: string | null = null;
   private readonly serverErrors: Record<TournamentField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<TournamentField, Signal<string | null>>;
@@ -232,6 +237,27 @@ export class TournamentForm {
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
   }
 
+  loadCopy(copy: TournamentCopy): void {
+    this.model.update((m) => ({
+      ...m,
+      name: copy.name,
+      slug: copy.slug,
+      maximumTeams: String(copy.maximumTeams),
+    }));
+    // Unedited, so renaming the copy still derives the address.
+    this.slugEdited.set(false);
+    this.copiedName = copy.name;
+    this.chosenSport.set(copy.sport);
+    this.division.load({
+      gender: copy.gender,
+      playersPerSide: copy.playersPerSide,
+      level: copy.level,
+      customLevelId: copy.customLevelId,
+      ageGroup: copy.ageGroup,
+    });
+    this.selected.set(new Set(copy.locationIds));
+  }
+
   chooseSport(sport: Sport): void {
     this.chosenSport.set(sport);
     this.division.sportChanged(sport);
@@ -251,6 +277,7 @@ export class TournamentForm {
   clear(): void {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
+    this.copiedName = null;
     this.chosenSport.set(null);
     this.division.clear();
     this.selected.set(this.defaultSelected());
@@ -315,6 +342,7 @@ export class TournamentForm {
   }
 
   private fillDivisionFromName(): void {
+    if (this.model().name.trim() === this.copiedName?.trim()) return;
     this.division.fillFromName(this.model().name, this.sport());
   }
 
