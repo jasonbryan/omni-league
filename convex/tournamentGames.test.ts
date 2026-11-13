@@ -476,6 +476,106 @@ describe('tournamentGames.createBracket', () => {
   });
 });
 
+async function storedPairings(s: TournamentWorld, seedOf: ReadonlyMap<Id<'teams'>, number>) {
+  const rows = await games(s);
+  const rounds = new Map<number, (number | null)[][]>();
+  for (const game of rows) {
+    const entry = game.teamIds.map((id) => (id === null ? null : seedOf.get(id)!));
+    rounds.set(game.round, [...(rounds.get(game.round) ?? []), entry]);
+  }
+  return [...rounds.values()];
+}
+
+describe('the stored bracket for 3, 6, and 16 teams', () => {
+  const seedMap = (teamIds: readonly Id<'teams'>[]) =>
+    new Map(teamIds.map((id, index) => [id, index + 1]));
+
+  test('3 teams: seed 1 has a bye into round 2 and 2 plays 3', async () => {
+    const { s, teamIds } = await world(NAMES.slice(0, 3));
+    expect(await create(s)).toEqual({ gameCount: 3, replaced: false });
+    expect(await storedPairings(s, seedMap(teamIds))).toEqual([
+      [
+        [1, null],
+        [2, 3],
+      ],
+      [[1, null]],
+    ]);
+    const stored = await games(s);
+    expect(stored.filter((game) => game.winnerTeamId !== undefined)).toHaveLength(1);
+    expect((await setup(s))!.bracket!.rounds.map((round) => round.name)).toEqual([
+      'Semifinals',
+      'Final',
+    ]);
+  });
+
+  test('6 teams: seeds 1 and 2 have byes, 4 plays 5, 3 plays 6, and a moved seed takes the place', async () => {
+    const { s, teamIds } = await world(NAMES.slice(0, 6));
+    await move(s, teamIds[5], 'up');
+    const order = [...teamIds];
+    [order[4], order[5]] = [order[5], order[4]];
+    await create(s);
+    const rows = await games(s);
+    expect(rows).toHaveLength(7);
+    expect(await storedPairings(s, seedMap(order))).toEqual([
+      [
+        [1, null],
+        [4, 5],
+        [2, null],
+        [3, 6],
+      ],
+      [
+        [1, null],
+        [2, null],
+      ],
+      [[null, null]],
+    ]);
+    expect(rows.filter((game) => game.winnerTeamId !== undefined)).toHaveLength(2);
+    expect((await setup(s))!.bracket!.rounds.map((round) => round.name)).toEqual([
+      'Quarterfinals',
+      'Semifinals',
+      'Final',
+    ]);
+  });
+
+  test('16 teams: 15 games, no bye, and every winner points at the game it joins', async () => {
+    const names = Array.from({ length: 16 }, (_, index) => `Team ${index + 1}`);
+    const { s, teamIds } = await world(names);
+    expect(await create(s)).toEqual({ gameCount: 15, replaced: false });
+    const rows = await games(s);
+    expect(rows.filter((game) => game.winnerTeamId !== undefined)).toEqual([]);
+    const pairings = await storedPairings(s, seedMap(teamIds));
+    expect(pairings[0]).toEqual([
+      [1, 16],
+      [8, 9],
+      [4, 13],
+      [5, 12],
+      [2, 15],
+      [7, 10],
+      [3, 14],
+      [6, 11],
+    ]);
+    expect(pairings.map((round) => round.length)).toEqual([8, 4, 2, 1]);
+    const byId = new Map(rows.map((game) => [game._id, game]));
+    for (const game of rows) {
+      const next = game.nextGameId && byId.get(game.nextGameId);
+      if (game.round === 4) {
+        expect(next).toBeFalsy();
+        continue;
+      }
+      expect(next).toBeTruthy();
+      expect(next!.round).toBe(game.round + 1);
+      expect(next!.slot).toBe(Math.ceil(game.slot / 2));
+      expect(game.nextSide).toBe(game.slot % 2 === 1 ? 0 : 1);
+    }
+    expect((await setup(s))!.bracket!.rounds.map((round) => round.name)).toEqual([
+      'Round of 16',
+      'Quarterfinals',
+      'Semifinals',
+      'Final',
+    ]);
+  });
+});
+
 describe('the bracket in tournamentGames.getSetup', () => {
   test('lists the rounds by name with each game’s teams, byes included', async () => {
     const { s } = await world(NAMES.slice(0, 5));

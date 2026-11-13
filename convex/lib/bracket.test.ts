@@ -99,6 +99,48 @@ describe('planBracket', () => {
     ]);
   });
 
+  test('3 teams: seed 1 takes the bye into the Final round and 2 plays 3', () => {
+    const games = planBracket(3);
+    expect(games.filter((game) => game.advances !== null).map((game) => game.advances)).toEqual([
+      1,
+    ]);
+    expect(pairings(games, 1)).toEqual([
+      [1, null],
+      [2, 3],
+    ]);
+    expect(pairings(games, 2)).toEqual([[1, null]]);
+    expect(games).toHaveLength(3);
+  });
+
+  test('6 teams: seeds 1 and 2 take byes, 4 plays 5 and 3 plays 6', () => {
+    const games = planBracket(6);
+    expect(games).toHaveLength(7);
+    expect(pairings(games, 1)).toEqual([
+      [1, null],
+      [4, 5],
+      [2, null],
+      [3, 6],
+    ]);
+    expect(games.filter((game) => game.advances !== null).map((game) => game.advances)).toEqual([
+      1, 2,
+    ]);
+    expect(pairings(games, 2)).toEqual([
+      [1, null],
+      [2, null],
+    ]);
+    expect(pairings(games, 3)).toEqual([[null, null]]);
+    expect(names(6)).toEqual(['Quarterfinals', 'Semifinals', 'Final']);
+  });
+
+  test('seeds 1 and 2 sit in opposite halves, so they meet only in the Final', () => {
+    for (const count of [4, 5, 6, 8, 16]) {
+      const first = planBracket(count).filter((game) => game.round === 1);
+      const half = (seed: number) =>
+        first.findIndex((game) => game.entrants.includes(seed)) < first.length / 2;
+      expect(half(1)).not.toBe(half(2));
+    }
+  });
+
   test('33 teams name the first round Round of 64', () => {
     expect(names(33)[0]).toBe('Round of 64');
     expect(names(128)[0]).toBe('Round of 128');
