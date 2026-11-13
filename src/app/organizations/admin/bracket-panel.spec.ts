@@ -65,6 +65,7 @@ const setupOf = (names: readonly string[], more: object = {}) => ({
 });
 const BRACKET = {
   hasResult: false,
+  winner: null,
   rounds: [
     {
       round: 1,
@@ -75,12 +76,16 @@ const BRACKET = {
           slot: 1,
           teams: [seed('Alpha'), null].map((t) => t && { teamId: t.teamId, name: t.name }),
           winnerTeamId: 'tm_alpha',
+          result: null,
+          locked: false,
         },
         {
           gameId: 'g_2',
           slot: 2,
           teams: [seed('Bravo'), seed('Charlie')].map((t) => ({ teamId: t.teamId, name: t.name })),
           winnerTeamId: null,
+          result: null,
+          locked: false,
         },
       ],
     },
@@ -93,6 +98,8 @@ const BRACKET = {
           slot: 1,
           teams: [{ teamId: 'tm_alpha', name: 'Alpha' }, null],
           winnerTeamId: null,
+          result: null,
+          locked: false,
         },
       ],
     },
@@ -397,7 +404,9 @@ describe('BracketPanel', () => {
         'Final',
       ]);
       expect(
-        rounds.map((round) => [...round.querySelectorAll('li')].map((game) => text(game))),
+        rounds.map((round) =>
+          [...round.querySelectorAll('[data-slot="game-label"]')].map((game) => text(game)),
+        ),
       ).toEqual([
         ['Game 1: Alpha v Bye', 'Game 2: Bravo v Charlie'],
         ['Game 1: Alpha v To be decided'],

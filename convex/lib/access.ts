@@ -260,6 +260,23 @@ export async function requireTournamentOrganizer(
   return { ...access, tournament };
 }
 
+export async function requireGameOrganizer(
+  ctx: Ctx,
+  gameId: Id<'tournamentGames'>,
+): Promise<
+  Authorized & {
+    program: Doc<'programs'>;
+    tournament: Doc<'tournaments'>;
+    game: Doc<'tournamentGames'>;
+  }
+> {
+  await requireUser(ctx);
+  const game = await ctx.db.get('tournamentGames', gameId);
+  if (!game) throw new Error('Not allowed');
+  const access = await requireTournamentOrganizer(ctx, game.tournamentId);
+  return { ...access, game };
+}
+
 export async function requireStaffOrForbidden(
   ctx: Ctx,
   organizationId: Id<'organizations'>,

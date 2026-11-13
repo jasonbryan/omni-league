@@ -29,6 +29,7 @@ import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
+import { BracketGame } from './bracket-game';
 import type { AlertText } from './alert-text';
 import {
   bracketRefusalMessage,
@@ -70,7 +71,16 @@ interface SeedRow {
 
 @Component({
   selector: 'app-bracket-panel',
-  imports: [AdminAlert, AdminOfflineAlert, ConfirmDialog, HlmCard, HlmSkeleton, HlmSpinner, NgIcon],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    BracketGame,
+    ConfirmDialog,
+    HlmCard,
+    HlmSkeleton,
+    HlmSpinner,
+    NgIcon,
+  ],
   providers: [
     provideIcons({
       lucideArrowDown,
@@ -250,6 +260,12 @@ interface SeedRow {
             @if (rounds(); as rounds) {
               <div id="bracket-rounds" [class]="section">
                 <h3 class="font-semibold">Bracket</h3>
+                @if (winner(); as winner) {
+                  <p data-slot="winner" class="mt-2 flex items-center gap-2 font-medium">
+                    <ng-icon name="lucideTrophy" class="text-base" aria-hidden="true" />Winner:
+                    {{ winner.name }}
+                  </p>
+                }
                 @for (round of rounds; track round.round) {
                   <section [attr.aria-labelledby]="'round-' + round.round" class="mt-4">
                     <h4
@@ -260,9 +276,11 @@ interface SeedRow {
                     </h4>
                     <ol role="list" class="mt-2 flex flex-col gap-2">
                       @for (game of round.games; track game.gameId) {
-                        <li class="rounded-lg border border-border px-3 py-2 text-sm">
-                          <span class="sr-only">Game {{ game.slot }}: </span>{{ game.label }}
-                        </li>
+                        <app-bracket-game
+                          [game]="game"
+                          [round]="round.round"
+                          [tournament]="tournament()"
+                        />
                       }
                     </ol>
                   </section>
@@ -367,21 +385,8 @@ export class BracketPanel {
     return this.hasResult() ? BRACKET_MESSAGES.resultEntered : null;
   });
 
-  protected readonly rounds = computed(() => {
-    const bracket = this.bracket();
-    if (!bracket) return null;
-    return bracket.rounds.map((round) => ({
-      round: round.round,
-      name: round.name,
-      games: round.games.map((game) => ({
-        gameId: game.gameId,
-        slot: game.slot,
-        label: game.teams
-          .map((team) => team?.name ?? (round.round === 1 ? 'Bye' : 'To be decided'))
-          .join(' v '),
-      })),
-    }));
-  });
+  protected readonly rounds = computed(() => this.bracket()?.rounds ?? null);
+  protected readonly winner = computed(() => this.bracket()?.winner ?? null);
 
   protected isMoving(row: SeedRow, direction: SeedDirection): boolean {
     const moving = this.moving();

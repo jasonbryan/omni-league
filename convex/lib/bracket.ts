@@ -31,6 +31,10 @@ export const BRACKET_MESSAGES = {
   setsPerGameLocked: 'Sets per game cannot change once the bracket is created.',
   registrationReopened:
     'The bracket is created, so registration cannot reopen. Choose a deadline that has passed.',
+  gameNotReady: 'This game is waiting on an earlier result, so it has no result yet.',
+  resultExists: 'This game has a result already. Correct it instead.',
+  noResult: 'This game has no result.',
+  nextGamePlayed: 'The next game has a result, so this result cannot change.',
 } as const;
 
 export const BRACKET_REFUSAL_CODES = [
@@ -44,6 +48,11 @@ export const BRACKET_REFUSAL_CODES = [
   'lastSeed',
   'setsPerGameLocked',
   'registrationReopened',
+  'gameNotReady',
+  'invalidScore',
+  'resultExists',
+  'noResult',
+  'nextGamePlayed',
 ] as const;
 
 export type BracketRefusalCode = (typeof BRACKET_REFUSAL_CODES)[number];

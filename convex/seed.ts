@@ -48,13 +48,16 @@ import { teamSortName } from './lib/teamInput';
 import { tournamentIsFull } from './lib/tournamentInput';
 import {
   bracketExists,
+  bracketGames,
+  bracketHasResult,
   replaceBracket,
+  saveResult,
   tournamentTeams as seededTeamsOf,
 } from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
-import type { Sport } from './lib/sports';
+import { scoreWinnerSide, type Score, type Sport } from './lib/sports';
 import {
   backfilledValidator,
   backfillDraftLeagueCounts,
@@ -1097,6 +1100,12 @@ export const DEMO_BRACKET_TOURNAMENT = {
   tournamentSlug: 'labor-day-sand-slam',
 } as const;
 
+/** The two games the first round plays, so the semifinals are filled: seed 4 beats 5, and seed 6 beats 3. */
+const DEMO_BRACKET_RESULTS: readonly { slot: number; score: Score }[] = [
+  { slot: 2, score: { kind: 'sets', sets: [{ a: 21, b: 15 }] } },
+  { slot: 4, score: { kind: 'sets', sets: [{ a: 18, b: 21 }] } },
+];
+
 /** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. */
 export const DEMO_BRACKET_TEAMS: readonly {
   name: string;
@@ -1457,6 +1466,7 @@ export const insertDemoTeams = internalMutation({
       (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains));
     await insertDemoBracketPartners(ctx, captains);
     await insertDemoBracket(ctx);
+    await insertDemoBracketResults(ctx, captains);
     await insertDemoTournamentWaitlistEntry(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return tournamentTeams;
@@ -1557,6 +1567,31 @@ async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
   const { seeds } = await seededTeamsOf(ctx, tournament);
   if (seeds.length < DEMO_BRACKET_TEAMS.length) return;
   await replaceBracket(ctx, tournament._id, seeds, []);
+}
+
+/** Entered by the demo admin, and only on a bracket with no result, so a result an organizer entered on a reused deployment is kept. */
+async function insertDemoBracketResults(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const tournament = await demoBracketTournament(ctx);
+  const authUserId = people.find(
+    (person) => person.email === DEMO_ACCOUNTS.admin.email,
+  )?.authUserId;
+  if (!tournament || authUserId === undefined) return;
+  const admin = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  const games = await bracketGames(ctx, tournament._id);
+  if (!admin || bracketHasResult(games)) return;
+  for (const { slot, score } of DEMO_BRACKET_RESULTS) {
+    const game = games.find((row) => row.round === 1 && row.slot === slot);
+    const side = scoreWinnerSide(score);
+    const winnerTeamId = side === null ? null : game?.teamIds[side];
+    if (!game || !winnerTeamId) continue;
+    await saveResult(ctx, game, { score, winnerTeamId, enteredBy: admin._id });
+  }
 }
 
 async function insertDemoWaitlistEntry(
