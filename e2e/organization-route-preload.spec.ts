@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
+import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -140,4 +140,66 @@ test.describe('public organization pages: modulepreload links', () => {
       expect(links).toEqual(manifest?.preload);
     },
   );
+});
+
+declare global {
+  interface Window {
+    sameDocument?: boolean;
+  }
+}
+
+test.describe('public organization pages: hydration and in-app navigation', () => {
+  for (const { name, path } of PUBLIC_PAGES) {
+    test(`${name}: hydrates, goes to the home page and back in the same document`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'one browser project only');
+      const target = path(await seedPublicPages());
+      await page.goto(target);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const heading = page.getByRole('main').getByRole('heading', { level: 1 });
+      await expect(heading).toBeVisible();
+      const title = await page.title();
+      await page.evaluate(() => (window.sameDocument = true));
+
+      await page.getByRole('banner').getByRole('link', { name: 'Omni League' }).click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}${target}`);
+      await expect(heading).toBeVisible();
+      await expect(page).toHaveTitle(title);
+      expect(await page.evaluate(() => window.sameDocument)).toBe(true);
+    });
+  }
+
+  test('links lead from the organization page to the league page and its season page, and back, in the same document', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'one browser project only');
+    const organization = await seedPublicPages();
+    const league = `${organization}/leagues/${LEAGUE_SLUG}`;
+    const season = `${league}/seasons/${SEASON_SLUG}`;
+    await page.goto(organization);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page.evaluate(() => (window.sameDocument = true));
+
+    await page.locator(`main a[href="${league}"]`).first().click();
+    await expect(page).toHaveURL(`${baseURL}${league}`);
+    await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toHaveText(
+      'Coed League',
+    );
+    await page.locator(`main a[href="${season}"]`).first().click();
+    await expect(page).toHaveURL(`${baseURL}${season}`);
+    await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toContainText(
+      'Summer 2027',
+    );
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${league}`);
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${organization}`);
+    await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
+    expect(await page.evaluate(() => window.sameDocument)).toBe(true);
+  });
 });
