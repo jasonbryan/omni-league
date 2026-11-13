@@ -40,6 +40,7 @@ import {
   type PublishTournamentOutcome,
 } from './publish-tournament-dialog';
 import { TournamentBreadcrumb } from './tournament-breadcrumb';
+import { TournamentDetailsForm } from './tournament-details-form';
 import { TournamentContext } from './tournament-context';
 import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
@@ -57,6 +58,7 @@ import { tournamentPath } from './tournament-path';
     RouterLink,
     ServerErrorView,
     TournamentBreadcrumb,
+    TournamentDetailsForm,
     TournamentNoAccess,
   ],
   providers: [
@@ -235,6 +237,18 @@ import { tournamentPath } from './tournament-path';
                   </div>
                 }
               </dl>
+            </section>
+            <section
+              id="edit-details"
+              aria-labelledby="edit-details-heading"
+              hlmCard
+              size="bare"
+              class="mt-4 max-w-2xl overflow-clip md:mt-6"
+            >
+              <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-6">
+                <h2 id="edit-details-heading" class="font-semibold">Edit details</h2>
+              </div>
+              <app-tournament-details-form [tournament]="tournament" />
             </section>
           </div>
           <app-publish-tournament-dialog (dismissed)="publishDismissed($event)" />

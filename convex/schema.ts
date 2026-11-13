@@ -9,6 +9,7 @@ import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { sportCountsValidator, sportValidator } from './lib/sports';
+import { setsPerGameValidator } from './lib/tournamentEdit';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
@@ -178,6 +179,8 @@ export default defineSchema({
     minimumRosterSize: v.number(),
     structure: v.literal('bracket'),
     bracketType: v.literal('single'),
+    /** Beach volleyball only; absent reads as 1. */
+    setsPerGame: v.optional(setsPerGameValidator),
   })
     .index('by_programId', ['programId'])
     .index('by_organizationId_and_startDate', ['organizationId', 'startDate'])

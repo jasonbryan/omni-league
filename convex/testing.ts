@@ -422,6 +422,20 @@ export const seedTournament = internalMutation({
   },
 });
 
+/** Another editor's save, for the e2e of a form that was loaded before it. */
+export const setTournamentMaximumTeams = internalMutation({
+  args: { organizationSlug: v.string(), tournamentSlug: v.string(), maximumTeams: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, maximumTeams }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    await ctx.db.patch('tournaments', found.tournament._id, { maximumTeams });
+    return null;
+  },
+});
+
 const seasonSeedValidator = v.object({
   name: v.string(),
   slug: v.string(),

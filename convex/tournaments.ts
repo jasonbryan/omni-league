@@ -6,6 +6,7 @@ import {
   requireUser,
   requireProgramOrganizer,
   requireProgramOrganizerOrForbidden,
+  requireTournamentOrganizer,
   requireStaffOrForbidden,
 } from './lib/access';
 import { getCurrentUser } from './lib/users';
@@ -42,6 +43,16 @@ import {
 } from './lib/tournamentLookup';
 import { sportName, sportValidator, type Sport } from './lib/sports';
 import {
+  editableOf,
+  sameEditable,
+  DEFAULT_SETS_PER_GAME,
+  setsPerGameIsChosen,
+  setsPerGameValidator,
+  tournamentEditableValidator,
+  type TournamentEditable,
+} from './lib/tournamentEdit';
+import {
+  checkTournamentDetails,
   checkTournamentFields,
   firstTournamentError,
   tournamentIsFull,
@@ -53,6 +64,7 @@ import {
   leagueSlugTaken,
   nextFreeSlug,
   publishTournament,
+  updateTournamentDetails,
 } from './lib/tenantWrites';
 
 export const ADMIN_TOURNAMENTS_LIMIT = 200;
@@ -61,9 +73,9 @@ export const OPEN_TOURNAMENTS_READ_LIMIT = 50;
 
 const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 
-function refuse(error: TournamentInputError): never {
+function refuse(error: TournamentInputError, extra: object = {}): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...error });
+  throw new ConvexError({ ...error, ...extra });
 }
 
 export const isSlugAvailable = query({
@@ -233,6 +245,97 @@ export const publish = mutation({
   },
 });
 
+const updateReturns = v.object({
+  earlier: tournamentEditableValidator,
+  written: tournamentEditableValidator,
+});
+
+export const updateDetails = mutation({
+  args: {
+    tournamentId: v.id('tournaments'),
+    startDate: v.string(),
+    // Absent for a one-day tournament.
+    endDate: v.optional(v.string()),
+    registrationDeadline: v.string(),
+    maximumTeams: v.number(),
+    // Absent keeps the sets per game the tournament holds.
+    setsPerGame: v.optional(setsPerGameValidator),
+    // What the form last showed, so a save made from out-of-date details is refused.
+    expected: tournamentEditableValidator,
+  },
+  returns: updateReturns,
+  handler: async (ctx, { tournamentId, expected, ...input }) => {
+    const { tournament, program } = await requireTournamentOrganizer(ctx, tournamentId);
+    const held = editableOf(tournament);
+    if (!sameEditable(held, expected)) {
+      refuse(
+        {
+          field: 'startDate',
+          code: 'changedSince',
+          message: TOURNAMENT_MESSAGES.changedWhileEditing,
+        },
+        { current: held },
+      );
+    }
+    const endDate = input.endDate ?? '';
+    checkedDetails(tournament, { ...input, endDate });
+    if (
+      input.setsPerGame !== undefined &&
+      !setsPerGameFitsSport(program.sport, input.setsPerGame)
+    ) {
+      throw new Error('Not allowed');
+    }
+    return updateTournamentDetails(ctx, tournament, {
+      startDate: input.startDate,
+      endDate: endDate === '' ? input.startDate : endDate,
+      registrationDeadline: input.registrationDeadline,
+      maximumTeams: input.maximumTeams,
+      setsPerGame: input.setsPerGame ?? held.setsPerGame,
+    });
+  },
+});
+
+export const undoUpdateDetails = mutation({
+  args: {
+    tournamentId: v.id('tournaments'),
+    earlier: tournamentEditableValidator,
+    written: tournamentEditableValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { tournamentId, earlier, written }) => {
+    const { tournament, program } = await requireTournamentOrganizer(ctx, tournamentId);
+    if (!sameEditable(editableOf(tournament), written)) {
+      refuse({
+        field: 'startDate',
+        code: 'changedSince',
+        message: TOURNAMENT_MESSAGES.changedSince,
+      });
+    }
+    // What `updateDetails` returned fits the sport, so a mismatch is a caller sending its own values.
+    if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame)) throw new Error('Not allowed');
+    checkedDetails(tournament, earlier);
+    await updateTournamentDetails(ctx, tournament, earlier);
+    return null;
+  },
+});
+
+function setsPerGameFitsSport(
+  sport: Sport,
+  setsPerGame: TournamentEditable['setsPerGame'],
+): boolean {
+  return setsPerGameIsChosen(sport) || setsPerGame === DEFAULT_SETS_PER_GAME;
+}
+
+function checkedDetails(
+  tournament: Doc<'tournaments'>,
+  values: Omit<TournamentEditable, 'setsPerGame'>,
+): void {
+  const refusal = firstTournamentError(
+    checkTournamentDetails({ ...values, teamCount: tournament.teamCount ?? 0 }),
+  );
+  if (refusal) refuse(refusal);
+}
+
 export const getForManagement = query({
   args: { orgSlug: v.string(), tournamentSlug: v.string() },
   returns: v.union(
@@ -242,6 +345,9 @@ export const getForManagement = query({
       organizationId: v.id('organizations'),
       role: roleValidator,
       status: programStatusValidator,
+      sport: sportValidator,
+      teamCount: v.number(),
+      setsPerGame: setsPerGameValidator,
       ...tournamentDetailsValidator.fields,
     }),
   ),
@@ -261,6 +367,9 @@ export const getForManagement = query({
       organizationId: organization._id,
       role: membership.role,
       status: found.program.status,
+      sport: found.program.sport,
+      teamCount: found.tournament.teamCount ?? 0,
+      setsPerGame: editableOf(found.tournament).setsPerGame,
       ...(await tournamentDetails(ctx, organization, found)),
     };
   },
