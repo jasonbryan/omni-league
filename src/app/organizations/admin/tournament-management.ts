@@ -40,6 +40,8 @@ import {
   type PublishTournamentOutcome,
 } from './publish-tournament-dialog';
 import { TournamentBreadcrumb } from './tournament-breadcrumb';
+import { TournamentDetailsForm } from './tournament-details-form';
+import { TournamentEditLanding } from './tournament-edit-landing';
 import { TournamentContext } from './tournament-context';
 import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
@@ -57,6 +59,7 @@ import { tournamentPath } from './tournament-path';
     RouterLink,
     ServerErrorView,
     TournamentBreadcrumb,
+    TournamentDetailsForm,
     TournamentNoAccess,
   ],
   providers: [
@@ -236,6 +239,19 @@ import { tournamentPath } from './tournament-path';
                 }
               </dl>
             </section>
+            <section
+              #editSection
+              id="edit-details"
+              aria-labelledby="edit-details-heading"
+              hlmCard
+              size="bare"
+              class="mt-4 max-w-2xl overflow-clip md:mt-6"
+            >
+              <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-6">
+                <h2 id="edit-details-heading" class="font-semibold">Edit details</h2>
+              </div>
+              <app-tournament-details-form [tournament]="tournament" />
+            </section>
           </div>
           <app-publish-tournament-dialog (dismissed)="publishDismissed($event)" />
         }
@@ -281,6 +297,7 @@ export class TournamentManagement {
   private readonly context = inject(TournamentContext);
   private readonly injector = inject(Injector);
   private readonly title = inject(Title);
+  private readonly landing = inject(TournamentEditLanding);
 
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
@@ -314,6 +331,7 @@ export class TournamentManagement {
     tournamentPath(this.context.orgSlug(), this.context.tournamentSlug()),
   );
 
+  private readonly editSection = viewChild<ElementRef<HTMLElement>>('editSection');
   private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
   private readonly publishDialog = viewChild(PublishTournamentDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
@@ -322,6 +340,7 @@ export class TournamentManagement {
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
   constructor() {
+    effect(() => this.landOnceTheFormRenders());
     // The no-access and not-found views set their own title.
     effect(() => {
       const tournament = this.tournament();
@@ -329,6 +348,22 @@ export class TournamentManagement {
         this.title.setTitle(`${tournament.name} | ${tournament.organization.name} | Omni League`);
       }
     });
+  }
+
+  private landOnceTheFormRenders(): void {
+    if (!this.landing.pending()) return;
+    const state = this.state();
+    if (state === 'loading') return;
+    this.landing.settle();
+    if (state !== 'ready') return;
+    afterNextRender(
+      () => {
+        const section = this.editSection()?.nativeElement;
+        section?.scrollIntoView();
+        section?.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 
   protected publish(): void {

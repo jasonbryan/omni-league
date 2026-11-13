@@ -233,6 +233,18 @@ export async function requireProgramOrganizer(
   return { user, membership, program };
 }
 
+/** Signed in first, so a tournament that does not exist and another organization's look alike. */
+export async function requireTournamentOrganizer(
+  ctx: Ctx,
+  tournamentId: Id<'tournaments'>,
+): Promise<Authorized & { program: Doc<'programs'>; tournament: Doc<'tournaments'> }> {
+  await requireUser(ctx);
+  const tournament = await ctx.db.get('tournaments', tournamentId);
+  if (!tournament) throw new Error('Not allowed');
+  const access = await requireProgramOrganizer(ctx, tournament.programId);
+  return { ...access, tournament };
+}
+
 export async function requireStaffOrForbidden(
   ctx: Ctx,
   organizationId: Id<'organizations'>,

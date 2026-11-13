@@ -209,6 +209,71 @@ test.describe('service worker (production build)', () => {
     expect(statuses).toEqual(chunks.map((url) => [url, 200]));
   });
 
+  test('each public organization page opens offline after a first visit to /, with the organizations route file and the page chunk served by the worker', async ({
+    page,
+    context,
+  }, testInfo) => {
+    skipUnlessMobile(testInfo);
+    const manifest = await installWorker(page);
+    const chunks = shellScripts(manifest).filter((url) => /^\/chunk-[^/]+\.js$/.test(url));
+    const [routeFile] = await scriptsContaining(page, chunks, 'organizationRoutes');
+    expect(routeFile, 'the chunk that exports organizationRoutes').toBeDefined();
+    const loadedOnStart = await page.evaluate(() =>
+      performance.getEntriesByType('resource').map((entry) => new URL(entry.name).pathname),
+    );
+    expect(loadedOnStart, 'the start page does not load the route file').not.toContain(routeFile);
+
+    const pages = [
+      ['/organizations/offline-org', 'OrganizationPage'],
+      ['/organizations/offline-org/sports/soccer', 'OrganizationPage'],
+      ['/organizations/offline-org/leagues/offline-league', 'PublicLeaguePage'],
+      [
+        '/organizations/offline-org/leagues/offline-league/seasons/offline-season',
+        'PublicSeasonPage',
+      ],
+      ['/organizations/offline-org/tournaments/offline-tournament', 'PublicTournamentPage'],
+    ] as const;
+    await setOffline(context, true);
+    for (const [path, exportName] of pages) {
+      const pageChunks = await scriptsContaining(page, chunks, `as ${exportName}}`);
+      expect(pageChunks, `the chunk that exports ${exportName}`).toHaveLength(1);
+      const scripts: Request[] = [];
+      const failed: string[] = [];
+      const onRequest = (request: Request) => {
+        if (request.resourceType() === 'script') scripts.push(request);
+      };
+      const onFailed = (request: Request) => {
+        if (request.resourceType() === 'script') failed.push(request.url());
+      };
+      page.on('request', onRequest);
+      page.on('requestfailed', onFailed);
+
+      const response = await page.goto(path);
+      expect(response?.fromServiceWorker(), path).toBe(true);
+      await expect(
+        page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING }),
+        path,
+      ).toBeVisible({ timeout: 10_000 });
+      page.off('request', onRequest);
+      page.off('requestfailed', onFailed);
+
+      const served = await Promise.all(
+        scripts.map(async (request) => {
+          const answer = await request.response();
+          return [new URL(request.url()).pathname, answer?.status(), answer?.fromServiceWorker()];
+        }),
+      );
+      expect(
+        served.map(([url]) => url),
+        path,
+      ).toEqual(expect.arrayContaining([routeFile, ...pageChunks]));
+      for (const [url, status, fromServiceWorker] of served) {
+        expect([status, fromServiceWorker], `${path}: ${String(url)}`).toEqual([200, true]);
+      }
+      expect(failed, path).toEqual([]);
+    }
+  });
+
   test('the new-version prompt and the unrecoverable message pass the axe helper at 360px and 1280px', async ({
     page,
     context,

@@ -85,7 +85,7 @@ Audited at `main` 76189e1 (2026-10-31).
 
 ## Routing
 
-Lazy-load every feature route with `loadComponent` / `loadChildren`. Guards and resolvers are functions.
+Lazy-load every feature route with `loadComponent` / `loadChildren`. Guards and resolvers are functions. Public organization routes go in `src/app/app.routes.organizations.ts`, so a new public page adds nothing to the initial bundle.
 
 ## Rendering
 

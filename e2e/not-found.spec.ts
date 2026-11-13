@@ -51,6 +51,24 @@ test.describe('not-found page', () => {
     },
   );
 
+  // `organizations` is a parent route, so the bare path matches it alone unless its route file has a not-found route for it.
+  test(
+    'raw server HTML: /organizations and an unknown path under an organization get the not-found view with the ** route Cache-Control',
+    RAW_HTTP,
+    async ({ request }) => {
+      for (const path of ['/organizations', '/organizations/nf-unknown-org/unknown']) {
+        const { status, headers, html } = await fetchRawHtml(request, path);
+        expect(status, path).toBe(404);
+        expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
+          PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+        );
+        expect(html.match(NOT_FOUND_H1), path).toHaveLength(1);
+        expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
+        expect(html, path).toMatch(HOME_LINK);
+      }
+    },
+  );
+
   // Angular throws NG05702 for a request path starting with `//`, so the server redirects to the
   // path with one leading slash (src/server-redirect.ts), which stays on this site.
   test(
@@ -242,7 +260,6 @@ test.describe('not-found page', () => {
     async () => {
       for (const [path, location] of [
         [`${UNKNOWN}//?token=A/B`, `${UNKNOWN}/?token=A%2FB`],
-        ['/organizations/(x)?token=A/B', '/organizations?token=A%2FB'],
         ['/organizations/x/(y)/', '/organizations/x'],
         ['/x/)', '/x/'],
       ]) {
@@ -257,6 +274,22 @@ test.describe('not-found page', () => {
         expect(target.location, location).toBeUndefined();
         expect(target.body.match(NOT_FOUND_H1), location).toHaveLength(1);
       }
+    },
+  );
+
+  // The router reads `(x)` as the primary child `x`, so under the nested `organizations` route `/organizations/(x)` is `/organizations/x`, and the engine finds nothing to redirect.
+  test(
+    '/organizations/(x) is the page of organization x: the not-found view for an unknown one, with no redirect',
+    RAW_HTTP,
+    async () => {
+      const response = await rawGet('/organizations/(nf-unknown-org)?token=A/B');
+      expect(response.status).toBe(404);
+      expect(response.location).toBeUndefined();
+      expect(response.headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(response.body.match(NOT_FOUND_H1)).toHaveLength(1);
+      expect(response.body).not.toContain('token=');
     },
   );
 
