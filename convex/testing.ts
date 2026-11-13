@@ -531,6 +531,48 @@ export const seedTournamentTeam = internalMutation({
   },
 });
 
+/** Teams with full rosters through the roster writers, for a bracket: the players are accounts with no sign-in, so a seed hashes no password. Skips the registration window. */
+export const seedTournamentRosters = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    // Players default to the tournament's minimum roster size.
+    teams: v.array(v.object({ name: v.string(), players: v.optional(v.number()) })),
+  },
+  returns: v.object({ teamIds: v.array(v.id('teams')) }),
+  handler: async (ctx, { organizationSlug, tournamentSlug, teams }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const { tournament } = found;
+    const teamIds: Id<'teams'>[] = [];
+    for (const { name, players = tournament.minimumRosterSize } of teams) {
+      const player = (number: number) =>
+        ctx.db.insert('users', {
+          authUserId: `e2e-roster-${tournamentSlug}-${name}-${number}`,
+          name: `${name} ${number}`,
+          adultConfirmedAt: 1,
+        });
+      const captainUserId = await player(1);
+      const teamId = await insertTournamentTeamWithCaptain(ctx, tournament, {
+        name,
+        captainUserId,
+      });
+      const team = (await ctx.db.get('teams', teamId))!;
+      for (let number = 2; number <= players; number++) {
+        await addRosterEntry(ctx, team, {
+          userId: await player(number),
+          source: 'invite',
+          addedByUserId: captainUserId,
+        });
+      }
+      teamIds.push(teamId);
+    }
+    return { teamIds };
+  },
+});
+
 /** A team on the tournament's waitlist through the roster writer, skipping the registration window; the tournament must be full. */
 export const seedTournamentWaitlistEntry = internalMutation({
   args: {

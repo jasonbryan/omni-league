@@ -33,6 +33,7 @@ import {
   promoteFailureText,
   promoteOfflineText,
   waitlistEmptyText,
+  WAITLIST_LOCKED_NOTE,
   waitlistNote,
   type WaitlistSubject,
 } from './waitlist-text';
@@ -154,29 +155,31 @@ export interface WaitlistView {
                       >
                     </p>
                   </div>
-                  <div class="mt-3">
-                    <button
-                      type="button"
-                      data-slot="button"
-                      [attr.data-waitlist-entry-id]="row.waitlistEntryId"
-                      [class]="outlineButton"
-                      [class.opacity-50]="!online() && promoting() === null"
-                      [attr.aria-disabled]="promoting() !== null || !online() ? 'true' : null"
-                      (click)="promote(row)"
-                    >
-                      @if (promoting() === row.waitlistEntryId) {
-                        <hlm-spinner data-icon="inline-start" />Promoting…<span class="sr-only">
-                          {{ row.teamName }}</span
-                        >
-                      } @else {
-                        <ng-icon
-                          name="lucideCircleArrowUp"
-                          data-icon="inline-start"
-                          aria-hidden="true"
-                        />Promote<span class="sr-only"> {{ row.teamName }}</span>
-                      }
-                    </button>
-                  </div>
+                  @if (!promotionClosed()) {
+                    <div class="mt-3">
+                      <button
+                        type="button"
+                        data-slot="button"
+                        [attr.data-waitlist-entry-id]="row.waitlistEntryId"
+                        [class]="outlineButton"
+                        [class.opacity-50]="!online() && promoting() === null"
+                        [attr.aria-disabled]="promoting() !== null || !online() ? 'true' : null"
+                        (click)="promote(row)"
+                      >
+                        @if (promoting() === row.waitlistEntryId) {
+                          <hlm-spinner data-icon="inline-start" />Promoting…<span class="sr-only">
+                            {{ row.teamName }}</span
+                          >
+                        } @else {
+                          <ng-icon
+                            name="lucideCircleArrowUp"
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                          />Promote<span class="sr-only"> {{ row.teamName }}</span>
+                        }
+                      </button>
+                    </div>
+                  }
                 </div>
               </li>
             }
@@ -216,6 +219,8 @@ export class WaitlistPanel {
   readonly waitlist = input.required<WaitlistView | null>();
   readonly teamCount = input.required<number>();
   readonly maxTeams = input<number | undefined>(undefined);
+  /** A tournament with a bracket takes no more teams, so a waiting team cannot be promoted. */
+  readonly promotionClosed = input(false);
 
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -246,7 +251,9 @@ export class WaitlistPanel {
   );
 
   protected readonly note = computed(() =>
-    waitlistNote(this.teamCount(), this.maxTeams(), this.subject()),
+    this.promotionClosed()
+      ? WAITLIST_LOCKED_NOTE
+      : waitlistNote(this.teamCount(), this.maxTeams(), this.subject()),
   );
   protected readonly emptyText = computed(() => waitlistEmptyText(this.subject()));
 

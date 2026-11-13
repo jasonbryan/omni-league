@@ -31,6 +31,7 @@ import {
   TOURNAMENT_NOT_FOUND_CODE,
   type RegistrationClosedError,
 } from './lib/teamInput';
+import { bracketExists } from './lib/tournamentBracket';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import { getCurrentUser } from './lib/users';
 
@@ -84,6 +85,12 @@ async function registrableTournament(
     throw new ConvexError({ code: TOURNAMENT_NOT_FOUND_CODE });
   }
   const { tournament } = found;
+  if (await bracketExists(ctx, tournament._id)) {
+    throw new ConvexError({
+      code: 'registrationClosed',
+      message: TEAM_MESSAGES.tournamentBracketCreated,
+    } satisfies RegistrationClosedError);
+  }
   if (!registrationIsOpen(tournament, Date.now())) {
     throw new ConvexError({
       code: 'registrationClosed',

@@ -201,7 +201,15 @@ const FIELD_IDS: Record<DetailsField, string> = {
           <span class="text-sm font-medium">Structure</span>
           <p class="mt-1.5 text-sm">Bracket only</p>
         </div>
-        @if (hasSetsPerGame()) {
+        @if (hasSetsPerGame() && setsLocked()) {
+          <div data-slot="sets-per-game">
+            <span class="text-sm font-medium">Sets per game</span>
+            <p class="mt-1.5 text-sm">{{ storedSets() }}</p>
+            <p hlmFieldDescription class="mt-1.5">
+              The bracket is created, so sets per game cannot change.
+            </p>
+          </div>
+        } @else if (hasSetsPerGame()) {
           <app-chip-radio-group
             name="sets-per-game"
             legend="Sets per game"
@@ -287,6 +295,10 @@ export class TournamentDetailsForm implements OnInit {
   protected readonly undoNote = signal<string | null>(null);
 
   protected readonly hasSetsPerGame = computed(() => setsPerGameIsChosen(this.tournament().sport));
+  protected readonly setsLocked = computed(() => this.tournament().bracketCreated);
+  protected readonly storedSets = computed(() =>
+    this.tournament().setsPerGame === 3 ? 'Best of 3' : '1 set',
+  );
   protected readonly shownStatus = computed(() =>
     this.details.editedSinceLoad() ? null : this.status(),
   );
@@ -341,7 +353,7 @@ export class TournamentDetailsForm implements OnInit {
     const tournamentId = this.tournament().tournamentId;
     const outcome = await this.details.submit(
       this.online(),
-      this.hasSetsPerGame(),
+      this.hasSetsPerGame() && !this.setsLocked(),
       (values, expected) => this.updateCall.run({ tournamentId, ...values, expected }),
     );
     if (outcome.sent) {

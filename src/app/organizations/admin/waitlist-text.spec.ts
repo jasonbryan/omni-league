@@ -21,6 +21,9 @@ describe('waitlist text', () => {
         new ConvexError({ code: 'alreadyOnAnotherTeam', teamName: 'Sand Sharks', message: 'x' }),
       ),
     ).toEqual({ kind: 'captainOnTeam', teamName: 'Sand Sharks' });
+    expect(promoteFailureOf(new ConvexError({ code: 'bracketCreated', message: 'x' }))).toEqual({
+      kind: 'bracketCreated',
+    });
     expect(promoteFailureOf(new Error('Not allowed'))).toEqual({ kind: 'failed' });
   });
 
@@ -35,6 +38,9 @@ describe('waitlist text', () => {
       'Rosa Delgado is already on Sand Sharks.',
     );
     expect(text({ kind: 'alreadyPromoted' }).description).toBe('It has already been promoted.');
+    expect(text({ kind: 'bracketCreated' }).description).toBe(
+      'The bracket is created, so waiting teams cannot be promoted.',
+    );
     expect(text({ kind: 'failed' }).description).toBe('Check your connection and try again.');
     expect(promoteOfflineText('Late Lobsters')).toBe(
       'Late Lobsters is still waiting. Try again when you’re connected.',

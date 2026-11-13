@@ -136,6 +136,64 @@ describe('testing:seedTournamentTeam', () => {
   });
 });
 
+describe('testing:seedTournamentRosters', () => {
+  const ROSTERS = {
+    organizationSlug: 'e2e-org-t1u2',
+    tournamentSlug: 'gulf-coast-beach-open',
+    teams: [{ name: 'Sand Crabs' }, { name: 'Short Handed', players: 1 }],
+  };
+
+  test('throws with IS_TEST unset and writes nothing', async () => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(t.mutation(internal.testing.seedTournamentRosters, ROSTERS)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('teams').collect())).toEqual([]);
+  });
+
+  test('inserts each team with the minimum roster size, or the players asked for, through the roster writer', async () => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    const { teamIds } = await t.mutation(internal.testing.seedTournamentRosters, ROSTERS);
+    expect(teamIds).toHaveLength(2);
+    const teams = await t.run((ctx) => ctx.db.query('teams').collect());
+    expect(teams.map((team) => [team.name, team.rosterCount])).toEqual([
+      ['Sand Crabs', 2],
+      ['Short Handed', 1],
+    ]);
+    const tournament = await t.run((ctx) => ctx.db.query('tournaments').first());
+    expect(tournament?.teamCount).toBe(2);
+    const entries = await t.run((ctx) => ctx.db.query('rosterEntries').collect());
+    expect(entries.filter((entry) => entry.status === 'rostered')).toHaveLength(3);
+  });
+
+  test('can be called again for more teams', async () => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    await t.mutation(internal.testing.seedTournamentRosters, ROSTERS);
+    await t.mutation(internal.testing.seedTournamentRosters, {
+      ...ROSTERS,
+      teams: [{ name: 'Net Results' }],
+    });
+    expect(await t.run((ctx) => ctx.db.query('teams').collect())).toHaveLength(3);
+  });
+
+  test('refuses an unknown organization and an unknown tournament', async () => {
+    const t = await seeded();
+    await expect(
+      t.mutation(internal.testing.seedTournamentRosters, {
+        ...ROSTERS,
+        organizationSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(t.mutation(internal.testing.seedTournamentRosters, ROSTERS)).rejects.toThrow(
+      /No tournament/,
+    );
+  });
+});
+
 describe('testing:seedTournamentWaitlistEntry', () => {
   const ENTRY = {
     organizationSlug: 'e2e-org-t1u2',

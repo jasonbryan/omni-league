@@ -835,6 +835,7 @@ describe('tournaments.getForManagement', () => {
       sport: 'beachVolleyball',
       teamCount: 0,
       setsPerGame: 1,
+      bracketCreated: false,
     });
   });
 

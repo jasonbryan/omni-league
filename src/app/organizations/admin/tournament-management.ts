@@ -34,6 +34,7 @@ import { publicTournamentNames } from '../public-tournament/public-tournament-na
 import { publicTournamentPath } from '../public-tournament/public-tournament-path';
 import { AdminAlert } from './admin-alert';
 import { adminPath } from './admin-path';
+import { BracketPanel } from './bracket-panel';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import {
   PublishTournamentDialog,
@@ -51,6 +52,7 @@ import { WaitlistPanel } from './waitlist-panel';
   selector: 'app-tournament-management',
   imports: [
     AdminAlert,
+    BracketPanel,
     HlmBadge,
     HlmCard,
     HlmSkeleton,
@@ -77,7 +79,7 @@ import { WaitlistPanel } from './waitlist-panel';
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block', '[attr.inert]': 'publishOpen() ? "" : null' },
+  host: { class: 'block', '[attr.inert]': 'publishOpen() || recreateOpen() ? "" : null' },
   template: `
     @switch (state()) {
       @case ('ready') {
@@ -247,6 +249,13 @@ import { WaitlistPanel } from './waitlist-panel';
               [waitlist]="waitlist()"
               [teamCount]="tournament.teamCount"
               [maxTeams]="tournament.maximumTeams"
+              [promotionClosed]="tournament.bracketCreated"
+            />
+            <app-bracket-panel
+              class="mt-4 max-w-2xl md:mt-6"
+              [tournament]="tournament"
+              [view]="bracket()"
+              [retryHref]="retryHref()"
             />
             <section
               #editSection
@@ -315,6 +324,7 @@ export class TournamentManagement {
   protected readonly state = this.context.state;
   protected readonly tournament = this.context.tournament;
   protected readonly waitlist = this.context.waitlist;
+  protected readonly bracket = this.context.bracket;
   protected readonly dates = computed(() => {
     const tournament = this.tournament();
     return tournament ? seasonDates(tournament.startDate, tournament.endDate) : '';
@@ -345,9 +355,11 @@ export class TournamentManagement {
   private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
   private readonly publishDialog = viewChild(PublishTournamentDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
+  private readonly bracketPanel = viewChild(BracketPanel);
 
   protected readonly published = signal(false);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
+  protected readonly recreateOpen = computed(() => this.bracketPanel()?.dialogOpen() ?? false);
 
   constructor() {
     effect(() => this.landOnceTheFormRenders());

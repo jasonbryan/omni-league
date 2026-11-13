@@ -1,4 +1,5 @@
 import { ConvexError, type Value } from 'convex/values';
+import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
 import { TOURNAMENT_MESSAGES } from '../../../../convex/lib/tournamentInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from './button-classes';
@@ -39,6 +40,7 @@ const TOURNAMENT = {
   locations: [{ name: 'Pelican Shoals Sand Courts', address: '2150 Pelican Shoals Dr' }],
   minimumRosterSize: 2,
   teamCount: 3,
+  bracketCreated: false,
   ...HELD,
 };
 
@@ -139,6 +141,24 @@ describe('TournamentDetailsForm', () => {
       expect(sets('2')).toBeNull();
     });
 
+    it('shows sets per game as text with the reason once the bracket is created, and keeps the other fields editable', async () => {
+      await open({ ...TOURNAMENT, setsPerGame: 3, bracketCreated: true });
+      expect(sets('1')).toBeNull();
+      expect(sets('3')).toBeNull();
+      expect(text(section().querySelector('[data-slot="sets-per-game"]'))).toBe(
+        'Sets per gameBest of 3 The bracket is created, so sets per game cannot change.',
+      );
+      expect(input('maximum-teams').disabled).toBe(false);
+    });
+
+    it('shows the stored sets per game, not an unsaved choice, when a bracket locks it', async () => {
+      await open();
+      await chooseSets('3');
+      o.subscription(GET)!.emit({ ...TOURNAMENT, bracketCreated: true });
+      await o.flush();
+      expect(text(section().querySelector('[data-slot="sets-per-game"]'))).toContain('1 set');
+    });
+
     it('leaves sets per game out for a sport that has no choice', async () => {
       await open({ ...TOURNAMENT, sport: 'soccer', sportName: 'Soccer' });
       expect(sets('1')).toBeNull();
@@ -236,6 +256,36 @@ describe('TournamentDetailsForm', () => {
     });
   });
 
+  describe('a bracket that registration must not reopen', () => {
+    const reopened = () =>
+      new ConvexError({
+        field: 'registrationDeadline',
+        code: 'registrationReopened',
+        message: BRACKET_MESSAGES.registrationReopened,
+      });
+
+    it('shows the server’s refusal of a later deadline under Registration deadline, focuses it, and keeps the value', async () => {
+      await open({ ...TOURNAMENT, bracketCreated: true });
+      await type('registration-deadline', '2027-01-12');
+      await submit();
+      o.convex.calls[0].reject(reopened());
+      await o.flush();
+      expect(error('registration-deadline')).toBe(BRACKET_MESSAGES.registrationReopened);
+      expect(input('registration-deadline').value).toBe('2027-01-12');
+      expect(document.activeElement).toBe(input('registration-deadline'));
+    });
+
+    it('shows the same reason in the status when Undo is refused, and keeps Undo', async () => {
+      await saved();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].reject(reopened());
+      await o.flush();
+      expect(text(status())).toContain(BRACKET_MESSAGES.registrationReopened);
+      expect(text(undoButton())).toBe('Undo');
+    });
+  });
+
   describe('saving', () => {
     it('sends the values with what the form showed, and says Details saved with Undo', async () => {
       await open();
@@ -270,6 +320,13 @@ describe('TournamentDetailsForm', () => {
       await type('end-date', '');
       await submit();
       expect(o.convex.calls[0].args).not.toHaveProperty('endDate');
+    });
+
+    it('sends no sets per game once the bracket is created, so the held value stays', async () => {
+      await open({ ...TOURNAMENT, bracketCreated: true });
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('setsPerGame');
     });
 
     it('sends no sets per game for a sport that has none', async () => {
