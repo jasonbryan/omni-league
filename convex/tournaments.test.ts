@@ -1114,6 +1114,40 @@ describe('tournaments.getForCopy', () => {
     expect((await programOf(s, sourceId)).status).toBe('published');
   });
 
+  test('a published copy of a soccer tournament is listed publicly under soccer, and its draft is not', async () => {
+    const s = await setup();
+    const sourceId = await draftIn(s, {
+      sport: 'soccer',
+      playersPerSide: 7,
+      level: 'rec',
+      locationIds: [s.alpha],
+    });
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId: sourceId });
+    const { structure, bracketType, ...fields } = (await s.adminA.query(
+      api.tournaments.getForCopy,
+      args,
+    ))!;
+    expect([structure, bracketType]).toEqual(['bracket', 'single']);
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      organizationId: s.organizationA,
+      ...fields,
+      startDate: inDays(60),
+      registrationDeadline: inDays(50),
+    });
+    expect(slugsOf(await listPublic(s))).not.toContain(fields.slug);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    for (const sport of [undefined, 'soccer' as const]) {
+      const list = await listPublic(s, { ...(sport && { sport }) });
+      expect(slugsOf(list), String(sport)).toContain(fields.slug);
+      expect(list.rows.find((row) => row.slug === fields.slug)).toMatchObject({
+        name: 'Winter Doubles Classic',
+        sportName: 'Soccer',
+        startDate: inDays(60),
+      });
+    }
+    expect(slugsOf(await listPublic(s, { sport: 'beachVolleyball' }))).not.toContain(fields.slug);
+  });
+
   test('refuses a league organizer assigned to the source tournament, as it refuses an unassigned one', async () => {
     const s = await setup();
     const tournamentId = await draftIn(s);

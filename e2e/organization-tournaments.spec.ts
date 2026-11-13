@@ -674,6 +674,45 @@ test.describe('Tournaments: copying one to run it again', () => {
   });
 
   test(
+    'a copy stays off the organization page as a draft and, once published, is listed under Tournaments with the source’s sport',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tenant, copyPath } = await copyable(page);
+      const section = page.locator('#tournaments');
+      const names = section.locator(':scope > ul > li h3');
+      await page.goto(copyPath);
+      await page.locator('#start-date').fill('2031-06-12');
+      await page.locator('#registration-deadline').fill('2031-06-05');
+      await submit(page).click();
+      await expect(rows(page)).toHaveCount(2);
+      await expect(
+        rows(page).filter({ hasText: 'Jun 12, 2031' }).locator('[data-slot="badge"]'),
+      ).toHaveText('Draft');
+
+      await page.goto(`/organizations/${tenant.slug}`);
+      await expect(names).toHaveText(['Gulf Coast Beach Open']);
+
+      await page.goto(`/app/organizations/${tenant.slug}/tournaments/gulf-coast-beach-open-2`);
+      await publishButton(page).click();
+      await publishDialog(page).getByRole('button', { name: 'Publish tournament' }).click();
+      await expect(stateBadge(page)).toHaveText('Published');
+
+      await page.goto(`/organizations/${tenant.slug}`);
+      await expect(names).toHaveText(['Gulf Coast Beach Open', 'Gulf Coast Beach Open']);
+      const copy = section.locator(':scope > ul > li').nth(1);
+      await expect(copy).toContainText('Beach volleyball');
+      await expect(copy).toContainText('Jun 12, 2031');
+      expect(
+        (
+          await page.request.get(
+            `/organizations/${tenant.slug}/tournaments/gulf-coast-beach-open-2`,
+          )
+        ).status(),
+      ).toBe(200);
+    },
+  );
+
+  test(
     'a web address that is another organization’s tournament or unknown opens the form empty',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
