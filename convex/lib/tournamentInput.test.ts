@@ -6,6 +6,8 @@ import {
   MAX_TOURNAMENT_NAME_LENGTH,
   TOURNAMENT_FIELDS,
   TOURNAMENT_MESSAGES,
+  tournamentHasRoom,
+  tournamentIsFull,
   type TournamentDetailsValues,
   type TournamentValues,
 } from './tournamentInput';
@@ -222,4 +224,21 @@ describe('checkTournamentDetails', () => {
       'maximumTeamsInvalid',
     );
   });
+});
+
+describe('tournamentHasRoom and tournamentIsFull', () => {
+  test.each([
+    { teamCount: undefined, waitlistCount: undefined, room: true, full: false },
+    { teamCount: 3, waitlistCount: 0, room: true, full: false },
+    { teamCount: 4, waitlistCount: undefined, room: false, full: true },
+    { teamCount: 4, waitlistCount: 2, room: false, full: true },
+    { teamCount: 3, waitlistCount: 1, room: true, full: true },
+  ])(
+    'a tournament of 4 with $teamCount teams and $waitlistCount waiting has room $room and is full $full',
+    ({ teamCount, waitlistCount, room, full }) => {
+      const tournament = { teamCount, waitlistCount, maximumTeams: 4 };
+      expect(tournamentHasRoom(tournament)).toBe(room);
+      expect(tournamentIsFull(tournament)).toBe(full);
+    },
+  );
 });

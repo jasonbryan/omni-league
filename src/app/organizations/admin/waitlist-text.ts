@@ -1,6 +1,8 @@
 import { ConvexError } from 'convex/values';
 import { TEAM_MESSAGES } from '../../../../convex/lib/teamInput';
-import type { AlertText } from '../admin/alert-text';
+import type { AlertText } from './alert-text';
+
+export type WaitlistSubject = 'season' | 'tournament';
 
 export type PromoteFailure =
   | { kind: 'noRoom' }
@@ -29,11 +31,15 @@ export function promoteFailureText(
   failure: PromoteFailure,
   teamName: string,
   captainName: string,
+  subject: WaitlistSubject,
 ): AlertText {
   const title = `${teamName} could not be promoted.`;
   switch (failure.kind) {
     case 'noRoom':
-      return { title, description: TEAM_MESSAGES.noRoom };
+      return {
+        title,
+        description: subject === 'season' ? TEAM_MESSAGES.noRoom : TEAM_MESSAGES.noRoomInTournament,
+      };
     case 'captainOnTeam':
       return { title, description: `${captainName} is already on ${failure.teamName}.` };
     case 'alreadyPromoted':
@@ -52,18 +58,27 @@ export function promotedText(
   captainName: string,
   teamCount: number,
   maxTeams: number | undefined,
+  subject: WaitlistSubject,
 ): AlertText {
   const teams = maxTeams === undefined ? `${teamCount}` : `${teamCount} of ${maxTeams}`;
   return {
     title: `${teamName} is a team now.`,
-    description: `${captainName} is its captain and can invite players. The season has ${teams} teams.`,
+    description: `${captainName} is its captain and can invite players. The ${subject} has ${teams} teams.`,
   };
 }
 
-export function waitlistNote(teamCount: number, maxTeams: number | undefined): AlertText {
+export function waitlistEmptyText(subject: WaitlistSubject): string {
+  return `When the ${subject} is full, teams that register wait here in the order they joined.`;
+}
+
+export function waitlistNote(
+  teamCount: number,
+  maxTeams: number | undefined,
+  subject: WaitlistSubject,
+): AlertText {
   if (maxTeams !== undefined && teamCount >= maxTeams) {
     return {
-      title: 'The season is full',
+      title: `The ${subject} is full`,
       description: 'Raise the maximum teams to promote a waiting team.',
     };
   }

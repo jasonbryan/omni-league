@@ -25,6 +25,7 @@ import {
   insertTournamentTeamWithCaptain,
   isMinorEntry,
   registerTeamOrJoinWaitlist,
+  registerTournamentTeamOrJoinWaitlist,
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
@@ -527,6 +528,30 @@ export const seedTournamentTeam = internalMutation({
       captainUserId: captain._id,
     });
     return { teamId };
+  },
+});
+
+/** A team on the tournament's waitlist through the roster writer, skipping the registration window; the tournament must be full. */
+export const seedTournamentWaitlistEntry = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    teamName: v.string(),
+    captainEmail: v.string(),
+  },
+  returns: v.object({ position: v.number() }),
+  handler: async (ctx, { organizationSlug, tournamentSlug, teamName, captainEmail }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const captain = await userByEmail(ctx, captainEmail);
+    const result = await registerTournamentTeamOrJoinWaitlist(ctx, found.tournament, {
+      name: teamName,
+      captainUserId: captain._id,
+    });
+    if (result.status !== 'waitlisted') throw new Error('The tournament is not full');
+    return { position: result.position };
   },
 });
 

@@ -16,11 +16,16 @@ const OPEN: NonNullable<TournamentRegistrationAnswer> = {
   maximumTeams: 16,
   isFull: false,
   team: null,
+  waitlist: null,
 };
 const FULL: TournamentRegistrationAnswer = { ...OPEN, isFull: true };
 const ON_TEAM: TournamentRegistrationAnswer = {
   ...OPEN,
   team: { teamId: 'team-a' as Id<'teams'>, name: 'Sand Crabs', isCaptain: true, rosterCount: 1 },
+};
+const WAITLISTED: TournamentRegistrationAnswer = {
+  ...FULL,
+  waitlist: { teamName: 'Late Lobsters', position: 2 },
 };
 const BEFORE = Date.parse('2027-05-01T00:00:00Z');
 const AFTER = Date.parse('2027-06-10T00:00:00Z');
@@ -38,6 +43,9 @@ describe('registerTournamentState: the first state that applies', () => {
     ['full before the deadline', FULL, true, BEFORE, 'full'],
     ['full after the deadline', FULL, true, AFTER, 'closed'],
     ['full and on a team', { ...FULL, team: ON_TEAM.team }, true, BEFORE, 'on-team'],
+    ['waiting on the waitlist', WAITLISTED, true, BEFORE, 'waitlisted'],
+    ['waiting on the waitlist after the deadline', WAITLISTED, true, AFTER, 'waitlisted'],
+    ['waiting and on a team', { ...WAITLISTED, team: ON_TEAM.team }, true, BEFORE, 'on-team'],
     ['open with room', OPEN, true, BEFORE, 'form'],
   ])('%s', (_label, answer, signedIn, nowMs, expected) => {
     expect(registerTournamentState({ answer, signedIn, nowMs })).toBe(expected);

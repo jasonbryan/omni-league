@@ -11,9 +11,16 @@ export type ManagedTournament = NonNullable<
   FunctionReturnType<typeof api.tournaments.getForManagement>
 >;
 
+export type TournamentWaitlist = NonNullable<
+  FunctionReturnType<typeof api.waitlist.listForTournament>
+>;
+
 export type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
-/** The query waits until Convex has accepted the token, so its first answer is the caller's own. */
+/**
+ * The query waits until Convex has accepted the token, so its first answer is the caller's own. The waitlist is asked only once the
+ * tournament has answered, so a refused caller or an unknown web address never reaches it, and the page stays on its skeleton until both answer.
+ */
 @Injectable()
 export class TournamentContext {
   private readonly auth = inject(AuthService);
@@ -35,7 +42,7 @@ export class TournamentContext {
     this.auth.convexAuthenticated() ? this.params() : skipToken,
   );
 
-  readonly state = computed<TournamentState>(() => {
+  private readonly frameState = computed<TournamentState>(() => {
     const error = this.result.error();
     if (error) return isForbidden(error) ? 'forbidden' : 'error';
     const value = this.result.value();
@@ -43,7 +50,24 @@ export class TournamentContext {
     return value === null ? 'not-found' : 'ready';
   });
 
+  private readonly waitlistQuery = injectQuery(api.waitlist.listForTournament, () =>
+    this.frameState() === 'ready' ? this.params() : skipToken,
+  );
+
+  readonly state = computed<TournamentState>(() => {
+    const frame = this.frameState();
+    if (frame !== 'ready') return frame;
+    const waiting =
+      this.waitlistQuery.value() === undefined && this.waitlistQuery.error() === undefined;
+    return waiting ? 'loading' : 'ready';
+  });
+
   readonly tournament = computed<ManagedTournament | null>(() =>
     this.state() === 'ready' ? (this.result.value() ?? null) : null,
+  );
+
+  /** `null` when the list failed: the rest of the page still shows. */
+  readonly waitlist = computed<TournamentWaitlist | null>(() =>
+    this.state() === 'ready' ? (this.waitlistQuery.value() ?? null) : null,
   );
 }

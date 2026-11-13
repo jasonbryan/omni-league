@@ -135,3 +135,38 @@ describe('testing:seedTournamentTeam', () => {
     );
   });
 });
+
+describe('testing:seedTournamentWaitlistEntry', () => {
+  const ENTRY = {
+    organizationSlug: 'e2e-org-t1u2',
+    tournamentSlug: 'gulf-coast-beach-open',
+    teamName: 'Late Lobsters',
+    captainEmail: 'captain@example.test',
+  };
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.seedTournamentWaitlistEntry, ENTRY)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('waitlistEntries').collect())).toEqual([]);
+  });
+
+  test('refuses an unknown organization and an unknown tournament', async () => {
+    const t = await seeded();
+    await expect(
+      t.mutation(internal.testing.seedTournamentWaitlistEntry, {
+        ...ENTRY,
+        organizationSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(t.mutation(internal.testing.seedTournamentWaitlistEntry, ENTRY)).rejects.toThrow(
+      /No tournament/,
+    );
+  });
+});

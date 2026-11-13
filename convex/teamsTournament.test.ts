@@ -476,6 +476,7 @@ describe('tournaments.getForRegistration', () => {
       maximumTeams: 4,
       isFull: false,
       team: null,
+      waitlist: null,
     });
   });
 

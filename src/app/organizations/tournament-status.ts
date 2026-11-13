@@ -31,7 +31,6 @@ export function upcomingTournaments<T extends SeasonDates>(
   return tournaments.filter((tournament) => seasonPhase(tournament, nowMs) !== 'ended');
 }
 
-/** A full tournament has no waitlist, so while registration is open it reads Full and offers no Register link. */
 export function tournamentStatus(
   tournament: SeasonDates & { isFull?: boolean | undefined },
   nowMs: number,

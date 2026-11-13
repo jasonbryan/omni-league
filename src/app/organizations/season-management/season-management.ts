@@ -35,6 +35,7 @@ import { HlmBadge } from '../../ui/badge';
 import { formatDay } from '../admin/format-day';
 import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { CAP_NOTE } from '../admin/note-classes';
+import { WaitlistPanel } from '../admin/waitlist-panel';
 import { CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
@@ -42,7 +43,6 @@ import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-a
 import { placedText } from './place-free-agent-text';
 import { SeasonContext, type SeasonFreeAgents } from './season-context';
 import { SeasonLimits } from './season-limits';
-import { SeasonWaitlistPanel } from './season-waitlist-panel';
 import { seasonManagementPath } from './season-management-path';
 import { teamRowLines } from './team-row-lines';
 import { HlmCard } from '../../ui/card';
@@ -86,7 +86,7 @@ function localDay(ms: number): string {
     PlaceFreeAgentDialog,
     RouterLink,
     SeasonLimits,
-    SeasonWaitlistPanel,
+    WaitlistPanel,
   ],
   providers: [
     provideIcons({
@@ -291,8 +291,9 @@ function localDay(ms: number): string {
               </div>
             }
           </section>
-          <app-season-waitlist-panel
+          <app-waitlist-panel
             class="lg:col-span-2"
+            subject="season"
             [waitlist]="waitlist()"
             [teamCount]="season.teamCount"
             [maxTeams]="season.maxTeams"

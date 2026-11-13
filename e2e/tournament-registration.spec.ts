@@ -5,7 +5,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
-import { signUp } from './support/session';
+import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
 import { seedTournament } from './support/tournament';
 import { newUser, seedUser, type TestUser } from './support/users';
@@ -71,6 +71,8 @@ async function seed(): Promise<Seeded> {
 
 const registerPath = (tenant: Tenant, slug: string) =>
   `/app/organizations/${tenant.slug}/tournaments/${slug}/register`;
+const managementPath = (tenant: Tenant, slug: string) =>
+  `/app/organizations/${tenant.slug}/tournaments/${slug}`;
 
 async function seedTeam(tenant: Tenant, slug: string, name: string, captain: TestUser) {
   return (await convexRun('testing:seedTournamentTeam', {
@@ -170,7 +172,7 @@ test.describe('register a team for a tournament', () => {
     await screenshot(page, testInfo, '340-register-closed');
   });
 
-  test('full: the card reads Full with no action, and the register route offers no form', async ({
+  test('full: the card reads Full and offers the waitlist, and the register route is the waitlist form', async ({
     page,
   }, testInfo) => {
     const { tenant, paths } = await seed();
@@ -178,16 +180,49 @@ test.describe('register a team for a tournament', () => {
     await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
     await page.goto(paths.full);
     await expect(card(page).locator('p').first()).toHaveText('Full');
-    await expect(card(page).locator('a, button')).toHaveCount(0);
+    await expect(card(page)).not.toContainText('Registration open');
     await expectAccessible(page);
-    await screenshot(page, testInfo, '340-tournament-full');
+    await screenshot(page, testInfo, '341-tournament-full');
 
     await signUp(page, newUser('Third'));
-    await page.goto(registerPath(tenant, FULL));
-    await expect(alert(page)).toContainText('This tournament is full.');
-    await expect(teamName(page)).toHaveCount(0);
+    await page.goto(paths.full);
+    await card(page).getByRole('link', { name: 'Join the waitlist' }).click();
+    await expect(page).toHaveURL(`${baseURL}${registerPath(tenant, FULL)}`);
+    await expect(page.locator('main form [data-slot="alert"]')).toContainText(
+      'This tournament is full, so your team joins the waitlist.',
+    );
+    await expect(teamName(page)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Join the waitlist' })).toBeVisible();
     await expectAccessible(page);
-    await screenshot(page, testInfo, '340-register-full');
+    await screenshot(page, testInfo, '341-register-full');
+  });
+
+  test('a captain joins the waitlist of a full tournament, sees position 1, and sees it again after a reload', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    await seedTeam(tenant, FULL, 'One', await seedUser(newUser('One')));
+    await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
+    await signUp(page, newUser('Late'));
+    await page.goto(registerPath(tenant, FULL));
+    await teamName(page).fill('Late Lobsters');
+    await page.getByRole('button', { name: 'Join the waitlist' }).click();
+    const status = page
+      .getByRole('main')
+      .getByRole('status')
+      .filter({ hasText: 'is on the waitlist' });
+    await expect(status).toHaveText(
+      'Late Lobsters is on the waitlist, position 1. Your team is first in line. If an organizer gives your team a place, it appears under Your teams, and you can invite your players.',
+    );
+    await expect(status).toBeFocused();
+    await expect(page).toHaveURL(`${baseURL}${registerPath(tenant, FULL)}`);
+    await expect(page.getByRole('link', { name: 'Back to the tournament page' })).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '341-register-waitlisted');
+
+    await page.reload();
+    await expect(alert(page)).toContainText('Late Lobsters is on the waitlist, position 1.');
+    await expect(teamName(page)).toHaveCount(0);
   });
 
   test('full: the organization page shows Full on the row and the open card, with no Register link, and Registration open for a tournament with room', async ({
@@ -258,7 +293,7 @@ test.describe('register a team for a tournament', () => {
 });
 
 test.describe('register a team for a tournament: a refused name', () => {
-  test.use({ expectedConvexErrors: ['teams:registerForTournament'] });
+  test.use({ expectedConvexErrors: ['teams:registerForTournamentOrWaitlist'] });
 
   test('a taken name shows its message under the field and keeps the name', async ({
     page,
@@ -276,6 +311,92 @@ test.describe('register a team for a tournament: a refused name', () => {
     await expect(teamName(page)).toHaveValue('Sand  Crabs');
     await expectAccessible(page);
     await screenshot(page, testInfo, '340-register-taken');
+  });
+});
+
+test.describe('the waitlist of a full tournament: an organizer', () => {
+  test.use({ expectedConvexErrors: ['waitlist:promoteForTournament'] });
+
+  test('sees the waiting team with no roster entries, is refused a promotion with no room, raises the maximum, promotes it, and the captain sees the team', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const captain = newUser('Late');
+    const admin = newUser('Admin');
+    const [captainPage] = await Promise.all([otherUser(browser, captain), signUp(page, admin)]);
+    const { tenant } = await seed();
+    await convexRun('testing:addMembership', {
+      organizationSlug: tenant.slug,
+      email: admin.email,
+      role: 'orgAdmin',
+    });
+    await seedTeam(tenant, FULL, 'One', await seedUser(newUser('One')));
+    await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
+    await convexRun('testing:seedTournamentWaitlistEntry', {
+      organizationSlug: tenant.slug,
+      tournamentSlug: FULL,
+      teamName: 'Late Lobsters',
+      captainEmail: captain.email,
+    });
+
+    await page.goto(managementPath(tenant, FULL));
+    const panel = page.locator('#waitlist');
+    await expect(panel.getByRole('heading', { level: 2, name: 'Waitlist' })).toBeVisible();
+    await expect(panel.getByTestId('waitlist-count')).toHaveText('1 waiting');
+    await expect(panel.locator('[data-slot="alert"]')).toContainText('The tournament is full');
+    const row = panel.locator('#waitlist-list > li');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Late Lobsters');
+    await expect(row).toContainText('Position 1');
+    await expect(row).toContainText(`Captain: ${captain.name}`);
+    await expect(row.getByRole('link', { name: captain.email })).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '341-management-waitlist');
+
+    await panel.getByRole('button', { name: 'Promote Late Lobsters' }).click();
+    const refused = panel.locator('[role="alert"]');
+    await expect(refused).toContainText('Late Lobsters could not be promoted.');
+    await expect(refused).toContainText('The tournament is full. Raise the maximum teams first.');
+    await expect(refused).toBeFocused();
+    await expect(row).toHaveCount(1);
+    await screenshot(page, testInfo, '341-management-no-room');
+
+    const maximum = page.locator('#details-maximum-teams');
+    await maximum.fill('3');
+    await page
+      .locator('#edit-details form')
+      .getByRole('button', { name: /^Save changes/ })
+      .click();
+    await expect(page.locator('#edit-details [data-slot="save-status"]')).toContainText(
+      'Details saved.',
+    );
+    await expect(
+      panel.locator('[data-slot="alert"]').filter({ hasText: 'Room for 1 more team' }),
+    ).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Promote Late Lobsters' }).click();
+    const promoted = panel.locator('[role="status"][data-slot="alert"]');
+    await expect(promoted).toHaveText(
+      `Late Lobsters is a team now. ${captain.name} is its captain and can invite players. The tournament has 3 of 3 teams.`,
+    );
+    await expect(promoted).toBeFocused();
+    await expect(panel.getByTestId('waitlist-count')).toHaveCount(0);
+    await expect(panel).toContainText('No teams waiting');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '341-management-promoted');
+
+    await captainPage.goto('/app');
+    const teams = captainPage.getByRole('region', { name: 'Your teams' });
+    await expect(teams.getByRole('heading', { level: 3, name: 'Late Lobsters' })).toBeVisible();
+    await teams.getByRole('link', { name: 'Late Lobsters' }).click();
+    await expect(
+      captainPage.getByRole('heading', { level: 1, name: 'Late Lobsters' }),
+    ).toBeVisible();
+    await expect(captainPage.getByTestId('roster-count')).toHaveText('1 of 2 players');
+    const roster = captainPage.locator('section[aria-labelledby="roster-heading"] ul > li');
+    await expect(roster).toHaveCount(1);
+    await expect(roster).toContainText(captain.name);
+    await expect(roster).toContainText('Captain');
   });
 });
 
@@ -454,6 +575,37 @@ test.describe('invites and joining a tournament team', () => {
       );
       await expectAccessible(page);
       await screenshot(page, testInfo, '370-join-other-team');
+    });
+
+    test('a captain waiting on the tournament waitlist is refused, naming the waiting team and the tournament', async ({
+      page,
+    }, testInfo) => {
+      const { tenant } = await seed();
+      const captain = await seedUser(newUser('Captain'));
+      const { teamId } = await seedTeam(tenant, FULL, 'One', captain);
+      await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
+      const waiting = newUser('Waiting');
+      await signUp(page, waiting);
+      await convexRun('testing:seedTournamentWaitlistEntry', {
+        organizationSlug: tenant.slug,
+        tournamentSlug: FULL,
+        teamName: 'Late Lobsters',
+        captainEmail: waiting.email,
+      });
+      const token = await seedInvite(teamId, waiting.email);
+
+      await openLink(page, token);
+      await main(page).getByRole('button', { name: 'Accept invite' }).click();
+      const alert = main(page).getByRole('alert');
+      await expect(alert).toContainText(
+        'You’re on the waitlist with Late Lobsters in this tournament.',
+      );
+      await expect(alert).toContainText(
+        'Late Lobsters is at position 1. While it waits, you can’t join another team in this tournament or add a minor to one.',
+      );
+      await expect(alert).not.toContainText('season');
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '341-join-waitlisted');
     });
   });
 

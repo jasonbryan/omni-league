@@ -175,6 +175,8 @@ export default defineSchema({
     maximumTeams: v.number(),
     /** Kept by `convex/lib/rosterWrites.ts`; absent on a tournament with no team yet. */
     teamCount: v.optional(v.number()),
+    /** The `waiting` waitlist entries, kept by `convex/lib/rosterWrites.ts`; absent on a tournament with none yet. */
+    waitlistCount: v.optional(v.number()),
     /** The division's players per side. */
     minimumRosterSize: v.number(),
     structure: v.literal('bracket'),
@@ -331,15 +333,16 @@ export default defineSchema({
     .index('by_seasonId_and_userId', ['seasonId', 'userId'])
     .index('by_userId_and_status', ['userId', 'status']),
 
-  // Written only through `convex/lib/rosterWrites.ts`, which keeps the season's `waitlistCount`. A waiting entry is not a team or a
-  // roster entry, so it carries no fee; promotion turns it into a team.
+  // Written only through `convex/lib/rosterWrites.ts`, which keeps the parent's `waitlistCount`. A waiting entry is not a team or a
+  // roster entry, so it carries no fee; promotion turns it into a team. An entry has exactly one parent: `seasonId`, or `tournamentId`.
   waitlistEntries: defineTable({
     organizationId: v.id('organizations'),
-    seasonId: v.id('seasons'),
+    seasonId: v.optional(v.id('seasons')),
+    tournamentId: v.optional(v.id('tournaments')),
     /** The captain. */
     userId: v.id('users'),
     teamName: v.string(),
-    // `teamName` lowercased: a team name is unique across the season's teams and waiting entries.
+    // `teamName` lowercased: a team name is unique across the parent's teams and waiting entries.
     sortName: v.string(),
     status: waitlistEntryStatusValidator,
     requestedAt: v.number(),
@@ -349,7 +352,10 @@ export default defineSchema({
   })
     .index('by_seasonId_and_status_and_requestedAt', ['seasonId', 'status', 'requestedAt'])
     .index('by_seasonId_and_userId', ['seasonId', 'userId'])
-    .index('by_seasonId_and_sortName', ['seasonId', 'sortName']),
+    .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
+    .index('by_tournamentId_and_status_and_requestedAt', ['tournamentId', 'status', 'requestedAt'])
+    .index('by_tournamentId_and_userId', ['tournamentId', 'userId'])
+    .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName']),
 
   // An endpoint is an unguessable capability URL only its browser holds, so presenting it is proof
   // enough to move its row to the caller.

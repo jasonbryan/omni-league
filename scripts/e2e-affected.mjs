@@ -807,6 +807,12 @@ export const AREAS = [
     ]),
     specs: [...STAFF, 'validate-on-blur'],
   },
+  {
+    // The waitlist panel is on the season and the tournament management pages.
+    name: 'admin waitlist panel',
+    test: named('src/app/organizations/admin/', ['waitlist-panel', 'waitlist-text']),
+    specs: ['waitlist', 'season-management', 'tournament-registration'],
+  },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
     name: 'create organization',
@@ -859,6 +865,7 @@ export const AREAS = [
       'season-page',
       'app-home',
       'waitlist',
+      'tournament-registration',
     ],
   },
   {
@@ -1159,13 +1166,20 @@ export const AREAS = [
       'season-page',
       'app-home',
       'waitlist',
+      'tournament-registration',
     ],
   },
   {
     name: 'convex waitlist',
     test: (file) =>
       named('convex/', ['waitlist'])(file) || named('convex/lib/', ['waitlist'])(file),
-    specs: ['waitlist', ...TEAM_REGISTRATION, ...TEAM_JOIN, 'season-management'],
+    specs: [
+      'waitlist',
+      ...TEAM_REGISTRATION,
+      ...TEAM_JOIN,
+      'season-management',
+      'tournament-registration',
+    ],
   },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];

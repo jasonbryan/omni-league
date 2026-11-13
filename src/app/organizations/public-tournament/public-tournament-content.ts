@@ -92,8 +92,13 @@ const FACT_ICON =
               } @else if (card.kind === 'full') {
                 <p class="text-lg font-semibold tracking-tight">Full</p>
                 <p class="mt-2 text-sm text-muted-foreground">
-                  All {{ card.maximumTeams }} teams have registered.
+                  Join the waitlist and an organizer offers your team a place if one opens.
+                  Registration closes {{ card.closes }}.
                 </p>
+                <a [routerLink]="registerHref()" data-slot="button" [class]="registerButton"
+                  ><ng-icon name="lucideClock" data-icon="inline-start" aria-hidden="true" />Join
+                  the waitlist</a
+                >
               } @else {
                 <p class="text-lg font-semibold tracking-tight">Registration closed</p>
                 <p class="mt-2 text-sm text-muted-foreground">

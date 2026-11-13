@@ -355,14 +355,19 @@ describe('PublicTournamentPage registration card', () => {
     expect(link?.getAttribute('data-slot')).toBe('button');
   });
 
-  it('reads Full with no action when the tournament has reached its maximum teams', async () => {
+  it('reads full and offers the waitlist when the tournament has reached its maximum teams', async () => {
     const harness = await open();
     emit({ ...BEACH_OPEN, isFull: true });
     await settle(harness);
     expect(text(card(harness)?.querySelector('p'))).toBe('Full');
-    expect(spaced(card(harness))).toContain('All 16 teams have registered');
+    expect(spaced(card(harness))).toContain(
+      'Join the waitlist and an organizer offers your team a place if one opens. Registration closes Jun 5, 2027.',
+    );
     expect(spaced(card(harness))).not.toContain('Registration open');
-    expect(card(harness)?.querySelector('a, button')).toBeNull();
+    const link = card(harness)?.querySelector('a');
+    expect(text(link)).toBe('Join the waitlist');
+    expect(link?.getAttribute('href')).toBe(`/app${TOURNAMENT_PATH}/register`);
+    expect(link?.getAttribute('data-slot')).toBe('button');
   });
 
   it('shows Registration closed rather than Full once the deadline has passed', async () => {

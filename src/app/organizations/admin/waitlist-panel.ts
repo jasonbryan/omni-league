@@ -20,21 +20,22 @@ import {
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
-import { AdminAlert } from '../admin/admin-alert';
-import { AdminOfflineAlert } from '../admin/admin-offline-alert';
-import type { AlertText } from '../admin/alert-text';
-import { OUTLINE_BUTTON } from '../admin/button-classes';
-import { formatDay } from '../admin/format-day';
+import { HlmCard } from '../../ui/card';
 import { HlmSpinner } from '../../ui/spinner';
-import type { SeasonWaitlist } from './season-context';
+import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
+import type { AlertText } from './alert-text';
+import { OUTLINE_BUTTON } from './button-classes';
+import { formatDay } from './format-day';
 import {
   promotedText,
   promoteFailureOf,
   promoteFailureText,
   promoteOfflineText,
+  waitlistEmptyText,
   waitlistNote,
+  type WaitlistSubject,
 } from './waitlist-text';
-import { HlmCard } from '../../ui/card';
 
 const PANEL = 'overflow-hidden';
 const PANEL_HEAD =
@@ -60,9 +61,21 @@ function localDay(ms: number): string {
   return `${date.getFullYear()}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`;
 }
 
+/** The waiting teams in the order they joined, as `waitlist.listForOrganizer` and `waitlist.listForTournament` answer. */
+export interface WaitlistView {
+  rows: readonly {
+    waitlistEntryId: WaitlistEntryId;
+    teamName: string;
+    captainName: string;
+    captainEmail: string;
+    requestedAt: number;
+  }[];
+  waitlistCount: number;
+}
+
 /** Promote acts at once, with no confirmation: it only adds a team, and the result says what happened. */
 @Component({
-  selector: 'app-season-waitlist-panel',
+  selector: 'app-waitlist-panel',
   imports: [AdminAlert, AdminOfflineAlert, HlmCard, HlmSpinner, NgIcon],
   providers: [
     provideIcons({
@@ -181,7 +194,7 @@ function localDay(ms: number): string {
             /></span>
             <p class="mt-4 font-medium">No teams waiting</p>
             <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
-              When the season is full, teams that register wait here in the order they joined.
+              {{ emptyText() }}
             </p>
           </div>
         }
@@ -198,14 +211,16 @@ function localDay(ms: number): string {
     </section>
   `,
 })
-export class SeasonWaitlistPanel {
-  readonly waitlist = input.required<SeasonWaitlist | null>();
+export class WaitlistPanel {
+  readonly subject = input.required<WaitlistSubject>();
+  readonly waitlist = input.required<WaitlistView | null>();
   readonly teamCount = input.required<number>();
   readonly maxTeams = input<number | undefined>(undefined);
 
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly promoteEntry = injectMutation(api.waitlist.promote);
+  private readonly promoteSeasonEntry = injectMutation(api.waitlist.promote);
+  private readonly promoteTournamentEntry = injectMutation(api.waitlist.promoteForTournament);
   protected readonly online = injectOnline();
 
   protected readonly panel = PANEL;
@@ -230,7 +245,10 @@ export class SeasonWaitlistPanel {
     })),
   );
 
-  protected readonly note = computed(() => waitlistNote(this.teamCount(), this.maxTeams()));
+  protected readonly note = computed(() =>
+    waitlistNote(this.teamCount(), this.maxTeams(), this.subject()),
+  );
+  protected readonly emptyText = computed(() => waitlistEmptyText(this.subject()));
 
   protected async promote(row: {
     waitlistEntryId: WaitlistEntryId;
@@ -245,19 +263,24 @@ export class SeasonWaitlistPanel {
     this.result.set(null);
     this.promoting.set(row.waitlistEntryId);
     try {
-      const { teamCount, maxTeams } = await this.promoteEntry.run({
-        waitlistEntryId: row.waitlistEntryId,
-      });
+      const args = { waitlistEntryId: row.waitlistEntryId };
+      const { teamCount, maxTeams } =
+        this.subject() === 'season'
+          ? await this.promoteSeasonEntry.run(args)
+          : await this.promoteTournamentEntry.run(args);
       this.show({
         kind: 'promoted',
-        text: promotedText(row.teamName, row.captainName, teamCount, maxTeams),
+        text: promotedText(row.teamName, row.captainName, teamCount, maxTeams, this.subject()),
       });
     } catch (error) {
       const failure = error instanceof ConvexOfflineError ? null : promoteFailureOf(error);
       this.show(
         failure === null
           ? { kind: 'offline', description: promoteOfflineText(row.teamName) }
-          : { kind: 'refused', text: promoteFailureText(failure, row.teamName, row.captainName) },
+          : {
+              kind: 'refused',
+              text: promoteFailureText(failure, row.teamName, row.captainName, this.subject()),
+            },
       );
     } finally {
       this.promoting.set(null);

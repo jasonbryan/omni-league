@@ -33,7 +33,7 @@ const ROWS = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 2,
+  tournaments: 3,
 };
 const NONE = {
   organizations: 0,
@@ -1035,6 +1035,9 @@ describe('seed:demo', () => {
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
       DEMO_WAITLIST_ENTRY,
+      DEMO_FULL_TOURNAMENT,
+      DEMO_FULL_TOURNAMENT_TEAMS,
+      DEMO_TOURNAMENT_WAITLIST_ENTRY,
       DEMO_FREE_AGENT_PEOPLE,
       DEMO_FREE_AGENTS,
       ...functions
@@ -1065,6 +1068,9 @@ describe('seed:demo', () => {
     expect(DEMO_FULL_SEASON.leagueSlug).toBe('thursday-night-coed-2s');
     expect(DEMO_FULL_SEASON_TEAMS).toHaveLength(2);
     expect(DEMO_WAITLIST_ENTRY.teamName).toBe('Late Lobsters');
+    expect(DEMO_FULL_TOURNAMENT.tournamentSlug).toBe('gulf-coast-king-of-the-beach');
+    expect(DEMO_FULL_TOURNAMENT_TEAMS).toHaveLength(4);
+    expect(DEMO_TOURNAMENT_WAITLIST_ENTRY.teamName).toBe('Sunrise Setters');
     expect(DEMO_FREE_AGENT_PEOPLE).toHaveLength(3);
     expect(DEMO_FREE_AGENTS).toHaveLength(5);
     const exports = Object.entries(functions);
@@ -1187,7 +1193,7 @@ describe('seed:demo tournaments', () => {
     expect(second.tournaments).toBe(0);
     const { organizationId, location, program, tournaments, tournament } =
       await winterDoublesClassic(t);
-    expect(tournaments).toHaveLength(2);
+    expect(tournaments).toHaveLength(3);
     expect(program).toMatchObject({
       organizationId,
       type: 'tournament',
@@ -1248,24 +1254,23 @@ describe('seed:demo tournaments', () => {
     });
   });
 
-  test('lists Gulf Coast Beach Open, not the draft, on the page and the beach volleyball view of Gulf Coast Sport & Social, and among its open registrations', async () => {
+  test('lists the published tournaments, not the draft, on the page and the beach volleyball view of Gulf Coast Sport & Social, and among its open registrations', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const slug = 'gulf-coast-sport-social';
     const beach = { organizationSlug: slug, page: 1, sport: 'beachVolleyball' as const };
     const names = (rows: { name: string }[]) => rows.map((row) => row.name);
+    const PUBLISHED = ['Gulf Coast Beach Open', 'Gulf Coast King of the Beach'];
     expect(
       names((await t.query(api.tournaments.listPublic, { organizationSlug: slug, page: 1 })).rows),
-    ).toEqual(['Gulf Coast Beach Open']);
-    expect(names((await t.query(api.tournaments.listPublic, beach)).rows)).toEqual([
-      'Gulf Coast Beach Open',
-    ]);
+    ).toEqual(PUBLISHED);
+    expect(names((await t.query(api.tournaments.listPublic, beach)).rows)).toEqual(PUBLISHED);
     expect((await t.query(api.tournaments.listPublic, { ...beach, sport: 'soccer' })).rows).toEqual(
       [],
     );
     expect(
       names(await t.query(api.tournaments.listOpenForOrganization, { organizationSlug: slug })),
-    ).toEqual(['Gulf Coast Beach Open']);
+    ).toEqual(PUBLISHED);
   });
 
   test('adds only the tournament whose web address is free where a program holds the other', async () => {
@@ -1285,9 +1290,9 @@ describe('seed:demo tournaments', () => {
       });
     });
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.tournaments).toBe(1);
+    expect(result.tournaments).toBe(2);
     const held = await winterDoublesClassic(t);
-    expect(held.tournaments).toHaveLength(1);
+    expect(held.tournaments).toHaveLength(2);
     expect(held.program?.type).toBe('league');
   });
 });

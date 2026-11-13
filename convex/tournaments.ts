@@ -10,7 +10,11 @@ import {
   requireStaffOrForbidden,
 } from './lib/access';
 import { getCurrentUser } from './lib/users';
-import { adultEntryInTournament } from './lib/rosterWrites';
+import {
+  adultEntryInTournament,
+  waitingEntryInTournament,
+  waitlistPosition,
+} from './lib/rosterWrites';
 import { isChoosableSlug, slugify } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
@@ -471,6 +475,7 @@ export const getForRegistration = query({
       maximumTeams: v.number(),
       isFull: v.boolean(),
       team: v.union(v.null(), registrationTeamValidator),
+      waitlist: v.union(v.null(), v.object({ teamName: v.string(), position: v.number() })),
     }),
   ),
   handler: async (ctx, { orgSlug, tournamentSlug }) => {
@@ -483,6 +488,7 @@ export const getForRegistration = query({
     const user = await getCurrentUser(ctx);
     const entry = user ? await adultEntryInTournament(ctx, tournament._id, user._id) : null;
     const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
+    const waiting = user ? await waitingEntryInTournament(ctx, tournament._id, user._id) : null;
     return {
       organizationName: organization.name,
       name: program.name,
@@ -502,6 +508,10 @@ export const getForRegistration = query({
               rosterCount: team.rosterCount,
             }
           : null,
+      waitlist: waiting && {
+        teamName: waiting.teamName,
+        position: await waitlistPosition(ctx, waiting),
+      },
     };
   },
 });

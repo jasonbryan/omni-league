@@ -335,6 +335,31 @@ describe('JoinTeamPage', () => {
       expectSelfBlocked(ctx.page, 'Not available: you’re on Net Results in this tournament.');
     });
 
+    it('on a tournament waitlist: names the waiting team and says tournament, not season', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(TOURNAMENT_INVITE);
+      await ctx.signIn();
+      ctx.accept()?.click();
+      await ctx.flush();
+      ctx.call()?.reject(
+        new ConvexError({
+          code: 'onWaitlist',
+          teamName: 'Late Lobsters',
+          position: 2,
+          message: "You're on the waitlist with Late Lobsters in this tournament.",
+        }),
+      );
+      await ctx.flush();
+      const alert = ctx.page.querySelector('[role="alert"]');
+      expect([
+        text(alert?.querySelector('[data-slot="alert-title"]')),
+        text(alert?.querySelector('[data-slot="alert-description"]')),
+      ]).toEqual([
+        'You’re on the waitlist with Late Lobsters in this tournament.',
+        'Late Lobsters is at position 2. While it waits, you can’t join another team in this tournament or add a minor to one. Leaving the waitlist isn’t possible yet.',
+      ]);
+    });
+
     it('on success: names the tournament as the roster’s', async () => {
       const ctx = await open({ signedIn: true });
       await ctx.emitInvite(TOURNAMENT_INVITE);

@@ -57,6 +57,8 @@ describe('TournamentDetailsForm', () => {
     await o.flush();
     o.subscription(GET)!.emit(tournament);
     await o.flush();
+    o.subscription('waitlist:listForTournament')?.emit({ rows: [], waitlistCount: 0 });
+    await o.flush();
   }
 
   const section = () => page.querySelector<HTMLElement>('#edit-details')!;

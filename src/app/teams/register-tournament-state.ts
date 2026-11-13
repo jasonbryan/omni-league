@@ -8,9 +8,9 @@ export type TournamentRegistrationAnswer = FunctionReturnType<
 >;
 
 export type RegisterTournamentState =
-  'loading' | 'not-found' | 'signed-out' | 'on-team' | 'closed' | 'full' | 'form';
+  'loading' | 'not-found' | 'signed-out' | 'on-team' | 'waitlisted' | 'closed' | 'full' | 'form';
 
-/** "On a team" comes before "closed", so a rostered player still reaches their team after the deadline. A tournament has no waitlist, so "full" offers no form. */
+/** "On a team" and "waitlisted" come before "closed", so a rostered player still reaches their team, and a waiting captain still sees their place, after the deadline. "Full" offers the waitlist form. */
 export function registerTournamentState({
   answer,
   signedIn,
@@ -24,6 +24,7 @@ export function registerTournamentState({
   if (answer === null) return 'not-found';
   if (!signedIn) return 'signed-out';
   if (answer.team) return 'on-team';
+  if (answer.waitlist) return 'waitlisted';
   if (!registrationIsOpen(answer, nowMs)) return 'closed';
   return answer.isFull ? 'full' : 'form';
 }

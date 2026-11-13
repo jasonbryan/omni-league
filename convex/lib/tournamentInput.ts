@@ -20,12 +20,19 @@ export const MAX_TOURNAMENT_NAME_LENGTH = 100;
 export const MIN_MAXIMUM_TEAMS = 2;
 export const MAX_MAXIMUM_TEAMS = 128;
 
-/** A tournament takes no waitlist, so reaching its maximum teams is the end of registration. */
-export function tournamentIsFull(tournament: {
+export interface TournamentTeamLimit {
   teamCount?: number | undefined;
+  waitlistCount?: number | undefined;
   maximumTeams: number;
-}): boolean {
-  return (tournament.teamCount ?? 0) >= tournament.maximumTeams;
+}
+
+export function tournamentHasRoom({ teamCount, maximumTeams }: TournamentTeamLimit): boolean {
+  return (teamCount ?? 0) < maximumTeams;
+}
+
+/** Full for registration: while any team waits, a new team joins the waitlist behind it even when there is room. */
+export function tournamentIsFull(tournament: TournamentTeamLimit): boolean {
+  return !tournamentHasRoom(tournament) || (tournament.waitlistCount ?? 0) > 0;
 }
 
 export type TournamentField =
