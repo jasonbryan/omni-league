@@ -17,6 +17,8 @@ const ORGANIZATION_LISTS = [
   'organizations:listPublicLeagues',
   'organizations:listPublicLocations',
   'seasons:listOpenForOrganization',
+  'tournaments:listPublic',
+  'tournaments:listOpenForOrganization',
   'organizations:listPublicLeagueFacets',
 ];
 const SKELETONS = ['organization-skeleton', 'league-skeleton', 'season-skeleton'];
@@ -118,7 +120,7 @@ test.describe('a hard load of a public page', () => {
     });
   }
 
-  // Signed in, the client sends all five subscriptions in one frame on a hard load, so the header cannot show alone.
+  // Signed in, the client sends all seven subscriptions in one frame on a hard load, so the header cannot show alone.
   test('of an organization with no leagues, answered with the client shell, with its lists subscribed after the header shows, has a layout shift below 0.1 when signed out', async ({
     page,
   }) => {

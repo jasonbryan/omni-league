@@ -8,7 +8,13 @@ import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
-import { numberedLocations, seedTenant, type LeagueSeed, type Tenant } from './support/tenant';
+import {
+  dateFromToday,
+  numberedLocations,
+  seedTenant,
+  type LeagueSeed,
+  type Tenant,
+} from './support/tenant';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -300,6 +306,79 @@ test.describe('the sport view: pages', () => {
       expect(namesIn(sectionOf(html, 'leagues'))).toEqual(['Soccer League 6', 'Soccer League 7']);
       expect(canonicalHrefs(html)).toEqual([`${ORIGIN}${path}?page=2`]);
       expect(html).toContain('Leagues pages');
+    },
+  );
+});
+
+test.describe('the sport view: tournaments', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  const textOfSection = (html: string, id: string) => {
+    const at = html.indexOf(`id="${id}"`);
+    return at === -1
+      ? undefined
+      : textOf(html.slice(html.indexOf('>', at) + 1, html.indexOf('</section>', at)));
+  };
+
+  test(
+    'lists the tournaments of the sport under a heading that names it, and no section for a sport with none',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenant({
+        name: 'E2E Sport Tournaments',
+        locations: [BAYSIDE, NORTH_BEACH],
+        leagues: [
+          { name: 'Coed 7v7 Rec', sport: 'soccer', locations: [BAYSIDE.name] },
+          { name: 'Thursday Coed 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
+          { name: 'Slow Pitch', sport: 'softball', locations: [BAYSIDE.name] },
+        ],
+        tournaments: [
+          {
+            name: 'Gulf Coast Beach Open',
+            slug: 'gulf-coast-beach-open',
+            sport: 'beachVolleyball',
+            locations: [NORTH_BEACH.name],
+            division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+            startDate: dateFromToday(30),
+            endDate: dateFromToday(31),
+            registrationDeadline: dateFromToday(23),
+          },
+          {
+            name: 'Bayside Soccer Cup',
+            slug: 'bayside-soccer-cup',
+            sport: 'soccer',
+            locations: [BAYSIDE.name],
+            startDate: dateFromToday(40),
+            endDate: dateFromToday(41),
+            registrationDeadline: dateFromToday(33),
+          },
+        ],
+      });
+
+      const beach = await fetchRawHtml(request, `${tenant.path}/sports/beach-volleyball`);
+      expect(beach.status).toBe(200);
+      const beachSection = textOfSection(beach.html, 'tournaments');
+      expect(beachSection).toMatch(
+        /^Beach volleyball tournaments Gulf Coast Beach Open Coed · 2v2 · Open Beach volleyball · North Beach Sand Courts Registration open /,
+      );
+      expect(beachSection).not.toContain('Bayside Soccer Cup');
+      expect(beach.html).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${tenant.path}/tournaments/gulf-coast-beach-open#registration"`,
+        ),
+      );
+      const open = textOfSection(beach.html, 'registration-open');
+      expect(open).toContain('Gulf Coast Beach Open');
+      expect(open).not.toContain('Bayside Soccer Cup');
+
+      const soccer = await fetchRawHtml(request, `${tenant.path}/sports/soccer`);
+      expect(textOfSection(soccer.html, 'tournaments')).toMatch(
+        /^Soccer tournaments Bayside Soccer Cup /,
+      );
+
+      const softball = await fetchRawHtml(request, `${tenant.path}/sports/softball`);
+      expect(softball.status).toBe(200);
+      expect(softball.html).not.toContain('id="tournaments"');
     },
   );
 });

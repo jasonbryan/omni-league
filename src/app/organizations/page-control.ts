@@ -47,9 +47,14 @@ export function pageWindow(page: number, pageCount: number): PageWindowItem[] {
   return items;
 }
 
-export function rangeText(page: number, total: number): string {
+export function rangeText(page: number, total: number, shown?: number): string {
   const first = (page - 1) * LIST_PAGE_SIZE + 1;
-  const last = Math.min(page * LIST_PAGE_SIZE, total);
+  if (shown === 0) return `0 of ${total}`;
+  const last = Math.min(
+    page * LIST_PAGE_SIZE,
+    total,
+    shown === undefined ? Infinity : first + shown - 1,
+  );
   return `${first}–${last} of ${total}`;
 }
 
@@ -159,6 +164,8 @@ export class PageControl {
   readonly page = input.required<number>();
   readonly pageCount = input.required<number>();
   readonly total = input.required<number>();
+  /** The rows on screen, when a row can leave the page after the query answered. */
+  readonly shown = input<number | undefined>(undefined);
   readonly path = input.required<string>();
   readonly fragment = input.required<string | undefined>();
   readonly queryFor = input<(page: number) => Params>(listPageQuery);
@@ -166,7 +173,7 @@ export class PageControl {
 
   protected readonly pageSize = LIST_PAGE_SIZE;
   protected readonly ghostButton = GHOST_BUTTON;
-  protected readonly range = computed(() => rangeText(this.page(), this.total()));
+  protected readonly range = computed(() => rangeText(this.page(), this.total(), this.shown()));
   protected readonly items = computed(() => pageWindow(this.page(), this.pageCount()));
 
   protected query(page: number): Params {

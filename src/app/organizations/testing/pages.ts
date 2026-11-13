@@ -94,7 +94,15 @@ export const GULF_COAST: PublicOrganizationPage = {
 };
 
 export function queryResults(page: PublicOrganizationPage): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
+  const {
+    leagues,
+    locations,
+    openSeasons = [],
+    tournaments = [],
+    openTournaments = [],
+    facets = [],
+    ...header
+  } = page;
   const list = (rows: unknown[], total: number) => ({
     rows,
     page: 1,
@@ -106,6 +114,8 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
     'organizations:listPublicLeagues': list(leagues, header.leagueCount),
     'organizations:listPublicLocations': list(locations, header.locationCount),
     'seasons:listOpenForOrganization': openSeasons,
+    'tournaments:listPublic': list(tournaments, tournaments.length),
+    'tournaments:listOpenForOrganization': openTournaments,
     'organizations:listPublicLeagueFacets': facets,
   };
 }
@@ -114,9 +124,18 @@ export function sportQueryResults(
   page: PublicOrganizationPage,
   segment: string,
 ): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
+  const {
+    leagues,
+    locations,
+    openSeasons = [],
+    tournaments = [],
+    openTournaments = [],
+    facets = [],
+    ...header
+  } = page;
   const sport = header.sports.find((entry) => entry.segment === segment);
   if (!sport) throw new Error(`No sport ${segment}`);
+  const sportTournaments = tournaments.filter((row) => row.sportName === sport.name);
   const list = (rows: unknown[], total: number) => ({
     rows,
     page: 1,
@@ -135,6 +154,10 @@ export function sportQueryResults(
     ),
     'seasons:listOpenForOrganization': openSeasons.filter(
       (season) => season.league.sportName === sport.name,
+    ),
+    'tournaments:listPublic': list(sportTournaments, sportTournaments.length),
+    'tournaments:listOpenForOrganization': openTournaments.filter(
+      (row) => row.sportName === sport.name,
     ),
     'organizations:listPublicLeagueFacets': facets,
   };
@@ -197,13 +220,21 @@ export const PAGED: PublicOrganizationPage = {
   })),
 };
 
-/** The four results for one URL: the organization page, or the sport view of `segment`. */
+/** The results for one URL: the organization page, or the sport view of `segment`. */
 export function pagedResults(
   page: PublicOrganizationPage,
-  pages: { leagues?: number; locations?: number } = {},
+  pages: { leagues?: number; locations?: number; tournaments?: number } = {},
   segment?: string,
 ): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
+  const {
+    leagues,
+    locations,
+    openSeasons = [],
+    tournaments = [],
+    openTournaments = [],
+    facets = [],
+    ...header
+  } = page;
   const sport =
     segment === undefined ? undefined : header.sports.find((entry) => entry.segment === segment);
   if (segment !== undefined && !sport) throw new Error(`No sport ${segment}`);
@@ -213,6 +244,9 @@ export function pagedResults(
   const shownLocations = sport
     ? locations.filter((location) => location.sportNames?.includes(sport.name))
     : locations;
+  const shownTournaments = sport
+    ? tournaments.filter((row) => row.sportName === sport.name)
+    : tournaments;
   return {
     'organizations:getPublicPage': header,
     'organizations:listPublicLeagues': listPage(
@@ -228,6 +262,10 @@ export function pagedResults(
     'seasons:listOpenForOrganization': sport
       ? openSeasons.filter((season) => season.league.sportName === sport.name)
       : openSeasons,
+    'tournaments:listPublic': listPage(shownTournaments, pages.tournaments ?? 1),
+    'tournaments:listOpenForOrganization': sport
+      ? openTournaments.filter((row) => row.sportName === sport.name)
+      : openTournaments,
     'organizations:listPublicLeagueFacets': facets,
   };
 }

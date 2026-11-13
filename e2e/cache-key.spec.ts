@@ -3,7 +3,13 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
-import { numberedLocations, numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
+import {
+  dateFromToday,
+  numberedLocations,
+  numberedSeasons,
+  seedSeasons,
+  seedTenant,
+} from './support/tenant';
 
 /**
  * Paths the edge function answers (server and client routes), one per route kind. Add one for every
@@ -379,13 +385,13 @@ test.describe('query strings and the CDN', () => {
 const PUBLIC_PAGE_CACHE = 'public,max-age=0,s-maxage=60,stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
 
-const rowIdsOf = (body: string, kind: 'league' | 'location') =>
+const rowIdsOf = (body: string, kind: 'league' | 'location' | 'tournament') =>
   [...body.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
 const canonicalOf = (body: string) => {
   const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(body)?.[0] ?? '';
   return /\bhref="([^"]*)"/.exec(tag)?.[1]?.replaceAll('&amp;', '&');
 };
-const rowIds = (kind: 'league' | 'location', from: number, to: number) =>
+const rowIds = (kind: 'league' | 'location' | 'tournament', from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
 
 /**
@@ -518,6 +524,76 @@ test.describe('numbered pages of the organization page and the sport view', () =
         expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
         expect(response.headers.location, sample(token)).toBeUndefined();
       }
+    },
+  );
+});
+
+test.describe('the tournaments page of the organization page', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
+
+  async function sevenTournaments(): Promise<string> {
+    const location = { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' };
+    const tenant = await seedTenant({
+      name: 'E2E Cache Key Tournaments',
+      locations: [location],
+      leagues: [{ name: 'Alpha League', sport: 'soccer', locations: [location.name] }],
+      tournaments: Array.from({ length: 7 }, (_, i) => ({
+        name: `Open ${i + 1}`,
+        slug: `open-${i + 1}`,
+        locations: [location.name],
+        startDate: dateFromToday(20 + i),
+        endDate: dateFromToday(20 + i),
+        registrationDeadline: dateFromToday(10),
+      })),
+    });
+    return tenant.path;
+  }
+
+  test(
+    'a page that is not valid or past the last renders page 1, cacheable, with no Location and none of the value; ?tournamentsPage=2 holds the last 2 and never gets another page’s body',
+    RAW_HTTP,
+    async () => {
+      const path = await sevenTournaments();
+      for (const query of [
+        '?tournamentsPage=0',
+        '?tournamentsPage=3',
+        '?tournamentsPage=2.5',
+        '?tournamentsPage=abc',
+        '?tournamentsPage=2&tournamentsPage=3',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+          PUBLIC_PAGE_CACHE,
+        );
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(rowIdsOf(response.body, 'tournament'), query).toEqual(rowIds('tournament', 1, 5));
+        expect(canonicalOf(response.body), query).toBe(`${ORIGIN}${path}`);
+        expect(response.body, query).not.toContain(query.slice(1));
+      }
+      for (const sample of [
+        (c: string) => `?tournamentsPage=${c}`,
+        (c: string) => `?tournamentsPage=2&tournamentsPage=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+      }
+
+      const expected: Record<string, string[]> = {
+        '?tournamentsPage=2': ['tournament-6', 'tournament-7'],
+        '': rowIds('tournament', 1, 5),
+      };
+      for (const query of ['?tournamentsPage=2', '', '?tournamentsPage=2', '']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(rowIdsOf(response.body, 'tournament'), query).toEqual(expected[query]);
+      }
+      const second = await rawGet(`${path}?tournamentsPage=2`);
+      expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?tournamentsPage=2`);
     },
   );
 });
