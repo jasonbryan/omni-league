@@ -290,7 +290,7 @@ export default defineSchema({
       'minorName',
       'status',
     ])
-    .index('by_tournamentId_and_userId', ['tournamentId', 'userId'])
+    .index('by_tournamentId_and_userId_and_minorName', ['tournamentId', 'userId', 'minorName'])
     .index('by_userId_and_status', ['userId', 'status']),
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.

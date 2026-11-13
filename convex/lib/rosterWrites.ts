@@ -48,7 +48,7 @@ type ReadCtx = Pick<QueryCtx, 'db'>;
 
 export const BACKFILL_TEAM_COUNT_SCAN_LIMIT = 1000;
 
-/** More than one person's entries in one tournament: their own, and a guardian's minors, removed ones included. */
+/** Reads one person's newest adult entries in a tournament, removed ones included; a rostered one is the newest. */
 export const TOURNAMENT_ENTRIES_READ_LIMIT = 100;
 
 // Season rules and counters have no meaning for a tournament team, so a season-only caller that reaches one refuses.
@@ -79,28 +79,33 @@ export async function adultEntryInSeason(
     .first();
 }
 
-/** Removed ones included, so the minor limit counts them. */
-async function entriesInTournament(
-  ctx: ReadCtx,
-  tournamentId: Id<'tournaments'>,
-  userId: Id<'users'>,
-): Promise<Doc<'rosterEntries'>[]> {
-  return ctx.db
-    .query('rosterEntries')
-    .withIndex('by_tournamentId_and_userId', (q) =>
-      q.eq('tournamentId', tournamentId).eq('userId', userId),
-    )
-    .order('desc')
-    .take(TOURNAMENT_ENTRIES_READ_LIMIT);
-}
-
 export async function adultEntryInTournament(
   ctx: ReadCtx,
   tournamentId: Id<'tournaments'>,
   userId: Id<'users'>,
 ): Promise<Doc<'rosterEntries'> | null> {
-  const entries = await entriesInTournament(ctx, tournamentId, userId);
-  return entries.find((entry) => entry.status === 'rostered' && !isMinorEntry(entry)) ?? null;
+  const entries = await ctx.db
+    .query('rosterEntries')
+    .withIndex('by_tournamentId_and_userId_and_minorName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('userId', userId).eq('minorName', undefined),
+    )
+    .order('desc')
+    .take(TOURNAMENT_ENTRIES_READ_LIMIT);
+  return entries.find((entry) => entry.status === 'rostered') ?? null;
+}
+
+/** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`, and no adult entry a re-invited guardian piles up can push one out of the read. */
+async function minorEntriesInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  guardianUserId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return ctx.db
+    .query('rosterEntries')
+    .withIndex('by_tournamentId_and_userId_and_minorName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('userId', guardianUserId).gte('minorName', ''),
+    )
+    .take(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
 }
 
 export async function rosteredEntriesInTournament(
@@ -108,12 +113,10 @@ export async function rosteredEntriesInTournament(
   tournamentId: Id<'tournaments'>,
   userId: Id<'users'>,
 ): Promise<Doc<'rosterEntries'>[]> {
-  const rostered = (await entriesInTournament(ctx, tournamentId, userId)).filter(
-    (entry) => entry.status === 'rostered',
-  );
-  const adult = rostered.find((entry) => !isMinorEntry(entry));
-  const minors = rostered.filter(isMinorEntry);
-  return adult ? [adult, ...minors] : minors;
+  const adult = await adultEntryInTournament(ctx, tournamentId, userId);
+  const minors = await minorEntriesInTournament(ctx, tournamentId, userId);
+  const rosteredMinors = minors.filter((entry) => entry.status === 'rostered');
+  return adult ? [adult, ...rosteredMinors] : rosteredMinors;
 }
 
 export async function adultEntryInTeamParent(
@@ -156,7 +159,7 @@ async function minorEntriesIn(
   guardianUserId: Id<'users'>,
 ): Promise<Doc<'rosterEntries'>[]> {
   return parent.tournamentId !== undefined
-    ? (await entriesInTournament(ctx, parent.tournamentId, guardianUserId)).filter(isMinorEntry)
+    ? minorEntriesInTournament(ctx, parent.tournamentId, guardianUserId)
     : minorEntriesInSeason(ctx, seasonIdOf(parent), guardianUserId);
 }
 

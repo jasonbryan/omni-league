@@ -42,7 +42,7 @@ async function teamOf(ctx: Pick<QueryCtx, 'db'>, teamId: Id<'teams'>): Promise<D
 
 // An action: Convex seeds the randomness of queries and mutations, which does not suit a bearer
 // secret.
-// eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: it turns away a caller with no identity, then insertPending authorizes the caller as the team's captain or an organizer of its league inside the transaction that writes the invite.
+// eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: it turns away a caller with no identity, then insertPending authorizes the caller as the team's captain or an organizer who runs its league or tournament inside the transaction that writes the invite.
 export const create = action({
   args: { teamId: v.id('teams'), email: v.string() },
   returns: v.object({

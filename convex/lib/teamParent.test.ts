@@ -223,6 +223,50 @@ describe('entries in the season or tournament a team plays in', () => {
     ).toEqual([]);
   });
 
+  test('finds a guardian’s minors, for the duplicate and limit checks, past a hundred adult re-entries', async () => {
+    const { s, crabs } = await teams();
+    const addAdultRounds = (rounds: number) =>
+      s.t.run(async (ctx) => {
+        const team = (await ctx.db.get('teams', crabs))!;
+        for (let round = 0; round < rounds; round++) {
+          await ctx.db.insert('rosterEntries', {
+            organizationId: s.a,
+            tournamentId: s.gulf,
+            teamId: team._id,
+            userId: s.guardian.userId,
+            status: 'removed',
+            source: 'invite',
+            addedAt: NOW,
+            addedByUserId: s.captain.userId,
+          });
+        }
+      });
+    await s.t.run(async (ctx) =>
+      addMinorEntry(ctx, (await ctx.db.get('teams', crabs))!, {
+        guardianUserId: s.guardian.userId,
+        minorName: 'Maya R.',
+        source: 'guardian',
+        addedByUserId: s.guardian.userId,
+      }),
+    );
+    await addAdultRounds(120);
+    await expect(
+      s.t.run(async (ctx) =>
+        addMinorEntry(ctx, (await ctx.db.get('teams', crabs))!, {
+          guardianUserId: s.guardian.userId,
+          minorName: 'maya r.',
+          source: 'guardian',
+          addedByUserId: s.guardian.userId,
+        }),
+      ),
+    ).rejects.toMatchObject({ data: { code: 'minorInSeason', inTournament: true } });
+    expect(
+      (await s.t.run((ctx) => rosteredEntriesInTournament(ctx, s.gulf, s.guardian.userId))).map(
+        (entry) => entry.minorName,
+      ),
+    ).toEqual(['Maya R.']);
+  });
+
   test('read the tournament for a tournament team and the season for a season team', async () => {
     const { s, crabs, sharks } = await teams();
     const read = (id: Id<'teams'>, userId: Id<'users'>) =>

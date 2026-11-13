@@ -295,6 +295,15 @@ describe('JoinTeamPage', () => {
       ]);
     });
 
+    it('draws the tournament link at least 44px tall under a touch pointer', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(TOURNAMENT_INVITE);
+      const link = page.querySelector('dl a')!;
+      expect(link.classList).toContain('inline-flex');
+      expect(link.classList).toContain('items-center');
+      expect(link.classList).toContain('pointer-coarse:min-h-11');
+    });
+
     it('a season invite carries no link in its details', async () => {
       const { page, emitInvite } = await open();
       await emitInvite(INVITE);

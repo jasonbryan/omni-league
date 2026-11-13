@@ -58,6 +58,7 @@ import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
 import { HlmCard } from '../ui/card';
+import { INLINE_LINK } from './team-links';
 import { HlmSkeleton } from '../ui/skeleton';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
@@ -70,7 +71,6 @@ interface RosterNotice {
 const PANEL = 'overflow-hidden';
 const BACK_LINK =
   'inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground pointer-coarse:min-h-11';
-const INLINE_LINK = 'underline underline-offset-4 hover:text-foreground';
 
 /** Routed to from registration with `{ registered: true }` in the navigation state, which a reload or a shared link never carries. */
 export interface TeamPageNavigationState {

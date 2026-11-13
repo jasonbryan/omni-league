@@ -53,6 +53,7 @@ import { Checkbox } from '../ui/checkbox';
 import { HlmFieldImports, HlmFieldSetImports } from '../ui/field';
 import { HlmInputImports } from '../ui/input';
 import { HlmSpinner } from '../ui/spinner';
+import { ROW_LINK } from './team-links';
 import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
 import { HlmCard } from '../ui/card';
@@ -319,7 +320,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                         <dt class="text-muted-foreground">{{ row.term }}</dt>
                         <dd class="font-medium sm:text-end">
                           @if (row.href) {
-                            <a [routerLink]="row.href" [class]="inlineLink">{{ row.value }}</a>
+                            <a [routerLink]="row.href" [class]="rowLink">{{ row.value }}</a>
                           } @else {
                             {{ row.value }}
                           }
@@ -593,7 +594,7 @@ export class JoinTeamPage {
   protected readonly returnToParams = { returnTo: JOIN_TEAM_PATH };
   protected readonly path = JOIN_TEAM_PATH;
   protected readonly offlineDescription = OFFLINE_DESCRIPTION;
-  protected readonly inlineLink = 'underline underline-offset-4 hover:text-foreground';
+  protected readonly rowLink = ROW_LINK;
 
   /** Read again only when the guard captures another link while the page is open; a new token starts the page over. */
   private readonly token = linkedSignal({
