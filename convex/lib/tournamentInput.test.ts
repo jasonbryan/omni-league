@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
+  checkTournamentDetails,
   checkTournamentFields,
   firstTournamentError,
   MAX_TOURNAMENT_NAME_LENGTH,
   TOURNAMENT_FIELDS,
   TOURNAMENT_MESSAGES,
+  type TournamentDetailsValues,
   type TournamentValues,
 } from './tournamentInput';
 
@@ -156,6 +158,68 @@ describe('TOURNAMENT_MESSAGES', () => {
   test('shares the web address format message with leagues', () => {
     expect(TOURNAMENT_MESSAGES.slugTaken('open-2027')).toBe(
       'open-2027 is already taken. Choose another web address.',
+    );
+  });
+});
+
+const DETAILS: TournamentDetailsValues = {
+  startDate: '2027-01-16',
+  endDate: '2027-01-17',
+  registrationDeadline: '2027-01-09',
+  maximumTeams: 16,
+  teamCount: 0,
+};
+
+const detailsErrorsOf = (change: Partial<TournamentDetailsValues>) =>
+  checkTournamentDetails({ ...DETAILS, ...change });
+
+describe('checkTournamentDetails', () => {
+  test('accepts valid details, a blank end date, and a maximum equal to the team count', () => {
+    expect(detailsErrorsOf({})).toEqual({});
+    expect(detailsErrorsOf({ endDate: '' })).toEqual({});
+    expect(detailsErrorsOf({ maximumTeams: 6, teamCount: 6 })).toEqual({});
+  });
+
+  test('applies the date and maximum rules of tournamentInput.ts, with the same messages', () => {
+    const create = checkTournamentFields({
+      ...VALID,
+      startDate: '2027-01-16',
+      endDate: '2027-01-15',
+      registrationDeadline: '2027-01-17',
+      maximumTeams: 129,
+    });
+    expect(
+      detailsErrorsOf({
+        endDate: '2027-01-15',
+        registrationDeadline: '2027-01-17',
+        maximumTeams: 129,
+      }),
+    ).toEqual(create);
+  });
+
+  test('refuses an empty maximum', () => {
+    expect(detailsErrorsOf({ maximumTeams: undefined }).maximumTeams?.code).toBe(
+      'maximumTeamsEmpty',
+    );
+  });
+
+  test('refuses a maximum below the team count, and says how many teams there are', () => {
+    expect(detailsErrorsOf({ maximumTeams: 3, teamCount: 4 }).maximumTeams).toEqual({
+      field: 'maximumTeams',
+      code: 'maximumTeamsBelowTeams',
+      message: '4 teams are registered. Enter 4 or more.',
+    });
+  });
+
+  test('words the Undo refusal by its reason, with the earlier maximum', () => {
+    expect(TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(6, 4)).toBe(
+      '6 teams are registered, more than the earlier maximum of 4, so it cannot be undone.',
+    );
+  });
+
+  test('refuses a maximum outside 2 to 128 with the range message, before it checks the team count', () => {
+    expect(detailsErrorsOf({ maximumTeams: 1, teamCount: 4 }).maximumTeams?.code).toBe(
+      'maximumTeamsInvalid',
     );
   });
 });

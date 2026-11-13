@@ -51,6 +51,9 @@ const DRAFT = {
   registrationDeadline: '2027-01-09',
   minimumRosterSize: 2,
   maximumTeams: 16,
+  sport: 'beachVolleyball',
+  teamCount: 0,
+  setsPerGame: 1,
 };
 const PUBLISHED = { ...DRAFT, status: 'published' };
 const AS_ORGANIZER = { ...DRAFT, role: 'leagueOrganizer' };
@@ -270,7 +273,10 @@ describe('TournamentManagement', () => {
           ['Pelican Shoals Sand Courts2150 Pelican Shoals Dr, Corpus Christi, TX 78418'],
         ],
       ]);
-      expectBareCards(main(), ['mt-6 max-w-2xl overflow-hidden']);
+      expectBareCards(main(), [
+        'mt-6 max-w-2xl overflow-hidden',
+        'mt-4 max-w-2xl overflow-clip md:mt-6',
+      ]);
     });
 
     it('offers Publish as a primary button that opens a dialog, and no public page link', () => {

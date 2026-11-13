@@ -75,7 +75,9 @@ export type TournamentInputCode =
   | 'endBeforeStart'
   | 'deadlineAfterStart'
   | 'maximumTeamsEmpty'
-  | 'maximumTeamsInvalid';
+  | 'maximumTeamsInvalid'
+  | 'maximumTeamsBelowTeams'
+  | 'changedSince';
 
 export interface TournamentInputError {
   field: TournamentField;
@@ -108,6 +110,13 @@ export const TOURNAMENT_MESSAGES = {
     `The registration deadline must be on or before the start date, ${formatCalendarDate(startDate)}.`,
   maximumTeamsEmpty: `Enter the most teams the tournament takes, from ${MIN_MAXIMUM_TEAMS} to ${MAX_MAXIMUM_TEAMS}.`,
   maximumTeamsInvalid: `Enter a whole number from ${MIN_MAXIMUM_TEAMS} to ${MAX_MAXIMUM_TEAMS}.`,
+  maximumTeamsBelowTeams: (teamCount: number) =>
+    `${teamCount} teams are registered. Enter ${teamCount} or more.`,
+  undoMaximumTeamsBelowTeams: (teamCount: number, earlierMaximum: number) =>
+    `${teamCount} teams are registered, more than the earlier maximum of ${earlierMaximum}, so it cannot be undone.`,
+  changedWhileEditing:
+    'Someone else changed this tournament while you were editing. Check the details and save again.',
+  changedSince: 'The tournament details changed since this save, so it cannot be undone.',
 } as const;
 
 export interface TournamentValues {
@@ -126,6 +135,17 @@ export interface TournamentValues {
   registrationDeadline: string;
   /** `undefined` while none is entered; text that is not a number is `NaN`. */
   maximumTeams: number | undefined;
+}
+
+export interface TournamentDetailsValues {
+  startDate: string;
+  /** Blank is a one-day tournament, which ends on its start date. */
+  endDate: string;
+  registrationDeadline: string;
+  /** `undefined` while none is entered; text that is not a number is `NaN`. */
+  maximumTeams: number | undefined;
+  /** The teams already registered, which the maximum cannot go below. */
+  teamCount: number;
 }
 
 type Errors = Partial<Record<TournamentField, TournamentInputError>>;
@@ -191,7 +211,11 @@ function divisionErrors(values: TournamentValues): Errors {
   return errors;
 }
 
-function dateErrors({ startDate, endDate, registrationDeadline }: TournamentValues): Errors {
+function dateErrors({
+  startDate,
+  endDate,
+  registrationDeadline,
+}: Pick<TournamentValues, 'startDate' | 'endDate' | 'registrationDeadline'>): Errors {
   const errors: Errors = {};
   const real = { startDate: false, endDate: false, registrationDeadline: false };
   const dates = { startDate, endDate, registrationDeadline };
@@ -224,7 +248,10 @@ function dateErrors({ startDate, endDate, registrationDeadline }: TournamentValu
   return errors;
 }
 
-function maximumTeamsError(maximumTeams: number | undefined): TournamentInputError | null {
+function maximumTeamsError(
+  maximumTeams: number | undefined,
+  teamCount: number,
+): TournamentInputError | null {
   const field = 'maximumTeams';
   if (maximumTeams === undefined) {
     return { field, code: 'maximumTeamsEmpty', message: TOURNAMENT_MESSAGES.maximumTeamsEmpty };
@@ -234,7 +261,12 @@ function maximumTeamsError(maximumTeams: number | undefined): TournamentInputErr
     maximumTeams >= MIN_MAXIMUM_TEAMS &&
     maximumTeams <= MAX_MAXIMUM_TEAMS
   ) {
-    return null;
+    if (maximumTeams >= teamCount) return null;
+    return {
+      field,
+      code: 'maximumTeamsBelowTeams',
+      message: TOURNAMENT_MESSAGES.maximumTeamsBelowTeams(teamCount),
+    };
   }
   return { field, code: 'maximumTeamsInvalid', message: TOURNAMENT_MESSAGES.maximumTeamsInvalid };
 }
@@ -254,7 +286,14 @@ export function checkTournamentFields(values: TournamentValues): Errors {
     };
   }
   Object.assign(errors, dateErrors(values));
-  const maximumTeams = maximumTeamsError(values.maximumTeams);
+  const maximumTeams = maximumTeamsError(values.maximumTeams, 0);
+  if (maximumTeams) errors.maximumTeams = maximumTeams;
+  return errors;
+}
+
+export function checkTournamentDetails(values: TournamentDetailsValues): Errors {
+  const errors = dateErrors(values);
+  const maximumTeams = maximumTeamsError(values.maximumTeams, values.teamCount);
   if (maximumTeams) errors.maximumTeams = maximumTeams;
   return errors;
 }
