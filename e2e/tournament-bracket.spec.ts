@@ -221,4 +221,41 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await screenshot(page, testInfo, 'bracket-empty');
     await expectAccessible(page);
   });
+
+  test('offline, Move and Create look disabled, a press shows the offline alert, and nothing is saved', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await expect(seedNames(page)).toHaveText(NAMES);
+    await expect(createButton(page)).not.toHaveAttribute('aria-disabled', /.*/);
+
+    await context.setOffline(true);
+    try {
+      await expect(createButton(page)).toHaveAttribute('aria-disabled', 'true', { timeout: 5_000 });
+      await expect(move(page, 'Bravo', 'up')).toHaveAttribute('aria-disabled', 'true');
+
+      // `force`: Playwright treats aria-disabled as not actionable, and the page must still answer.
+      await move(page, 'Bravo', 'up').click({ force: true });
+      const alert = panel(page).getByRole('alert');
+      await expect(alert).toContainText('Bravo keeps its seed. Try again when you’re connected.');
+      await expect(alert).toBeFocused();
+      await expect(seedNames(page)).toHaveText(NAMES);
+      await screenshot(page, testInfo, 'bracket-offline-move');
+      await expectAccessible(page);
+
+      await createButton(page).click({ force: true });
+      await expect(alert).toContainText('No bracket was created.');
+      await expect(rounds(page)).toHaveCount(0);
+    } finally {
+      await context.setOffline(false);
+    }
+    await expect(createButton(page)).not.toHaveAttribute('aria-disabled', /.*/, {
+      timeout: 20_000,
+    });
+    await page.reload();
+    await expect(seedNames(page)).toHaveText(NAMES);
+    await expect(createButton(page)).toHaveText('Create bracket');
+  });
 });
