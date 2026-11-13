@@ -9,10 +9,9 @@ import {
   RECHECK_DELAYS_MS,
   RECHECK_EVERY_MS,
   SESSION_CHECK_LIMIT_MS,
-  type SignInResult,
-  type SignUpFailure,
 } from './auth.service';
 import { redirectSignedIn, requireSignedIn } from './guards';
+import { requestSignIn, requestSignUp } from './password-auth';
 import { FakeAuthClient, provideFakeAuthClient } from './testing/fake-auth-client';
 
 @Component({ template: '' })
@@ -560,7 +559,7 @@ describe('AuthService', () => {
       client.storedCookie = '';
       const auth = configure();
       await loaded();
-      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: true });
+      await expect(auth.authenticate(requestSignUp, INPUT)).resolves.toEqual({ ok: true });
       expect(auth.signedIn()).toBe(true);
       expect(client.sessionListeners).toBe(1);
       expect(auth.signedIn()).toBe(true);
@@ -582,7 +581,10 @@ describe('AuthService', () => {
       const auth = TestBed.inject(AuthService);
       await expect(auth.isSignedIn()).resolves.toBe(false);
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
-      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: false, error: 'unexpected' });
+      await expect(auth.authenticate(requestSignUp, INPUT)).resolves.toEqual({
+        ok: false,
+        error: 'unexpected',
+      });
     });
 
     it('stops listening to the session store when the application is destroyed', async () => {
@@ -1032,8 +1034,16 @@ describe('AuthService', () => {
       });
 
       it.each([
-        ['sign-in', (auth: AuthService) => auth.signIn(INPUT), () => client.releaseSignIn()],
-        ['sign-up', (auth: AuthService) => auth.signUp(INPUT), () => client.releaseSignUp()],
+        [
+          'sign-in',
+          (auth: AuthService) => auth.authenticate(requestSignIn, INPUT),
+          () => client.releaseSignIn(),
+        ],
+        [
+          'sign-up',
+          (auth: AuthService) => auth.authenticate(requestSignUp, INPUT),
+          () => client.releaseSignUp(),
+        ],
       ] as const)(
         "a %s that succeeds after a check already signed in advances authEpoch, so Convex asks for the new session's token",
         async (kind, submit, release) => {
@@ -1065,7 +1075,7 @@ describe('AuthService', () => {
         client.storedCookie = '';
         const auth = configure();
         await loaded();
-        await expect(auth.signIn(INPUT)).resolves.toEqual({ ok: true });
+        await expect(auth.authenticate(requestSignIn, INPUT)).resolves.toEqual({ ok: true });
         expect(auth.signedIn()).toBe(true);
         expect(auth.authEpoch()).toBe(0);
       });
@@ -1076,7 +1086,7 @@ describe('AuthService', () => {
         await loaded();
         const signedInByCheck = vi.fn();
         auth.signedInByCheck.subscribe(signedInByCheck);
-        await expect(auth.signIn(INPUT)).resolves.toEqual({ ok: true });
+        await expect(auth.authenticate(requestSignIn, INPUT)).resolves.toEqual({ ok: true });
         client.emitSession({ id: 's1' });
         expect(auth.signedIn()).toBe(true);
         expect(signedInByCheck).not.toHaveBeenCalled();
@@ -1431,250 +1441,103 @@ describe('AuthService', () => {
     });
   });
 
-  describe('signUp', () => {
-    it('sends the 18+ confirmation with the trimmed email, and is signed in on success', async () => {
-      const auth = configure();
-      client.emitSession(null);
-      const result = auth.signUp({ ...INPUT, email: '  maya.okafor@example.com ' });
-      await expect(result).resolves.toEqual({ ok: true });
-      expect(client.signUps).toEqual([{ ...INPUT, adultConfirmed: true }]);
-      // Known at once, before the session store refetches, so the /app guard lets it through.
-      expect(auth.signedIn()).toBe(true);
-      await expect(auth.isSignedIn()).resolves.toBe(true);
-    });
-
-    it.each<[string, { status: number; code?: string; message?: string }, SignUpFailure]>([
-      [
-        '422 already exists',
-        { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' },
-        'exists',
-      ],
-      ['422 already exists (short code)', { status: 422, code: 'USER_ALREADY_EXISTS' }, 'exists'],
-      ['400 breached', { status: 400, code: 'PASSWORD_COMPROMISED' }, 'breached'],
-      [
-        '500 check unavailable',
-        { status: 500, message: 'Failed to check password. Please try again later.' },
-        'check-unavailable',
-      ],
-      [
-        '500 check failed with a status',
-        { status: 500, message: 'Failed to check password. Status: 503' },
-        'check-unavailable',
-      ],
-      ['400 invalid email', { status: 400, code: 'INVALID_EMAIL' }, 'invalid-email'],
-      // Better Auth answers a malformed email with its body-validation error.
-      [
-        '400 validation error on the email',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
-        'invalid-email',
-      ],
-      [
-        '400 validation error on another field',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body.name] Invalid input' },
-        'unexpected',
-      ],
-      [
-        '400 validation error on the email and another field',
-        {
-          status: 400,
-          code: 'VALIDATION_ERROR',
-          message: '[body.email] Invalid email address; [body.name] Invalid input',
-        },
-        'unexpected',
-      ],
-      [
-        '400 validation error, the server message for a missing password and a bad email',
-        {
-          status: 400,
-          code: 'VALIDATION_ERROR',
-          message:
-            '[body.email] Invalid email address; [body.password] Invalid input: expected string, received undefined',
-        },
-        'unexpected',
-      ],
-      [
-        '400 validation error on the email and the password',
-        {
-          status: 400,
-          code: 'VALIDATION_ERROR',
-          message:
-            '[body.email] Invalid email address; [body.password] Invalid input: expected string, received number',
-        },
-        'unexpected',
-      ],
-      [
-        '400 validation error on a field whose name starts with email',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body.emailAddress] Invalid input' },
-        'unexpected',
-      ],
-      [
-        '400 validation error on the whole body',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body] Invalid input' },
-        'unexpected',
-      ],
-      [
-        '400 with an email issue message but another code',
-        { status: 400, code: 'SOMETHING_ELSE', message: '[body.email] Invalid email address' },
-        'unexpected',
-      ],
-      [
-        '400 validation error without a message',
-        { status: 400, code: 'VALIDATION_ERROR' },
-        'unexpected',
-      ],
-      ['400 too short', { status: 400, code: 'PASSWORD_TOO_SHORT' }, 'password-too-short'],
-      ['400 too long', { status: 400, code: 'PASSWORD_TOO_LONG' }, 'password-too-long'],
-      ['400 no 18+', { status: 400, code: 'ADULT_CONFIRMATION_REQUIRED' }, 'adult-required'],
-      ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, 'unexpected'],
-      ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'name-invalid'],
-      ['503 auth not configured', { status: 503, code: 'AUTH_NOT_CONFIGURED' }, 'unexpected'],
-      [
-        '429 from the per-IP limit',
-        { status: 429, message: 'Too many requests. Please try again later.' },
-        'rate-limited',
-      ],
-      ['429 without a body', { status: 429 }, 'rate-limited'],
-      ['429 with a code', { status: 429, code: 'TOO_MANY_ATTEMPTS' }, 'rate-limited'],
-      ['500 other', { status: 500, message: 'boom' }, 'unexpected'],
-    ])('maps %s to %s', async (_, error, expected) => {
-      const auth = configure();
-      client.emitSession(null);
-      client.nextSignUpError = error;
-      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: false, error: expected });
-      expect(auth.signedIn()).toBe(false);
-    });
-
-    it('maps a network failure to unexpected', async () => {
-      const auth = configure();
-      client.signUpThrows = new TypeError('Failed to fetch');
-      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: false, error: 'unexpected' });
-    });
-
-    it('is unexpected without a client', async () => {
-      const auth = configure(null);
-      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: false, error: 'unexpected' });
-    });
-  });
-
-  describe('signIn', () => {
+  describe('authenticate', () => {
     const CREDENTIALS = { email: 'maya.okafor@example.com', password: 'sandbar sunset spike 2026' };
 
-    it('sends the trimmed email and the password, and is signed in on success', async () => {
+    it('is signed in at once after a sign-up, before the session store refetches', async () => {
       const auth = configure();
       client.emitSession(null);
-      await expect(
-        auth.signIn({ ...CREDENTIALS, email: '  maya.okafor@example.com ' }),
-      ).resolves.toEqual({ ok: true });
-      expect(client.signIns).toEqual([CREDENTIALS]);
-      // Known at once, before the session store refetches, so the /app guard lets it through.
+      await expect(auth.authenticate(requestSignUp, INPUT)).resolves.toEqual({ ok: true });
+      // Known at once, so the /app guard lets it through.
       expect(auth.signedIn()).toBe(true);
       await expect(auth.isSignedIn()).resolves.toBe(true);
     });
 
-    it('makes no session request before it, then follows the session store', async () => {
+    it('is signed in at once after a sign-in, before the session store refetches', async () => {
+      const auth = configure();
+      client.emitSession(null);
+      await expect(auth.authenticate(requestSignIn, CREDENTIALS)).resolves.toEqual({ ok: true });
+      expect(auth.signedIn()).toBe(true);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+    });
+
+    it('makes no session request before a sign-in, then follows the session store', async () => {
       client.storedCookie = '';
       const auth = configure();
       await expect(auth.isSignedIn()).resolves.toBe(false);
       expect(client.sessionListeners).toBe(0);
-      await auth.signIn(CREDENTIALS);
+      await auth.authenticate(requestSignIn, CREDENTIALS);
       expect(client.sessionListeners).toBe(1);
       client.emitSession(null);
       expect(auth.signedIn()).toBe(false);
     });
 
-    it('drops a token fetched before it, so the next one is the new session’s', async () => {
+    it('drops a token fetched before a sign-in, so the next one is the new session’s', async () => {
       const auth = configure();
       client.emitSession({ id: 's1' });
       client.nextToken = 'old';
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('old');
       client.nextToken = 'new';
-      await auth.signIn(CREDENTIALS);
+      await auth.authenticate(requestSignIn, CREDENTIALS);
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('new');
     });
 
-    it.each<
-      [
-        string,
-        { status: number; code?: string; message?: string; retryAfterSeconds?: number },
-        SignInResult,
-      ]
-    >([
-      [
-        '401 wrong password or unknown email',
-        { status: 401, code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' },
-        { ok: false, error: 'incorrect' },
-      ],
-      ['401 without a code', { status: 401 }, { ok: false, error: 'incorrect' }],
-      [
-        '400 over-length password, answered before the address is looked up',
-        { status: 400, code: 'PASSWORD_TOO_LONG', message: 'Password too long' },
-        { ok: false, error: 'incorrect' },
-      ],
-      [
-        '429 inside the wait, with the seconds left',
-        { status: 429, code: 'TOO_MANY_ATTEMPTS', retryAfterSeconds: 240 },
-        { ok: false, error: 'throttled', retryAfterSeconds: 240 },
-      ],
-      [
-        '429 inside the wait, without the seconds',
-        { status: 429, code: 'TOO_MANY_ATTEMPTS' },
-        { ok: false, error: 'throttled', retryAfterSeconds: 60 },
-      ],
-      [
-        '429 at the hard limit',
-        { status: 429, code: 'SIGN_IN_LOCKED' },
-        { ok: false, error: 'locked' },
-      ],
-      [
-        '429 from the per-IP limit',
-        { status: 429, message: 'Too many requests. Please try again later.' },
-        { ok: false, error: 'rate-limited' },
-      ],
-      ['429 without a body', { status: 429 }, { ok: false, error: 'rate-limited' }],
-      [
-        '429 with another code',
-        { status: 429, code: 'SOMETHING_ELSE' },
-        { ok: false, error: 'rate-limited' },
-      ],
-      [
-        '400 invalid email',
-        { status: 400, code: 'INVALID_EMAIL' },
-        { ok: false, error: 'invalid-email' },
-      ],
-      [
-        '400 validation error on the email',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
-        { ok: false, error: 'invalid-email' },
-      ],
-      [
-        '400 validation error on the password',
-        { status: 400, code: 'VALIDATION_ERROR', message: '[body.password] Invalid input' },
-        { ok: false, error: 'unexpected' },
-      ],
-      ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, { ok: false, error: 'unexpected' }],
-      [
-        '503 auth not configured',
-        { status: 503, code: 'AUTH_NOT_CONFIGURED' },
-        { ok: false, error: 'unexpected' },
-      ],
-      ['500', { status: 500, message: 'boom' }, { ok: false, error: 'unexpected' }],
-    ])('maps %s', async (_, error, expected) => {
+    it('stays signed out, and answers the refusal, when the request is refused', async () => {
       const auth = configure();
       client.emitSession(null);
-      client.nextSignInError = error;
-      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual(expected);
+      client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS' };
+      await expect(auth.authenticate(requestSignUp, INPUT)).resolves.toEqual({
+        ok: false,
+        error: 'exists',
+      });
+      client.nextSignInError = { status: 401 };
+      await expect(auth.authenticate(requestSignIn, CREDENTIALS)).resolves.toEqual({
+        ok: false,
+        error: 'incorrect',
+      });
       expect(auth.signedIn()).toBe(false);
     });
 
-    it('maps a network failure to unexpected', async () => {
+    it('stays signed out when the request throws', async () => {
       const auth = configure();
+      client.emitSession(null);
+      client.signUpThrows = new TypeError('Failed to fetch');
       client.signInThrows = new TypeError('Failed to fetch');
-      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual({ ok: false, error: 'unexpected' });
+      await expect(auth.authenticate(requestSignUp, INPUT)).resolves.toEqual({
+        ok: false,
+        error: 'unexpected',
+      });
+      await expect(auth.authenticate(requestSignIn, CREDENTIALS)).resolves.toEqual({
+        ok: false,
+        error: 'unexpected',
+      });
+      expect(auth.signedIn()).toBe(false);
     });
 
-    it('is unexpected without a client', async () => {
+    it.each<[string, (auth: AuthService) => Promise<unknown>]>([
+      ['sign-up', (auth) => auth.authenticate(requestSignUp, INPUT)],
+      ['sign-in', (auth) => auth.authenticate(requestSignIn, CREDENTIALS)],
+    ])('is already signed in when changes settle after a %s', async (_, request) => {
+      const auth = configure();
+      client.emitSession(null);
+      const signedInAtSettle: boolean[] = [];
+      TestBed.inject(ChangesInFlight).settled.subscribe(() =>
+        signedInAtSettle.push(auth.signedIn()),
+      );
+
+      await request(auth);
+
+      expect(signedInAtSettle).toEqual([true]);
+    });
+
+    it.each<[string, (auth: AuthService) => Promise<unknown>]>([
+      ['sign-up', (auth) => auth.authenticate(requestSignUp, INPUT)],
+      ['sign-in', (auth) => auth.authenticate(requestSignIn, CREDENTIALS)],
+    ])('answers unexpected for a %s without a client, and makes no request', async (_, request) => {
       const auth = configure(null);
-      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual({ ok: false, error: 'unexpected' });
+      await expect(request(auth)).resolves.toEqual({ ok: false, error: 'unexpected' });
+      expect(client.signUps).toEqual([]);
+      expect(client.signIns).toEqual([]);
     });
   });
 
@@ -1719,7 +1582,9 @@ describe('AuthService', () => {
       await auth.signOut();
       expect(client.refetches).toBe(1);
 
-      await expect(auth.signIn({ email: INPUT.email, password: INPUT.password })).resolves.toEqual({
+      await expect(
+        auth.authenticate(requestSignIn, { email: INPUT.email, password: INPUT.password }),
+      ).resolves.toEqual({
         ok: true,
       });
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
@@ -1734,7 +1599,7 @@ describe('AuthService', () => {
       client.emitSession(null);
 
       client.holdSignUp = true;
-      const signUp = auth.signUp(INPUT);
+      const signUp = auth.authenticate(requestSignUp, INPUT);
       await loaded();
       expect(changes.active()).toBe(true);
       client.releaseSignUp();
@@ -1742,7 +1607,10 @@ describe('AuthService', () => {
       expect(changes.active()).toBe(false);
 
       client.holdSignIn = true;
-      const signIn = auth.signIn({ email: INPUT.email, password: INPUT.password });
+      const signIn = auth.authenticate(requestSignIn, {
+        email: INPUT.email,
+        password: INPUT.password,
+      });
       await loaded();
       expect(changes.active()).toBe(true);
       client.releaseSignIn();
@@ -1760,7 +1628,7 @@ describe('AuthService', () => {
       const changes = TestBed.inject(ChangesInFlight);
       client.signInThrows = new Error('network');
 
-      await auth.signIn({ email: INPUT.email, password: INPUT.password });
+      await auth.authenticate(requestSignIn, { email: INPUT.email, password: INPUT.password });
 
       expect(changes.active()).toBe(false);
     });
