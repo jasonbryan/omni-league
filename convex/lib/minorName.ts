@@ -4,6 +4,9 @@ export const MAX_MINOR_NAME_LENGTH = 60;
 
 export const MAX_MINORS_PER_GUARDIAN_IN_SEASON = 20;
 
+/** Where a minor plays: the limit and the one-place rule hold within one season or one tournament. */
+export type MinorScope = 'season' | 'tournament';
+
 export type MinorNameCode = 'minorNameEmpty' | 'minorNameTooLong' | 'minorNameInvisible';
 
 export interface MinorNameError {
@@ -18,6 +21,8 @@ export interface MinorInSeasonRefusal {
   /** The name as stored, which may differ from the one entered in case and spacing. */
   minorName: string;
   teamName: string;
+  /** Set when the minor is in a tournament, so the page words it for a tournament. */
+  inTournament?: true;
   message: string;
 }
 
@@ -40,9 +45,22 @@ export const MINOR_MESSAGES = {
   minorNameInvisible: 'Remove the hidden or control characters from the name.',
   minorInSeason: (minorName: string, teamName: string) =>
     `${minorName} is already on ${teamName} in this season.`,
+  minorInTournament: (minorName: string, teamName: string) =>
+    `${minorName} is already on ${teamName} in this tournament.`,
   minorLimit: `You’ve added ${MAX_MINORS_PER_GUARDIAN_IN_SEASON} minors in this season, removed ones included, which is the most one guardian can add.`,
+  minorLimitInTournament: `You’ve added ${MAX_MINORS_PER_GUARDIAN_IN_SEASON} minors in this tournament, removed ones included, which is the most one guardian can add.`,
   nothingChosen: 'Choose at least one: join yourself, add a minor, or both.',
 } as const;
+
+export function minorInMessage(scope: MinorScope, minorName: string, teamName: string): string {
+  return scope === 'tournament'
+    ? MINOR_MESSAGES.minorInTournament(minorName, teamName)
+    : MINOR_MESSAGES.minorInSeason(minorName, teamName);
+}
+
+export function minorLimitMessage(scope: MinorScope): string {
+  return scope === 'tournament' ? MINOR_MESSAGES.minorLimitInTournament : MINOR_MESSAGES.minorLimit;
+}
 
 export function normalizeMinorName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');

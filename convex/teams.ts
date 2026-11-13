@@ -339,10 +339,33 @@ const seasonTeamsValidator = v.object({
   total: v.number(),
 });
 
+async function tournamentTeamsForMember(
+  ctx: Pick<QueryCtx, 'db' | 'auth'>,
+  team: Doc<'teams'>,
+): Promise<Infer<typeof seasonTeamsValidator> | null> {
+  const { rosteredTeamIds } = await requireTournamentTeamMemberOrAdmin(ctx, team);
+  const tournament = team.tournamentId && (await ctx.db.get('tournaments', team.tournamentId));
+  if (!tournament) return null;
+  const teams = await ctx.db
+    .query('teams')
+    .withIndex('by_tournamentId_and_sortName', (q) => q.eq('tournamentId', tournament._id))
+    .take(SEASON_TEAMS_LIMIT);
+  return {
+    rows: teams.map((row) => ({
+      teamId: row._id,
+      name: row.name,
+      isViewerTeam: rosteredTeamIds.has(row._id),
+    })),
+    total: tournament.teamCount ?? teams.length,
+  };
+}
+
 export const listForSeasonMember = query({
   args: { teamId: v.string() },
   returns: v.union(v.null(), seasonTeamsValidator),
   handler: async (ctx, args) => {
+    const named = await teamById(ctx, args.teamId);
+    if (named?.tournamentId !== undefined) return tournamentTeamsForMember(ctx, named);
     const found = await teamAndLeague(ctx, args.teamId);
     if (!found) return null;
     const { team, league } = found;

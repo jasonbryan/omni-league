@@ -318,9 +318,14 @@ describe('AccountPage', () => {
       expect(crabs?.querySelector('h3 a')?.getAttribute('href')).toBe('/app/teams/k1crabs');
     });
 
-    it('names no next step for a tournament team below its minimum, which has no invites yet', async () => {
+    it('names the next step for a tournament team below its minimum, by the tournament', async () => {
       await show([SAND_CRABS]);
-      expect(nextStepRegion()).toBeNull();
+      const region = nextStepRegion()!;
+      expect(text(region.querySelector('p.font-semibold'))).toBe('Sand Crabs needs 1 more player');
+      expect(text(region.querySelectorAll('p')[1])).toBe(
+        'Gulf Coast Beach Open needs 2 players per team by Jun 5, 2027.',
+      );
+      expect(region.querySelector('a')?.getAttribute('href')).toBe('/app/teams/k1crabs#invite');
       expect(cards()).toHaveLength(1);
     });
 

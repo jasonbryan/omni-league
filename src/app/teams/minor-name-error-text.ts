@@ -10,7 +10,7 @@ import type { MinorNameError } from './minor-name-form';
     @if (shown.kind === 'inSeason') {
       <span
         ><strong class="font-semibold">{{ shown.minorName }}</strong> is already on
-        {{ shown.teamName }} in this season.</span
+        {{ shown.teamName }} in this {{ shown.inTournament ? 'tournament' : 'season' }}.</span
       >
     } @else {
       <span>{{ shown.text }}</span>

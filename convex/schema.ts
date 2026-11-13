@@ -293,14 +293,15 @@ export default defineSchema({
       'minorName',
       'status',
     ])
-    .index('by_tournamentId_and_userId', ['tournamentId', 'userId'])
+    .index('by_tournamentId_and_userId_and_minorName', ['tournamentId', 'userId', 'minorName'])
     .index('by_userId_and_status', ['userId', 'status']),
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.
   // A pending invite is not a roster entry.
   teamInvites: defineTable({
     organizationId: v.id('organizations'),
-    seasonId: v.id('seasons'),
+    /** Set with the team's `seasonId`; a tournament team's invite has none, and the team names its tournament. */
+    seasonId: v.optional(v.id('seasons')),
     teamId: v.id('teams'),
     /** Trimmed and lowercased, so an address matches whatever its case. */
     email: v.string(),

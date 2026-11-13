@@ -1052,6 +1052,19 @@ const DEMO_TEAM_INVITES = {
 } as const;
 
 /**
+ * Sand Crabs, which player@ captains in `DEMO_TOURNAMENT`: one pending invite, and one fictional
+ * player who accepted. The markers work as in `DEMO_TEAM_INVITES`, and each invite is inserted once.
+ */
+const DEMO_TOURNAMENT_INVITES = {
+  teamName: 'Sand Crabs',
+  pending: { email: `ari.silva@${DEMO_ACCOUNT_DOMAIN}`, tokenHash: 'demo-invite-tournament-1' },
+  accepted: {
+    email: `theo.grant@${DEMO_ACCOUNT_DOMAIN}`,
+    tokenHash: 'demo-invite-tournament-player',
+  },
+} as const;
+
+/**
  * player@ joins the captain@ account's team by accepting an invite, so the team shows 2 of 4. The
  * marker inserts it once: a removed entry is not put back.
  */
@@ -1497,6 +1510,66 @@ export const insertDemoTeamInvites = internalMutation({
   },
 });
 
+/** Each invite is inserted once, by its marker, so a revoked or removed one is not put back. */
+export const insertDemoTournamentInvites = internalMutation({
+  args: { people: v.array(v.object({ email: v.string(), authUserId: v.string() })) },
+  returns: v.number(),
+  handler: async (ctx, { people }) => {
+    assertPreviewDeployment();
+    const organization = await organizationBySlug(ctx, DEMO_TOURNAMENT.orgSlug);
+    const found =
+      organization &&
+      (await findTournamentBySlugs(ctx, organization, DEMO_TOURNAMENT.tournamentSlug));
+    if (!found) return 0;
+    const team = await ctx.db
+      .query('teams')
+      .withIndex('by_tournamentId_and_sortName', (q) =>
+        q
+          .eq('tournamentId', found.tournament._id)
+          .eq('sortName', teamSortName(DEMO_TOURNAMENT_INVITES.teamName)),
+      )
+      .first();
+    if (!team) return 0;
+    const { pending, accepted } = DEMO_TOURNAMENT_INVITES;
+    let inserted = 0;
+    const marked = async (tokenHash: string) =>
+      ctx.db
+        .query('teamInvites')
+        .withIndex('by_tokenHash', (q) => q.eq('tokenHash', tokenHash))
+        .first();
+    const invite = (row: { email: string; tokenHash: string }) =>
+      insertTeamInvite(ctx, team, {
+        ...row,
+        expiresAt: Date.now() + INVITE_LIFETIME_MS,
+        invitedByUserId: team.captainUserId,
+      });
+    if (
+      !(await marked(pending.tokenHash)) &&
+      !(await pendingTeamInvite(ctx, team._id, pending.email))
+    ) {
+      await invite(pending);
+      inserted++;
+    }
+    const authUserId = people.find((person) => person.email === accepted.email)?.authUserId;
+    const user =
+      authUserId === undefined
+        ? null
+        : await ctx.db
+            .query('users')
+            .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+            .unique();
+    if (
+      user &&
+      !(await marked(accepted.tokenHash)) &&
+      !(await adultEntryInTournament(ctx, found.tournament._id, user._id))
+    ) {
+      await acceptTeamInvite(ctx, await invite(accepted), user._id);
+      inserted++;
+    }
+    return inserted;
+  },
+});
+
 export const insertDemoTeamPlayer = internalMutation({
   args: { authUserId: v.string() },
   returns: v.boolean(),
@@ -1782,6 +1855,7 @@ export const demo = internalAction({
             authUserId: player.authUserId,
           });
         }
+        teamInvites += await ctx.runMutation(internal.seed.insertDemoTournamentInvites, { people });
         freeAgents = await ctx.runMutation(internal.seed.insertDemoFreeAgents, { people });
         const guardian = people.find((account) => account.email === DEMO_MINOR.guardianEmail);
         if (guardian) {

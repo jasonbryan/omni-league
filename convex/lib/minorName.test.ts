@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { checkMinorName, minorNameKey, shortMinorName } from './minorName';
+import {
+  checkMinorName,
+  minorInMessage,
+  minorLimitMessage,
+  minorNameKey,
+  shortMinorName,
+} from './minorName';
 
 describe('shortMinorName', () => {
   test.each([
@@ -55,5 +61,21 @@ describe('checkMinorName', () => {
 
   test('the key ignores case and spacing', () => {
     expect(minorNameKey(' maya  RIVERA')).toBe(minorNameKey('Maya Rivera'));
+  });
+});
+
+describe('the messages for a season and for a tournament', () => {
+  test('say where the minor already plays', () => {
+    expect(minorInMessage('season', 'Maya R.', 'Sand Sharks')).toBe(
+      'Maya R. is already on Sand Sharks in this season.',
+    );
+    expect(minorInMessage('tournament', 'Maya R.', 'Sand Crabs')).toBe(
+      'Maya R. is already on Sand Crabs in this tournament.',
+    );
+  });
+
+  test('say where the limit counts', () => {
+    expect(minorLimitMessage('season')).toContain('20 minors in this season');
+    expect(minorLimitMessage('tournament')).toContain('20 minors in this tournament');
   });
 });

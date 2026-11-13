@@ -1,14 +1,14 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, type MutationCtx } from './_generated/server';
-import { canManageTeam, organizesLeague, requireUser } from './lib/access';
+import { canManageTeamOf, organizesTeam, requireUser } from './lib/access';
 import { checkMinorName } from './lib/minorName';
 import {
   addMinorEntry,
   isMinorEntry,
   removeRosterEntry,
   renameMinorEntry,
-  rosteredEntriesInSeason,
+  rosteredEntriesInTeamParent,
 } from './lib/rosterWrites';
 import {
   TEAM_MESSAGES,
@@ -32,9 +32,8 @@ function checkedMinorName(minorName: string): string {
 async function entryWithTeam(ctx: MutationCtx, rosterEntryId: Doc<'rosterEntries'>['_id']) {
   const entry = await ctx.db.get('rosterEntries', rosterEntryId);
   const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
-  const league = team?.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
-  if (!entry || !team || !league) throw new Error('Not allowed');
-  return { entry, team, league };
+  if (!entry || !team) throw new Error('Not allowed');
+  return { entry, team };
 }
 
 export const remove = mutation({
@@ -43,9 +42,9 @@ export const remove = mutation({
   handler: async (ctx, { rosterEntryId }) => {
     // Signed-in first, so an unknown id and another team's entry look alike.
     const user = await requireUser(ctx);
-    const { entry, team, league } = await entryWithTeam(ctx, rosterEntryId);
+    const { entry, team } = await entryWithTeam(ctx, rosterEntryId);
     const isGuardian = isMinorEntry(entry) && entry.userId === user._id;
-    if (!isGuardian && !(await canManageTeam(ctx, user._id, team, league))) {
+    if (!isGuardian && !(await canManageTeamOf(ctx, user._id, team))) {
       throw new Error('Not allowed');
     }
     if (entry.status !== 'rostered') refuseNotRostered();
@@ -67,8 +66,8 @@ export const addMinor = mutation({
   handler: async (ctx, { teamId, minorName }) => {
     const user = await requireUser(ctx);
     const team = await ctx.db.get('teams', teamId);
-    if (team?.seasonId === undefined) throw new Error('Not allowed');
-    const entries = await rosteredEntriesInSeason(ctx, team.seasonId, user._id);
+    if (!team) throw new Error('Not allowed');
+    const entries = await rosteredEntriesInTeamParent(ctx, team, user._id);
     if (!entries.some((entry) => entry.teamId === team._id)) throw new Error('Not allowed');
     const name = checkedMinorName(minorName);
     const rosterEntryId = await addMinorEntry(ctx, team, {
@@ -81,15 +80,15 @@ export const addMinor = mutation({
   },
 });
 
-/** The guardian and the league's organizers rename a minor; the captain may remove one but not rename it. */
+/** The guardian and whoever runs the league or tournament rename a minor; the captain may remove one but not rename it. */
 export const renameMinor = mutation({
   args: { rosterEntryId: v.id('rosterEntries'), minorName: v.string() },
   returns: v.object({ minorName: v.string() }),
   handler: async (ctx, { rosterEntryId, minorName }) => {
     const user = await requireUser(ctx);
-    const { entry, league } = await entryWithTeam(ctx, rosterEntryId);
+    const { entry, team } = await entryWithTeam(ctx, rosterEntryId);
     if (!isMinorEntry(entry)) throw new Error('Not allowed');
-    if (entry.userId !== user._id && !(await organizesLeague(ctx, user._id, league))) {
+    if (entry.userId !== user._id && !(await organizesTeam(ctx, user._id, team))) {
       throw new Error('Not allowed');
     }
     if (entry.status !== 'rostered') refuseNotRostered();

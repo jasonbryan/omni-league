@@ -7,7 +7,8 @@ import { ShownUntilValid } from '../core/forms/shown-errors';
 import { isTeamFull } from './team-invite-form';
 
 export type MinorNameError =
-  { kind: 'text'; text: string } | { kind: 'inSeason'; minorName: string; teamName: string };
+  | { kind: 'text'; text: string }
+  | { kind: 'inSeason'; minorName: string; teamName: string; inTournament: boolean };
 
 export type MinorNameFormAlertKind = 'offline' | 'failed' | 'full';
 
@@ -25,7 +26,12 @@ export function minorNameRefusalOf(failure: unknown): MinorNameError | null {
   const minorName = fields['minorName'];
   const teamName = fields['teamName'];
   if (fields['code'] === 'minorInSeason' && typeof minorName === 'string') {
-    return { kind: 'inSeason', minorName, teamName: typeof teamName === 'string' ? teamName : '' };
+    return {
+      kind: 'inSeason',
+      minorName,
+      teamName: typeof teamName === 'string' ? teamName : '',
+      inTournament: fields['inTournament'] === true,
+    };
   }
   const message = fields['message'];
   return typeof message === 'string' ? { kind: 'text', text: message } : null;

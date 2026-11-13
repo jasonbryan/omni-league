@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { randomBytes } from 'node:crypto';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
@@ -134,7 +135,8 @@ test.describe('register a team for a tournament', () => {
       'href',
       paths.open,
     );
-    await expect(main.getByRole('link', { name: 'Invite players' })).toHaveCount(0);
+    await expect(main.locator('app-team-invite-panel')).toBeVisible();
+    await expect(main.locator('app-season-teams-panel')).toContainText('Teams in this tournament');
     await expectAccessible(page);
     await screenshot(page, testInfo, '340-team-registered');
 
@@ -278,7 +280,7 @@ test.describe('register a team for a tournament: a refused name', () => {
 });
 
 test.describe('Your teams', () => {
-  test('lists a tournament team with the tournament’s name and dates, and no next step to invite players', async ({
+  test('lists a tournament team with the tournament’s name and dates, and a next step to invite players', async ({
     page,
   }, testInfo) => {
     const { tenant } = await seed();
@@ -295,7 +297,13 @@ test.describe('Your teams', () => {
     await expect(teams).toContainText('Gulf Coast Beach Open');
     await expect(teams.getByText('Tournament', { exact: true })).toBeVisible();
     await expect(teams).toContainText('1 of 2');
-    await expect(page.getByRole('link', { name: /Invite players/ })).toHaveCount(0);
+    const next = page.getByRole('region', { name: 'Next step' });
+    await expect(next).toContainText('Sand Crabs needs 1 more player');
+    await expect(next).toContainText('Gulf Coast Beach Open needs 2 players per team by');
+    await expect(next.getByRole('link', { name: 'Invite players to Sand Crabs' })).toHaveAttribute(
+      'href',
+      `/app/teams/${teamId}#invite`,
+    );
     await expectAccessible(page);
     await screenshot(page, testInfo, '340-your-teams');
   });
@@ -317,5 +325,188 @@ test.describe('the team page of a tournament team', () => {
     ).toBeVisible();
     await expectAccessible(page);
     await screenshot(page, testInfo, '340-team-no-access');
+  });
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+const newToken = () => randomBytes(32).toString('base64url');
+const main = (page: Page) => page.getByRole('main');
+const rosterRows = (page: Page) =>
+  page.locator('section[aria-labelledby="roster-heading"] ul > li');
+
+async function seedInvite(teamId: string, email: string): Promise<string> {
+  const token = newToken();
+  await convexRun('testing:addTeamInvite', {
+    teamId,
+    email,
+    expiresAt: Date.now() + 12 * DAY,
+    token,
+  });
+  return token;
+}
+
+async function openLink(page: Page, token: string) {
+  await page.goto(`/teams/join#${token}`);
+  await expect(page).toHaveURL(`${baseURL}/teams/join`);
+}
+
+test.describe('invites and joining a tournament team', () => {
+  test('the captain invites by email: the link shows once, the invite is pending, and the roster is unchanged', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const captain = newUser('Inviter');
+    await signUp(page, captain);
+    const { teamId } = await seedTeam(tenant, OPEN, 'Sand Crabs', captain);
+    await page.goto(`/app/teams/${teamId}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sand Crabs' })).toBeVisible();
+    await expect(page.getByTestId('pending-count')).toHaveText('0 pending invites');
+    await expect(page.getByText('No pending invites')).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-team-captain');
+
+    await page.locator('#email').fill('partner@example.com');
+    await page.getByRole('button', { name: 'Create invite link' }).click();
+    await expect(page.locator('#invite-link')).toHaveValue(/\/teams\/join#[A-Za-z0-9_-]{43}$/);
+    await expect(page.locator('#pending-list')).toContainText('partner@example.com');
+    await expect(page.getByTestId('pending-count')).toHaveText('1 pending invite');
+    await expect(page.getByTestId('roster-count')).toHaveText('1 of 2 players');
+    await expect(rosterRows(page)).toHaveCount(1);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-invite-link');
+  });
+
+  test('a partner signs up with the invited address and accepts: the invite names the tournament and links to it, and they are on the roster', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, paths } = await seed();
+    const captain = await seedUser(newUser('Captain'));
+    const { teamId } = await seedTeam(tenant, OPEN, 'Sand Crabs', captain);
+    const partner = newUser('Partner');
+    const token = await seedInvite(teamId, partner.email);
+
+    await openLink(page, token);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Join Sand Crabs');
+    const details = main(page).locator('dl');
+    for (const value of ['Sand Crabs', 'Gulf Coast Beach Open', tenant.name]) {
+      await expect(details).toContainText(value);
+    }
+    await expect(details).not.toContainText('Season');
+    await expect(details.getByRole('link', { name: 'Gulf Coast Beach Open' })).toHaveAttribute(
+      'href',
+      paths.open,
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-join-signed-out');
+
+    await main(page).getByRole('link', { name: 'Create an account' }).click();
+    await page.locator('#name').fill(partner.name);
+    await page.locator('#email').fill(partner.email);
+    await page.locator('#password').fill(partner.password);
+    await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
+    await page.getByRole('button', { name: /Create account/ }).click();
+    await expect(page).toHaveURL(`${baseURL}/teams/join`, { timeout: 20_000 });
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-join-ready');
+
+    await main(page).getByRole('button', { name: 'Accept invite' }).click();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('You’re on Sand Crabs');
+    await expect(main(page)).toContainText(
+      `You’re on the roster for Gulf Coast Beach Open. ${captain.name} is the captain.`,
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-join-accepted');
+
+    await main(page).getByRole('link', { name: 'Go to Sand Crabs' }).click();
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${teamId}`);
+    await expect(page.getByTestId('roster-count')).toHaveText('2 of 2 players');
+    await expect(rosterRows(page).filter({ hasText: partner.name })).toHaveCount(1);
+    await expect(main(page).locator('app-add-minor-panel')).toBeVisible();
+  });
+
+  test.describe('refused', () => {
+    test.use({ expectedConvexErrors: ['teamInvites:accept'] });
+
+    test('someone on another team in the tournament is refused, naming that team, and may still add a minor', async ({
+      page,
+    }, testInfo) => {
+      const { tenant } = await seed();
+      const captain = await seedUser(newUser('Captain'));
+      const { teamId } = await seedTeam(tenant, OPEN, 'Sand Crabs', captain);
+      const rival = newUser('Rival');
+      await signUp(page, rival);
+      await seedTeam(tenant, OPEN, 'Net Results', rival);
+      const token = await seedInvite(teamId, rival.email);
+
+      await openLink(page, token);
+      await main(page).getByRole('button', { name: 'Accept invite' }).click();
+      const alert = main(page).getByRole('alert');
+      await expect(alert).toContainText('You’re already on Net Results in this tournament.');
+      await expect(alert).toContainText(
+        'Each person plays on one team per tournament, so you can’t join Sand Crabs yourself. You can still add a minor you’re responsible for.',
+      );
+      await expect(alert).toBeFocused();
+      await expect(
+        main(page).getByRole('checkbox', { name: 'Join the roster myself' }),
+      ).toBeDisabled();
+      await expect(main(page).locator('#join-self-description')).toHaveText(
+        'Not available: you’re on Net Results in this tournament.',
+      );
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '370-join-other-team');
+    });
+  });
+
+  test('a captain of another team in the tournament sees the roster, and the tournament’s teams link to each team page', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const captain = await seedUser(newUser('Captain'));
+    const { teamId } = await seedTeam(tenant, OPEN, 'Sand Crabs', captain);
+    const rival = newUser('Rival');
+    await signUp(page, rival);
+    const { teamId: rivalsId } = await seedTeam(tenant, OPEN, 'Net Results', rival);
+    await page.goto(`/app/teams/${teamId}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sand Crabs' })).toBeVisible();
+    await expect(rosterRows(page)).toHaveCount(1);
+    await expect(rosterRows(page)).toContainText(captain.name);
+    await expect(main(page).locator('app-team-invite-panel')).toHaveCount(0);
+    const teams = main(page).locator('app-season-teams-panel');
+    await expect(teams.getByRole('heading', { name: 'Teams in this tournament' })).toBeVisible();
+    await expect(teams.getByTestId('season-teams-count')).toHaveText('2 teams');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '370-other-team-roster');
+
+    await teams.getByRole('link', { name: /Net Results/ }).click();
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${rivalsId}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Net Results' })).toBeVisible();
+  });
+
+  test('the captain removes a player after a confirmation, and the roster and count follow', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const captain = newUser('Remover');
+    await signUp(page, captain);
+    const { teamId } = await seedTeam(tenant, OPEN, 'Sand Crabs', captain);
+    const player = await seedUser(newUser('Leaver'));
+    await convexRun('testing:addToTeam', { teamId, email: player.email });
+    await page.goto(`/app/teams/${teamId}`);
+    await expect(page.getByTestId('roster-count')).toHaveText('2 of 2 players');
+    await page.getByRole('button', { name: `Remove ${player.name} from Sand Crabs` }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(
+      dialog.getByRole('heading', { name: `Remove ${player.name} from Sand Crabs?` }),
+    ).toBeVisible();
+    // The modal holds focus, so the page-wide Tab walk does not apply.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '370-remove-confirm');
+    await dialog.getByRole('button', { name: 'Remove player' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(rosterRows(page)).toHaveCount(1);
+    await expect(page.getByTestId('roster-count')).toHaveText('1 of 2 players');
+    await expect(
+      page.locator('section[aria-labelledby="roster-heading"] [role="status"]'),
+    ).toContainText(`${player.name} was removed from Sand Crabs.`);
   });
 });

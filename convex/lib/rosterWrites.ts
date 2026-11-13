@@ -8,7 +8,10 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import {
   MAX_MINORS_PER_GUARDIAN_IN_SEASON,
   MINOR_MESSAGES,
+  minorInMessage,
+  minorLimitMessage,
   minorNameKey,
+  type MinorScope,
   type MinorInSeasonRefusal,
   type MinorLimitRefusal,
   type NothingChosenRefusal,
@@ -45,7 +48,7 @@ type ReadCtx = Pick<QueryCtx, 'db'>;
 
 export const BACKFILL_TEAM_COUNT_SCAN_LIMIT = 1000;
 
-/** More than one person's entries in one tournament: their own, and a guardian's minors, removed ones included. */
+/** Reads one person's newest adult entries in a tournament, removed ones included; a rostered one is the newest. */
 export const TOURNAMENT_ENTRIES_READ_LIMIT = 100;
 
 // Season rules and counters have no meaning for a tournament team, so a season-only caller that reaches one refuses.
@@ -83,12 +86,57 @@ export async function adultEntryInTournament(
 ): Promise<Doc<'rosterEntries'> | null> {
   const entries = await ctx.db
     .query('rosterEntries')
-    .withIndex('by_tournamentId_and_userId', (q) =>
-      q.eq('tournamentId', tournamentId).eq('userId', userId),
+    .withIndex('by_tournamentId_and_userId_and_minorName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('userId', userId).eq('minorName', undefined),
     )
     .order('desc')
     .take(TOURNAMENT_ENTRIES_READ_LIMIT);
-  return entries.find((entry) => entry.status === 'rostered' && !isMinorEntry(entry)) ?? null;
+  return entries.find((entry) => entry.status === 'rostered') ?? null;
+}
+
+/** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`, and no adult entry a re-invited guardian piles up can push one out of the read. */
+async function minorEntriesInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  guardianUserId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return ctx.db
+    .query('rosterEntries')
+    .withIndex('by_tournamentId_and_userId_and_minorName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('userId', guardianUserId).gte('minorName', ''),
+    )
+    .take(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
+}
+
+export async function rosteredEntriesInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  const adult = await adultEntryInTournament(ctx, tournamentId, userId);
+  const minors = await minorEntriesInTournament(ctx, tournamentId, userId);
+  const rosteredMinors = minors.filter((entry) => entry.status === 'rostered');
+  return adult ? [adult, ...rosteredMinors] : rosteredMinors;
+}
+
+export async function adultEntryInTeamParent(
+  ctx: ReadCtx,
+  team: Doc<'teams'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'> | null> {
+  return team.tournamentId !== undefined
+    ? adultEntryInTournament(ctx, team.tournamentId, userId)
+    : adultEntryInSeason(ctx, seasonIdOf(team), userId);
+}
+
+export async function rosteredEntriesInTeamParent(
+  ctx: ReadCtx,
+  team: Doc<'teams'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return team.tournamentId !== undefined
+    ? rosteredEntriesInTournament(ctx, team.tournamentId, userId)
+    : rosteredEntriesInSeason(ctx, seasonIdOf(team), userId);
 }
 
 /** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`. */
@@ -104,6 +152,19 @@ async function minorEntriesInSeason(
     )
     .take(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
 }
+
+async function minorEntriesIn(
+  ctx: ReadCtx,
+  parent: { seasonId?: Id<'seasons'> | undefined; tournamentId?: Id<'tournaments'> | undefined },
+  guardianUserId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return parent.tournamentId !== undefined
+    ? minorEntriesInTournament(ctx, parent.tournamentId, guardianUserId)
+    : minorEntriesInSeason(ctx, seasonIdOf(parent), guardianUserId);
+}
+
+const scopeOf = (parent: { tournamentId?: Id<'tournaments'> | undefined }): MinorScope =>
+  parent.tournamentId !== undefined ? 'tournament' : 'season';
 
 export async function rosteredEntriesInSeason(
   ctx: ReadCtx,
@@ -554,8 +615,9 @@ export interface NewMinorEntry {
 }
 
 // A minor has no identity beyond its guardian and name, so the check cannot match minors across guardians.
-async function assertMinorNotInSeason(
+async function assertMinorNotIn(
   ctx: ReadCtx,
+  scope: MinorScope,
   minors: Doc<'rosterEntries'>[],
   minorName: string,
   renamedEntryId: Id<'rosterEntries'> | null,
@@ -576,7 +638,8 @@ async function assertMinorNotInSeason(
     code: 'minorInSeason',
     minorName: same.minorName,
     teamName,
-    message: MINOR_MESSAGES.minorInSeason(same.minorName, teamName),
+    ...(scope === 'tournament' && { inTournament: true as const }),
+    message: minorInMessage(scope, same.minorName, teamName),
   });
 }
 
@@ -586,18 +649,19 @@ export async function addMinorEntry(
   team: Doc<'teams'>,
   entry: NewMinorEntry,
 ): Promise<Id<'rosterEntries'>> {
-  const seasonId = seasonIdOf(team);
-  await assertNotWaitlisted(ctx, seasonId, entry.guardianUserId);
-  const minors = await minorEntriesInSeason(ctx, seasonId, entry.guardianUserId);
-  await assertMinorNotInSeason(ctx, minors, entry.minorName, null);
+  const parent = parentFieldsOf(team);
+  if ('seasonId' in parent) await assertNotWaitlisted(ctx, parent.seasonId, entry.guardianUserId);
+  const minors = await minorEntriesIn(ctx, parent, entry.guardianUserId);
+  const scope = scopeOf(team);
+  await assertMinorNotIn(ctx, scope, minors, entry.minorName, null);
   // Removed entries count too, so adding and removing cannot grow a guardian's entries past the read window.
   if (minors.length >= MAX_MINORS_PER_GUARDIAN_IN_SEASON) {
-    refuse({ field: 'minorName', code: 'minorLimit', message: MINOR_MESSAGES.minorLimit });
+    refuse({ field: 'minorName', code: 'minorLimit', message: minorLimitMessage(scope) });
   }
   await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
-    seasonId,
+    ...parent,
     teamId: team._id,
     userId: entry.guardianUserId,
     minorName: entry.minorName,
@@ -619,8 +683,8 @@ export async function renameMinorEntry(
   if (!isMinorEntry(entry) || entry.status !== 'rostered') {
     throw new Error('Only a rostered minor can be renamed');
   }
-  const minors = await minorEntriesInSeason(ctx, seasonIdOf(entry), entry.userId);
-  await assertMinorNotInSeason(ctx, minors, minorName, entry._id);
+  const minors = await minorEntriesIn(ctx, entry, entry.userId);
+  await assertMinorNotIn(ctx, scopeOf(entry), minors, minorName, entry._id);
   await ctx.db.patch('rosterEntries', entry._id, { minorName });
 }
 
@@ -750,6 +814,7 @@ export async function insertTeamInvite(
   team: Doc<'teams'>,
   invite: NewTeamInvite,
 ): Promise<Id<'teamInvites'>> {
+  const parent = parentFieldsOf(team);
   await assertTeamHasRoom(ctx, team._id);
   if (await pendingTeamInvite(ctx, team._id, invite.email)) {
     refuse({
@@ -760,7 +825,7 @@ export async function insertTeamInvite(
   }
   const inviteId = await ctx.db.insert('teamInvites', {
     organizationId: team.organizationId,
-    seasonId: seasonIdOf(team),
+    ...('seasonId' in parent && { seasonId: parent.seasonId }),
     teamId: team._id,
     email: invite.email,
     tokenHash: invite.tokenHash,
