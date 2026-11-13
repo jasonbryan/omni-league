@@ -94,6 +94,7 @@ import type * as signInThrottle from "../signInThrottle.js";
 import type * as teamInvites from "../teamInvites.js";
 import type * as teams from "../teams.js";
 import type * as testing from "../testing.js";
+import type * as tournamentGames from "../tournamentGames.js";
 import type * as tournaments from "../tournaments.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
@@ -191,6 +192,7 @@ declare const fullApi: ApiFromModules<{
   teamInvites: typeof teamInvites;
   teams: typeof teams;
   testing: typeof testing;
+  tournamentGames: typeof tournamentGames;
   tournaments: typeof tournaments;
   users: typeof users;
   waitlist: typeof waitlist;

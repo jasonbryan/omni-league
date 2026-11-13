@@ -8,6 +8,7 @@ export type PromoteFailure =
   | { kind: 'noRoom' }
   | { kind: 'captainOnTeam'; teamName: string }
   | { kind: 'alreadyPromoted' }
+  | { kind: 'bracketCreated' }
   | { kind: 'failed' };
 
 /** Only a refusal's code is read: any other failure's message is server detail the page never shows. */
@@ -18,6 +19,7 @@ export function promoteFailureOf(error: unknown): PromoteFailure {
   const { code, teamName } = data as { code?: unknown; teamName?: unknown };
   if (code === 'noRoom') return { kind: 'noRoom' };
   if (code === 'alreadyPromoted') return { kind: 'alreadyPromoted' };
+  if (code === 'bracketCreated') return { kind: 'bracketCreated' };
   if (
     (code === 'alreadyOnTeam' || code === 'alreadyOnAnotherTeam') &&
     typeof teamName === 'string'
@@ -44,6 +46,8 @@ export function promoteFailureText(
       return { title, description: `${captainName} is already on ${failure.teamName}.` };
     case 'alreadyPromoted':
       return { title, description: TEAM_MESSAGES.alreadyPromoted };
+    case 'bracketCreated':
+      return { title, description: TEAM_MESSAGES.promoteBracketCreated };
     case 'failed':
       return { title, description: 'Check your connection and try again.' };
   }
@@ -92,3 +96,8 @@ export function waitlistNote(
       'While teams are waiting, new teams still join the waitlist, so promote to fill the places.',
   };
 }
+
+export const WAITLIST_LOCKED_NOTE: AlertText = {
+  title: 'The bracket is created',
+  description: 'Waiting teams cannot be promoted now.',
+};

@@ -28,6 +28,7 @@ const BASE = `/app/organizations/${COASTAL.slug}/tournaments`;
 const URL = `${BASE}/winter-doubles-classic`;
 const GET = 'tournaments:getForManagement';
 const LIST_WAITLIST = 'waitlist:listForTournament';
+const BRACKET_SETUP = 'tournamentGames:getSetup';
 const PUBLISH = 'tournaments:publish';
 const LIST_MINE = 'organizations:listMine';
 const ARGS = { orgSlug: COASTAL.slug, tournamentSlug: 'winter-doubles-classic' };
@@ -69,6 +70,7 @@ const DRAFT = {
   sport: 'beachVolleyball',
   teamCount: 0,
   setsPerGame: 1,
+  bracketCreated: false,
 };
 const PUBLISHED = { ...DRAFT, status: 'published' };
 const AS_ORGANIZER = { ...DRAFT, role: 'leagueOrganizer' };
@@ -142,6 +144,7 @@ describe('TournamentManagement', () => {
       expectPageAndShellSubscriptions(o.convex, [
         [GET, ARGS],
         [LIST_WAITLIST, ARGS],
+        [BRACKET_SETUP, ARGS],
       ]);
       const nav = page.querySelector('nav[aria-label="Coastal Bend Rec Club admin"]')!;
       expect(nav).not.toBeNull();
@@ -213,7 +216,7 @@ describe('TournamentManagement', () => {
       expect(page.querySelector('app-admin-sidebar')).toBeNull();
       expect(o.subscription(LIST_MINE)?.args).toEqual({});
       expect(o.convex.activeSubscriptions.map((s) => s.name).sort()).toEqual(
-        [GET, LIST_WAITLIST, LIST_MINE, 'users:me', 'users:me'].sort(),
+        [GET, LIST_WAITLIST, BRACKET_SETUP, LIST_MINE, 'users:me', 'users:me'].sort(),
       );
       o.subscription(LIST_MINE)!.emit([
         {
@@ -296,6 +299,7 @@ describe('TournamentManagement', () => {
       ]);
       expectBareCards(main(), [
         'mt-6 max-w-2xl overflow-hidden',
+        'overflow-hidden',
         'overflow-hidden',
         'mt-4 max-w-2xl overflow-clip md:mt-6',
       ]);
@@ -421,10 +425,28 @@ describe('TournamentManagement', () => {
       );
     });
 
-    it('is an h2 section between the details and the edit form', async () => {
+    it('is an h2 section between the details and the bracket', async () => {
       await open(FULL, URL, WAITLIST);
       const headings = [...main().querySelectorAll('section > div > h2, section > h2')].map(text);
-      expect(headings.slice(0, 3)).toEqual(['Details', 'Waitlist', 'Edit details']);
+      expect(headings.slice(0, 4)).toEqual([
+        'Details',
+        'Waitlist',
+        'Seeds and bracket',
+        'Edit details',
+      ]);
+    });
+
+    it('once the bracket is created: no Promote buttons, and a note that says why', async () => {
+      await open({ ...ROOM, bracketCreated: true }, URL, WAITLIST);
+      expect(rows().map((row) => text(row.querySelector('h3')))).toEqual([
+        'Late Lobsters',
+        'Shore Thing',
+      ]);
+      expect(promoteButton('Late Lobsters')).toBeUndefined();
+      expect(page.querySelectorAll('#waitlist button')).toHaveLength(0);
+      expect(text(page.querySelector('#waitlist [data-slot="alert"]'))).toBe(
+        'The bracket is created Waiting teams cannot be promoted now.',
+      );
     });
 
     it('promote: sends the entry, shows the pending label, then the promoted status, focused', async () => {

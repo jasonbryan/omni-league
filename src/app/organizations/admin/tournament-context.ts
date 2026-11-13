@@ -15,11 +15,17 @@ export type TournamentWaitlist = NonNullable<
   FunctionReturnType<typeof api.waitlist.listForTournament>
 >;
 
+export type BracketSetup = NonNullable<FunctionReturnType<typeof api.tournamentGames.getSetup>>;
+
+export type BracketView =
+  { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: BracketSetup };
+
 export type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
 /**
  * The query waits until Convex has accepted the token, so its first answer is the caller's own. The waitlist is asked only once the
  * tournament has answered, so a refused caller or an unknown web address never reaches it, and the page stays on its skeleton until both answer.
+ * The seeds and bracket are asked at the same time, but the page does not wait for them: their panel shows its own skeleton.
  */
 @Injectable()
 export class TournamentContext {
@@ -54,6 +60,10 @@ export class TournamentContext {
     this.frameState() === 'ready' ? this.params() : skipToken,
   );
 
+  private readonly bracketQuery = injectQuery(api.tournamentGames.getSetup, () =>
+    this.frameState() === 'ready' ? this.params() : skipToken,
+  );
+
   readonly state = computed<TournamentState>(() => {
     const frame = this.frameState();
     if (frame !== 'ready') return frame;
@@ -70,4 +80,11 @@ export class TournamentContext {
   readonly waitlist = computed<TournamentWaitlist | null>(() =>
     this.state() === 'ready' ? (this.waitlistQuery.value() ?? null) : null,
   );
+
+  readonly bracket = computed<BracketView>(() => {
+    if (this.state() !== 'ready') return { status: 'loading' };
+    const setup = this.bracketQuery.value();
+    if (this.bracketQuery.error() || setup === null) return { status: 'error' };
+    return setup === undefined ? { status: 'loading' } : { status: 'ready', setup };
+  });
 }

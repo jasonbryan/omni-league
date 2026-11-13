@@ -39,6 +39,7 @@ const TOURNAMENT = {
   locations: [{ name: 'Pelican Shoals Sand Courts', address: '2150 Pelican Shoals Dr' }],
   minimumRosterSize: 2,
   teamCount: 3,
+  bracketCreated: false,
   ...HELD,
 };
 
@@ -137,6 +138,16 @@ describe('TournamentDetailsForm', () => {
       expect(sets('1')).not.toBeNull();
       expect(sets('3')).not.toBeNull();
       expect(sets('2')).toBeNull();
+    });
+
+    it('shows sets per game as text with the reason once the bracket is created, and keeps the other fields editable', async () => {
+      await open({ ...TOURNAMENT, setsPerGame: 3, bracketCreated: true });
+      expect(sets('1')).toBeNull();
+      expect(sets('3')).toBeNull();
+      expect(text(section().querySelector('[data-slot="sets-per-game"]'))).toBe(
+        'Sets per gameBest of 3 The bracket is created, so sets per game cannot change.',
+      );
+      expect(input('maximum-teams').disabled).toBe(false);
     });
 
     it('leaves sets per game out for a sport that has no choice', async () => {
@@ -270,6 +281,13 @@ describe('TournamentDetailsForm', () => {
       await type('end-date', '');
       await submit();
       expect(o.convex.calls[0].args).not.toHaveProperty('endDate');
+    });
+
+    it('sends no sets per game once the bracket is created, so the held value stays', async () => {
+      await open({ ...TOURNAMENT, bracketCreated: true });
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('setsPerGame');
     });
 
     it('sends no sets per game for a sport that has none', async () => {

@@ -199,6 +199,27 @@ export default defineSchema({
       'registrationDeadline',
     ]),
 
+  // Written only through `convex/lib/tournamentBracket.ts`. A bye is a round 1 game with one team, already its winner.
+  tournamentGames: defineTable({
+    tournamentId: v.id('tournaments'),
+    stage: v.literal('bracket'),
+    /** From 1, the first round played. */
+    round: v.number(),
+    /** From 1, top to bottom within the round. */
+    slot: v.number(),
+    /** Two places, `null` for one not filled yet or a bye. */
+    teamIds: v.array(v.union(v.id('teams'), v.null())),
+    winnerTeamId: v.optional(v.id('teams')),
+    /** The game the winner joins, on `nextSide`; both are absent on the Final. */
+    nextGameId: v.optional(v.id('tournamentGames')),
+    nextSide: v.optional(v.union(v.literal(0), v.literal(1))),
+  }).index('by_tournamentId_and_stage_and_round_and_slot', [
+    'tournamentId',
+    'stage',
+    'round',
+    'slot',
+  ]),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.
@@ -264,6 +285,8 @@ export default defineSchema({
     /** The team's `pending` invites, expired ones included; absent on a team written before invites existed, which has none. */
     pendingInviteCount: v.optional(v.number()),
     createdAt: v.number(),
+    /** A tournament team's place in the bracket, 1 being the top seed; absent until an organizer orders the seeds. */
+    seed: v.optional(v.number()),
   })
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
     .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName'])

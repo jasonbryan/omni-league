@@ -27,6 +27,7 @@ import {
   type SeasonInputError,
 } from './seasonInput';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
+import { bracketExists } from './tournamentBracket';
 import { tournamentHasRoom, tournamentIsFull } from './tournamentInput';
 import {
   TEAM_MESSAGES,
@@ -34,6 +35,7 @@ import {
   type AlreadyFreeAgentRefusal,
   type AlreadyPlacedRefusal,
   type AlreadyPromotedRefusal,
+  type BracketCreatedRefusal,
   type NoRoomRefusal,
   type OnWaitlistRefusal,
   type RosterRefusal,
@@ -309,6 +311,7 @@ type Refusal =
   | OnWaitlistRefusal
   | NoRoomRefusal
   | AlreadyPromotedRefusal
+  | BracketCreatedRefusal
   | MinorInSeasonRefusal
   | MinorLimitRefusal
   | NothingChosenRefusal;
@@ -676,6 +679,9 @@ export async function promoteTournamentWaitlistEntry(
     refuse({ code: 'alreadyPromoted', message: TEAM_MESSAGES.alreadyPromoted });
   }
   const tournament = await currentTournament(ctx, entry.tournamentId);
+  if (await bracketExists(ctx, tournament._id)) {
+    refuse({ code: 'bracketCreated', message: TEAM_MESSAGES.promoteBracketCreated });
+  }
   if (!tournamentHasRoom(tournament)) {
     refuse({ code: 'noRoom', message: TEAM_MESSAGES.noRoomInTournament });
   }

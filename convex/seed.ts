@@ -46,6 +46,11 @@ import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
 import { seasonIsFull } from './lib/seasonInput';
 import { teamSortName } from './lib/teamInput';
 import { tournamentIsFull } from './lib/tournamentInput';
+import {
+  bracketExists,
+  replaceBracket,
+  tournamentTeams as seededTeamsOf,
+} from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
@@ -684,6 +689,19 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     maximumTeams: 4,
     status: 'published',
   },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Labor Day Sand Slam',
+    slug: 'labor-day-sand-slam',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 4,
+    endDaysFromRun: 5,
+    deadlineDaysFromRun: -3,
+    maximumTeams: 8,
+    status: 'published',
+  },
 ];
 
 async function ensureTournament(
@@ -986,11 +1004,20 @@ const DEMO_REMOVED_PLAYER = {
   teamName: 'Net Results',
 } as const;
 
+/** The second player of each `DEMO_BRACKET_TEAMS` team beyond the two already in the demo data, signed up as the captains are. */
+const DEMO_BRACKET_PARTNERS = [
+  { email: `kai.mendoza@${DEMO_ACCOUNT_DOMAIN}`, name: 'Kai Mendoza' },
+  { email: `zoe.hartley@${DEMO_ACCOUNT_DOMAIN}`, name: 'Zoe Hartley' },
+  { email: `omar.haddad@${DEMO_ACCOUNT_DOMAIN}`, name: 'Omar Haddad' },
+  { email: `ines.costa@${DEMO_ACCOUNT_DOMAIN}`, name: 'Ines Costa' },
+] as const;
+
 const FICTIONAL_PEOPLE: readonly { email: string; name: string }[] = [
   ...DEMO_CAPTAINS,
   ...DEMO_FREE_AGENT_PEOPLE,
   DEMO_PLACED_FREE_AGENT,
   DEMO_REMOVED_PLAYER,
+  ...DEMO_BRACKET_PARTNERS,
 ];
 
 /** player@ waits in another season than its team's, so the one-place rule holds. */
@@ -1063,6 +1090,50 @@ export const DEMO_TOURNAMENT_WAITLIST_ENTRY = {
   teamName: 'Sunrise Setters',
   captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
 } as const;
+
+/** Registration is closed, so its teams are confirmed with two players each and its bracket exists. */
+export const DEMO_BRACKET_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'labor-day-sand-slam',
+} as const;
+
+/** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. */
+export const DEMO_BRACKET_TEAMS: readonly {
+  name: string;
+  captainEmail: string;
+  partnerEmail: string;
+}[] = [
+  {
+    name: 'Sun Chasers',
+    captainEmail: DEMO_CAPTAINS[0].email,
+    partnerEmail: DEMO_PLACED_FREE_AGENT.email,
+  },
+  {
+    name: 'Shoreline Smash',
+    captainEmail: DEMO_CAPTAINS[1].email,
+    partnerEmail: DEMO_REMOVED_PLAYER.email,
+  },
+  {
+    name: 'Coastal Crush',
+    captainEmail: DEMO_CAPTAINS[2].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[0].email,
+  },
+  {
+    name: 'Dune Dashers',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[0].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[1].email,
+  },
+  {
+    name: 'Riptide',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[2].email,
+  },
+  {
+    name: 'Wave Riders',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[2].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[3].email,
+  },
+];
 
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
@@ -1382,7 +1453,10 @@ export const insertDemoTeams = internalMutation({
         DEMO_FULL_TOURNAMENT,
         DEMO_FULL_TOURNAMENT_TEAMS,
         captains,
-      ));
+      )) +
+      (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains));
+    await insertDemoBracketPartners(ctx, captains);
+    await insertDemoBracket(ctx);
     await insertDemoTournamentWaitlistEntry(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return tournamentTeams;
@@ -1435,6 +1509,54 @@ async function insertTournamentTeams(
     inserted++;
   }
   return inserted;
+}
+
+async function demoBracketTournament(ctx: MutationCtx): Promise<Doc<'tournaments'> | null> {
+  const organization = await organizationBySlug(ctx, DEMO_BRACKET_TOURNAMENT.orgSlug);
+  const found =
+    organization &&
+    (await findTournamentBySlugs(ctx, organization, DEMO_BRACKET_TOURNAMENT.tournamentSlug));
+  return found ? found.tournament : null;
+}
+
+/** Each team gets its partner once, up to the minimum roster size, so a roster the organizer changed is not refilled. */
+async function insertDemoBracketPartners(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const tournament = await demoBracketTournament(ctx);
+  if (!tournament) return;
+  for (const { name, partnerEmail } of DEMO_BRACKET_TEAMS) {
+    const authUserId = people.find((person) => person.email === partnerEmail)?.authUserId;
+    const team = await ctx.db
+      .query('teams')
+      .withIndex('by_tournamentId_and_sortName', (q) =>
+        q.eq('tournamentId', tournament._id).eq('sortName', teamSortName(name)),
+      )
+      .first();
+    if (authUserId === undefined || !team || team.rosterCount >= tournament.minimumRosterSize) {
+      continue;
+    }
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user || (await adultEntryInTournament(ctx, tournament._id, user._id))) continue;
+    await addRosterEntry(ctx, team, {
+      userId: user._id,
+      source: 'invite',
+      addedByUserId: team.captainUserId,
+    });
+  }
+}
+
+/** Once, and only with every demo team confirmed, so the bracket is never made from some of them and left out of date. */
+async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
+  const tournament = await demoBracketTournament(ctx);
+  if (!tournament || (await bracketExists(ctx, tournament._id))) return;
+  const { seeds } = await seededTeamsOf(ctx, tournament);
+  if (seeds.length < DEMO_BRACKET_TEAMS.length) return;
+  await replaceBracket(ctx, tournament._id, seeds, []);
 }
 
 async function insertDemoWaitlistEntry(

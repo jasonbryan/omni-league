@@ -15,6 +15,11 @@ export interface RegistrationClosedError {
   message: string;
 }
 
+export interface BracketCreatedRefusal {
+  code: 'bracketCreated';
+  message: string;
+}
+
 export interface SeasonFullRefusal {
   code: 'seasonFull';
   message: string;
@@ -93,6 +98,8 @@ export const TEAM_MESSAGES = {
   seasonFull: 'This season is full.',
   tournamentFull: 'This tournament is full.',
   tournamentRegistrationClosed: 'Registration for this tournament is closed.',
+  tournamentBracketCreated: 'The bracket is created, so this tournament takes no more teams.',
+  promoteBracketCreated: 'The bracket is created, so waiting teams cannot be promoted.',
   tournamentNameTaken: (registered: string) =>
     `${registered} is already registered in this tournament. Choose another name.`,
   alreadyOnAnotherTournamentTeam: (teamName: string) =>

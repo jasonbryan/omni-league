@@ -25,6 +25,7 @@ import {
   scopedFilters,
   type DivisionFilters,
 } from './lib/leagueFilters';
+import { BRACKET_MESSAGES } from './lib/bracket';
 import { programStatusValidator } from './lib/programs';
 import { leagueLocations } from './lib/publicLeague';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
@@ -63,6 +64,7 @@ import {
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
+import { bracketExists, refuseBracket } from './lib/tournamentBracket';
 import {
   insertDraftTournament,
   leagueSlugTaken,
@@ -289,6 +291,7 @@ export const updateDetails = mutation({
     ) {
       throw new Error('Not allowed');
     }
+    await refuseSetsPerGameChangeWithBracket(ctx, tournament, input.setsPerGame);
     return updateTournamentDetails(ctx, tournament, {
       startDate: input.startDate,
       endDate: endDate === '' ? input.startDate : endDate,
@@ -319,6 +322,7 @@ export const undoUpdateDetails = mutation({
     if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame) || earlier.endDate === '') {
       throw new Error('Not allowed');
     }
+    await refuseSetsPerGameChangeWithBracket(ctx, tournament, earlier.setsPerGame);
     checkedDetails(tournament, earlier, (error) =>
       error.code === 'maximumTeamsBelowTeams'
         ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
@@ -331,6 +335,21 @@ export const undoUpdateDetails = mutation({
     return null;
   },
 });
+
+// The Structure has no input here, so the sets per game is the only detail a bracket locks.
+async function refuseSetsPerGameChangeWithBracket(
+  ctx: QueryCtx,
+  tournament: Doc<'tournaments'>,
+  setsPerGame: TournamentEditable['setsPerGame'] | undefined,
+): Promise<void> {
+  if (setsPerGame === undefined || setsPerGame === editableOf(tournament).setsPerGame) return;
+  if (await bracketExists(ctx, tournament._id)) {
+    refuseBracket(
+      { code: 'setsPerGameLocked', message: BRACKET_MESSAGES.setsPerGameLocked },
+      { field: 'setsPerGame' },
+    );
+  }
+}
 
 function setsPerGameFitsSport(
   sport: Sport,
@@ -362,6 +381,8 @@ export const getForManagement = query({
       sport: sportValidator,
       teamCount: v.number(),
       setsPerGame: setsPerGameValidator,
+      /** Registration, the waitlist, and Sets per game are locked while one exists. */
+      bracketCreated: v.boolean(),
       ...tournamentDetailsValidator.fields,
     }),
   ),
@@ -384,6 +405,7 @@ export const getForManagement = query({
       sport: found.program.sport,
       teamCount: found.tournament.teamCount ?? 0,
       setsPerGame: editableOf(found.tournament).setsPerGame,
+      bracketCreated: await bracketExists(ctx, found.tournament._id),
       ...(await tournamentDetails(ctx, organization, found)),
     };
   },

@@ -35,8 +35,8 @@ const FICTIONAL_FREE_AGENTS = [
 ] as const;
 const PLACED_FREE_AGENT = `nia.brooks@${DOMAIN}`;
 const REMOVED_PLAYER = `rio.santos@${DOMAIN}`;
-/** The five demo accounts, the three fictional captains, the four fictional free agents, and the removed player. */
-const USERS = 13;
+/** The five demo accounts, the three fictional captains, the four fictional free agents, the removed player, and the four partners of the Labor Day Sand Slam teams. */
+const USERS = 17;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -279,7 +279,7 @@ const DATA = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 3,
+  tournaments: 4,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -305,7 +305,7 @@ describe('seed:demo accounts: a new deployment', () => {
         backfilled: NO_BACKFILL,
         memberships: 5,
         invites: 1,
-        teams: 14,
+        teams: 20,
         teamInvites: 4,
         freeAgents: 6,
         accounts: ALL('created'),
@@ -585,7 +585,7 @@ describe('seed:demo accounts: the demo teams', () => {
       });
       const { entry, sharks } = await t.run(async (ctx) => ({
         entry: (await ctx.db.query('rosterEntries').collect()).find(
-          (row) => row.source === 'invite' && row.status === 'rostered',
+          (row) => row.source === 'invite' && row.status === 'rostered' && row.seasonId,
         ),
         sharks: (await ctx.db.query('teams').collect()).find((row) => row.name === 'Sand Sharks'),
       }));
@@ -677,7 +677,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(14);
+      expect(first.teams).toBe(20);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -716,7 +716,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await run(t);
       await t.run(async (ctx) => {
         const entry = (await ctx.db.query('rosterEntries').collect()).find(
-          (row) => row.source === 'invite' && row.status === 'rostered',
+          (row) => row.source === 'invite' && row.status === 'rostered' && row.seasonId,
         )!;
         await removeRosterEntry(ctx, entry, entry.addedByUserId);
       });
@@ -828,7 +828,9 @@ describe('seed:demo accounts: the demo teams', () => {
       ]);
       for (const row of rows) expect(row).not.toHaveProperty('seasonId');
       const entries = await t.run((ctx) => ctx.db.query('rosterEntries').collect());
-      const theo = entries.filter((entry) => entry.source === 'invite' && entry.tournamentId);
+      const theo = entries.filter(
+        (entry) => entry.source === 'invite' && entry.teamId === crabs.teamId,
+      );
       expect(theo).toHaveLength(1);
       expect(theo[0]).not.toHaveProperty('seasonId');
     },
@@ -842,7 +844,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(13);
+      expect(result.teams).toBe(19);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -946,7 +948,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(19);
+      expect(rosterEntries).toHaveLength(31);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -1083,8 +1085,8 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      // One per sign-up: four demo accounts, the three fictional captains, the four fictional free agents, and the removed player.
-      expect(await authRows(t, 'session')).toHaveLength(12);
+      // One per sign-up: four demo accounts, the three fictional captains, the four fictional free agents, the removed player, and the four bracket partners.
+      expect(await authRows(t, 'session')).toHaveLength(16);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,
