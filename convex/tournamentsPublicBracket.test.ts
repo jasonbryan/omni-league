@@ -167,6 +167,31 @@ describe('tournaments.getPublicPage bracket', () => {
     }
   });
 
+  test('lists a bracket of 17 teams in five rounds with 15 byes and one first-round game', async () => {
+    const names = Array.from({ length: 17 }, (_, index) => `Team ${index + 1}`);
+    const s = await worldWithBracket(names);
+    const bracket = (await bracketOf(s))!;
+    expect(bracket.rounds.map((round) => round.name)).toEqual([
+      'Round of 32',
+      'Round of 16',
+      'Quarterfinals',
+      'Semifinals',
+      'Final',
+    ]);
+    expect(bracket.rounds.map((round) => round.games.length)).toEqual([16, 8, 4, 2, 1]);
+    const first = bracket.rounds[0].games;
+    expect(first.filter((game) => game.bye)).toHaveLength(15);
+    expect(first[1]).toEqual({
+      teams: [
+        { name: 'Team 16', seed: 16 },
+        { name: 'Team 17', seed: 17 },
+      ],
+      bye: false,
+    });
+    expect(first[0]).toEqual({ teams: [{ name: 'Team 1', seed: 1 }, null], bye: true });
+    expect(bracket).not.toHaveProperty('winner');
+  });
+
   test('leaves a place empty when its team is gone', async () => {
     const s = await worldWithBracket(['Alpha', 'Bravo']);
     const bravo = await teamIdOf(s, 'Bravo');

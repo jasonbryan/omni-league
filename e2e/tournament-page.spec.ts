@@ -1,5 +1,5 @@
 import type { Locator } from '@playwright/test';
-import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
+import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { seedBracket } from './support/bracket';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -174,6 +174,51 @@ test.describe('public tournament page: raw server HTML', () => {
   );
 
   test(
+    'a bracket of two teams is one Final with both seeds and no bye in the HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)),
+      );
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      const headings = [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, heading]) =>
+        textOf(heading),
+      );
+      expect(headings).toEqual(['Final']);
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games).toEqual(['Game 1: (1) Alpha against (2) Bravo']);
+    },
+  );
+
+  test(
+    'a bracket of 17 teams has five rounds, 31 games, 15 byes, and one first-round game in the HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(request, await seedBracketTournament(SEVENTEEN_TEAMS));
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      const headings = [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, heading]) =>
+        textOf(heading),
+      );
+      expect(headings).toEqual([
+        'Round of 32',
+        'Round of 16',
+        'Quarterfinals',
+        'Semifinals',
+        'Final',
+      ]);
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games).toHaveLength(31);
+      expect(games.filter((game) => game.endsWith('against Bye'))).toHaveLength(15);
+      expect(games).toContain('Game 2: (16) Team 16 against (17) Team 17');
+    },
+  );
+
+  test(
     'a tournament without a bracket says where it will appear',
     RAW_HTTP,
     async ({ request }) => {
@@ -340,6 +385,44 @@ test.describe('public tournament page: in the browser', () => {
     expect(await checkReflow(page)).toMatchObject({ passed: true });
     await screenshot(page, testInfo, 'tournament-bracket-360');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+
+  test('a bracket of two teams is one Final and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.locator('section#bracket h3')).toHaveText(['Final']);
+    const games = page.getByTestId('bracket-game');
+    await expect(games).toHaveCount(1);
+    expect(textOf(await games.first().innerHTML())).toBe('Game 1: (1) Alpha against (2) Bravo');
+    await expect(page.getByText('Bye', { exact: true })).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
+  test('Tab reaches the labelled rounds, with a visible focus ring, and arrow keys never move the page sideways', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const scroller = page.getByRole('region', { name: 'Bracket rounds' });
+    const tab = tabKey(page);
+    for (let press = 0; press < 80; press += 1) {
+      if (await scroller.evaluate((el) => el === document.activeElement)) break;
+      await page.keyboard.press(tab);
+    }
+    await expect(scroller).toBeFocused();
+    expect(await scroller.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
+    await expect(scroller).toBeFocused();
+    const pageWidth = page.viewportSize()!.width;
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      pageWidth,
+    );
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
   });
 
   test('a small bracket fits the page, so the hint keeps its line and hides', async ({
