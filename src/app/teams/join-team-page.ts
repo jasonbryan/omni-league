@@ -775,8 +775,8 @@ export class JoinTeamPage {
       case 'onWaitlist':
         return {
           alert: 'waitlist',
-          title: `You’re on the waitlist with ${refusal.teamName} in this season.`,
-          description: `${refusal.teamName} is at position ${refusal.position}. While it waits, you can’t join another team in this season or add a minor to one. Leaving the waitlist isn’t possible yet.`,
+          title: `You’re on the waitlist with ${refusal.teamName} in this ${playsIn}.`,
+          description: `${refusal.teamName} is at position ${refusal.position}. While it waits, you can’t join another team in this ${playsIn} or add a minor to one. Leaving the waitlist isn’t possible yet.`,
         };
       case 'teamFull':
         return {

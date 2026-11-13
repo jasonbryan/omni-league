@@ -1,6 +1,6 @@
 import { ConvexError } from 'convex/values';
 import { TEAM_MESSAGES } from '../../../../convex/lib/teamInput';
-import type { AlertText } from '../admin/alert-text';
+import type { AlertText } from './alert-text';
 
 export type WaitlistSubject = 'season' | 'tournament';
 
