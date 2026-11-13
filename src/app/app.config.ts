@@ -15,7 +15,7 @@ import {
   withQuietNavigationFailure,
 } from './core/navigation-failure';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
-import { provideUpdatePrompt } from './shell/update-prompt';
+import { provideUpdatePrompt } from './shell/update-prompt-provider';
 
 export const appConfig: ApplicationConfig = {
   providers: [

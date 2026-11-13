@@ -31,6 +31,7 @@ const STARTUP_FILES = [
   'src/app/core/service-worker/app-updates.ts',
   'src/app/core/focus-main.ts',
   'src/app/shell/update-prompt.ts',
+  'src/app/shell/update-prompt-provider.ts',
 ];
 
 describe('value imports of the Convex adapter barrel', () => {
