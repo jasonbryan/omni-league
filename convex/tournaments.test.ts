@@ -4,6 +4,8 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import type { StandardLevel } from './lib/divisions';
+import type { Sport } from './lib/sports';
 import {
   checkTournamentFields,
   firstTournamentError,
@@ -665,7 +667,11 @@ describe('tournaments.listForOrganization', () => {
   });
 });
 
-type Overrides = Partial<ReturnType<typeof valid>> & { customLevelId?: Id<'customLevels'> };
+type Overrides = Partial<Omit<ReturnType<typeof valid>, 'sport' | 'level'>> & {
+  sport?: Sport;
+  level?: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
+};
 
 async function draftIn(s: Setup, overrides: Overrides = {}) {
   const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
