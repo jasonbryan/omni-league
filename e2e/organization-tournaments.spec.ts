@@ -6,6 +6,7 @@ import { remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
@@ -1042,6 +1043,38 @@ test.describe('Tournaments: editing the details', () => {
       await screenshot(page, testInfo, 'tournament-edit-details-failed');
       await expectAccessible(page);
     });
+  });
+
+  test('while the save is held the button reads Saving…, the fields keep their values, and the state passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const held = await holdMutations(page);
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('8');
+    held.hold();
+    await saveButton(page).click();
+    await expect(editForm(page).getByRole('button', { name: 'Saving…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(field(page, 'maximum-teams')).toHaveValue('8');
+    await screenshot(page, testInfo, 'tournament-edit-details-saving');
+    await expectAccessible(page);
+    held.release();
+    await expect(saveStatus(page)).toContainText('Details saved.');
+  });
+
+  test('after Undo the restored state passes the axe helper', async ({ page }, testInfo) => {
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('8');
+    await saveButton(page).click();
+    await undoButton(page).click();
+    await expect(saveStatus(page)).toContainText('Earlier details restored.');
+    await expect(field(page, 'maximum-teams')).toHaveValue('4');
+    await screenshot(page, testInfo, 'tournament-edit-details-restored');
+    await expectAccessible(page);
   });
 
   test('pressing Save offline shows the offline alert and keeps every field', async ({

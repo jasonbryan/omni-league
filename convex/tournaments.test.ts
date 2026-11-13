@@ -1995,6 +1995,39 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     expect(await snapshot(s.t)).toEqual(before);
   });
 
+  test('refuses a maximum that is not a number or not finite, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    for (const maximumTeams of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(
+        await refusal(
+          s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId, { maximumTeams })),
+        ),
+        String(maximumTeams),
+      ).toMatchObject({ field: 'maximumTeams', code: 'maximumTeamsInvalid' });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo refuses earlier values that are not valid, such as a maximum below the team count', async () => {
+    vi.useFakeTimers({ now: TODAY });
+    const s = await setup();
+    const tournamentId = await publishedWithTeams(s, 3, 16);
+    const { written } = await s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+          tournamentId,
+          earlier: { ...held, maximumTeams: 2 },
+          written,
+        }),
+      ),
+    ).toMatchObject({ field: 'maximumTeams', code: 'maximumTeamsBelowTeams' });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
   test('Undo refuses earlier values a caller made up, such as 3 sets for soccer', async () => {
     const s = await setup();
     const tournamentId = await draftIn(s, {
