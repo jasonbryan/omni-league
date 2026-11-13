@@ -958,62 +958,70 @@ test.describe('Tournaments: editing the details', () => {
     },
   );
 
-  test('Undo brings the earlier values back, and is refused with the reason once teams fill the earlier maximum', async ({
-    page,
-  }, testInfo) => {
-    const { tenant, managePath } = await publishedWithTeams(page, 3);
-    await page.goto(managePath);
-    await field(page, 'maximum-teams').fill('6');
-    await saveButton(page).click();
-    await expect(saveStatus(page)).toContainText('Details saved.');
-    await undoButton(page).click();
-    await expect(saveStatus(page)).toContainText('Earlier details restored.');
-    await expect(saveStatus(page).locator('[tabindex="-1"]')).toBeFocused();
-    await expect(field(page, 'maximum-teams')).toHaveValue('4');
+  test.describe('an Undo the server refuses', () => {
+    test.use({ expectedConvexErrors: ['tournaments:undoUpdateDetails'] });
 
-    await field(page, 'maximum-teams').fill('6');
-    await saveButton(page).click();
-    await expect(undoButton(page)).toBeVisible();
-    await seedTournamentTeam(tenant, 4);
-    await seedTournamentTeam(tenant, 5);
-    await seedTournamentTeam(tenant, 6);
-    await undoButton(page).click();
-    await expect(saveStatus(page)).toContainText('6 teams are registered. Enter 6 or more.');
-    await expect(field(page, 'maximum-teams')).toHaveValue('6');
-    await screenshot(page, testInfo, 'tournament-edit-details-undo-refused');
-    await expectAccessible(page);
+    test('Undo brings the earlier values back, and is refused with the reason once teams fill the earlier maximum', async ({
+      page,
+    }, testInfo) => {
+      const { tenant, managePath } = await publishedWithTeams(page, 3);
+      await page.goto(managePath);
+      await field(page, 'maximum-teams').fill('6');
+      await saveButton(page).click();
+      await expect(saveStatus(page)).toContainText('Details saved.');
+      await undoButton(page).click();
+      await expect(saveStatus(page)).toContainText('Earlier details restored.');
+      await expect(saveStatus(page).locator('[tabindex="-1"]')).toBeFocused();
+      await expect(field(page, 'maximum-teams')).toHaveValue('4');
+
+      await field(page, 'maximum-teams').fill('6');
+      await saveButton(page).click();
+      await expect(undoButton(page)).toBeVisible();
+      await seedTournamentTeam(tenant, 4);
+      await seedTournamentTeam(tenant, 5);
+      await seedTournamentTeam(tenant, 6);
+      await undoButton(page).click();
+      await expect(saveStatus(page)).toContainText('6 teams are registered. Enter 6 or more.');
+      await expect(field(page, 'maximum-teams')).toHaveValue('6');
+      await screenshot(page, testInfo, 'tournament-edit-details-undo-refused');
+      await expectAccessible(page);
+    });
   });
 
-  test('a form loaded before another editor saved is refused with the alert, and saving again works', async ({
-    page,
-  }, testInfo) => {
-    const { managePath } = await publishedWithTeams(page, 0);
-    await page.goto(managePath);
-    const held = await holdQueries(page, ['tournaments:getForManagement']);
-    await page.reload();
-    await expect.poll(() => held.isHolding()).toBe(true);
-    held.release();
-    await expect(field(page, 'maximum-teams')).toHaveValue('4');
-    await field(page, 'maximum-teams').fill('9');
-    await convexRun('testing:setTournamentMaximumTeams', {
-      organizationSlug: managePath.split('/')[3],
-      tournamentSlug: 'gulf-coast-beach-open',
-      maximumTeams: 12,
+  test.describe('a save refused as out of date', () => {
+    test.use({ expectedConvexErrors: ['tournaments:updateDetails'] });
+
+    test('a form loaded before another editor saved is refused with the alert, and saving again works', async ({
+      page,
+    }, testInfo) => {
+      const { managePath } = await publishedWithTeams(page, 0);
+      await page.goto(managePath);
+      const held = await holdQueries(page, ['tournaments:getForManagement']);
+      await page.reload();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      held.release();
+      await expect(field(page, 'maximum-teams')).toHaveValue('4');
+      await field(page, 'maximum-teams').fill('9');
+      await convexRun('testing:setTournamentMaximumTeams', {
+        organizationSlug: managePath.split('/')[3],
+        tournamentSlug: 'gulf-coast-beach-open',
+        maximumTeams: 12,
+      });
+      await expect(page.getByRole('main').getByText('Up to 12 teams')).toBeVisible();
+      await expect(field(page, 'maximum-teams')).toHaveValue('9');
+      await saveButton(page).click();
+      const alert = editForm(page).getByRole('alert');
+      await expect(alert).toContainText(
+        'Someone else changed this tournament while you were editing.',
+      );
+      await expect(alert).toBeFocused();
+      await expect(field(page, 'maximum-teams')).toHaveValue('9');
+      await screenshot(page, testInfo, 'tournament-edit-details-changed');
+      await expectAccessible(page);
+      await saveButton(page).click();
+      await expect(saveStatus(page)).toContainText('Details saved.');
+      await expect(main(page).locator('dl')).toContainText('Up to 9 teams');
     });
-    await expect(page.getByRole('main').getByText('Up to 12 teams')).toBeVisible();
-    await expect(field(page, 'maximum-teams')).toHaveValue('9');
-    await saveButton(page).click();
-    const alert = editForm(page).getByRole('alert');
-    await expect(alert).toContainText(
-      'Someone else changed this tournament while you were editing.',
-    );
-    await expect(alert).toBeFocused();
-    await expect(field(page, 'maximum-teams')).toHaveValue('9');
-    await screenshot(page, testInfo, 'tournament-edit-details-changed');
-    await expectAccessible(page);
-    await saveButton(page).click();
-    await expect(saveStatus(page)).toContainText('Details saved.');
-    await expect(main(page).locator('dl')).toContainText('Up to 9 teams');
   });
 
   test.describe('a save the server fails', () => {
