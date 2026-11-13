@@ -618,7 +618,7 @@ describe('an existing game without result fields', () => {
   });
 });
 
-describe('the tester probes', () => {
+describe('refusals of invalid input, strangers, and stale edits', () => {
   test.each([
     ['a negative score', -1],
     ['a fractional score', 1.5],
