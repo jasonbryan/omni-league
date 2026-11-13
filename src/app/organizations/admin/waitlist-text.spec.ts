@@ -4,6 +4,7 @@ import {
   promoteFailureText,
   promotedText,
   promoteOfflineText,
+  waitlistEmptyText,
   waitlistNote,
 } from './waitlist-text';
 
@@ -25,7 +26,7 @@ describe('waitlist text', () => {
 
   it('says why a promotion was refused', () => {
     const text = (failure: Parameters<typeof promoteFailureText>[0]) =>
-      promoteFailureText(failure, 'Late Lobsters', 'Rosa Delgado');
+      promoteFailureText(failure, 'Late Lobsters', 'Rosa Delgado', 'season');
     expect(text({ kind: 'noRoom' })).toEqual({
       title: 'Late Lobsters could not be promoted.',
       description: 'The season is full. Raise the maximum teams first.',
@@ -41,23 +42,48 @@ describe('waitlist text', () => {
   });
 
   it('says the promoted team is a team now, with the count against the maximum', () => {
-    expect(promotedText('Late Lobsters', 'Rosa Delgado', 5, 6)).toEqual({
+    expect(promotedText('Late Lobsters', 'Rosa Delgado', 5, 6, 'season')).toEqual({
       title: 'Late Lobsters is a team now.',
       description:
         'Rosa Delgado is its captain and can invite players. The season has 5 of 6 teams.',
     });
-    expect(promotedText('Late Lobsters', 'Rosa Delgado', 5, undefined).description).toBe(
+    expect(promotedText('Late Lobsters', 'Rosa Delgado', 5, undefined, 'season').description).toBe(
       'Rosa Delgado is its captain and can invite players. The season has 5 teams.',
     );
   });
 
   it('notes no room, or the room promoting fills', () => {
-    expect(waitlistNote(4, 4)).toEqual({
+    expect(waitlistNote(4, 4, 'season')).toEqual({
       title: 'The season is full',
       description: 'Raise the maximum teams to promote a waiting team.',
     });
-    expect(waitlistNote(4, 6).title).toBe('Room for 2 more teams');
-    expect(waitlistNote(5, 6).title).toBe('Room for 1 more team');
-    expect(waitlistNote(5, undefined).title).toBe('Room for more teams');
+    expect(waitlistNote(4, 6, 'season').title).toBe('Room for 2 more teams');
+    expect(waitlistNote(5, 6, 'season').title).toBe('Room for 1 more team');
+    expect(waitlistNote(5, undefined, 'season').title).toBe('Room for more teams');
+  });
+
+  it('names a tournament where the text names the season', () => {
+    expect(
+      promoteFailureText({ kind: 'noRoom' }, 'Late Lobsters', 'Rosa Delgado', 'tournament'),
+    ).toEqual({
+      title: 'Late Lobsters could not be promoted.',
+      description: 'The tournament is full. Raise the maximum teams first.',
+    });
+    expect(promotedText('Late Lobsters', 'Rosa Delgado', 5, 6, 'tournament').description).toBe(
+      'Rosa Delgado is its captain and can invite players. The tournament has 5 of 6 teams.',
+    );
+    expect(waitlistNote(4, 4, 'tournament')).toEqual({
+      title: 'The tournament is full',
+      description: 'Raise the maximum teams to promote a waiting team.',
+    });
+    expect(waitlistNote(5, 6, 'tournament').description).toBe(
+      'While teams are waiting, new teams still join the waitlist, so promote to fill the places.',
+    );
+    expect(waitlistEmptyText('season')).toBe(
+      'When the season is full, teams that register wait here in the order they joined.',
+    );
+    expect(waitlistEmptyText('tournament')).toBe(
+      'When the tournament is full, teams that register wait here in the order they joined.',
+    );
   });
 });

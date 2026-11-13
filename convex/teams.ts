@@ -1,6 +1,6 @@
 import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
-import { mutation, query, type QueryCtx } from './_generated/server';
+import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import {
   canManageTeam,
   canManageTournamentTeam,
@@ -17,6 +17,7 @@ import {
   insertTournamentTeamWithCaptain,
   isMinorEntry,
   registerTeamOrJoinWaitlist,
+  registerTournamentTeamOrJoinWaitlist,
 } from './lib/rosterWrites';
 import {
   findOrganizationBySlug,
@@ -72,25 +73,33 @@ export const register = mutation({
   },
 });
 
-/** A tournament has no waitlist, so a full one refuses (`tournamentIsFull`). */
+async function registrableTournament(
+  ctx: MutationCtx,
+  { orgSlug, tournamentSlug }: Infer<typeof tournamentSlugsValidator>,
+): Promise<Doc<'tournaments'>> {
+  const organization = await findOrganizationBySlug(ctx, orgSlug);
+  const found = organization && (await findTournamentBySlugs(ctx, organization, tournamentSlug));
+  // A draft answers like an unknown tournament, as the register page's query does.
+  if (found?.program.status !== 'published') {
+    throw new ConvexError({ code: TOURNAMENT_NOT_FOUND_CODE });
+  }
+  const { tournament } = found;
+  if (!registrationIsOpen(tournament, Date.now())) {
+    throw new ConvexError({
+      code: 'registrationClosed',
+      message: TEAM_MESSAGES.tournamentRegistrationClosed,
+    } satisfies RegistrationClosedError);
+  }
+  return tournament;
+}
+
+/** A full tournament refuses (`tournamentIsFull`); `registerForTournamentOrWaitlist` puts the team on the waitlist instead. */
 export const registerForTournament = mutation({
   args: { ...tournamentSlugsValidator.fields, name: v.string() },
   returns: v.object({ teamId: v.id('teams') }),
-  handler: async (ctx, { name, orgSlug, tournamentSlug }) => {
+  handler: async (ctx, { name, ...slugs }) => {
     const user = await requireUser(ctx);
-    const organization = await findOrganizationBySlug(ctx, orgSlug);
-    const found = organization && (await findTournamentBySlugs(ctx, organization, tournamentSlug));
-    // A draft answers like an unknown tournament, as the register page's query does.
-    if (found?.program.status !== 'published') {
-      throw new ConvexError({ code: TOURNAMENT_NOT_FOUND_CODE });
-    }
-    const { tournament } = found;
-    if (!registrationIsOpen(tournament, Date.now())) {
-      throw new ConvexError({
-        code: 'registrationClosed',
-        message: TEAM_MESSAGES.tournamentRegistrationClosed,
-      } satisfies RegistrationClosedError);
-    }
+    const tournament = await registrableTournament(ctx, slugs);
     const checked = checkTeamName(name);
     if (!checked.ok) throw new ConvexError({ ...checked.error });
     const teamId = await insertTournamentTeamWithCaptain(ctx, tournament, {
@@ -98,6 +107,25 @@ export const registerForTournament = mutation({
       captainUserId: user._id,
     });
     return { teamId };
+  },
+});
+
+/** A full tournament puts the team on its waitlist instead (`tournamentIsFull`). */
+export const registerForTournamentOrWaitlist = mutation({
+  args: { ...tournamentSlugsValidator.fields, name: v.string() },
+  returns: v.union(
+    v.object({ status: v.literal('registered'), teamId: v.id('teams') }),
+    v.object({ status: v.literal('waitlisted'), position: v.number() }),
+  ),
+  handler: async (ctx, { name, ...slugs }) => {
+    const user = await requireUser(ctx);
+    const tournament = await registrableTournament(ctx, slugs);
+    const checked = checkTeamName(name);
+    if (!checked.ok) throw new ConvexError({ ...checked.error });
+    return registerTournamentTeamOrJoinWaitlist(ctx, tournament, {
+      name: checked.name,
+      captainUserId: user._id,
+    });
   },
 });
 

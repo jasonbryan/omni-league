@@ -29,7 +29,7 @@ describe('tournamentRegistrationCard', () => {
   it('is full while registration is open and the tournament says it is full', () => {
     expect(tournamentRegistrationCard({ ...BEACH_OPEN, isFull: true }, at('2027-04-01'))).toEqual({
       kind: 'full',
-      maximumTeams: 16,
+      closes: 'Jun 5, 2027',
     });
   });
 

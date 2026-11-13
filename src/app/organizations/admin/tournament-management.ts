@@ -45,6 +45,7 @@ import { TournamentEditLanding } from './tournament-edit-landing';
 import { TournamentContext } from './tournament-context';
 import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
+import { WaitlistPanel } from './waitlist-panel';
 
 @Component({
   selector: 'app-tournament-management',
@@ -61,6 +62,7 @@ import { tournamentPath } from './tournament-path';
     TournamentBreadcrumb,
     TournamentDetailsForm,
     TournamentNoAccess,
+    WaitlistPanel,
   ],
   providers: [
     provideIcons({
@@ -239,6 +241,13 @@ import { tournamentPath } from './tournament-path';
                 }
               </dl>
             </section>
+            <app-waitlist-panel
+              class="mt-4 max-w-2xl md:mt-6"
+              subject="tournament"
+              [waitlist]="waitlist()"
+              [teamCount]="tournament.teamCount"
+              [maxTeams]="tournament.maximumTeams"
+            />
             <section
               #editSection
               id="edit-details"
@@ -305,6 +314,7 @@ export class TournamentManagement {
 
   protected readonly state = this.context.state;
   protected readonly tournament = this.context.tournament;
+  protected readonly waitlist = this.context.waitlist;
   protected readonly dates = computed(() => {
     const tournament = this.tournament();
     return tournament ? seasonDates(tournament.startDate, tournament.endDate) : '';

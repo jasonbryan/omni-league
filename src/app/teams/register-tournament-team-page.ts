@@ -21,6 +21,7 @@ import {
   lucideArrowRight,
   lucideCalendarX,
   lucideCircleAlert,
+  lucideListOrdered,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
@@ -57,6 +58,7 @@ import {
   type RegisterTournamentState,
 } from './register-tournament-state';
 import { registerTournamentTeamPath, teamPath } from './team-paths';
+import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
 
 export const REGISTER_TOURNAMENT_MESSAGES = {
   failedTitle: 'The team could not be registered.',
@@ -66,13 +68,24 @@ export const REGISTER_TOURNAMENT_MESSAGES = {
   onTeamDescription:
     'Each person plays on one team per tournament, so there’s nothing to register here.',
   closedTitle: 'Registration for this tournament is closed.',
-  fullTitle: 'This tournament is full.',
-  fullDescription: (maximumTeams: number) =>
-    `All ${maximumTeams} teams have registered, so no more teams can register.`,
+  waitlistTitle: 'This tournament is full, so your team joins the waitlist.',
+  waitlistDescription:
+    'Waiting teams keep their place in line. If a place opens, an organizer moves a team from the waitlist into the tournament, and you become its captain.',
+  waitlistedTitle: (team: string, position: number) =>
+    `${team} is on the waitlist, position ${position}.`,
+  waitlistedDescription: (position: number) => {
+    const ahead =
+      position <= 1
+        ? 'Your team is first in line.'
+        : position === 2
+          ? 'One team is ahead of yours.'
+          : `${position - 1} teams are ahead of yours.`;
+    return `${ahead} If an organizer gives your team a place, it appears under Your teams, and you can invite your players.`;
+  },
 } as const;
 
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'full' | 'onTeam';
+type Refusal = 'closed' | 'onTeam' | 'waitlisted';
 
 type FormAlert = 'offline' | 'failed';
 
@@ -85,6 +98,11 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+}
+
+function checkedName(name: string): string {
+  const checked = checkTeamName(name);
+  return checked.ok ? checked.name : name;
 }
 
 function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
@@ -117,6 +135,7 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
       lucideArrowRight,
       lucideCalendarX,
       lucideCircleAlert,
+      lucideListOrdered,
       lucideUsers,
     }),
   ],
@@ -184,29 +203,34 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                     />Back to the tournament page</a
                   >
                 }
-                @case ('full') {
-                  <div
-                    #cardAlert
-                    hlmAlert
-                    [attr.role]="refused() ? 'alert' : 'status'"
-                    tabindex="-1"
-                  >
-                    <ng-icon name="lucideUsers" aria-hidden="true" />
-                    <div hlmAlertTitle>{{ messages.fullTitle }}</div>
-                    <div hlmAlertDescription>
-                      {{ messages.fullDescription(tournament.maximumTeams) }}
+                @case ('waitlisted') {
+                  @if (waitlistPlace(); as place) {
+                    <div
+                      #cardAlert
+                      hlmAlert
+                      [attr.role]="refused() ? 'alert' : 'status'"
+                      tabindex="-1"
+                      class="outline-offset-2 focus:outline-2 focus:outline-ring"
+                    >
+                      <ng-icon name="lucideListOrdered" aria-hidden="true" />
+                      <div hlmAlertTitle>
+                        {{ messages.waitlistedTitle(place.teamName, place.position) }}
+                      </div>
+                      <div hlmAlertDescription>
+                        {{ messages.waitlistedDescription(place.position) }}
+                      </div>
                     </div>
-                  </div>
-                  <a
-                    [routerLink]="tournamentHref()"
-                    data-slot="button"
-                    [class]="outlineButton + ' mt-4 w-full'"
-                    ><ng-icon
-                      name="lucideArrowLeft"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Back to the tournament page</a
-                  >
+                    <a
+                      [routerLink]="tournamentHref()"
+                      data-slot="button"
+                      [class]="outlineButton + ' mt-4 w-full'"
+                      ><ng-icon
+                        name="lucideArrowLeft"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />Back to the tournament page</a
+                    >
+                  }
                 }
                 @default {
                   <form novalidate aria-labelledby="register-heading" (submit)="submit($event)">
@@ -227,9 +251,17 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                         />
                       }
                     }
-                    <p class="text-sm text-muted-foreground">
-                      You&rsquo;ll be the captain and the team&rsquo;s first player.
-                    </p>
+                    @if (joinsWaitlist()) {
+                      <div hlmAlert role="note">
+                        <ng-icon name="lucideListOrdered" aria-hidden="true" />
+                        <div hlmAlertTitle>{{ messages.waitlistTitle }}</div>
+                        <div hlmAlertDescription>{{ messages.waitlistDescription }}</div>
+                      </div>
+                    } @else {
+                      <p class="text-sm text-muted-foreground">
+                        You&rsquo;ll be the captain and the team&rsquo;s first player.
+                      </p>
+                    }
                     <div hlmFieldGroup class="mt-5">
                       <div
                         hlmField
@@ -255,7 +287,12 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                           [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
                         />
                         <p hlmFieldDescription id="team-name-description">
-                          Up to {{ maxLength }} characters. Other teams in the tournament see it.
+                          @if (joinsWaitlist()) {
+                            Up to {{ maxLength }} characters. Organizers see it while your team
+                            waits; it is not public until the team has a place.
+                          } @else {
+                            Up to {{ maxLength }} characters. Other teams in the tournament see it.
+                          }
                         </p>
                         @if (error(); as error) {
                           <div hlmFieldError id="team-name-error">
@@ -277,13 +314,15 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                       [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
                     >
                       @if (submitting()) {
-                        <hlm-spinner data-icon="inline-start" />Registering team…
+                        <hlm-spinner data-icon="inline-start" />{{
+                          joinsWaitlist() ? 'Joining the waitlist…' : 'Registering team…'
+                        }}
                       } @else {
-                        Register team
+                        {{ joinsWaitlist() ? 'Join the waitlist' : 'Register team' }}
                       }
                     </button>
                     <p role="status" class="sr-only">
-                      {{ submitting() ? 'Registering the team.' : '' }}
+                      {{ submittingStatus() }}
                     </p>
                   </form>
                 }
@@ -300,7 +339,7 @@ export class RegisterTournamentTeamPage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly title = inject(Title);
-  private readonly registerTeam = injectMutation(api.teams.registerForTournament);
+  private readonly registerTeam = injectMutation(api.teams.registerForTournamentOrWaitlist);
 
   protected readonly messages = REGISTER_TOURNAMENT_MESSAGES;
   protected readonly maxLength = MAX_TEAM_NAME_LENGTH;
@@ -360,8 +399,26 @@ export class RegisterTournamentTeamPage {
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
     if (state !== 'form' && state !== 'full') return state;
+    if (this.joinedWaitlist()) return 'waitlisted';
     const refusal = this.refusal();
-    return refusal === 'closed' || refusal === 'full' ? refusal : state;
+    return refusal === 'closed' || refusal === 'waitlisted' ? refusal : state;
+  });
+
+  protected readonly joinsWaitlist = computed(() => this.state() === 'full');
+
+  /** The mutation's answer, shown until the query holds the new entry. */
+  private readonly joinedWaitlist = linkedSignal<unknown, WaitlistPlace | null>({
+    source: this.slugs,
+    computation: () => null,
+  });
+
+  protected readonly waitlistPlace = computed<WaitlistPlace | null>(
+    () => this.tournament()?.waitlist ?? this.joinedWaitlist(),
+  );
+
+  protected readonly submittingStatus = computed(() => {
+    if (!this.submitting()) return '';
+    return this.joinsWaitlist() ? 'Joining the waitlist.' : 'Registering the team.';
   });
 
   protected readonly closedLine = computed(() => {
@@ -446,6 +503,15 @@ export class RegisterTournamentTeamPage {
       this.showFailure(failure);
       return;
     }
+    if (result.status === 'waitlisted') {
+      this.submitting.set(false);
+      this.joinedWaitlist.set({
+        teamName: checkedName(this.model().name),
+        position: result.position,
+      });
+      this.focusCardAlert.set(true);
+      return;
+    }
     // A finished one-time form is replaced in history, so Back returns to the tournament page.
     await this.router.navigateByUrl(teamPath(result.teamId), {
       replaceUrl: true,
@@ -471,8 +537,9 @@ export class RegisterTournamentTeamPage {
       this.refuse('closed');
       return;
     }
-    if (code === 'tournamentFull') {
-      this.refuse('full');
+    if (code === 'onWaitlist') {
+      this.joinedWaitlist.set(waitlistPlaceOf(failure));
+      this.refuse('waitlisted');
       return;
     }
     if (code === 'alreadyOnTeam' || code === 'alreadyOnAnotherTeam') {
@@ -482,7 +549,7 @@ export class RegisterTournamentTeamPage {
     this.showAlert('failed');
   }
 
-  /** The query answers with the caller's team, or the closed or full tournament, soon after; the card's alert takes focus once it shows. */
+  /** The query answers with the caller's team or waitlist place, or the closed tournament, soon after; the card's alert takes focus once it shows. */
   private refuse(refusal: Refusal): void {
     this.refusal.set(refusal);
     this.focusCardAlert.set(true);

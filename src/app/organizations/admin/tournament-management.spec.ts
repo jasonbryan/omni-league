@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { By, Title } from '@angular/platform-browser';
 import { RouterLink, type Routes } from '@angular/router';
+import { ConvexError } from 'convex/values';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { TournamentPage } from './tournament-page';
@@ -25,10 +27,23 @@ const ROUTES: Routes = [
 const BASE = `/app/organizations/${COASTAL.slug}/tournaments`;
 const URL = `${BASE}/winter-doubles-classic`;
 const GET = 'tournaments:getForManagement';
+const LIST_WAITLIST = 'waitlist:listForTournament';
 const PUBLISH = 'tournaments:publish';
 const LIST_MINE = 'organizations:listMine';
 const ARGS = { orgSlug: COASTAL.slug, tournamentSlug: 'winter-doubles-classic' };
 const tokens = (value: string) => value.split(' ').sort();
+const NO_WAITLIST = { rows: [], waitlistCount: 0 };
+const waiting = (i: number, teamName: string) => ({
+  waitlistEntryId: `wl_${i}`,
+  teamName,
+  captainName: `Captain ${i}`,
+  captainEmail: `captain${i}@example.com`,
+  requestedAt: Date.UTC(2026, 9, 6 + i, 18),
+});
+const WAITLIST = {
+  rows: [waiting(0, 'Late Lobsters'), waiting(1, 'Shore Thing')],
+  waitlistCount: 2,
+};
 
 const DRAFT = {
   tournamentId: 'tn_winter',
@@ -63,12 +78,14 @@ describe('TournamentManagement', () => {
   let o: Opened;
   let page: HTMLElement;
 
-  async function open(result?: unknown, url = URL) {
+  async function open(result?: unknown, url = URL, waitlist: unknown = NO_WAITLIST) {
     o = await openAdmin(ROUTES, url);
     page = o.page;
     o.acceptToken();
     await o.flush();
     if (result !== undefined) o.subscription(GET)!.emit(result);
+    await o.flush();
+    o.subscription(LIST_WAITLIST)?.emit(waitlist);
     await o.flush();
   }
 
@@ -112,6 +129,7 @@ describe('TournamentManagement', () => {
       o.acceptToken();
       await o.flush();
       expect(o.subscription(GET)!.args).toEqual(ARGS);
+      expect(o.subscription(LIST_WAITLIST)).toBeUndefined();
       const names = o.convex.activeSubscriptions.map((s) => s.name);
       expect(names.filter((name) => name.startsWith('tournaments:'))).toEqual([GET]);
       for (const count of ['leagues:publishedCount', 'memberships:staffCount']) {
@@ -121,7 +139,10 @@ describe('TournamentManagement', () => {
 
     it('an org admin gets the admin sidebar, with Tournaments marked, and the admin counts', async () => {
       await open(DRAFT);
-      expectPageAndShellSubscriptions(o.convex, [[GET, ARGS]]);
+      expectPageAndShellSubscriptions(o.convex, [
+        [GET, ARGS],
+        [LIST_WAITLIST, ARGS],
+      ]);
       const nav = page.querySelector('nav[aria-label="Coastal Bend Rec Club admin"]')!;
       expect(nav).not.toBeNull();
       expect(
@@ -192,7 +213,7 @@ describe('TournamentManagement', () => {
       expect(page.querySelector('app-admin-sidebar')).toBeNull();
       expect(o.subscription(LIST_MINE)?.args).toEqual({});
       expect(o.convex.activeSubscriptions.map((s) => s.name).sort()).toEqual(
-        [GET, LIST_MINE, 'users:me', 'users:me'].sort(),
+        [GET, LIST_WAITLIST, LIST_MINE, 'users:me', 'users:me'].sort(),
       );
       o.subscription(LIST_MINE)!.emit([
         {
@@ -275,6 +296,7 @@ describe('TournamentManagement', () => {
       ]);
       expectBareCards(main(), [
         'mt-6 max-w-2xl overflow-hidden',
+        'overflow-hidden',
         'mt-4 max-w-2xl overflow-clip md:mt-6',
       ]);
     });
@@ -334,6 +356,147 @@ describe('TournamentManagement', () => {
         organization: { slug: COASTAL.slug, name: COASTAL.name },
         tournament: { slug: 'winter-doubles-classic', name: 'Winter Doubles Classic' },
       });
+    });
+  });
+
+  describe('the waitlist', () => {
+    const PROMOTE = 'waitlist:promoteForTournament';
+    const FULL = { ...PUBLISHED, maximumTeams: 4, teamCount: 4 };
+    const ROOM = { ...PUBLISHED, maximumTeams: 6, teamCount: 4 };
+    const rows = () => [...page.querySelectorAll<HTMLElement>('#waitlist-list > li')];
+    const promoteButton = (team: string) =>
+      [...page.querySelectorAll<HTMLButtonElement>('#waitlist button')].find(
+        (button) => text(button) === `Promote ${team}`,
+      );
+
+    it('asks for the list only once the tournament has answered, and keeps the skeleton until the list answers', async () => {
+      o = await openAdmin(ROUTES, URL);
+      page = o.page;
+      o.acceptToken();
+      await o.flush();
+      expect(o.subscription(LIST_WAITLIST)).toBeUndefined();
+      o.subscription(GET)!.emit(FULL);
+      await o.flush();
+      expect(o.subscription(LIST_WAITLIST)!.args).toEqual(ARGS);
+      expect(text(main().querySelector('[role="status"]'))).toBe('Loading the tournament.');
+      expect(page.querySelector('#waitlist')).toBeNull();
+      o.subscription(LIST_WAITLIST)!.emit(WAITLIST);
+      await o.flush();
+      expect(page.querySelector('#waitlist')).not.toBeNull();
+    });
+
+    it('empty: says when teams wait here', async () => {
+      await open(FULL);
+      const panel = page.querySelector('#waitlist');
+      expect(text(panel?.querySelector('h2'))).toBe('Waitlist');
+      expect(text(panel)).toContain(
+        'No teams waiting When the tournament is full, teams that register wait here in the order they joined.',
+      );
+      expect(page.querySelector('[data-testid="waitlist-count"]')).toBeNull();
+    });
+
+    it('populated in a full tournament: the count, the no-room note, and each team oldest first with its position', async () => {
+      await open(FULL, URL, WAITLIST);
+      expect(text(page.querySelector('[data-testid="waitlist-count"]'))).toBe('2 waiting');
+      expect(text(page.querySelector('#waitlist [data-slot="alert"]'))).toBe(
+        'The tournament is full Raise the maximum teams to promote a waiting team.',
+      );
+      expect(page.querySelector('#waitlist-list')?.tagName).toBe('OL');
+      expect(rows().map((row) => text(row.querySelector('h3')))).toEqual([
+        'Late Lobsters',
+        'Shore Thing',
+      ]);
+      const first = rows()[0];
+      expect(text(first)).toContain('Position 1');
+      expect(text(first)).toContain('Captain: Captain 0');
+      expect(first.querySelector('a')?.getAttribute('href')).toBe('mailto:captain0@example.com');
+      expect(text(first)).toContain('Joined Oct 6, 2026');
+      expect(tokens(promoteButton('Late Lobsters')!.className)).toEqual(tokens(OUTLINE_BUTTON));
+    });
+
+    it('with room while teams wait: says to promote to fill the places', async () => {
+      await open(ROOM, URL, WAITLIST);
+      expect(text(page.querySelector('#waitlist [data-slot="alert"]'))).toBe(
+        'Room for 2 more teams While teams are waiting, new teams still join the waitlist, so promote to fill the places.',
+      );
+    });
+
+    it('is an h2 section between the details and the edit form', async () => {
+      await open(FULL, URL, WAITLIST);
+      const headings = [...main().querySelectorAll('section > div > h2, section > h2')].map(text);
+      expect(headings.slice(0, 3)).toEqual(['Details', 'Waitlist', 'Edit details']);
+    });
+
+    it('promote: sends the entry, shows the pending label, then the promoted status, focused', async () => {
+      await open(ROOM, URL, WAITLIST);
+      promoteButton('Late Lobsters')!.click();
+      await o.flush();
+      expect(calls()).toEqual([[PROMOTE, { waitlistEntryId: 'wl_0' }]]);
+      const pending = [...page.querySelectorAll('#waitlist button')][0];
+      expect(text(pending)).toBe('Promoting… Late Lobsters');
+      expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(pending);
+      o.convex.calls[0].resolve({ teamId: 'tm_late', teamCount: 5, maxTeams: 6 });
+      await o.flush();
+      const status = page.querySelector<HTMLElement>(
+        '#waitlist [role="status"][data-slot="alert"]',
+      );
+      expect(text(status)).toBe(
+        'Late Lobsters is a team now. Captain 0 is its captain and can invite players. The tournament has 5 of 6 teams.',
+      );
+      expect(document.activeElement).toBe(status);
+    });
+
+    it('promote refused for no room: the destructive alert, focused', async () => {
+      await open(FULL, URL, WAITLIST);
+      promoteButton('Shore Thing')!.click();
+      await o.flush();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          code: 'noRoom',
+          message: 'The tournament is full. Raise the maximum teams first.',
+        }),
+      );
+      await o.flush();
+      const alert = page.querySelector<HTMLElement>('#waitlist [role="alert"]');
+      expect(text(alert)).toBe(
+        'Shore Thing could not be promoted. The tournament is full. Raise the maximum teams first.',
+      );
+      expect(alert?.className).toContain('text-destructive');
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('offline: a press shows the offline alert and sends nothing', async () => {
+      await open(ROOM, URL, WAITLIST);
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await o.harness.fixture.whenStable();
+      const button = promoteButton('Late Lobsters')!;
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      button.click();
+      await o.flush();
+      expect(text(page.querySelector('#waitlist [role="alert"]'))).toBe(
+        "You're offline. Nothing was sent. Late Lobsters is still waiting. Try again when you’re connected.",
+      );
+      expect(calls()).toEqual([]);
+      vi.restoreAllMocks();
+      window.dispatchEvent(new Event('online'));
+    });
+
+    it('a failed list shows an alert in its panel and keeps the rest of the page', async () => {
+      o = await openAdmin(ROUTES, URL);
+      page = o.page;
+      o.acceptToken();
+      await o.flush();
+      o.subscription(GET)!.emit(FULL);
+      await o.flush();
+      o.subscription(LIST_WAITLIST)!.fail(new Error('network'));
+      await o.flush();
+      expect(text(page.querySelector('#waitlist [role="alert"]'))).toContain(
+        'The waitlist could not be loaded.',
+      );
+      expect(text(main().querySelector('h1'))).toBe('Winter Doubles Classic');
     });
   });
 

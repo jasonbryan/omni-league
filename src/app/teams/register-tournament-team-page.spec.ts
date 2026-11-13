@@ -19,7 +19,7 @@ const SLUGS = { orgSlug: 'gulf-coast-sport-social', tournamentSlug: 'gulf-coast-
 const URL = `/app/organizations/${SLUGS.orgSlug}/tournaments/${SLUGS.tournamentSlug}/register`;
 const TOURNAMENT_PATH = `/organizations/${SLUGS.orgSlug}/tournaments/${SLUGS.tournamentSlug}`;
 const GET = 'tournaments:getForRegistration';
-const REGISTER = 'teams:registerForTournament';
+const REGISTER = 'teams:registerForTournamentOrWaitlist';
 const OPEN = {
   organizationName: 'Gulf Coast Sport & Social',
   name: 'Gulf Coast Beach Open',
@@ -31,8 +31,10 @@ const OPEN = {
   maximumTeams: 16,
   isFull: false,
   team: null,
+  waitlist: null,
 };
 const FULL = { ...OPEN, isFull: true };
+const WAITLISTED = { ...FULL, waitlist: { teamName: 'Late Lobsters', position: 2 } };
 const ON_TEAM = {
   ...OPEN,
   team: { teamId: 'team_crabs', name: 'Sand Crabs', isCaptain: true, rosterCount: 1 },
@@ -180,16 +182,57 @@ describe('RegisterTournamentTeamPage', () => {
       expect(back?.getAttribute('href')).toBe(TOURNAMENT_PATH);
     });
 
-    it('full: says so with a link back, and no form', async () => {
+    it('full: the form joins the waitlist, with the waitlist note and button, and calls no mutation', async () => {
       await open();
       await answer(FULL);
-      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
-        'This tournament is full. All 16 teams have registered, so no more teams can register.',
+      const note = page.querySelector('form [data-slot="alert"]');
+      expect(note?.getAttribute('role')).toBe('note');
+      expect(note?.hasAttribute('tabindex')).toBe(false);
+      expectAlertSlots(note);
+      expectAlertClasses(note, 'default');
+      expect(alertText(note)).toBe(
+        'This tournament is full, so your team joins the waitlist. Waiting teams keep their place in line. If a place opens, an organizer moves a team from the waitlist into the tournament, and you become its captain.',
       );
+      expect(text(page.querySelector('#team-name-description'))).toBe(
+        'Up to 60 characters. Organizers see it while your team waits; it is not public until the team has a place.',
+      );
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('waitlisted: the position and a link back to the tournament page, and no form', async () => {
+      await open();
+      await answer(WAITLISTED);
+      const card = page.querySelector('[data-slot="alert"]');
+      expect(card?.getAttribute('role')).toBe('status');
+      expectAlertSlots(card);
+      expectAlertClasses(card, 'default', 'outline-offset-2 focus:outline-2 focus:outline-ring');
+      expect(text(card)).toBe(
+        'Late Lobsters is on the waitlist, position 2. One team is ahead of yours. If an organizer gives your team a place, it appears under Your teams, and you can invite your players.',
+      );
+      const link = [...page.querySelectorAll('main a')].find(
+        (a) => text(a) === 'Back to the tournament page',
+      );
+      expect(link?.getAttribute('href')).toBe(TOURNAMENT_PATH);
       expect(page.querySelector('form')).toBeNull();
-      expect(
-        [...page.querySelectorAll('main a')].find((a) => text(a) === 'Back to the tournament page'),
-      ).toBeDefined();
+    });
+
+    it('waitlisted after the deadline: the position, not the closed state', async () => {
+      await open({ now: '2027-06-10T00:00:00Z' });
+      await answer(WAITLISTED);
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain(
+        'Late Lobsters is on the waitlist, position 2.',
+      );
+      expect(page.textContent).not.toContain('Registration for this tournament is closed.');
+    });
+
+    it.each([
+      [1, 'Your team is first in line.'],
+      [4, '3 teams are ahead of yours.'],
+    ])('waitlisted at position %s says how many teams are ahead', async (position, ahead) => {
+      await open();
+      await answer({ ...FULL, waitlist: { teamName: 'Late Lobsters', position } });
+      expect(text(page.querySelector('[data-slot="alert-description"]'))).toContain(ahead);
     });
 
     it('full and on a team: "You’re on <team>" wins over full', async () => {
@@ -233,6 +276,38 @@ describe('RegisterTournamentTeamPage', () => {
     });
   });
 
+  describe('joining the waitlist', () => {
+    it('shows the pending state, then the position in a status that takes focus, on the same route', async () => {
+      await open();
+      await answer(FULL);
+      await type(' Late   Lobsters ');
+      await submit();
+      expect(registers().map((call) => call.args)).toEqual([
+        { ...SLUGS, name: ' Late   Lobsters ' },
+      ]);
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Joining the waitlist…');
+      expectPendingSpinner(page.querySelector('button[type="submit"]'));
+      expect(text(page.querySelector('form > p[role="status"]'))).toBe('Joining the waitlist.');
+      registers()[0].resolve({ status: 'waitlisted', position: 1 });
+      await flush();
+      const status = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(status?.getAttribute('role')).toBe('status');
+      expect(text(status)).toContain('Late Lobsters is on the waitlist, position 1.');
+      expect(document.activeElement).toBe(status);
+      expect(url()).toBe(URL);
+    });
+
+    it('opens the team page when the answer is a team, as when a place opened since the page loaded', async () => {
+      await open();
+      await answer(FULL);
+      await type('Sand Crabs');
+      await submit();
+      registers()[0].resolve({ status: 'registered', teamId: 'team_crabs' });
+      await flush();
+      expect(url()).toBe('/app/teams/team_crabs');
+    });
+  });
+
   describe('the form', () => {
     beforeEach(async () => {
       await open();
@@ -266,7 +341,7 @@ describe('RegisterTournamentTeamPage', () => {
       expect(button?.getAttribute('aria-disabled')).toBe('true');
       expectPendingSpinner(button);
       expect(text(page.querySelector('form > p[role="status"]'))).toBe('Registering the team.');
-      registers()[0].resolve({ teamId: 'team_crabs' });
+      registers()[0].resolve({ status: 'registered', teamId: 'team_crabs' });
       await flush();
       expect(url()).toBe('/app/teams/team_crabs');
     });
@@ -296,11 +371,6 @@ describe('RegisterTournamentTeamPage', () => {
         'Registration for this tournament is closed.',
       ],
       [
-        'full',
-        { code: 'tournamentFull', message: 'This tournament is full.' },
-        'This tournament is full.',
-      ],
-      [
         'on a team',
         {
           code: 'alreadyOnAnotherTeam',
@@ -326,6 +396,25 @@ describe('RegisterTournamentTeamPage', () => {
       const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
       expect(alert?.getAttribute('role')).toBe('alert');
       expect(text(alert)).toContain(line);
+      expect(page.querySelector('form')).toBeNull();
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('a refusal as on the waitlist shows the waitlisted card, whose alert takes focus', async () => {
+      await type('Second Try');
+      await submit();
+      registers()[0].reject(
+        new ConvexError({
+          code: 'onWaitlist',
+          teamName: 'Late Lobsters',
+          position: 3,
+          message: "You're on the waitlist with Late Lobsters in this tournament.",
+        }),
+      );
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toContain('Late Lobsters is on the waitlist, position 3.');
       expect(page.querySelector('form')).toBeNull();
       expect(document.activeElement).toBe(alert);
     });

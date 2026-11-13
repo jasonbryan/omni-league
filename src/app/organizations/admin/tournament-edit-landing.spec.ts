@@ -64,6 +64,8 @@ describe('TournamentEditLanding', () => {
   const answer = async (tournament: object | null = WINTER) => {
     o.subscription(GET)!.emit(tournament);
     await o.flush();
+    o.subscription('waitlist:listForTournament')?.emit({ rows: [], waitlistCount: 0 });
+    await o.flush();
   };
   const expectLanded = () => {
     expect(landing().pending()).toBe(false);

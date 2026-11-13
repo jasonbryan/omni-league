@@ -105,7 +105,10 @@ export const TEAM_MESSAGES = {
   alreadyFreeAgent: 'Already registered as a free agent in this season.',
   alreadyPlaced: 'Already placed on a team.',
   onWaitlist: (teamName: string) => `You're on the waitlist with ${teamName} in this season.`,
+  onTournamentWaitlist: (teamName: string) =>
+    `You're on the waitlist with ${teamName} in this tournament.`,
   noRoom: 'The season is full. Raise the maximum teams first.',
+  noRoomInTournament: 'The tournament is full. Raise the maximum teams first.',
   alreadyPromoted: 'It has already been promoted.',
   captainRequired: 'A team needs its captain.',
   notRostered: 'No longer on the team.',

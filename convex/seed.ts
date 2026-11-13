@@ -38,6 +38,7 @@ import {
   insertTournamentTeamWithCaptain,
   pendingTeamInvite,
   registerTeamOrJoinWaitlist,
+  registerTournamentTeamOrJoinWaitlist,
   removeRosterEntry,
   teamWithSortName,
 } from './lib/rosterWrites';
@@ -670,6 +671,19 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     maximumTeams: 16,
     status: 'published',
   },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Gulf Coast King of the Beach',
+    slug: 'gulf-coast-king-of-the-beach',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 45,
+    endDaysFromRun: 46,
+    deadlineDaysFromRun: 38,
+    maximumTeams: 4,
+    status: 'published',
+  },
 ];
 
 async function ensureTournament(
@@ -1030,6 +1044,26 @@ export const DEMO_TOURNAMENT_TEAMS: readonly { name: string; captainEmail: strin
   { name: 'Spike Squad', captainEmail: DEMO_CAPTAINS[2].email },
 ];
 
+/** Its demo teams fill its `maximumTeams`, so it shows a full tournament. */
+export const DEMO_FULL_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'gulf-coast-king-of-the-beach',
+} as const;
+
+/** Each team is inserted by name in `DEMO_FULL_TOURNAMENT`, once its captain's account exists. */
+export const DEMO_FULL_TOURNAMENT_TEAMS: readonly { name: string; captainEmail: string }[] = [
+  { name: 'Salt & Spike', captainEmail: DEMO_CAPTAINS[0].email },
+  { name: 'Dune Divers', captainEmail: DEMO_CAPTAINS[1].email },
+  { name: 'Pepper Party', captainEmail: DEMO_CAPTAINS[2].email },
+  { name: 'Tide Turners', captainEmail: DEMO_FREE_AGENT_PEOPLE[0].email },
+];
+
+/** Joins `DEMO_FULL_TOURNAMENT`'s waitlist once the tournament is full, inserted by team name once its captain's account exists. */
+export const DEMO_TOURNAMENT_WAITLIST_ENTRY = {
+  teamName: 'Sunrise Setters',
+  captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
+} as const;
+
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
   { name: 'Net Results', captainEmail: DEMO_CAPTAINS[0].email },
@@ -1341,7 +1375,15 @@ export const insertDemoTeams = internalMutation({
   returns: v.number(),
   handler: async (ctx, { captains }) => {
     assertPreviewDeployment();
-    const tournamentTeams = await insertTournamentTeams(ctx, captains);
+    const tournamentTeams =
+      (await insertTournamentTeams(ctx, DEMO_TOURNAMENT, DEMO_TOURNAMENT_TEAMS, captains)) +
+      (await insertTournamentTeams(
+        ctx,
+        DEMO_FULL_TOURNAMENT,
+        DEMO_FULL_TOURNAMENT_TEAMS,
+        captains,
+      ));
+    await insertDemoTournamentWaitlistEntry(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return tournamentTeams;
     let inserted =
@@ -1358,16 +1400,17 @@ export const insertDemoTeams = internalMutation({
 
 async function insertTournamentTeams(
   ctx: MutationCtx,
+  slugs: { orgSlug: string; tournamentSlug: string },
+  teams: readonly { name: string; captainEmail: string }[],
   captains: readonly { email: string; authUserId: string }[],
 ): Promise<number> {
-  const organization = await organizationBySlug(ctx, DEMO_TOURNAMENT.orgSlug);
+  const organization = await organizationBySlug(ctx, slugs.orgSlug);
   const found =
-    organization &&
-    (await findTournamentBySlugs(ctx, organization, DEMO_TOURNAMENT.tournamentSlug));
+    organization && (await findTournamentBySlugs(ctx, organization, slugs.tournamentSlug));
   if (!found) return 0;
   const tournamentId = found.tournament._id;
   let inserted = 0;
-  for (const team of DEMO_TOURNAMENT_TEAMS) {
+  for (const team of teams) {
     const authUserId = captains.find((captain) => captain.email === team.captainEmail)?.authUserId;
     if (authUserId === undefined) continue;
     const sortName = teamSortName(team.name);
@@ -1417,6 +1460,39 @@ async function insertDemoWaitlistEntry(
   // Only a full season puts the team on the waitlist; any other would register it.
   if (!user || !season || !seasonIsFull(season)) return;
   await registerTeamOrJoinWaitlist(ctx, season, { name: teamName, captainUserId: user._id });
+}
+
+async function insertDemoTournamentWaitlistEntry(
+  ctx: MutationCtx,
+  captains: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const { teamName, captainEmail } = DEMO_TOURNAMENT_WAITLIST_ENTRY;
+  const authUserId = captains.find((captain) => captain.email === captainEmail)?.authUserId;
+  if (authUserId === undefined) return;
+  const organization = await organizationBySlug(ctx, DEMO_FULL_TOURNAMENT.orgSlug);
+  const found =
+    organization &&
+    (await findTournamentBySlugs(ctx, organization, DEMO_FULL_TOURNAMENT.tournamentSlug));
+  if (!found) return;
+  const tournamentId = found.tournament._id;
+  const seeded = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_tournamentId_and_sortName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('sortName', teamSortName(teamName)),
+    )
+    .first();
+  if (seeded) return;
+  const user = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  const tournament = await ctx.db.get('tournaments', tournamentId);
+  // Only a full tournament puts the team on the waitlist; any other would register it.
+  if (!user || !tournament || !tournamentIsFull(tournament)) return;
+  await registerTournamentTeamOrJoinWaitlist(ctx, tournament, {
+    name: teamName,
+    captainUserId: user._id,
+  });
 }
 
 async function insertSeasonTeams(

@@ -279,7 +279,7 @@ const DATA = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 2,
+  tournaments: 3,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -305,7 +305,7 @@ describe('seed:demo accounts: a new deployment', () => {
         backfilled: NO_BACKFILL,
         memberships: 5,
         invites: 1,
-        teams: 10,
+        teams: 14,
         teamInvites: 4,
         freeAgents: 6,
         accounts: ALL('created'),
@@ -605,9 +605,16 @@ describe('seed:demo accounts: the demo teams', () => {
       await run(t);
       const tournamentTeams = () =>
         t.run(async (ctx) => {
-          const teams = (await ctx.db.query('teams').collect()).filter((row) => row.tournamentId);
           const tournaments = await ctx.db.query('tournaments').collect();
           const programs = await ctx.db.query('programs').collect();
+          const only = tournaments.find(
+            (row) =>
+              programs.find((program) => program._id === row.programId)?.slug ===
+              'gulf-coast-beach-open',
+          );
+          const teams = (await ctx.db.query('teams').collect()).filter(
+            (row) => row.tournamentId === only?._id,
+          );
           const users = await ctx.db.query('users').collect();
           const { page } = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
             model: 'user',
@@ -617,7 +624,6 @@ describe('seed:demo accounts: the demo teams', () => {
             page.find(
               (authUser) => authUser._id === users.find((user) => user._id === userId)?.authUserId,
             )?.email;
-          const [only] = tournaments.filter((row) => row.teamCount !== undefined);
           return {
             tournament: programs.find((program) => program._id === only?.programId)?.slug,
             teamCount: only?.teamCount,
@@ -643,13 +649,35 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 
   test(
+    'shows admin@ the full gulf-coast-king-of-the-beach with its four teams and one waiting team',
+    async () => {
+      const t = setup();
+      await run(t);
+      const slugs = { orgSlug: GULF_COAST, tournamentSlug: 'gulf-coast-king-of-the-beach' };
+      const admin = await as(t, EMAILS.admin);
+      expect(await admin.query(api.tournaments.getForManagement, slugs)).toMatchObject({
+        status: 'published',
+        maximumTeams: 4,
+        teamCount: 4,
+      });
+      expect(await admin.query(api.waitlist.listForTournament, slugs)).toMatchObject({
+        rows: [{ teamName: 'Sunrise Setters', captainName: 'Lena Ortiz' }],
+        waitlistCount: 1,
+      });
+      const organizer = await as(t, EMAILS.organizer);
+      await expect(organizer.query(api.waitlist.listForTournament, slugs)).rejects.toThrow();
+    },
+    SLOW,
+  );
+
+  test(
     'adds Sand Sharks on a later run once the captain@ account exists, and nothing after that',
     async () => {
       const t = setup();
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(10);
+      expect(first.teams).toBe(14);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -814,7 +842,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(9);
+      expect(result.teams).toBe(13);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -918,7 +946,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(15);
+      expect(rosterEntries).toHaveLength(19);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
