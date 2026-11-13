@@ -18,7 +18,8 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff } from '@ng-icons/lucide';
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
-import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
+import { AuthService } from '../core/auth/auth.service';
+import { requestSignUp, type SignUpFailure } from '../core/auth/password-auth';
 import { injectContinueToReturnTo } from '../core/auth/continue-to-return-to';
 import { AFTER_AUTH_DEFAULT, returnToOrApp } from '../core/auth/return-to';
 import { injectOfflineTitle, injectOnline } from '../core/data/convex';
@@ -479,7 +480,11 @@ export class SignUpPage {
 
     const { name, email, password } = this.model();
     this.submitting.set(true);
-    const result = await this.auth.signUp({ name: name.trim(), email: email.trim(), password });
+    const result = await this.auth.authenticate(requestSignUp, {
+      name: name.trim(),
+      email: email.trim(),
+      password,
+    });
     this.submitting.set(false);
     if (this.continueToReturnTo.underway()) return;
     if (result.ok) {
