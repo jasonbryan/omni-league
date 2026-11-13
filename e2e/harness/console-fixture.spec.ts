@@ -279,6 +279,56 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
     });
   });
 
+  test.describe('expectedFailedRequests: an aborted request', () => {
+    const options = {
+      expectedFailedRequests: [{ status: 'net::ERR_FAILED', path: '/probe-aborted' }],
+    } as const;
+
+    async function abortRequest(page: Page, path: string): Promise<void> {
+      await page.route(`**${path}`, (route) => route.abort('failed'));
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate(
+          (p) =>
+            fetch(p).then(
+              () => undefined,
+              () => undefined,
+            ),
+          path,
+        ),
+      ]);
+    }
+
+    test('allows the listed net error and path', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await page.goto('/');
+      await abortRequest(page, '/probe-aborted');
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('still fails on an aborted request for another path', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await page.goto('/');
+      await abortRequest(page, '/probe-aborted');
+      await abortRequest(page, '/probe-other');
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^console\.error: Failed to load resource: net::ERR_FAILED /),
+      ]);
+      await close();
+    });
+
+    test('fails on an unused entry, naming it', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems()).toEqual([
+        expect.stringContaining(
+          'expectedFailedRequests entry net::ERR_FAILED /probe-aborted was not used',
+        ),
+      ]);
+      await close();
+    });
+  });
+
   test.describe('expectedFailedRequests: 504 on a RegExp path', () => {
     // On a production build the worker answers requests that `page.route` never sees.
     test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
