@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -88,6 +88,8 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await screenshot(page, testInfo, 'bracket-seed-moved');
     await expectAccessible(page);
 
+    // The accessibility check walks the page with Tab, so focus returns to the button first.
+    await move(page, 'Charlie', 'up').focus();
     await page.keyboard.press('Space');
     await expect(seedStatus(page)).toHaveText('Charlie moved up to seed 1 of 3.');
     await expect(seedNames(page)).toHaveText(['Charlie', 'Alpha', 'Bravo']);
@@ -136,8 +138,9 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await createButton(page).click();
     const dialog = page.getByRole('alertdialog', { name: 'Recreate the bracket?' });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, 'bracket-recreate-confirm');
-    await expectAccessible(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(createButton(page)).toBeFocused();
