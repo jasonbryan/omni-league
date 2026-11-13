@@ -17,7 +17,8 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideWifiOff } from '@ng-icons/lucide';
 import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
-import { AuthService, type SignInResult } from '../core/auth/auth.service';
+import { AuthService } from '../core/auth/auth.service';
+import { requestSignIn, type SignInResult } from '../core/auth/password-auth';
 import { injectContinueToReturnTo } from '../core/auth/continue-to-return-to';
 import { returnToOrApp } from '../core/auth/return-to';
 import { injectOfflineTitle, injectOnline } from '../core/data/convex';
@@ -331,7 +332,7 @@ export class SignInPage {
 
     const { email, password } = this.model();
     this.submitting.set(true);
-    const result = await this.auth.signIn({ email: email.trim(), password });
+    const result = await this.auth.authenticate(requestSignIn, { email: email.trim(), password });
     this.submitting.set(false);
     if (this.continueToReturnTo.underway()) return;
     if (result.ok) {

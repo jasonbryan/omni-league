@@ -193,6 +193,28 @@ test.describe('find a league: the organizations list', () => {
     await expect(page).toHaveURL(`${baseURL}/leagues`);
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
   });
+
+  test('following an organization link opens its page without a full page load and moves focus to main', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
+    await page.goto('/leagues');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
+    await page.evaluate(() => {
+      (window as unknown as { sameDocument: boolean }).sameDocument = true;
+    });
+
+    await rows(page).first().getByRole('link').click();
+    const organization = seeded.byWord.get(SORTED_WORDS[0])!;
+    await expect(page).toHaveURL(`${baseURL}${organization.path}`);
+    await expect(page.getByRole('heading', { level: 1, name: organization.name })).toBeVisible();
+    await expect(page.locator('main#main')).toBeFocused();
+    expect(
+      await page.evaluate(() => (window as unknown as { sameDocument?: boolean }).sameDocument),
+    ).toBe(true);
+  });
 });
 
 test.describe('find a league: the organizations list screens', () => {

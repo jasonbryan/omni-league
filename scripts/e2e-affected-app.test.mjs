@@ -26,6 +26,7 @@ const CLIENT_ROUTE_FILES = [
   'src/app/app.routes.ts',
   'src/app/app.routes.app.ts',
   'src/app/app.routes.invites.ts',
+  'src/app/app.routes.organizations.ts',
 ];
 const ROUTE_TABLE_FILES = [...CLIENT_ROUTE_FILES, 'src/app/app.routes.server.ts'];
 const withAlways = (...filters) => [...new Set([...ALWAYS, ...filters])].sort();
@@ -600,6 +601,19 @@ describe('the route tables', () => {
     }
   });
 
+  it('maps the bare organizations paths to the not-found spec, and each public organization page to the preload spec', () => {
+    for (const path of ['organizations', 'organizations/']) {
+      assert.deepEqual(ROUTE_SPECS[path], ['not-found'], path);
+    }
+    const pages = routes.filter(
+      (route) => route.component && route.path.startsWith('organizations/:orgSlug'),
+    );
+    assert.equal(pages.length, 5);
+    for (const route of pages) {
+      assert.ok(ROUTE_SPECS[route.path].includes('organization-route-preload'), route.path);
+    }
+  });
+
   it('maps every path behind requireSignedIn to the after-sign-in spec, and invites/accept to the accept-invite spec', () => {
     const signedIn = routes.filter((route) => route.guards.includes('requireSignedIn'));
     assert.ok(signedIn.length >= 3, signedIn.map((route) => route.path).join(', '));
@@ -747,6 +761,7 @@ describe('the route tables', () => {
         'organization-filters',
         'organization-page',
         'organization-page-manage',
+        'organization-route-preload',
         'sport-view',
       ]);
     });
@@ -952,6 +967,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/auth/guards.ts':
       'imported only by app.routes.ts, and its redirects reach every signed-in and sign-in path',
     'src/app/core/auth/make-auth-client.ts': 'loaded with a dynamic import()',
+    'src/app/core/auth/password-auth.ts': MAIN_SERVER,
     'src/app/core/auth/return-to.ts': 'imported only by guards.ts',
     'src/app/core/changes-in-flight.ts': MAIN_SERVER,
     'src/app/core/data/convex/api.ts': MAIN_SERVER,
