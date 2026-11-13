@@ -160,6 +160,7 @@ describe('convex/testing.ts exports', () => {
       'seedTeam',
       'seedTenant',
       'seedTournament',
+      'seedTournamentBracket',
       'seedTournamentRosters',
       'seedTournamentTeam',
       'seedTournamentWaitlistEntry',

@@ -17,6 +17,7 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicTournamentPage } from './public-tournament-page';
 import {
   BEACH_OPEN,
+  BEACH_OPEN_BRACKET,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
   tournamentQueryResults,
@@ -113,6 +114,12 @@ describe('PublicTournamentPage offline', () => {
       );
     });
 
+    it('shows the empty line for a copy saved before the bracket existed', () => {
+      expect(text(host(harness).querySelector('main section#bracket p'))).toBe(
+        'The bracket appears here once the organizer creates it.',
+      );
+    });
+
     it('shows the saved-copy note under the heading lines, with the saved time', () => {
       const expected = formatSavedTime(SAVED_AT, NOW);
       const header = host(harness).querySelector('main h1')?.parentElement;
@@ -143,6 +150,16 @@ describe('PublicTournamentPage offline', () => {
     const harness = await open();
     expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Beach Open');
     expect(note(harness)).toBeNull();
+  });
+
+  it('shows the bracket from a saved copy opened offline, with the saved-copy note', async () => {
+    plant(tournamentQueryResults({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    const section = host(harness).querySelector('main section#bracket');
+    expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual(['Semifinals', 'Final']);
+    expect(section?.querySelectorAll('li')).toHaveLength(3);
+    expect(note(harness)).not.toBeNull();
   });
 
   describe('no saved copy', () => {
