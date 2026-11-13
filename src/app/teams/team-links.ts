@@ -1,4 +1,4 @@
-/** A link inside running text. */
+/** No tap target: a link inside running text is exempt from the 44px rule. */
 export const INLINE_LINK = 'underline underline-offset-4 hover:text-foreground';
 
 /** A link that is the only content of a row, so it needs a tap target. */
