@@ -390,6 +390,7 @@ async function publicTournamentRow(
     startDate: tournament.startDate,
     endDate: tournament.endDate,
     registrationDeadline: tournament.registrationDeadline,
+    isFull: tournamentIsFull(tournament),
   };
 }
 

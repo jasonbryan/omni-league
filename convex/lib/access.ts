@@ -114,7 +114,7 @@ export async function requireSeasonMemberOrOrganizer(
   };
 }
 
-/** A tournament team is seen by the people on it and the organization's admins; other teams in the tournament do not see its roster. */
+/** A tournament team is seen by the people on it and the staff who run its tournament; other teams in the tournament do not see its roster. */
 export async function requireTournamentTeamMemberOrAdmin(
   ctx: Ctx,
   team: Doc<'teams'>,
@@ -123,7 +123,7 @@ export async function requireTournamentTeamMemberOrAdmin(
   if (!user || team.tournamentId === undefined) throw forbidden();
   const own = await adultEntryInTournament(ctx, team.tournamentId, user._id);
   const ownTeamId = own?.teamId === team._id ? team._id : null;
-  const organizes = await isOrgAdmin(ctx, user._id, team.organizationId);
+  const organizes = await organizesTournamentTeam(ctx, user._id, team);
   if (ownTeamId === null && !organizes) throw forbiddenTournamentTeam();
   return {
     user,
@@ -133,13 +133,17 @@ export async function requireTournamentTeamMemberOrAdmin(
   };
 }
 
-async function isOrgAdmin(
+/** An org admin of the organization, or an organizer assigned to the tournament's program. */
+async function organizesTournamentTeam(
   ctx: Ctx,
   userId: Id<'users'>,
-  organizationId: Id<'organizations'>,
+  team: Doc<'teams'>,
 ): Promise<boolean> {
-  const membership = await membershipOf(ctx, userId, organizationId);
-  return membership?.role === 'orgAdmin';
+  const tournament = team.tournamentId ? await ctx.db.get('tournaments', team.tournamentId) : null;
+  const program = tournament ? await ctx.db.get('programs', tournament.programId) : null;
+  if (program?.organizationId !== team.organizationId) return false;
+  const membership = await membershipOf(ctx, userId, team.organizationId);
+  return membership !== null && mayOrganizeProgram(membership, program);
 }
 
 export async function canManageTournamentTeam(
@@ -147,7 +151,7 @@ export async function canManageTournamentTeam(
   userId: Id<'users'>,
   team: Doc<'teams'>,
 ): Promise<boolean> {
-  return team.captainUserId === userId || (await isOrgAdmin(ctx, userId, team.organizationId));
+  return team.captainUserId === userId || (await organizesTournamentTeam(ctx, userId, team));
 }
 
 export async function canManageTeam(

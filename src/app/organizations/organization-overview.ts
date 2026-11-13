@@ -295,14 +295,16 @@ function rowId(
                             {{ card.closesLabel }}
                             <span class="font-medium text-foreground">{{ card.closes }}</span>
                           </p>
-                          <a
-                            [routerLink]="card.href"
-                            [state]="card.names"
-                            fragment="registration"
-                            data-slot="button"
-                            [class]="registerButton"
-                            >Register<span class="sr-only"> {{ card.registerFor }}</span></a
-                          >
+                          @if (card.canRegister) {
+                            <a
+                              [routerLink]="card.href"
+                              [state]="card.names"
+                              fragment="registration"
+                              data-slot="button"
+                              [class]="registerButton"
+                              >Register<span class="sr-only"> {{ card.registerFor }}</span></a
+                            >
+                          }
                         </div>
                       </div>
                     </li>
@@ -785,6 +787,7 @@ export class OrganizationOverview {
       where: season.league.locationNames.join(', '),
       closes: closesText(season.registrationDeadline),
       full: season.isFull === true,
+      canRegister: true,
       closesLabel: season.isFull === true ? 'Waitlist open · closes' : 'Closes',
     })),
   );
@@ -803,7 +806,8 @@ export class OrganizationOverview {
       teams: `${tournament.divisionLabel}, teams of at least ${tournament.minimumRosterSize}`,
       where: tournament.locationNames.join(', '),
       closes: closesText(tournament.registrationDeadline),
-      full: false,
+      full: tournament.isFull === true,
+      canRegister: tournament.isFull !== true,
       closesLabel: 'Closes',
     })),
   );

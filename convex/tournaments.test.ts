@@ -1125,6 +1125,7 @@ describe('tournaments.listPublic', () => {
           startDate: inDays(30),
           endDate: inDays(31),
           registrationDeadline: inDays(23),
+          isFull: false,
         },
       ],
       page: 1,
@@ -1302,7 +1303,33 @@ describe('tournaments.listOpenForOrganization', () => {
         endDate: inDays(31),
         registrationDeadline: inDays(23),
         minimumRosterSize: 2,
+        isFull: false,
       },
+    ]);
+  });
+
+  test('marks a tournament that has reached its maximum teams as full, and one with room as not', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'full', startInDays: 10 },
+      { slug: 'room', startInDays: 11 },
+    ]);
+    await s.t.run(async (ctx) => {
+      for (const tournament of await ctx.db.query('tournaments').collect()) {
+        const program = (await ctx.db.get('programs', tournament.programId))!;
+        await ctx.db.patch('tournaments', tournament._id, {
+          teamCount:
+            program.slug === 'full' ? tournament.maximumTeams : tournament.maximumTeams - 1,
+        });
+      }
+    });
+    expect((await listOpen(s)).map(({ slug, isFull }) => [slug, isFull])).toEqual([
+      ['full', true],
+      ['room', false],
+    ]);
+    expect((await listPublic(s)).rows.map(({ slug, isFull }) => [slug, isFull])).toEqual([
+      ['full', true],
+      ['room', false],
     ]);
   });
 

@@ -188,6 +188,35 @@ test.describe('register a team for a tournament', () => {
     await screenshot(page, testInfo, '340-register-full');
   });
 
+  test('full: the organization page shows Full on the row and the open card, with no Register link, and Registration open for a tournament with room', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    await seedTeam(tenant, FULL, 'One', await seedUser(newUser('One')));
+    await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
+    await page.goto(tenant.path);
+    const row = (name: string) =>
+      page.locator('#tournaments li').filter({ has: page.getByRole('heading', { name }) });
+    await expect(row('Tiny Open')).toContainText('Full');
+    await expect(row('Tiny Open')).not.toContainText('Registration open');
+    await expect(row('Tiny Open').getByRole('link', { name: /^Register/ })).toHaveCount(0);
+    await expect(row('Gulf Coast Beach Open')).toContainText('Registration open');
+    await expect(
+      row('Gulf Coast Beach Open').getByRole('link', {
+        name: 'Register for Gulf Coast Beach Open',
+      }),
+    ).toBeVisible();
+    const card = (name: string) =>
+      page.locator('#registration-open li').filter({ has: page.getByRole('heading', { name }) });
+    await expect(card('Tiny Open')).toContainText('Full');
+    await expect(card('Tiny Open').getByRole('link', { name: /^Register/ })).toHaveCount(0);
+    await expect(
+      card('Gulf Coast Beach Open').getByRole('link', { name: /^Register/ }),
+    ).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '340-organization-full');
+  });
+
   test('already on a team: says so with a link to it and no form, also after the deadline', async ({
     page,
   }, testInfo) => {

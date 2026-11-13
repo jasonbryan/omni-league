@@ -246,7 +246,9 @@ export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;
 
 export const getTournamentPublicPageReturns = v.union(v.null(), publicTournamentPageValidator);
 
+// `isFull` is optional so a copy saved before it existed stays valid.
 const publicTournamentRowFields = {
+  isFull: v.optional(v.boolean()),
   name: v.string(),
   slug: v.string(),
   sportName: v.string(),

@@ -86,7 +86,11 @@ async function setup() {
         await publishTournament(ctx, (await ctx.db.get('tournaments', id))!);
       return id;
     };
-    const member = async (authUserId: string, organizationId: Id<'organizations'> | null) => {
+    const member = async (
+      authUserId: string,
+      organizationId: Id<'organizations'> | null,
+      organizer?: { programIds: Id<'programs'>[] },
+    ) => {
       const userId = await ctx.db.insert('users', {
         authUserId,
         name: `Name ${authUserId}`,
@@ -96,8 +100,9 @@ async function setup() {
         await ctx.db.insert('memberships', {
           userId,
           organizationId,
-          role: 'orgAdmin',
+          role: organizer ? 'leagueOrganizer' : 'orgAdmin',
           leagueIds: [],
+          ...(organizer && { programIds: organizer.programIds }),
         });
       }
       return userId;
@@ -122,10 +127,14 @@ async function setup() {
       },
       'published',
     );
+    const gulf = await tournament(a, 'Gulf Coast Beach Open', 'gulf-coast-beach-open');
+    const tiny = await tournament(a, 'Tiny Open', 'tiny-open', { maximumTeams: 2 });
+    const programOf = async (id: Id<'tournaments'>) =>
+      (await ctx.db.get('tournaments', id))!.programId;
     return {
       season,
-      gulf: await tournament(a, 'Gulf Coast Beach Open', 'gulf-coast-beach-open'),
-      tiny: await tournament(a, 'Tiny Open', 'tiny-open', { maximumTeams: 2 }),
+      gulf,
+      tiny,
       second: await tournament(a, 'Second Open', 'second-open'),
       draft: await tournament(a, 'Draft Open', 'draft-open', {}, 'draft'),
       pastDeadline: await tournament(a, 'Past Deadline Open', 'past-deadline-open', {
@@ -141,6 +150,11 @@ async function setup() {
       admin: await member('admin-a', a),
       foreignAdmin: await member('admin-b', b),
       stranger: await member('stranger', null),
+      assignedOrganizer: await member('organizer-assigned', a, {
+        programIds: [await programOf(gulf)],
+      }),
+      otherOrganizer: await member('organizer-other', a, { programIds: [await programOf(tiny)] }),
+      unassignedOrganizer: await member('organizer-none', a, { programIds: [] }),
     };
   });
   return { t, ...ids };
@@ -554,6 +568,18 @@ describe('teams.getForMember for a tournament team', () => {
     });
   });
 
+  test('gives an organizer assigned to the tournament the team, and manage rights', async () => {
+    const { s, teamId } = await registered();
+    expect(
+      await as(s, 'organizer-assigned').query(api.teams.getForMember, { teamId }),
+    ).toMatchObject({
+      name: 'Sand Crabs',
+      viewerIsCaptain: false,
+      viewerCanManage: true,
+      viewerOnTeam: false,
+    });
+  });
+
   test('answers an admin of the organization with the stand-in season and league too', async () => {
     const { s, teamId } = await registered();
     expect(await as(s, 'admin-a').query(api.teams.getForMember, { teamId })).toMatchObject({
@@ -568,6 +594,8 @@ describe('teams.getForMember for a tournament team', () => {
     ['a stranger', 'stranger'],
     ['a captain of another team in the tournament', 'rival'],
     ['an admin of another organization', 'admin-b'],
+    ['an organizer assigned to another tournament', 'organizer-other'],
+    ['an organizer assigned to no program', 'organizer-none'],
   ])('refuses %s as forbidden', async (_label, authUserId) => {
     const { s, teamId } = await registered();
     const caller = authUserId ? as(s, authUserId) : s.t;

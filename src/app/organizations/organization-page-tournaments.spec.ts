@@ -254,6 +254,19 @@ describe('the Tournaments section', () => {
       expect(register?.className).toContain('pointer-coarse:min-h-11');
     });
 
+    it('shows Full in place of Registration open, with no Register link, for a full tournament', async () => {
+      await emit(harness, queryResults(withTournaments([{ ...BEACH_OPEN, isFull: true }])));
+      const row = rows(harness)[0];
+      expectBadge(row.querySelector('[data-slot="badge"]'), 'outline', 'fit');
+      expect(text(row.querySelector('[data-slot="badge"]'))).toBe('Full');
+      expect([...(row.querySelector('p:last-of-type')?.children ?? [])].map(text)).toEqual([
+        'Full',
+        'May 15 – May 16, 2027',
+      ]);
+      expect(row.querySelector('a[href$="#registration"]')).toBeNull();
+      expect(text(row)).not.toContain('Registration open');
+    });
+
     it('shows Registration closed with no Register link after the deadline', () => {
       const row = rows(harness)[0];
       expectBadge(row.querySelector('[data-slot="badge"]'), 'muted', 'fit');
@@ -598,6 +611,37 @@ describe('the Registration open section with tournaments', () => {
     const href = '/organizations/gulf-coast-sport-social/tournaments/gulf-coast-beach-open';
     expect(links.map((a) => a.getAttribute('href'))).toEqual([href, `${href}#registration`]);
     expect(text(links[1])).toBe('Register for Gulf Coast Beach Open');
+  });
+
+  it('draws a full open tournament with a Full badge and no Register link', async () => {
+    const harness = await open();
+    await emit(
+      harness,
+      queryResults(withTournaments([BEACH_OPEN], [{ ...OPEN_ROW, isFull: true }])),
+    );
+    const card = cards(harness)[0];
+    expect([...card.querySelectorAll('[data-slot="badge"]')].map(text)).toEqual([
+      'Beach volleyball',
+      'Full',
+    ]);
+    expect([...card.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
+      '/organizations/gulf-coast-sport-social/tournaments/gulf-coast-beach-open',
+    ]);
+    expect(text(card)).not.toContain('Register');
+  });
+
+  it('draws a tournament with room, and a saved copy with no `isFull`, with the Register link', async () => {
+    const harness = await open();
+    await emit(
+      harness,
+      queryResults(withTournaments([BEACH_OPEN], [{ ...OPEN_ROW, isFull: false }, OPEN_ROW])),
+    );
+    for (const card of cards(harness)) {
+      expect(card.querySelectorAll('[data-slot="badge"]')).toHaveLength(1);
+      expect(text(card.querySelector('a[href$="#registration"]'))).toBe(
+        'Register for Gulf Coast Beach Open',
+      );
+    }
   });
 
   it('leaves out an open tournament whose deadline has passed at the viewer’s time', async () => {
