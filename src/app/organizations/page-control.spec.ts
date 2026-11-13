@@ -82,6 +82,15 @@ describe('pageWindow', () => {
   });
 });
 
+describe('rangeText with the rows shown', () => {
+  it('ends at the last row shown, and says none when the page has none', () => {
+    expect(rangeText(1, 6, 4)).toBe('1–4 of 6');
+    expect(rangeText(2, 6, 1)).toBe('6–6 of 6');
+    expect(rangeText(2, 6, 0)).toBe('0 of 6');
+    expect(rangeText(1, 7, 5)).toBe('1–5 of 7');
+  });
+});
+
 describe('rangeText', () => {
   it('names the first and last row on the page and the total', () => {
     expect(rangeText(1, 7)).toBe('1–5 of 7');

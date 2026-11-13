@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { requireOrgAdmin } from './lib/access';
+import { assignablePrograms } from './lib/assignedPrograms';
 import { authEmailsOf } from './lib/authUsers';
 import { recountMemberships } from './lib/memberships';
 import { roleValidator } from './lib/roles';
@@ -27,6 +28,7 @@ export const listForOrganization = query({
       email: v.string(),
       role: roleValidator,
       leagueNames: v.array(v.string()),
+      tournamentNames: v.optional(v.array(v.string())),
       isYou: v.boolean(),
     }),
   ),
@@ -60,12 +62,16 @@ export const listForOrganization = query({
         const name = await nameOf(id);
         if (name !== null) leagueNames.push(name);
       }
+      const tournamentNames = (
+        await assignablePrograms(ctx, organizationId, membership.programIds)
+      ).map((program) => program.name);
       rows.push({
         membershipId: membership._id,
         name: user.name,
         email: emails.get(user.authUserId) ?? '',
         role: membership.role,
         leagueNames,
+        ...(tournamentNames.length > 0 && { tournamentNames }),
         isYou: user._id === caller._id,
       });
     }

@@ -1,14 +1,38 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import {
+  requireOrgAdmin,
+  requireUser,
+  requireProgramOrganizer,
+  requireProgramOrganizerOrForbidden,
+  requireStaffOrForbidden,
+} from './lib/access';
 import { getCurrentUser } from './lib/users';
 import { adultEntryInTournament } from './lib/rosterWrites';
-import { leagueDivisionLabel } from './lib/leagueDivision';
 import { isChoosableSlug } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
+import { leagueDivisionLabel } from './lib/leagueDivision';
+import {
+  divisionFilterArgs,
+  hasDivisionFilters,
+  matchesDivisionFilters,
+  scopedFilters,
+  type DivisionFilters,
+} from './lib/leagueFilters';
 import { programStatusValidator } from './lib/programs';
-import { getTournamentPublicPageReturns, type PublicTournamentPage } from './lib/publicPage';
+import { leagueLocations } from './lib/publicLeague';
+import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import {
+  getTournamentPublicPageReturns,
+  publicOpenTournamentsValidator,
+  publicTournamentsValidator,
+  type PublicOpenTournaments,
+  type PublicTournaments,
+  type PublicTournamentPage,
+} from './lib/publicPage';
+import { dateAtUtcMinus12 } from './lib/registration';
+import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { tournamentDetailsValidator } from './lib/tournamentDetails';
 import {
@@ -16,7 +40,7 @@ import {
   tournamentDetails,
   tournamentSlugsValidator,
 } from './lib/tournamentLookup';
-import { sportValidator, type Sport } from './lib/sports';
+import { sportName, sportValidator, type Sport } from './lib/sports';
 import {
   checkTournamentFields,
   firstTournamentError,
@@ -27,6 +51,10 @@ import {
 import { insertDraftTournament, leagueSlugTaken, publishTournament } from './lib/tenantWrites';
 
 export const ADMIN_TOURNAMENTS_LIMIT = 200;
+
+export const OPEN_TOURNAMENTS_READ_LIMIT = 50;
+
+const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 
 function refuse(error: TournamentInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -153,6 +181,7 @@ export const listForOrganization = query({
   returns: v.array(
     v.object({
       tournamentId: v.id('tournaments'),
+      programId: v.id('programs'),
       name: v.string(),
       slug: v.string(),
       startDate: v.string(),
@@ -173,6 +202,7 @@ export const listForOrganization = query({
       if (program?.organizationId !== organizationId) continue;
       rows.push({
         tournamentId: tournament._id,
+        programId: program._id,
         name: program.name,
         slug: program.slug,
         startDate: tournament.startDate,
@@ -192,7 +222,7 @@ export const publish = mutation({
     await requireUser(ctx);
     const tournament = await ctx.db.get('tournaments', tournamentId);
     if (!tournament) throw new Error('Not allowed');
-    await requireOrgAdmin(ctx, tournament.organizationId);
+    await requireProgramOrganizer(ctx, tournament.programId);
     await publishTournament(ctx, tournament);
     return null;
   },
@@ -204,6 +234,8 @@ export const getForManagement = query({
     v.null(),
     v.object({
       tournamentId: v.id('tournaments'),
+      organizationId: v.id('organizations'),
+      role: roleValidator,
       status: programStatusValidator,
       ...tournamentDetailsValidator.fields,
     }),
@@ -212,11 +244,17 @@ export const getForManagement = query({
     const organization = await findOrganizationBySlug(ctx, orgSlug);
     // Null for any caller: the public page already shows whether the organization exists.
     if (!organization) return null;
-    await requireOrgAdminOrForbidden(ctx, organization._id);
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
-    if (!found) return null;
+    if (!found) {
+      // Only staff learn that a web address is unused.
+      await requireStaffOrForbidden(ctx, organization._id);
+      return null;
+    }
+    const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
     return {
       tournamentId: found.tournament._id,
+      organizationId: organization._id,
+      role: membership.role,
       status: found.program.status,
       ...(await tournamentDetails(ctx, organization, found)),
     };
@@ -296,5 +334,134 @@ export const getForRegistration = query({
             }
           : null,
     };
+  },
+});
+
+// The date bound is read here, not passed as an argument, because saved copies and server renders key on the route's arguments alone; the page drops a row that has ended since the query last ran.
+function today(): string {
+  return dateAtUtcMinus12(Date.now());
+}
+
+function upcomingByEndDate(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport | undefined,
+) {
+  const from = today();
+  return sport === undefined
+    ? ctx.db
+        .query('tournaments')
+        .withIndex('by_organizationId_and_status_and_endDate', (q) =>
+          q.eq('organizationId', organizationId).eq('status', 'published').gte('endDate', from),
+        )
+    : ctx.db
+        .query('tournaments')
+        .withIndex('by_organizationId_and_sport_and_status_and_endDate', (q) =>
+          q
+            .eq('organizationId', organizationId)
+            .eq('sport', sport)
+            .eq('status', 'published')
+            .gte('endDate', from),
+        );
+}
+
+async function ownProgramMatchingDivision(
+  ctx: QueryCtx,
+  tournament: Doc<'tournaments'>,
+  filters: DivisionFilters,
+): Promise<Doc<'programs'> | null> {
+  const program = await ctx.db.get('programs', tournament.programId);
+  if (program?.organizationId !== tournament.organizationId) return null;
+  return matchesDivisionFilters(program, filters) ? program : null;
+}
+
+async function publicTournamentRow(
+  ctx: QueryCtx,
+  organization: Doc<'organizations'>,
+  tournament: Doc<'tournaments'>,
+  program: Doc<'programs'>,
+) {
+  return {
+    name: program.name,
+    slug: program.slug,
+    sportName: sportName(program.sport),
+    divisionLabel: await leagueDivisionLabel(ctx, program),
+    locationNames: (await leagueLocations(ctx, organization, program)).map(({ name }) => name),
+    startDate: tournament.startDate,
+    endDate: tournament.endDate,
+    registrationDeadline: tournament.registrationDeadline,
+  };
+}
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const listPublic = query({
+  args: {
+    organizationSlug: v.string(),
+    page: v.number(),
+    sport: v.optional(sportValidator),
+    ...divisionFilterArgs,
+  },
+  returns: publicTournamentsValidator,
+  handler: async (
+    ctx,
+    { organizationSlug, page: requested, sport, ...requestedFilters },
+  ): Promise<PublicTournaments> => {
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) return EMPTY_LIST;
+    const filters = scopedFilters(organization.sportLeagueCounts, sport, requestedFilters);
+    const read = await upcomingByEndDate(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
+    const matching: Doc<'tournaments'>[] = [];
+    for (const tournament of read) {
+      if (
+        !hasDivisionFilters(filters) ||
+        (await ownProgramMatchingDivision(ctx, tournament, filters))
+      ) {
+        matching.push(tournament);
+      }
+    }
+    const { page, pageCount } = pageOf(matching.length, requested);
+    if (pageCount === 0) return EMPTY_LIST;
+    const rows = [];
+    for (const tournament of pageRows(matching.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
+      const program = await ownProgramMatchingDivision(ctx, tournament, filters);
+      if (program) rows.push(await publicTournamentRow(ctx, organization, tournament, program));
+    }
+    return { rows, page, pageCount, total: matching.length };
+  },
+});
+
+// Reads from today's date only to skip closed rows; the page decides at the viewer's time which are open (`registrationIsOpen`).
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const listOpenForOrganization = query({
+  args: { organizationSlug: v.string(), sport: v.optional(sportValidator), ...divisionFilterArgs },
+  returns: publicOpenTournamentsValidator,
+  handler: async (
+    ctx,
+    { organizationSlug, sport, ...requestedFilters },
+  ): Promise<PublicOpenTournaments> => {
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) return [];
+    const filters = scopedFilters(organization.sportLeagueCounts, sport, requestedFilters);
+    const from = today();
+    const read = await ctx.db
+      .query('tournaments')
+      .withIndex('by_organizationId_and_status_and_registrationDeadline', (q) =>
+        q
+          .eq('organizationId', organization._id)
+          .eq('status', 'published')
+          .gte('registrationDeadline', from),
+      )
+      .take(OPEN_TOURNAMENTS_READ_LIMIT);
+    const cards: PublicOpenTournaments = [];
+    for (const tournament of read) {
+      if (sport !== undefined && tournament.sport !== sport) continue;
+      const program = await ownProgramMatchingDivision(ctx, tournament, filters);
+      if (!program) continue;
+      cards.push({
+        ...(await publicTournamentRow(ctx, organization, tournament, program)),
+        minimumRosterSize: tournament.minimumRosterSize,
+      });
+    }
+    return cards;
   },
 });

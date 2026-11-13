@@ -23,7 +23,7 @@ const ORIGIN = new URL(baseURL).origin;
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
 const LOCATIONS = numberedLocations(6);
-const SAVED_PAGE_QUERIES = 5;
+const SAVED_PAGE_QUERIES = 7;
 
 const beach = (
   name: string,

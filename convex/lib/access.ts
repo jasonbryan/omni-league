@@ -211,3 +211,41 @@ export async function requireLeagueOrganizer(
   if (!membership || !mayOrganizeLeague(membership, leagueId)) throw new Error('Not allowed');
   return { user, membership, league };
 }
+
+function mayOrganizeProgram(membership: Doc<'memberships'>, program: Doc<'programs'>): boolean {
+  return membership.role === 'orgAdmin' || (membership.programIds ?? []).includes(program._id);
+}
+
+/** A league's program is run through `requireLeagueOrganizer`, so a program of the league type is refused here. */
+export async function requireProgramOrganizer(
+  ctx: Ctx,
+  programId: Id<'programs'>,
+): Promise<Authorized & { program: Doc<'programs'> }> {
+  const user = await requireUser(ctx);
+  const program = await ctx.db.get('programs', programId);
+  if (!program || program.type === 'league') throw new Error('Not allowed');
+  const membership = await membershipOf(ctx, user._id, program.organizationId);
+  if (!membership || !mayOrganizeProgram(membership, program)) throw new Error('Not allowed');
+  return { user, membership, program };
+}
+
+export async function requireStaffOrForbidden(
+  ctx: Ctx,
+  organizationId: Id<'organizations'>,
+): Promise<Authorized> {
+  const user = await getCurrentUser(ctx);
+  const membership = user ? await membershipOf(ctx, user._id, organizationId) : null;
+  if (!user || !membership) throw forbidden();
+  return { user, membership };
+}
+
+export async function requireProgramOrganizerOrForbidden(
+  ctx: Ctx,
+  program: Doc<'programs'>,
+): Promise<Authorized> {
+  const access = await requireStaffOrForbidden(ctx, program.organizationId);
+  if (program.type === 'league' || !mayOrganizeProgram(access.membership, program)) {
+    throw forbidden();
+  }
+  return access;
+}

@@ -186,4 +186,64 @@ describe('LeagueSidebar', () => {
     await answer(MINE_AS_ORGANIZER);
     expect(links()).toHaveLength(3);
   });
+
+  describe('tournaments', () => {
+    const WITH_TOURNAMENTS = [
+      {
+        ...MINE_AS_ORGANIZER[0],
+        tournaments: [
+          { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+          { name: 'Winter Doubles Classic', slug: 'winter-doubles-classic' },
+        ],
+      },
+    ];
+    const tournamentLinks = () => [
+      ...page.querySelectorAll<HTMLAnchorElement>('nav ul[aria-label="Your tournaments"] a'),
+    ];
+
+    it('lists the assigned tournaments of this organization after the leagues, none marked on a league page', async () => {
+      await open(COED_AS_ORGANIZER);
+      await answer(WITH_TOURNAMENTS);
+      const base = `/app/organizations/${GULF.slug}/tournaments`;
+      expect(tournamentLinks().map(row)).toEqual([
+        ['Gulf Coast Beach Open', `${base}/gulf-coast-beach-open`, null],
+        ['Winter Doubles Classic', `${base}/winter-doubles-classic`, null],
+      ]);
+      const lists = [...page.querySelectorAll('nav ul[aria-label]')].map((ul) =>
+        ul.getAttribute('aria-label'),
+      );
+      expect(lists).toEqual(['Your leagues', 'Your tournaments']);
+      expect(text(page.querySelector('nav')!.querySelectorAll('p')[1])).toBe('Your tournaments');
+      expect(links()).toHaveLength(3);
+      for (const link of tournamentLinks()) {
+        expect(tokens(link.className)).toEqual(tokens(OTHER_CLASS));
+        expect(link.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideSwords');
+      }
+    });
+
+    it('names both in the navigation label, and keeps the leagues-only label without tournaments', async () => {
+      await open(COED_AS_ORGANIZER);
+      expect(page.querySelector('nav')!.getAttribute('aria-label')).toBe(`${GULF.name} leagues`);
+      await answer(WITH_TOURNAMENTS);
+      expect(page.querySelector('nav')!.getAttribute('aria-label')).toBe(
+        `${GULF.name} leagues and tournaments`,
+      );
+    });
+
+    it('lists no tournament of another organization', async () => {
+      await open(COED_AS_ORGANIZER);
+      await answer([
+        ...MINE_AS_ORGANIZER,
+        {
+          name: 'Lakeside Softball',
+          slug: 'lakeside-softball',
+          role: 'leagueOrganizer',
+          leagues: [],
+          tournaments: [{ name: 'Lakeside Classic', slug: 'lakeside-classic' }],
+        },
+      ]);
+      expect(tournamentLinks()).toEqual([]);
+      expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Classic');
+    });
+  });
 });

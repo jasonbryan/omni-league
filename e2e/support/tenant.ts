@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { convexRun } from './convex';
+import { seedTournament, type TournamentSeed } from './tournament';
 
 export type Sport = 'beachVolleyball' | 'soccer' | 'softball';
 
@@ -31,6 +32,8 @@ export interface TenantSeed {
   name?: string;
   locations?: { name: string; address: string }[];
   leagues?: LeagueSeed[];
+  /** Seeded after the leagues, so each names locations in `locations`. */
+  tournaments?: TournamentSeed[];
 }
 
 export interface Tenant {
@@ -84,6 +87,7 @@ export function newTenant(seed: TenantSeed = {}): { tenant: Tenant; args: Tenant
 export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   const { tenant, args } = newTenant(seed);
   await convexRun('testing:seedLeague', { ...args });
+  for (const tournament of seed.tournaments ?? []) await seedTournament(tenant, tournament);
   return tenant;
 }
 

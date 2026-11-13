@@ -494,6 +494,139 @@ describe('AcceptInvitePage', () => {
     });
   });
 
+  describe('tournaments', () => {
+    const GULF = { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' };
+    const rowsOf = (page: HTMLElement) =>
+      [...page.querySelectorAll('dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+
+    it('a tournament-only invite names the tournament under "Tournament", and leads with a tournament', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({ ...ORGANIZER, leagueNames: [], tournamentNames: [GULF.name] });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run a tournament as a league organizer.',
+      );
+      expect(rowsOf(page)).toEqual([
+        ['Organization', 'Coastal Bend Rec Club'],
+        ['Role', 'League organizer'],
+        ['Tournament', GULF.name],
+        ['Expires', 'Oct 23, 2026'],
+      ]);
+    });
+
+    it('several tournaments read "Tournaments", and leagues come before them', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({
+        ...ORGANIZER,
+        tournamentNames: [GULF.name, 'Winter Doubles Classic'],
+      });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run leagues and tournaments as a league organizer.',
+      );
+      expect(rowsOf(page).map(([label]) => label)).toEqual([
+        'Organization',
+        'Role',
+        'League',
+        'Tournaments',
+        'Expires',
+      ]);
+      expect(rowsOf(page)[3][1]).toBe('Gulf Coast Beach Open and Winter Doubles Classic');
+    });
+
+    it('several tournaments alone lead with "tournaments"', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({
+        ...ORGANIZER,
+        leagueNames: [],
+        tournamentNames: [GULF.name, 'Winter Doubles Classic'],
+      });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run tournaments as a league organizer.',
+      );
+    });
+
+    describe('after accepting', () => {
+      async function acceptWith(result: unknown) {
+        const ctx = await open({ signedIn: true });
+        await ctx.emitInvite({ ...ORGANIZER, leagueNames: [], tournamentNames: [GULF.name] });
+        await ctx.signIn();
+        ctx.accept()?.click();
+        await ctx.flush();
+        ctx.call()?.resolve(result);
+        await ctx.flush();
+        return ctx.page;
+      }
+      const ANSWER = {
+        organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
+        role: 'leagueOrganizer',
+        leagueNames: [],
+        leagues: [],
+      };
+      const links = (page: HTMLElement) =>
+        [...page.querySelectorAll('main a')].map((a) => ({
+          label: text(a),
+          href: a.getAttribute('href'),
+        }));
+
+      it('one tournament and no league: the line names it, and the button opens its management page', async () => {
+        const page = await acceptWith({
+          ...ANSWER,
+          tournamentNames: [GULF.name],
+          tournaments: [GULF],
+        });
+        expect(text(page.querySelector('main p'))).toBe(
+          'You’re a league organizer for Gulf Coast Beach Open.',
+        );
+        expect(links(page)).toEqual([
+          {
+            label: 'Open Gulf Coast Beach Open',
+            href: '/app/organizations/coastal-bend/tournaments/gulf-coast-beach-open',
+          },
+        ]);
+      });
+
+      it('a league and a tournament: the line names both, and the button goes to /app', async () => {
+        const page = await acceptWith({
+          ...ANSWER,
+          leagueNames: ['Coed 7v7 Rec'],
+          leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+          tournamentNames: [GULF.name],
+          tournaments: [GULF],
+        });
+        expect(text(page.querySelector('main p'))).toBe(
+          'You’re a league organizer for Coed 7v7 Rec and Gulf Coast Beach Open.',
+        );
+        expect(links(page)).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('two tournaments: the button goes to /app', async () => {
+        const page = await acceptWith({
+          ...ANSWER,
+          tournamentNames: [GULF.name, 'Winter Doubles Classic'],
+          tournaments: [GULF, { name: 'Winter Doubles Classic', slug: 'winter-doubles-classic' }],
+        });
+        expect(links(page)).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('one league and no tournament key still opens the league, as before', async () => {
+        const page = await acceptWith({
+          ...ANSWER,
+          leagueNames: ['Coed 7v7 Rec'],
+          leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+        });
+        expect(links(page)).toEqual([
+          {
+            label: 'Open Coed 7v7 Rec',
+            href: '/app/organizations/coastal-bend/leagues/coed-7v7-rec',
+          },
+        ]);
+      });
+    });
+  });
+
   describe('refusals', () => {
     async function refuse(failure: Error) {
       const ctx = await open({ signedIn: true });

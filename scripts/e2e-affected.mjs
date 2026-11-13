@@ -118,12 +118,15 @@ export const ROUTE_SPECS = {
     'after-sign-in',
   ],
   'app/organizations/:orgSlug/tournaments/:tournamentSlug/register': ['tournament-registration'],
+  'app/organizations/:orgSlug/tournaments/:tournamentSlug': [
+    'organization-tournaments',
+    'after-sign-in',
+  ],
   'app/organizations/:slug': ['organization-admin', 'after-sign-in'],
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
   'app/organizations/:slug/leagues': ['organization-leagues'],
   'app/organizations/:slug/tournaments': ['organization-tournaments'],
-  'app/organizations/:slug/tournaments/:tournamentSlug': ['organization-tournaments'],
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
@@ -211,6 +214,8 @@ export const PUBLIC_QUERIES = [
   'seasons:listOpenForOrganization',
   'teams:listPublic',
   'tournaments:getPublicPage',
+  'tournaments:listPublic',
+  'tournaments:listOpenForOrganization',
 ];
 const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
 const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;

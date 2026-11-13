@@ -20,7 +20,7 @@ import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminTournaments } from './organizations/admin/admin-tournaments';
 import { AdminStaff } from './organizations/admin/admin-staff';
-import { TournamentManagement } from './organizations/admin/tournament-management';
+import { TournamentPage } from './organizations/admin/tournament-page';
 import { AdminDetails } from './organizations/admin/admin-details';
 import { SeasonPage } from './organizations/season-management/season-page';
 import { LeaguePage } from './organizations/league/league-page';
@@ -265,7 +265,7 @@ describe('Route tables', () => {
     }
   });
 
-  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -279,6 +279,7 @@ describe('Route tables', () => {
       league,
       season,
       registerTournament,
+      tournament,
       admin,
       register,
       registerFreeAgent,
@@ -312,6 +313,9 @@ describe('Route tables', () => {
     expect(registerTournament?.title).toBe('Register a team | Omni League');
     expect(registerTournament?.canActivate).toBeUndefined();
     expect(await registerTournament?.loadComponent?.()).toBe(RegisterTournamentTeamPage);
+    expect(tournament?.path).toBe('organizations/:orgSlug/tournaments/:tournamentSlug');
+    expect(tournament?.canActivate).toEqual([requireSignedIn]);
+    expect(await tournament?.loadComponent?.()).toBe(TournamentPage);
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);
@@ -320,7 +324,6 @@ describe('Route tables', () => {
       'locations',
       'leagues',
       'tournaments',
-      'tournaments/:tournamentSlug',
       'staff',
       'details',
     ]);
@@ -329,9 +332,8 @@ describe('Route tables', () => {
     expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(await admin?.children?.[2]?.loadComponent?.()).toBe(AdminLeagues);
     expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminTournaments);
-    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(TournamentManagement);
-    expect(await admin?.children?.[5]?.loadComponent?.()).toBe(AdminStaff);
-    expect(await admin?.children?.[6]?.loadComponent?.()).toBe(AdminDetails);
+    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(AdminStaff);
+    expect(await admin?.children?.[5]?.loadComponent?.()).toBe(AdminDetails);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Home | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

@@ -9,7 +9,15 @@ import {
   firstTournamentError,
   TOURNAMENT_MESSAGES,
 } from './lib/tournamentInput';
-import { defaultDivision, insertCustomLevel, insertTenant } from './lib/tenantWrites';
+import { PUBLIC_LIST_MAX_ROWS } from './lib/publicList';
+import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
+import {
+  defaultDivision,
+  insertCustomLevel,
+  insertDraftTournament,
+  insertTenant,
+  publishTournament,
+} from './lib/tenantWrites';
 import schema from './schema';
 import { modules, tournamentProgramFields } from './test.setup';
 import { isForbidden } from './lib/forbidden';
@@ -159,6 +167,8 @@ describe('tournaments.create', () => {
       _creationTime: tournament._creationTime,
       programId: program?._id,
       organizationId: s.organizationA,
+      status: 'draft',
+      sport: 'beachVolleyball',
       startDate: '2027-01-16',
       endDate: '2027-01-17',
       registrationDeadline: '2027-01-09',
@@ -549,8 +559,15 @@ describe('tournaments.listForOrganization', () => {
     const rows = await s.adminA.query(api.tournaments.listForOrganization, {
       organizationId: s.organizationA,
     });
-    expect(rows.map(({ tournamentId, ...row }) => [typeof tournamentId, row])).toEqual([
+    expect(
+      rows.map(({ tournamentId, programId, ...row }) => [
+        typeof tournamentId,
+        typeof programId,
+        row,
+      ]),
+    ).toEqual([
       [
+        'string',
         'string',
         {
           name: 'Spring Open',
@@ -562,6 +579,7 @@ describe('tournaments.listForOrganization', () => {
       ],
       [
         'string',
+        'string',
         {
           name: 'Winter Doubles Classic',
           slug: 'winter-doubles-classic',
@@ -571,6 +589,15 @@ describe('tournaments.listForOrganization', () => {
         },
       ],
     ]);
+  });
+
+  test('names each tournament’s program id, the id an invite assigns', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const [row] = await s.adminA.query(api.tournaments.listForOrganization, {
+      organizationId: s.organizationA,
+    });
+    expect(row.programId).toBe((await programOf(s, tournamentId))._id);
   });
 
   test('shows a published tournament as published', async () => {
@@ -608,6 +635,8 @@ describe('tournaments.listForOrganization', () => {
         await ctx.db.insert('tournaments', {
           programId,
           organizationId: s.organizationA,
+          status: 'published',
+          sport: 'soccer',
           startDate: '2027-01-16',
           endDate: '2027-01-16',
           registrationDeadline: '2027-01-09',
@@ -652,6 +681,23 @@ const programOf = (s: Setup, tournamentId: Id<'tournaments'>) =>
     return (await ctx.db.get('programs', tournament.programId))!;
   });
 
+async function assign(s: Setup, authUserId: string, ...tournamentIds: Id<'tournaments'>[]) {
+  await s.t.run(async (ctx) => {
+    const user = (await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique())!;
+    const membership = (await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
+      .first())!;
+    const programIds = [];
+    for (const id of tournamentIds)
+      programIds.push((await ctx.db.get('tournaments', id))!.programId);
+    await ctx.db.patch('memberships', membership._id, { programIds });
+  });
+}
+
 async function forbiddenBy(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -661,7 +707,7 @@ async function forbiddenBy(call: Promise<unknown>) {
 }
 
 describe('tournaments.publish', () => {
-  test('an org admin publishes a draft: its program reads published and nothing else changes', async () => {
+  test('an org admin publishes a draft: its program and tournament read published and nothing else changes', async () => {
     const s = await setup();
     const tournamentId = await draftIn(s);
     const before = await snapshot(s.t);
@@ -674,7 +720,12 @@ describe('tournaments.publish', () => {
     expect(after.programs.filter((program) => program.type === 'tournament')).toMatchObject([
       { status: 'published' },
     ]);
-    expect({ ...after, programs: asDraft(after.programs) }).toEqual(before);
+    expect(after.tournaments).toMatchObject([{ status: 'published' }]);
+    expect({
+      ...after,
+      programs: asDraft(after.programs),
+      tournaments: after.tournaments.map((row) => ({ ...row, status: 'draft' as const })),
+    }).toEqual(before);
   });
 
   test('publishing a published tournament changes nothing', async () => {
@@ -698,6 +749,47 @@ describe('tournaments.publish', () => {
     expect((await programOf(s, tournamentId)).status).toBe('draft');
   });
 
+  test('an organizer assigned to the tournament publishes it', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await assign(s, 'organizer-a', tournamentId);
+    await s.t
+      .withIdentity(identity('organizer-a'))
+      .mutation(api.tournaments.publish, { tournamentId });
+    expect((await programOf(s, tournamentId)).status).toBe('published');
+  });
+
+  test('refuses an organizer assigned to another tournament, and an assignment that names another organization’s program', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const other = await draftIn(s, { name: 'Other Open', slug: 'other-open' });
+    await assign(s, 'organizer-a', other);
+    await expect(
+      s.t.withIdentity(identity('organizer-a')).mutation(api.tournaments.publish, { tournamentId }),
+    ).rejects.toThrow('Not allowed');
+    const bProgram = await s.t.run((ctx) =>
+      ctx.db.insert('programs', {
+        ...tournamentProgramFields(s.organizationB, 'b-open'),
+        locationIds: [s.bField],
+      }),
+    );
+    await s.t.run(async (ctx) => {
+      const user = (await ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', 'organizer-a'))
+        .unique())!;
+      const membership = (await ctx.db
+        .query('memberships')
+        .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
+        .first())!;
+      await ctx.db.patch('memberships', membership._id, { programIds: [bProgram] });
+    });
+    await expect(
+      s.t.withIdentity(identity('organizer-a')).mutation(api.tournaments.publish, { tournamentId }),
+    ).rejects.toThrow('Not allowed');
+    expect((await programOf(s, tournamentId)).status).toBe('draft');
+  });
+
   test('refuses a tournament that does not exist, as it refuses another organization’s', async () => {
     const s = await setup();
     const tournamentId = await draftIn(s);
@@ -716,6 +808,8 @@ describe('tournaments.getForManagement', () => {
     const tournamentId = await draftIn(s, { locationIds: [s.bravo, s.alpha] });
     expect(await s.adminA.query(api.tournaments.getForManagement, slugs)).toEqual({
       tournamentId,
+      organizationId: s.organizationA,
+      role: 'orgAdmin',
       name: 'Winter Doubles Classic',
       slug: 'winter-doubles-classic',
       status: 'draft',
@@ -732,6 +826,49 @@ describe('tournaments.getForManagement', () => {
       maximumTeams: 16,
       minimumRosterSize: 2,
     });
+  });
+
+  test('gives the assigned organizer the same details, with their role', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await assign(s, 'organizer-a', tournamentId);
+    const page = await s.t
+      .withIdentity(identity('organizer-a'))
+      .query(api.tournaments.getForManagement, slugs);
+    expect(page).toMatchObject({
+      tournamentId,
+      organizationId: s.organizationA,
+      role: 'leagueOrganizer',
+      name: 'Winter Doubles Classic',
+      status: 'draft',
+    });
+  });
+
+  test('refuses an organizer of the organization who is assigned to another tournament only', async () => {
+    const s = await setup();
+    await draftIn(s);
+    const other = await draftIn(s, { name: 'Other Open', slug: 'other-open' });
+    await assign(s, 'organizer-a', other);
+    const organizer = s.t.withIdentity(identity('organizer-a'));
+    await forbiddenBy(organizer.query(api.tournaments.getForManagement, slugs));
+    expect(
+      (
+        await organizer.query(api.tournaments.getForManagement, {
+          ...slugs,
+          tournamentSlug: 'other-open',
+        })
+      )?.name,
+    ).toBe('Other Open');
+  });
+
+  test('is null for an unknown web address when the caller is an organizer of the organization', async () => {
+    const s = await setup();
+    await draftIn(s);
+    expect(
+      await s.t
+        .withIdentity(identity('organizer-a'))
+        .query(api.tournaments.getForManagement, { ...slugs, tournamentSlug: 'unknown' }),
+    ).toBeNull();
   });
 
   test('reads published after Publish', async () => {
@@ -782,6 +919,8 @@ describe('tournaments.getForManagement', () => {
       await ctx.db.insert('tournaments', {
         programId,
         organizationId: s.organizationB,
+        status: 'published',
+        sport: 'soccer',
         startDate: '2027-01-16',
         endDate: '2027-01-16',
         registrationDeadline: '2027-01-09',
@@ -909,5 +1048,321 @@ describe('tournaments.getPublicPage', () => {
     });
     const page = await s.t.query(api.tournaments.getPublicPage, slugs);
     expect(page?.locations).toEqual([{ name: 'bravo Beach', address: '2 Bravo St' }]);
+  });
+});
+
+const inDays = (days: number) => addCalendarDays(dateAtUtcMinus12(Date.now()), days);
+
+interface DatedTournament {
+  slug: string;
+  name?: string;
+  organizationId?: Id<'organizations'>;
+  sport?: 'beachVolleyball' | 'soccer';
+  division?: Parameters<typeof insertDraftTournament>[2]['division'];
+  startInDays: number;
+  endInDays?: number;
+  deadlineInDays?: number;
+  status?: 'draft' | 'published';
+}
+
+async function insertDated(s: Setup, tournaments: readonly DatedTournament[]) {
+  await s.t.run(async (ctx) => {
+    for (const tournament of tournaments) {
+      const sport = tournament.sport ?? 'beachVolleyball';
+      const organizationId = tournament.organizationId ?? s.organizationA;
+      const tournamentId = await insertDraftTournament(ctx, organizationId, {
+        name: tournament.name ?? tournament.slug,
+        slug: tournament.slug,
+        sport,
+        locationIds: [],
+        division: tournament.division ?? defaultDivision(sport),
+        startDate: inDays(tournament.startInDays),
+        endDate: inDays(tournament.endInDays ?? tournament.startInDays),
+        registrationDeadline: inDays(tournament.deadlineInDays ?? tournament.startInDays - 7),
+        maximumTeams: 8,
+      });
+      if ((tournament.status ?? 'published') === 'published') {
+        await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+      }
+    }
+  });
+}
+
+const listPublic = (s: Setup, args: { sport?: 'beachVolleyball' | 'soccer'; page?: number } = {}) =>
+  s.t.query(api.tournaments.listPublic, {
+    organizationSlug: 'org-a',
+    page: args.page ?? 1,
+    ...(args.sport && { sport: args.sport }),
+  });
+
+const slugsOf = (list: { rows: { slug: string }[] }) => list.rows.map((row) => row.slug);
+
+describe('tournaments.listPublic', () => {
+  test('gives a signed-out caller a published upcoming tournament with its dates, sport, division, and locations', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const tournamentId = await insertDraftTournament(ctx, s.organizationA, {
+        name: 'Gulf Coast Beach Open',
+        slug: 'gulf-coast-beach-open',
+        sport: 'beachVolleyball',
+        locationIds: [s.bravo, s.alpha],
+        division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+        startDate: inDays(30),
+        endDate: inDays(31),
+        registrationDeadline: inDays(23),
+        maximumTeams: 16,
+      });
+      await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+    });
+    expect(await listPublic(s)).toEqual({
+      rows: [
+        {
+          name: 'Gulf Coast Beach Open',
+          slug: 'gulf-coast-beach-open',
+          sportName: 'Beach volleyball',
+          divisionLabel: 'Coed · 2v2 · Open',
+          locationNames: ['bravo Beach', 'Alpha Field'],
+          startDate: inDays(30),
+          endDate: inDays(31),
+          registrationDeadline: inDays(23),
+        },
+      ],
+      page: 1,
+      pageCount: 1,
+      total: 1,
+    });
+  });
+
+  test('gives every caller the same answer', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'open', startInDays: 10 }]);
+    const anonymous = await listPublic(s);
+    for (const caller of [s.adminA, s.adminB, s.t.withIdentity(identity('stranger'))]) {
+      expect(
+        await caller.query(api.tournaments.listPublic, { organizationSlug: 'org-a', page: 1 }),
+      ).toEqual(anonymous);
+    }
+  });
+
+  test('leaves out a draft and a tournament that has ended, and keeps one that ends today', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'draft', startInDays: 10, status: 'draft' },
+      { slug: 'ended', startInDays: -5, endInDays: -1 },
+      { slug: 'ends-today', startInDays: -1, endInDays: 0 },
+      { slug: 'upcoming', startInDays: 10 },
+    ]);
+    expect(slugsOf(await listPublic(s))).toEqual(['ends-today', 'upcoming']);
+  });
+
+  test('lists the soonest end date first', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'late', startInDays: 40 },
+      { slug: 'early', startInDays: 5 },
+      { slug: 'middle', startInDays: 20 },
+    ]);
+    expect(slugsOf(await listPublic(s))).toEqual(['early', 'middle', 'late']);
+  });
+
+  test('puts 7 upcoming tournaments on two pages of 5 and 2, and shows page 1 for a page past the last', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: 7 }, (_, i) => ({ slug: `open-${i + 1}`, startInDays: 10 + i })),
+    );
+    const first = await listPublic(s);
+    expect(slugsOf(first)).toEqual(['open-1', 'open-2', 'open-3', 'open-4', 'open-5']);
+    expect([first.page, first.pageCount, first.total]).toEqual([1, 2, 7]);
+    const second = await listPublic(s, { page: 2 });
+    expect(slugsOf(second)).toEqual(['open-6', 'open-7']);
+    expect([second.page, second.pageCount, second.total]).toEqual([2, 2, 7]);
+    for (const page of [3, 0, -1, 1.5]) {
+      expect(await listPublic(s, { page }), String(page)).toEqual(first);
+    }
+  });
+
+  test('is empty, with no pages, for an organization with no upcoming tournament and for an unknown one', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'ended', startInDays: -9, endInDays: -8 }]);
+    const empty = { rows: [], page: 1, pageCount: 0, total: 0 };
+    expect(await listPublic(s)).toEqual(empty);
+    expect(
+      await s.t.query(api.tournaments.listPublic, { organizationSlug: 'nowhere', page: 1 }),
+    ).toEqual(empty);
+  });
+
+  test('lists only the organization’s own tournaments', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'a-open', startInDays: 10 },
+      { slug: 'b-open', startInDays: 10, organizationId: s.organizationB },
+    ]);
+    expect(slugsOf(await listPublic(s))).toEqual(['a-open']);
+  });
+
+  test('narrows to one sport, with the count and pages of that sport', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'sand-1', startInDays: 10 },
+      { slug: 'soccer-1', startInDays: 11, sport: 'soccer' },
+      { slug: 'sand-2', startInDays: 12 },
+    ]);
+    const sand = await listPublic(s, { sport: 'beachVolleyball' });
+    expect(slugsOf(sand)).toEqual(['sand-1', 'sand-2']);
+    expect(sand.total).toBe(2);
+    expect(slugsOf(await listPublic(s, { sport: 'soccer' }))).toEqual(['soccer-1']);
+  });
+
+  test('hides a tournament whose division a filter does not match, and counts the rest', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'coed', startInDays: 10 },
+      {
+        slug: 'womens',
+        startInDays: 11,
+        division: { gender: 'womens', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+      },
+      {
+        slug: 'mens-fours',
+        startInDays: 12,
+        division: { gender: 'mens', playersPerSide: 4, level: 'a', ageGroup: 'over30' },
+      },
+    ]);
+    const filtered = (filters: object) =>
+      s.t.query(api.tournaments.listPublic, {
+        organizationSlug: 'org-a',
+        page: 1,
+        sport: 'beachVolleyball',
+        ...filters,
+      });
+    expect(slugsOf(await filtered({ gender: ['womens'] }))).toEqual(['womens']);
+    expect(slugsOf(await filtered({ gender: ['coed', 'mens'] }))).toEqual(['coed', 'mens-fours']);
+    expect(slugsOf(await filtered({ playersPerSide: [4] }))).toEqual(['mens-fours']);
+    expect(slugsOf(await filtered({ ageGroup: ['over30'], gender: ['mens'] }))).toEqual([
+      'mens-fours',
+    ]);
+    const none = await filtered({ gender: ['womens'], ageGroup: ['over30'] });
+    expect(none).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
+    expect((await filtered({ gender: ['coed', 'womens'] })).total).toBe(2);
+  });
+
+  test('reads no further than the row limit', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: PUBLIC_LIST_MAX_ROWS + 3 }, (_, i) => ({
+        slug: `open-${String(i).padStart(3, '0')}`,
+        startInDays: 1,
+        endInDays: 1 + i,
+      })),
+    );
+    const last = await listPublic(s, { page: 999 });
+    expect(last.page).toBe(1);
+    const lastPage = await listPublic(s, { page: PUBLIC_LIST_MAX_ROWS / 5 });
+    expect(lastPage.total).toBeLessThanOrEqual(PUBLIC_LIST_MAX_ROWS);
+    expect(lastPage.pageCount).toBe(PUBLIC_LIST_MAX_ROWS / 5);
+    expect(slugsOf(lastPage)).toEqual(
+      Array.from(
+        { length: 5 },
+        (_, i) => `open-${String(PUBLIC_LIST_MAX_ROWS - 5 + i).padStart(3, '0')}`,
+      ),
+    );
+  });
+});
+
+describe('tournaments.listOpenForOrganization', () => {
+  const listOpen = (s: Setup, args: object = {}) =>
+    s.t.query(api.tournaments.listOpenForOrganization, { organizationSlug: 'org-a', ...args });
+
+  test('gives a signed-out caller a published tournament with its deadline and roster size', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const tournamentId = await insertDraftTournament(ctx, s.organizationA, {
+        name: 'Gulf Coast Beach Open',
+        slug: 'gulf-coast-beach-open',
+        sport: 'beachVolleyball',
+        locationIds: [s.bravo],
+        division: { gender: 'coed', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+        startDate: inDays(30),
+        endDate: inDays(31),
+        registrationDeadline: inDays(23),
+        maximumTeams: 16,
+      });
+      await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+    });
+    expect(await listOpen(s)).toEqual([
+      {
+        name: 'Gulf Coast Beach Open',
+        slug: 'gulf-coast-beach-open',
+        sportName: 'Beach volleyball',
+        divisionLabel: 'Coed · 2v2 · Open',
+        locationNames: ['bravo Beach'],
+        startDate: inDays(30),
+        endDate: inDays(31),
+        registrationDeadline: inDays(23),
+        minimumRosterSize: 2,
+      },
+    ]);
+  });
+
+  test('gives every caller the same answer', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'open', startInDays: 10 }]);
+    const anonymous = await listOpen(s);
+    for (const caller of [s.adminA, s.adminB, s.t.withIdentity(identity('stranger'))]) {
+      expect(
+        await caller.query(api.tournaments.listOpenForOrganization, {
+          organizationSlug: 'org-a',
+        }),
+      ).toEqual(anonymous);
+    }
+  });
+
+  test('leaves out a draft and a tournament whose deadline or end has passed, and keeps one whose deadline is today', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'draft', startInDays: 10, status: 'draft' },
+      { slug: 'ended', startInDays: -5, endInDays: -1 },
+      { slug: 'closed', startInDays: 5, deadlineInDays: -2 },
+      { slug: 'deadline-today', startInDays: 5, deadlineInDays: 0 },
+      { slug: 'open', startInDays: 10 },
+    ]);
+    expect((await listOpen(s)).map((row) => row.slug)).toEqual(['deadline-today', 'open']);
+  });
+
+  test('lists the soonest deadline first', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'late', startInDays: 40, deadlineInDays: 30 },
+      { slug: 'early', startInDays: 20, deadlineInDays: 3 },
+      { slug: 'middle', startInDays: 30, deadlineInDays: 12 },
+    ]);
+    expect((await listOpen(s)).map((row) => row.slug)).toEqual(['early', 'middle', 'late']);
+  });
+
+  test('lists only the organization’s own tournaments, narrowed to a sport and to a division', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'sand', startInDays: 10 },
+      { slug: 'soccer', startInDays: 11, sport: 'soccer' },
+      {
+        slug: 'sand-womens',
+        startInDays: 12,
+        division: { gender: 'womens', playersPerSide: 2, level: 'open', ageGroup: 'adult' },
+      },
+      { slug: 'other-org', startInDays: 10, organizationId: s.organizationB },
+    ]);
+    const slugs = async (args: object) => (await listOpen(s, args)).map((row) => row.slug);
+    expect(await slugs({})).toEqual(['sand', 'soccer', 'sand-womens']);
+    expect(await slugs({ sport: 'soccer' })).toEqual(['soccer']);
+    expect(await slugs({ sport: 'beachVolleyball', gender: ['womens'] })).toEqual(['sand-womens']);
+  });
+
+  test('is empty for an unknown organization', async () => {
+    const s = await setup();
+    expect(
+      await s.t.query(api.tournaments.listOpenForOrganization, { organizationSlug: 'nowhere' }),
+    ).toEqual([]);
   });
 });

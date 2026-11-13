@@ -1,35 +1,39 @@
 import { TestBed } from '@angular/core/testing';
 import { By, Title } from '@angular/platform-browser';
-import { RouterLink } from '@angular/router';
+import { RouterLink, type Routes } from '@angular/router';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
-import { AdminArea } from './admin-area';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { TournamentManagement } from './tournament-management';
+import { TournamentPage } from './tournament-page';
 import {
-  adminRoutes,
   COASTAL,
+  Elsewhere,
   expectPageAndShellSubscriptions,
   forbiddenError,
-  GET_ADMIN_CONTEXT,
   openAdmin,
   text,
 } from './testing/admin-harness';
 
-const ROUTES = adminRoutes(AdminArea, [
-  { path: 'tournaments/:tournamentSlug', component: TournamentManagement },
-]);
+const ROUTES: Routes = [
+  { path: 'app/organizations/:orgSlug/tournaments/:tournamentSlug', component: TournamentPage },
+  { path: 'app/organizations/:slug', component: Elsewhere },
+  { path: 'app', component: Elsewhere },
+  { path: 'organizations/:orgSlug', component: Elsewhere },
+];
 const BASE = `/app/organizations/${COASTAL.slug}/tournaments`;
 const URL = `${BASE}/winter-doubles-classic`;
 const GET = 'tournaments:getForManagement';
 const PUBLISH = 'tournaments:publish';
+const LIST_MINE = 'organizations:listMine';
 const ARGS = { orgSlug: COASTAL.slug, tournamentSlug: 'winter-doubles-classic' };
 const tokens = (value: string) => value.split(' ').sort();
 
 const DRAFT = {
   tournamentId: 'tn_winter',
+  organizationId: COASTAL.organizationId,
+  role: 'orgAdmin',
   status: 'draft',
   organization: { name: COASTAL.name, slug: COASTAL.slug },
   name: 'Winter Doubles Classic',
@@ -49,6 +53,7 @@ const DRAFT = {
   maximumTeams: 16,
 };
 const PUBLISHED = { ...DRAFT, status: 'published' };
+const AS_ORGANIZER = { ...DRAFT, role: 'leagueOrganizer' };
 
 describe('TournamentManagement', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
@@ -59,7 +64,6 @@ describe('TournamentManagement', () => {
     o = await openAdmin(ROUTES, url);
     page = o.page;
     o.acceptToken();
-    o.subscription(GET_ADMIN_CONTEXT)!.emit(COASTAL);
     await o.flush();
     if (result !== undefined) o.subscription(GET)!.emit(result);
     await o.flush();
@@ -95,28 +99,34 @@ describe('TournamentManagement', () => {
   }
 
   describe('the page', () => {
-    it('asks tournaments.getForManagement with the route’s slugs, only after the context says ready', async () => {
+    it('asks tournaments.getForManagement with the route’s slugs once the token is accepted, and no admin count before it answers', async () => {
       o = await openAdmin(ROUTES, URL);
-      o.acceptToken();
       expect(o.subscription(GET)).toBeUndefined();
-      o.subscription(GET_ADMIN_CONTEXT)!.emit(COASTAL);
+      o.acceptToken();
       await o.flush();
-      expectPageAndShellSubscriptions(o.convex, [
-        [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
-        [GET, ARGS],
-      ]);
+      expect(o.subscription(GET)!.args).toEqual(ARGS);
+      const names = o.convex.activeSubscriptions.map((s) => s.name);
+      expect(names.filter((name) => name.startsWith('tournaments:'))).toEqual([GET]);
+      for (const count of ['leagues:publishedCount', 'memberships:staffCount']) {
+        expect(names).not.toContain(count);
+      }
     });
 
-    it('asks for nothing when the caller has no access to the organization', async () => {
-      o = await openAdmin(ROUTES, URL);
-      o.acceptToken();
-      o.subscription(GET_ADMIN_CONTEXT)!.fail(forbiddenError());
-      await o.flush();
-      expect(o.subscription(GET)).toBeUndefined();
-      expect(text(o.page.querySelector('h1'))).toBe('You can’t manage this organization');
+    it('an org admin gets the admin sidebar, with Tournaments marked, and the admin counts', async () => {
+      await open(DRAFT);
+      expectPageAndShellSubscriptions(o.convex, [[GET, ARGS]]);
+      const nav = page.querySelector('nav[aria-label="Coastal Bend Rec Club admin"]')!;
+      expect(nav).not.toBeNull();
+      expect(
+        [...nav.querySelectorAll('a[aria-current]')].map((a) => [
+          text(a),
+          a.getAttribute('aria-current'),
+        ]),
+      ).toEqual([['Tournaments', 'true']]);
+      expect(o.convex.activeSubscriptions.map((s) => s.name)).not.toContain(LIST_MINE);
     });
 
-    it('loading: skeleton shapes and a polite status, in the admin shell', async () => {
+    it('loading: skeleton shapes and a polite status, in the shell', async () => {
       await open();
       expect(text(main().querySelector('[role="status"]'))).toBe('Loading the tournament.');
       expect(main().querySelector('h1')).toBeNull();
@@ -129,11 +139,23 @@ describe('TournamentManagement', () => {
       expect(page.querySelector('app-not-found-view')).not.toBeNull();
     });
 
-    it('a forbidden answer shows the no-access view', async () => {
+    it('a forbidden answer shows the no-access view for the tournament, with no sidebar and no organization data', async () => {
       await open();
       o.subscription(GET)!.fail(forbiddenError());
       await o.flush();
-      expect(text(main().querySelector('h1'))).toBe('You can’t manage this organization');
+      expect(text(main().querySelector('h1'))).toBe('You can’t manage this tournament');
+      expect(text(main().querySelector('h1 + p'))).toBe(
+        'Only org admins and the league organizers assigned to it can open it. If you should have access, ask an org admin to assign it to you.',
+      );
+      const link = main().querySelector<HTMLAnchorElement>('a[data-slot="button"]')!;
+      expect([text(link), link.getAttribute('href')]).toEqual(['Go to your organizations', '/app']);
+      expect(tokens(link.className)).toEqual(tokens(PRIMARY_BUTTON + ' mt-8'));
+      expect(page.querySelector('app-admin-sidebar, app-league-sidebar')).toBeNull();
+      expect(page.textContent).not.toContain('Winter Doubles Classic');
+      expect(TestBed.inject(Title).getTitle()).toBe('No access | Omni League');
+      expect(o.convex.activeSubscriptions.map((s) => s.name)).not.toContain(
+        'memberships:staffCount',
+      );
     });
 
     it('a failed query shows the server-error view, never the error message, and Try again keeps the page', async () => {
@@ -143,6 +165,59 @@ describe('TournamentManagement', () => {
       expect(page.querySelector('app-server-error-view')).not.toBeNull();
       expect(page.textContent).not.toContain('secret');
       expect(main().querySelector('a')?.getAttribute('href')).toBe(URL);
+    });
+  });
+
+  describe('an assigned organizer', () => {
+    beforeEach(() => open(AS_ORGANIZER));
+
+    it('manages the tournament with Publish, and the breadcrumb leads to Your organizations, which they can open', () => {
+      const links = [...main().querySelectorAll('nav[aria-label="Breadcrumb"] a')];
+      expect(links.map(text)).toEqual(['Your organizations', 'Winter Doubles Classic']);
+      expect(links.map((a) => a.getAttribute('href'))).toEqual(['/app', URL]);
+      expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, 'page']);
+      expect(text(publishButton())).toBe('Publish');
+    });
+
+    it('gets the organizer sidebar, listing their tournaments with this one marked, and none of the admin counts', async () => {
+      const nav = page.querySelector('nav[aria-label="Coastal Bend Rec Club tournaments"]')!;
+      expect(nav).not.toBeNull();
+      expect(page.querySelector('app-admin-sidebar')).toBeNull();
+      expect(o.subscription(LIST_MINE)?.args).toEqual({});
+      expect(o.convex.activeSubscriptions.map((s) => s.name).sort()).toEqual(
+        [GET, LIST_MINE, 'users:me', 'users:me'].sort(),
+      );
+      o.subscription(LIST_MINE)!.emit([
+        {
+          name: COASTAL.name,
+          slug: COASTAL.slug,
+          role: 'leagueOrganizer',
+          leagues: [],
+          tournaments: [
+            { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+            { name: 'Winter Doubles Classic', slug: 'winter-doubles-classic' },
+          ],
+        },
+      ]);
+      await o.flush();
+      expect(
+        [...nav.querySelectorAll('ul[aria-label="Your tournaments"] a')].map((a) => [
+          text(a),
+          a.getAttribute('href'),
+          a.getAttribute('aria-current'),
+        ]),
+      ).toEqual([
+        ['Gulf Coast Beach Open', `${BASE}/gulf-coast-beach-open`, null],
+        ['Winter Doubles Classic', URL, 'page'],
+      ]);
+      expect(nav.textContent).not.toContain('Your leagues');
+    });
+
+    it('publishes with the same call an org admin makes', async () => {
+      await pressPublish();
+      dialogButton('Publish tournament').click();
+      await o.flush();
+      expect(calls()).toEqual([[PUBLISH, { tournamentId: 'tn_winter' }]]);
     });
   });
 

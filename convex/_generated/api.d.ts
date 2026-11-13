@@ -19,6 +19,7 @@ import type * as ipRateLimits from "../ipRateLimits.js";
 import type * as leagues from "../leagues.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_adminAttention from "../lib/adminAttention.js";
+import type * as lib_assignedPrograms from "../lib/assignedPrograms.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_customLevelInput from "../lib/customLevelInput.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   leagues: typeof leagues;
   "lib/access": typeof lib_access;
   "lib/adminAttention": typeof lib_adminAttention;
+  "lib/assignedPrograms": typeof lib_assignedPrograms;
   "lib/authOrigins": typeof lib_authOrigins;
   "lib/authUsers": typeof lib_authUsers;
   "lib/customLevelInput": typeof lib_customLevelInput;

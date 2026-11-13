@@ -38,9 +38,11 @@ import { OrganizationSkeleton } from './organization-skeleton';
 import { listPagesPath } from './organization-path';
 import { divisionFilterQueryArgs, filterGroups, parseDivisionFilters } from './division-filters';
 import { openSeasonsBySoonestDeadline } from './season-status';
+import { openTournamentsBySoonestDeadline } from './tournament-status';
 
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
 type PublicLocations = FunctionReturnType<typeof api.organizations.listPublicLocations>;
+type PublicTournaments = FunctionReturnType<typeof api.tournaments.listPublic>;
 
 /** Offline, a page with no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL, and the load would never end. */
 function holdPreviousPage<T>(
@@ -93,8 +95,14 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [leaguesBusy]="leaguesBusy()"
           [locationsBusy]="locationsBusy()"
           [savedAt]="savedAt()"
+          [tournaments]="tournamentRows()"
+          [tournamentPaging]="tournamentPaging()"
+          [tournamentsBusy]="tournamentsBusy()"
           [openSeasons]="openSeasons()"
+          [openTournaments]="openTournaments()"
           [expectedOpenSeasons]="expectedOpenSeasons()"
+          [expectedOpenKind]="expectedOpenKind()"
+          [openCardsShownBefore]="openCardsShownBefore()"
           [now]="now()"
           [canManage]="viewerIsOrgAdmin.value() === true"
           [filters]="filters()"
@@ -132,6 +140,7 @@ export class OrganizationPage {
       leagues: parseListPage(params.getAll('leagues')),
       page: parseListPage(params.getAll('page')),
       locations: parseListPage(params.getAll('locations')),
+      tournaments: parseListPage(params.getAll('tournamentsPage')),
     };
   });
 
@@ -147,6 +156,7 @@ export class OrganizationPage {
     return this.segment() === undefined ? pages.leagues : pages.page;
   });
   private readonly locationsPage = computed(() => this.requestedPages().locations);
+  private readonly tournamentsPage = computed(() => this.requestedPages().tournaments);
   private readonly listArgs = computed(() => {
     const sport = this.sportKey();
     return sport ? { sport } : {};
@@ -180,6 +190,21 @@ export class OrganizationPage {
       ? skipToken
       : { orgSlug: this.slug(), ...this.listArgs(), ...this.filterArgs() },
   );
+  private readonly tournaments = injectQuery(api.tournaments.listPublic, () =>
+    this.unknownSport()
+      ? skipToken
+      : {
+          organizationSlug: this.slug(),
+          page: this.tournamentsPage(),
+          ...this.listArgs(),
+          ...this.filterArgs(),
+        },
+  );
+  private readonly openTournamentRows = injectQuery(api.tournaments.listOpenForOrganization, () =>
+    this.unknownSport()
+      ? skipToken
+      : { organizationSlug: this.slug(), ...this.listArgs(), ...this.filterArgs() },
+  );
   private readonly facets = injectQuery(api.organizations.listPublicLeagueFacets, () =>
     this.unknownSport() ? skipToken : { slug: this.slug(), ...this.listArgs() },
   );
@@ -200,6 +225,12 @@ export class OrganizationPage {
   private readonly shownLocations = holdPreviousPage<PublicLocations>(
     this.listKey,
     this.locations.value,
+    this.online,
+  );
+  // Keyed by the organization alone, so the rows stay while another sport's answer loads and the Tournaments section does not come and go.
+  private readonly shownTournaments = holdPreviousPage<PublicTournaments>(
+    this.slug,
+    this.tournaments.value,
     this.online,
   );
 
@@ -233,7 +264,11 @@ export class OrganizationPage {
     listPagesPath(
       this.slug(),
       this.segment(),
-      { leagues: this.leaguesPage(), locations: this.locationsPage() },
+      {
+        leagues: this.leaguesPage(),
+        locations: this.locationsPage(),
+        tournaments: this.tournamentsPage(),
+      },
       this.filters(),
     ),
   );
@@ -244,6 +279,8 @@ export class OrganizationPage {
       this.leagues.error() !== undefined ||
       this.locations.error() !== undefined ||
       this.openSeasonRows.error() !== undefined ||
+      this.tournaments.error() !== undefined ||
+      this.openTournamentRows.error() !== undefined ||
       this.facets.error() !== undefined,
   );
 
@@ -257,11 +294,19 @@ export class OrganizationPage {
 
   protected readonly leagueRows = computed(() => this.shownLeagues()?.value.rows);
   protected readonly locationRows = computed(() => this.shownLocations()?.value.rows);
+  protected readonly tournamentRows = computed(() => this.shownTournaments()?.value.rows);
 
   // The query reads no clock, so which seasons are open is decided here, at the server's request time or the browser's clock.
   protected readonly openSeasons = computed(() => {
     const rows = this.openSeasonRows.value();
     return rows && openSeasonsBySoonestDeadline(rows, this.now());
+  });
+
+  // Offline, a saved copy made before the tournament lists existed leaves them out, and the page shows none.
+  protected readonly openTournaments = computed(() => {
+    const rows = this.openTournamentRows.value();
+    if (rows === undefined) return this.online() ? undefined : [];
+    return openTournamentsBySoonestDeadline(rows, this.now());
   });
 
   // The view is the one the query answers: the filters in scope, as it drops the rest.
@@ -275,12 +320,28 @@ export class OrganizationPage {
     return view ? this.openSeasonsSeen.expectedCount(view) : UNSEEN_OPEN_SEASON_COUNT;
   });
 
+  protected readonly openCardsShownBefore = computed(() => {
+    const view = this.openSeasonsView();
+    return view ? this.openSeasonsSeen.hasShownCards(view) : false;
+  });
+
+  protected readonly expectedOpenKind = computed(() => {
+    const view = this.openSeasonsView();
+    return view ? this.openSeasonsSeen.expectedKind(view) : 'season';
+  });
+
   // Online, the hero and chips stay on screen while the lists of another sport load. Offline, a list with no saved copy means the whole page has none.
   protected readonly organization = computed(() => {
     if (this.failed() || this.noLeagueInSport()) return undefined;
     const header = this.header.value();
     if (!header) return undefined;
-    const listsMissing = !this.leagueRows() || !this.locationRows() || !this.openSeasonRows.value();
+    // Page 1 of the tournaments may be missing from a copy saved before the section existed; a later page was never listed there, so it is missing like another page of leagues.
+    const laterTournamentsPageMissing = this.tournamentsPage() > 1 && !this.tournamentRows();
+    const listsMissing =
+      !this.leagueRows() ||
+      !this.locationRows() ||
+      !this.openSeasonRows.value() ||
+      laterTournamentsPageMissing;
     return !this.online() && listsMissing ? undefined : header;
   });
 
@@ -293,11 +354,20 @@ export class OrganizationPage {
     return locations && pagingOf(locations);
   });
 
+  protected readonly tournamentPaging = computed(() => {
+    const tournaments = this.shownTournaments()?.value;
+    return tournaments && pagingOf(tournaments);
+  });
+
   protected readonly leaguesBusy = computed(
     () => this.shownLeagues() !== undefined && this.leagues.value() === undefined,
   );
   protected readonly locationsBusy = computed(
     () => this.shownLocations() !== undefined && this.locations.value() === undefined,
+  );
+
+  protected readonly tournamentsBusy = computed(
+    () => this.shownTournaments() !== undefined && this.tournaments.value() === undefined,
   );
 
   protected readonly savedAt = computed(() => {
@@ -307,6 +377,8 @@ export class OrganizationPage {
       this.leagues.savedAt(),
       this.locations.savedAt(),
       this.openSeasonRows.savedAt(),
+      this.tournaments.savedAt(),
+      this.openTournamentRows.savedAt(),
       this.facets.savedAt(),
     ].filter((time) => time !== undefined);
     return times.length > 0 ? Math.min(...times) : undefined;
@@ -326,7 +398,8 @@ export class OrganizationPage {
   private readonly waiting = computed(
     () =>
       this.phase() === 'loading' ||
-      (this.phase() === 'page' && (this.leaguesBusy() || this.locationsBusy())),
+      (this.phase() === 'page' &&
+        (this.leaguesBusy() || this.locationsBusy() || this.tournamentsBusy())),
   );
   private readonly waitedOut = injectPageLoadWait(this.waiting, this.requestedPagesPath);
   protected readonly stalled = computed(() => this.waiting() && this.waitedOut());
@@ -340,11 +413,16 @@ export class OrganizationPage {
   constructor() {
     effect(() => {
       const view = this.openSeasonsView();
-      const open = view && this.openSeasons();
-      if (view && open) {
+      const seasons = view && this.openSeasons();
+      const tournaments = view && this.openTournaments();
+      if (view && seasons && tournaments) {
         this.openSeasonsSeen.record(
           view,
-          open.map((season) => season.league.sportName),
+          [
+            ...seasons.map((season) => season.league.sportName),
+            ...tournaments.map((tournament) => tournament.sportName),
+          ],
+          seasons.length === 0 && tournaments.length > 0 ? 'tournament' : 'season',
         );
       }
     });
@@ -352,14 +430,19 @@ export class OrganizationPage {
       const page = this.shownOrganization();
       const leagues = this.leaguePaging();
       const locations = this.locationPaging();
+      const tournaments = this.tournamentPaging();
       if (!page || !leagues || !locations) return null;
       const sport = this.sport();
       const inCity = page.cityState === undefined ? '' : ` in ${page.cityState}`;
       const filtered = hasDivisionFilters(this.filters());
       // Page N of a filtered list holds other leagues than unfiltered page N.
       const canonicalPages = filtered
-        ? { leagues: 1, locations: 1 }
-        : { leagues: leagues.page, locations: locations.page };
+        ? { leagues: 1, locations: 1, tournaments: 1 }
+        : {
+            leagues: leagues.page,
+            locations: locations.page,
+            tournaments: tournaments?.page ?? 1,
+          };
       const path = listPagesPath(page.slug, sport?.segment, canonicalPages);
       const noindex = filtered ? { noindex: true } : {};
       if (!sport) {

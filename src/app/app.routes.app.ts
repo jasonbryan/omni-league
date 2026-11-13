@@ -50,6 +50,13 @@ export const appRoutes: Routes = [
       import('./teams/register-tournament-team-page').then((m) => m.RegisterTournamentTeamPage),
   },
   {
+    // Outside the admin area, which is for org admins only: an organizer assigned to the tournament opens it too.
+    path: 'organizations/:orgSlug/tournaments/:tournamentSlug',
+    canActivate: [requireSignedIn],
+    loadComponent: () =>
+      import('./organizations/admin/tournament-page').then((m) => m.TournamentPage),
+  },
+  {
     path: 'organizations/:slug',
     canActivate: [requireSignedIn],
     loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),
@@ -74,11 +81,6 @@ export const appRoutes: Routes = [
         path: 'tournaments',
         loadComponent: () =>
           import('./organizations/admin/admin-tournaments').then((m) => m.AdminTournaments),
-      },
-      {
-        path: 'tournaments/:tournamentSlug',
-        loadComponent: () =>
-          import('./organizations/admin/tournament-management').then((m) => m.TournamentManagement),
       },
       {
         path: 'staff',

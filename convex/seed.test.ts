@@ -1247,6 +1247,26 @@ describe('seed:demo tournaments', () => {
     });
   });
 
+  test('lists Gulf Coast Beach Open, not the draft, on the page and the beach volleyball view of Gulf Coast Sport & Social, and among its open registrations', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const slug = 'gulf-coast-sport-social';
+    const beach = { organizationSlug: slug, page: 1, sport: 'beachVolleyball' as const };
+    const names = (rows: { name: string }[]) => rows.map((row) => row.name);
+    expect(
+      names((await t.query(api.tournaments.listPublic, { organizationSlug: slug, page: 1 })).rows),
+    ).toEqual(['Gulf Coast Beach Open']);
+    expect(names((await t.query(api.tournaments.listPublic, beach)).rows)).toEqual([
+      'Gulf Coast Beach Open',
+    ]);
+    expect((await t.query(api.tournaments.listPublic, { ...beach, sport: 'soccer' })).rows).toEqual(
+      [],
+    );
+    expect(
+      names(await t.query(api.tournaments.listOpenForOrganization, { organizationSlug: slug })),
+    ).toEqual(['Gulf Coast Beach Open']);
+  });
+
   test('adds only the tournament whose web address is free where a program holds the other', async () => {
     const t = setup();
     await t.run(async (ctx) => {

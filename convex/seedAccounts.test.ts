@@ -217,10 +217,27 @@ async function membershipsOf(t: T, email: string) {
       const organization = await ctx.db.get('organizations', row.organizationId);
       const leagues = [];
       for (const id of row.leagueIds) leagues.push((await ctx.db.get('leagues', id))?.slug);
-      result.push({ organization: organization?.slug, role: row.role, leagues });
+      const tournaments = [];
+      for (const id of row.programIds ?? [])
+        tournaments.push((await ctx.db.get('programs', id))?.slug);
+      result.push({
+        organization: organization?.slug,
+        role: row.role,
+        leagues,
+        ...(tournaments.length > 0 && { tournaments }),
+      });
     }
     return result.sort((a, b) => String(a.organization).localeCompare(String(b.organization)));
   });
+}
+
+async function refused(fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (failure) {
+    return isForbidden(failure) || String(failure).includes('Not allowed');
+  }
+  return false;
 }
 
 const ALL = (code: string) => ({
@@ -318,7 +335,12 @@ describe('seed:demo accounts: a new deployment', () => {
         { organization: SAGUARO, role: 'orgAdmin', leagues: [] },
       ]);
       expect(await membershipsOf(t, EMAILS.organizer)).toEqual([
-        { organization: GULF_COAST, role: 'leagueOrganizer', leagues: ['sunday-reverse-coed-4s'] },
+        {
+          organization: GULF_COAST,
+          role: 'leagueOrganizer',
+          leagues: ['sunday-reverse-coed-4s'],
+          tournaments: ['gulf-coast-beach-open'],
+        },
       ]);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
       expect(await membershipsOf(t, EMAILS.captain)).toEqual([]);
@@ -409,6 +431,9 @@ describe('seed:demo accounts: a new deployment', () => {
         [EMAILS.admin, 'orgAdmin'],
         [EMAILS.organizer, 'leagueOrganizer'],
       ]);
+      expect(staff.find((s) => s.email === EMAILS.organizer)?.tournamentNames).toEqual([
+        'Gulf Coast Beach Open',
+      ]);
       const pending = await admin.query(api.invites.listPending, {
         organizationId: gulfCoast._id,
       });
@@ -423,22 +448,29 @@ describe('seed:demo accounts: a new deployment', () => {
           slug: GULF_COAST,
           role: 'leagueOrganizer',
           leagues: [{ name: 'Sunday Reverse Coed 4s', slug: 'sunday-reverse-coed-4s' }],
+          tournaments: [{ name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' }],
         },
       ]);
+      expect(
+        await organizer.query(api.tournaments.getForManagement, {
+          orgSlug: GULF_COAST,
+          tournamentSlug: 'gulf-coast-beach-open',
+        }),
+      ).toMatchObject({ slug: 'gulf-coast-beach-open', role: 'leagueOrganizer' });
+      expect(
+        await refused(() =>
+          organizer.query(api.tournaments.getForManagement, {
+            orgSlug: GULF_COAST,
+            tournamentSlug: 'winter-doubles-classic',
+          }),
+        ),
+      ).toBe(true);
       expect(
         await organizer.query(api.leagues.getOrganizerContext, {
           orgSlug: GULF_COAST,
           leagueSlug: 'sunday-reverse-coed-4s',
         }),
       ).toMatchObject({ slug: 'sunday-reverse-coed-4s', role: 'leagueOrganizer' });
-      const refused = async (fn: () => Promise<unknown>) => {
-        try {
-          await fn();
-        } catch (failure) {
-          return isForbidden(failure) || String(failure).includes('Not allowed');
-        }
-        return false;
-      };
       expect(
         await refused(() =>
           organizer.query(api.leagues.getOrganizerContext, {

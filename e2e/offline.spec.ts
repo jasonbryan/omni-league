@@ -4,6 +4,11 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import {
+  expectSavedCopies,
+  organizationPageSavedKeys,
+  organizationTournamentSavedKeys,
+} from './support/saved-copies';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedTournament } from './support/tournament';
 
@@ -189,6 +194,92 @@ test.describe('open seasons offline', () => {
     await page.clock.fastForward('48:00:00');
     await expect(cards).toHaveText(['Later Season']);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('tournaments offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('the Tournaments section and the open tournaments show from the saved copy, and one that ended since is dropped', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const alpha = { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' };
+    const tenant = await seedTenant({
+      name: 'E2E Offline Tournaments',
+      locations: [alpha],
+      leagues: [{ name: 'Soccer League', sport: 'soccer', locations: [alpha.name] }],
+      tournaments: [
+        {
+          name: 'Closing Open',
+          slug: 'closing-open',
+          locations: [alpha.name],
+          startDate: dateFromToday(10),
+          endDate: dateFromToday(11),
+          registrationDeadline: dateFromToday(1),
+        },
+        {
+          name: 'Later Open',
+          slug: 'later-open',
+          locations: [alpha.name],
+          startDate: dateFromToday(30),
+          endDate: dateFromToday(31),
+          registrationDeadline: dateFromToday(20),
+        },
+        {
+          name: 'Ends Tomorrow Open',
+          slug: 'ends-tomorrow-open',
+          locations: [alpha.name],
+          startDate: dateFromToday(1),
+          endDate: dateFromToday(1),
+          registrationDeadline: dateFromToday(-6),
+        },
+      ],
+    });
+    const rows = page.locator('#tournaments > ul > li');
+    const cards = page.locator('#registration-open > ul > li h3');
+    const note = page.locator('app-saved-copy-note');
+    await page.clock.install();
+
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows.locator('h3')).toHaveText([
+      'Ends Tomorrow Open',
+      'Closing Open',
+      'Later Open',
+    ]);
+    await expectSavedCopies(page, [
+      ...organizationPageSavedKeys(tenant.slug),
+      ...organizationTournamentSavedKeys(tenant.slug),
+    ]);
+    await expect(note).toHaveCount(0);
+    await rows.getByRole('link', { name: 'Closing Open', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Closing Open' })).toBeVisible();
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+    await expect(note).toBeVisible();
+    await expect(rows.locator('h3')).toHaveText([
+      'Ends Tomorrow Open',
+      'Closing Open',
+      'Later Open',
+    ]);
+    await expect(rows.nth(1)).toContainText('Registration open');
+    await expect(cards).toHaveText(['Closing Open', 'Later Open']);
+    await expect(page.getByRole('link', { name: 'Register for a tournament' })).toBeVisible();
+
+    // Two days on, the saved copy still lists each tournament; the page applies the date.
+    await page.clock.fastForward('48:00:00');
+    await expect(rows.locator('h3')).toHaveText(['Closing Open', 'Later Open']);
+    await expect(rows.first()).toContainText('Registration closed');
+    await expect(cards).toHaveText(['Later Open']);
+    await expect(note).toBeVisible();
 
     await context.setOffline(false);
   });

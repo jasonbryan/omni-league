@@ -38,6 +38,8 @@ const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
+const TOURNAMENTS = 'tournaments:listPublic';
+const OPEN_TOURNAMENTS = 'tournaments:listOpenForOrganization';
 const FACETS = 'organizations:listPublicLeagueFacets';
 
 function subscription(name = HEADER): FakeSubscription {
@@ -103,6 +105,8 @@ describe('OrganizationPage', () => {
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 3 } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1 } },
       { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
+      { name: OPEN_TOURNAMENTS, args: { organizationSlug: 'gulf-coast-sport-social' } },
+      { name: TOURNAMENTS, args: { organizationSlug: 'gulf-coast-sport-social', page: 1 } },
     ]);
   });
 

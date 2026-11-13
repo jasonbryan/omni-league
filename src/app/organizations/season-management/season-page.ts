@@ -40,7 +40,12 @@ import { seasonManagementPath } from './season-management-path';
                   }"
                 />
               } @else {
-                <app-league-sidebar [league]="league" current="true" />
+                <app-league-sidebar
+                  [organization]="league.organization"
+                  [here]="league"
+                  hereKind="league"
+                  current="true"
+                />
               }
             </ng-template>
           }
