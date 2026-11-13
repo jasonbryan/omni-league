@@ -241,3 +241,24 @@ export const publicTournamentPageValidator = tournamentDetailsValidator;
 export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;
 
 export const getTournamentPublicPageReturns = v.union(v.null(), publicTournamentPageValidator);
+
+const publicTournamentRowFields = {
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  divisionLabel: v.string(),
+  locationNames: v.array(v.string()),
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+};
+
+export const publicTournamentsValidator = publicListValidator(v.object(publicTournamentRowFields));
+
+export type PublicTournaments = Infer<typeof publicTournamentsValidator>;
+
+export const publicOpenTournamentsValidator = v.array(
+  v.object({ ...publicTournamentRowFields, minimumRosterSize: v.number() }),
+);
+
+export type PublicOpenTournaments = Infer<typeof publicOpenTournamentsValidator>;

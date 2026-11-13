@@ -139,6 +139,14 @@ describe('the sport view queries', () => {
         name: 'seasons:listOpenForOrganization',
         args: { orgSlug: 'gulf-coast-sport-social', sport: 'soccer' },
       },
+      {
+        name: 'tournaments:listOpenForOrganization',
+        args: { organizationSlug: 'gulf-coast-sport-social', sport: 'soccer' },
+      },
+      {
+        name: 'tournaments:listPublic',
+        args: { organizationSlug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' },
+      },
     ]);
   });
 

@@ -5,6 +5,7 @@ import {
   expectSavedCopies,
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
+  organizationTournamentSavedKeys,
 } from '../support/saved-copies';
 import { seedTenant } from '../support/tenant';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
@@ -33,6 +34,22 @@ test.describe('organization page saved-copy keys', VIEWPORT_AGNOSTIC, () => {
       'cvx-saved:organizations:listPublicLeagues:{"page":1,"slug":"gulf-coast","sport":"soccer"}',
       'cvx-saved:organizations:listPublicLocations:{"page":1,"slug":"gulf-coast","sport":"soccer"}',
       'cvx-saved:seasons:listOpenForOrganization:{"orgSlug":"gulf-coast","sport":"soccer"}',
+    ]);
+  });
+});
+
+test.describe('organization page tournament saved-copy keys', VIEWPORT_AGNOSTIC, () => {
+  test('the All sports view has the upcoming tournaments on page 1 and the open tournaments', () => {
+    expect(organizationTournamentSavedKeys('gulf-coast')).toEqual([
+      'cvx-saved:tournaments:listPublic:{"organizationSlug":"gulf-coast","page":1}',
+      'cvx-saved:tournaments:listOpenForOrganization:{"organizationSlug":"gulf-coast"}',
+    ]);
+  });
+
+  test('a sport view adds the sport to both keys', () => {
+    expect(organizationTournamentSavedKeys('gulf-coast', 'soccer')).toEqual([
+      'cvx-saved:tournaments:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
+      'cvx-saved:tournaments:listOpenForOrganization:{"organizationSlug":"gulf-coast","sport":"soccer"}',
     ]);
   });
 });

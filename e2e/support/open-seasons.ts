@@ -1,13 +1,13 @@
 import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { slugify } from '../../convex/lib/slugs';
 import { sportName } from '../../convex/lib/sports';
-import { DEMO, DEMO_RUN_SEASONS, DEMO_SEASONS } from '../../convex/seed';
+import { DEMO, DEMO_RUN_SEASONS, DEMO_SEASONS, DEMO_TOURNAMENTS } from '../../convex/seed';
 import type { PublicOpenSeasonRows } from '../../src/app/organizations/organization-path';
-import { openSeasonsBySoonestDeadline } from '../../src/app/organizations/season-status';
+import { compare, openSeasonsBySoonestDeadline } from '../../src/app/organizations/season-status';
 
 export interface ExpectedOpenCard {
-  leagueName: string;
-  seasonName: string;
+  title: string;
+  subtitle: string;
 }
 
 type OpenSeasonRow = PublicOpenSeasonRows[number];
@@ -21,6 +21,13 @@ type SeasonFields = Pick<
  * order. The run seasons are dated from `nowMs`, as if the seed ran on the same day.
  */
 export function expectedOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
+  return openSeasonRows(orgSlug, nowMs).map((row) => ({
+    title: row.league.name,
+    subtitle: row.name,
+  }));
+}
+
+function openSeasonRows(orgSlug: string, nowMs: number): OpenSeasonRow[] {
   const tenant = DEMO.find((t) => t.organization.slug === orgSlug);
   if (tenant === undefined) throw new Error(`No demo organization has the slug ${orgSlug}`);
   const publishedLeagues = new Map(
@@ -58,8 +65,29 @@ export function expectedOpenCards(orgSlug: string, nowMs: number): ExpectedOpenC
       minimumRosterSize: run.playersPerSide,
     });
   }
-  return openSeasonsBySoonestDeadline(rows, nowMs).map((row) => ({
-    leagueName: row.league.name,
-    seasonName: row.name,
+  return openSeasonsBySoonestDeadline(rows, nowMs);
+}
+
+export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
+  const today = dateAtUtcMinus12(nowMs);
+  const cards = openSeasonRows(orgSlug, nowMs).map((row) => ({
+    deadline: row.registrationDeadline,
+    title: row.league.name,
+    subtitle: row.name,
   }));
+  for (const tournament of DEMO_TOURNAMENTS) {
+    const deadline = addCalendarDays(today, tournament.deadlineDaysFromRun);
+    const start = addCalendarDays(today, tournament.startDaysFromRun);
+    if (tournament.organizationSlug !== orgSlug || tournament.status !== 'published') continue;
+    if (today > deadline || today >= start) continue;
+    cards.push({ deadline, title: tournament.name, subtitle: 'Tournament' });
+  }
+  return cards
+    .sort(
+      (a, b) =>
+        compare(a.deadline, b.deadline) ||
+        compare(a.title, b.title) ||
+        compare(a.subtitle, b.subtitle),
+    )
+    .map(({ title, subtitle }) => ({ title, subtitle }));
 }

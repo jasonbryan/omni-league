@@ -462,6 +462,8 @@ export async function insertDraftTournament(
   return ctx.db.insert('tournaments', {
     programId,
     organizationId,
+    status: 'draft',
+    sport: tournament.sport,
     startDate: tournament.startDate,
     endDate: tournament.endDate,
     registrationDeadline: tournament.registrationDeadline,
@@ -482,6 +484,7 @@ export async function publishTournament(
   }
   if (program.status === 'published') return;
   await ctx.db.patch('programs', program._id, { status: 'published' });
+  await ctx.db.patch('tournaments', tournament._id, { status: 'published' });
 }
 
 export const MAX_DRAFT_SEASONS_UPDATED = 200;
