@@ -53,9 +53,10 @@ test.describe(
   () => {
     const RUN = Date.parse('2026-10-30T17:00:00Z');
 
-    test('puts Gulf Coast Beach Open, the published tournament, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
+    test('puts the published tournaments, soonest deadline first, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
       expect(expectedRegistrationOpenCards(GULF_COAST, RUN)).toEqual([
         { title: 'Gulf Coast Beach Open', subtitle: 'Tournament' },
+        { title: 'Gulf Coast King of the Beach', subtitle: 'Tournament' },
         { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
         { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
         { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },

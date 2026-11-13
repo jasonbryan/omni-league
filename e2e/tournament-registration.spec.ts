@@ -370,9 +370,9 @@ test.describe('the waitlist of a full tournament: an organizer', () => {
     await expect(page.locator('#edit-details [data-slot="save-status"]')).toContainText(
       'Details saved.',
     );
-    await expect(panel.locator('[data-slot="alert"]').first()).toContainText(
-      'Room for 1 more team',
-    );
+    await expect(
+      panel.locator('[data-slot="alert"]').filter({ hasText: 'Room for 1 more team' }),
+    ).toBeVisible();
 
     await panel.getByRole('button', { name: 'Promote Late Lobsters' }).click();
     const promoted = panel.locator('[role="status"][data-slot="alert"]');
