@@ -77,7 +77,8 @@ describe('the two stylesheets that import the base file', () => {
     ['design/mockup-kit/mockup-kit.css', ['design', 'mockup-kit', 'mockup-kit.css']],
   ]) {
     it(`${name} imports base.css and does not repeat its rules`, async () => {
-      const css = withoutComments(await read(...path));
+      // An @source entry is a class name, and `dark:focus-visible:ring-destructive/40` holds `:focus-visible`.
+      const css = withoutComments(await read(...path)).replace(/@source\b[^;]*;/g, '');
       assert.match(css, /@import\s+'[^']*styles\/base\.css'\s*;/);
       assert.doesNotMatch(css, /scroll-padding-top|:focus-visible|@apply|border-border/);
     });
