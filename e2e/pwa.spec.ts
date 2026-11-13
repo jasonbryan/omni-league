@@ -7,14 +7,15 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Page, Request, Route, TestInfo } from '@playwright/test';
+import type { BrowserContext, Locator, Page, Request, Route, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { initials } from '../src/app/organizations/initials';
 import { expectAccessible } from './support/a11y';
 import { baseURL, LOCAL_CONVEX_SITE_URL, LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
-import { expect, test } from './support/fixtures';
+import { expect, failedRequests, test } from './support/fixtures';
 import { expectedRegistrationOpenCards } from './support/open-seasons';
+import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { expectLogoLoaded } from './support/organization-mark';
 import {
   expectSavedCopies,
@@ -337,6 +338,337 @@ test.describe('service worker (production build)', () => {
       });
       await expectAccessible(page);
     }
+  });
+
+  test.describe('the new-version prompt from its lazy chunk', () => {
+    const READY_CARD_TEXT = 'It loads by itself when you leave this page';
+    const RELOADED_FOR_KEY = 'omni-league:sw-reloaded-for';
+    const READY_EVENT = {
+      type: 'VERSION_READY',
+      currentVersion: { hash: 'e2e-running' },
+      latestVersion: { hash: 'e2e-next' },
+    };
+    const LOST_FILES_EVENT = { type: 'UNRECOVERABLE_STATE', reason: 'e2e' };
+    const VIEWPORTS = [
+      [360, 800],
+      [1280, 720],
+    ] as const;
+
+    /** The chunk the app requests at start is the one whose text holds the ready card's copy. */
+    async function promptChunkPath(page: Page): Promise<string> {
+      const manifest = (await (await page.request.get('/ngsw.json')).json()) as NgswManifest;
+      const shell = manifest.assetGroups.find((group) => group.name === 'shell');
+      for (const url of (shell?.urls ?? []).filter((path) => /^\/chunk-[^/]+\.js$/.test(path))) {
+        const body = await (await page.request.get(url)).text();
+        if (body.includes(READY_CARD_TEXT)) return url;
+      }
+      throw new Error('no chunk holds the ready card text');
+    }
+
+    /** The worker is held, so `page.route` still sees the chunk request. */
+    async function openWithChunk(
+      page: Page,
+      answer: (route: Route) => Promise<void>,
+    ): Promise<void> {
+      await holdServiceWorkerRegistration(page.context());
+      await page.route(`**${await promptChunkPath(page)}`, answer);
+      await page.goto('/');
+      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+    }
+
+    async function typeUnsavedInput(page: Page): Promise<void> {
+      await page.locator('main').evaluate((main) => {
+        const field = document.createElement('input');
+        field.setAttribute('aria-label', 'Unsaved note');
+        main.append(field);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    const fallback = (page: Page) => page.locator('app-update-fallback');
+    const prompt = (page: Page) => page.locator('app-update-prompt');
+    const announcement = (page: Page) => page.locator('app-update-fallback [role="status"]');
+    const messageIn = (host: Locator) =>
+      host.getByRole('alert', { name: 'Omni League needs to reload' });
+
+    async function expectOnlyMessage(page: Page): Promise<void> {
+      const message = messageIn(fallback(page));
+      await expect(message).toBeVisible();
+      await expect(page.getByRole('alert')).toHaveCount(1);
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(1);
+      await expect(prompt(page)).toHaveCount(0);
+      await expect(message.getByRole('button')).toHaveText(['Reload']);
+      await expect(message.locator('svg')).toHaveCount(0);
+      await expect(announcement(page)).toHaveText('');
+      await expect
+        .poll(() =>
+          message.evaluate((section) => {
+            const room = `${String(section.getBoundingClientRect().height + parseFloat(getComputedStyle(section).bottom))}px`;
+            return [
+              getComputedStyle(document.body).paddingBottom === room,
+              getComputedStyle(document.documentElement).scrollPaddingBottom === room,
+            ];
+          }),
+        )
+        .toEqual([true, true]);
+    }
+
+    test('a new version shows its card once, and Later closes it', async ({ page }, testInfo) => {
+      skipUnlessMobile(testInfo);
+      await installWorker(page);
+      await typeUnsavedInput(page);
+      const card = prompt(page).locator('section');
+      await expect(prompt(page)).toHaveCount(1);
+
+      await workerEvent(page, READY_EVENT);
+      await expect(card).toBeVisible();
+      await expect(card).toHaveAccessibleName('A new version of Omni League is ready');
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(1);
+      await expect(page.locator('app-update-fallback [role="status"]')).toHaveCount(1);
+      await expect(page.locator('app-update-prompt [role="status"]')).toHaveCount(0);
+      await expect(announcement(page)).toHaveText('A new version of Omni League is ready.');
+      await expect(card.getByRole('button')).toHaveText(['Reload', 'Later']);
+
+      await card.getByRole('button', { name: 'Later' }).click();
+      await expect(card).toHaveCount(0);
+      await expect(announcement(page)).toHaveText('');
+    });
+
+    test('Reload on the new-version card loads the page again', async ({ page }, testInfo) => {
+      skipUnlessMobile(testInfo);
+      await installWorker(page);
+      await typeUnsavedInput(page);
+      await workerEvent(page, READY_EVENT);
+      const card = prompt(page).locator('section');
+      await expect(card).toBeVisible();
+      await page.evaluate(() => {
+        (window as unknown as { reloadMarker: boolean }).reloadMarker = true;
+      });
+      await card.getByRole('button', { name: 'Reload' }).click();
+      await expect
+        .poll(() =>
+          page.evaluate(() => (window as unknown as { reloadMarker?: boolean }).reloadMarker),
+        )
+        .toBeUndefined();
+      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+    });
+
+    test('lost files show the message from the prompt, whose chunk loaded, once', async ({
+      page,
+    }, testInfo) => {
+      skipUnlessMobile(testInfo);
+      await installWorker(page);
+      await typeUnsavedInput(page);
+      await workerEvent(page, LOST_FILES_EVENT);
+      const message = messageIn(prompt(page));
+      await expect(message).toBeVisible();
+      await expect(page.getByRole('alert')).toHaveCount(1);
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(1);
+      await expect(fallback(page).getByRole('alert')).toHaveCount(0);
+    });
+
+    test('a hanging chunk shows the message for lost files, then hands off to the prompt with one card and focus on its Reload', async ({
+      page,
+    }, testInfo) => {
+      skipUnlessMobile(testInfo);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      await openWithChunk(page, async (route) => {
+        await gate;
+        await route.continue();
+      });
+      await page.evaluate(() => {
+        const seen = { most: 0 };
+        (window as unknown as { cardsSeen: typeof seen }).cardsSeen = seen;
+        const count = () => {
+          seen.most = Math.max(
+            seen.most,
+            document.querySelectorAll('section[data-slot="card"]').length,
+            document.querySelectorAll('[role="alert"]').length,
+          );
+        };
+        new MutationObserver(count).observe(document.body, { childList: true, subtree: true });
+      });
+
+      await typeUnsavedInput(page);
+      await workerEvent(page, READY_EVENT);
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(0);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await workerEvent(page, LOST_FILES_EVENT);
+      await expectOnlyMessage(page);
+
+      const fallbackReload = messageIn(fallback(page)).getByRole('button', { name: 'Reload' });
+      for (
+        let step = 0;
+        step < 200 && !(await fallbackReload.evaluate((el) => el === document.activeElement));
+        step++
+      ) {
+        await page.keyboard.press('Tab');
+      }
+      await expect(fallbackReload).toBeFocused();
+
+      release();
+      const promptMessage = messageIn(prompt(page));
+      await expect(promptMessage).toBeVisible();
+      await expect(page.getByRole('alert')).toHaveCount(1);
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(1);
+      await expect(fallback(page).getByRole('alert')).toHaveCount(0);
+      await expect(promptMessage.getByRole('button', { name: 'Reload' })).toBeFocused();
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { cardsSeen: { most: number } }).cardsSeen.most,
+        ),
+      ).toBe(1);
+    });
+
+    test('a hanging chunk shows no card for a ready version until it arrives, then the ready card', async ({
+      page,
+    }, testInfo) => {
+      skipUnlessMobile(testInfo);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      await openWithChunk(page, async (route) => {
+        await gate;
+        await route.continue();
+      });
+      await typeUnsavedInput(page);
+      await workerEvent(page, READY_EVENT);
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(0);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await expect(announcement(page)).toHaveText('');
+
+      release();
+      await expect(prompt(page).locator('section')).toHaveAccessibleName(
+        'A new version of Omni League is ready',
+      );
+      await expect(page.locator('section[data-slot="card"]')).toHaveCount(1);
+      await expect(announcement(page)).toHaveText('A new version of Omni League is ready.');
+    });
+    test.describe('with the chunk request aborted', () => {
+      test.use({
+        // Chromium logs an aborted request as a console error with the net code and no status.
+        expectedFailedRequests: failedRequests({
+          status: 'net::ERR_FAILED',
+          path: /^\/chunk-[^/]+\.js$/,
+        }),
+      });
+
+      test.describe('when the chunk is blocked', () => {
+        test.beforeEach(async ({ page }, testInfo) => {
+          skipUnlessMobile(testInfo);
+          await openWithChunk(page, (route) => route.abort('failed'));
+        });
+
+        test('lost files show the message from the fallback, with Reload', async ({ page }) => {
+          await expect(page.getByRole('alert')).toHaveCount(0);
+          await typeUnsavedInput(page);
+          await workerEvent(page, LOST_FILES_EVENT);
+          await expectOnlyMessage(page);
+        });
+
+        test('a ready version shows the message when input is unsaved', async ({ page }) => {
+          await typeUnsavedInput(page);
+          await workerEvent(page, READY_EVENT);
+          await expectOnlyMessage(page);
+        });
+
+        test('a ready version shows the message the second time for that version in the tab', async ({
+          page,
+        }) => {
+          await page.evaluate(
+            ([key, hash]) => sessionStorage.setItem(key, JSON.stringify([hash])),
+            [RELOADED_FOR_KEY, 'e2e-next'] as const,
+          );
+          await workerEvent(page, READY_EVENT);
+          await expectOnlyMessage(page);
+        });
+
+        test('shows nothing while no version is ready and no files are lost', async ({ page }) => {
+          await expect(fallback(page)).toHaveCount(1);
+          await expect(page.getByRole('alert')).toHaveCount(0);
+          await expect(page.locator('section[data-slot="card"]')).toHaveCount(0);
+          await expect(announcement(page)).toHaveText('');
+        });
+      });
+
+      test('a ready version shows the message when sessionStorage is blocked and the chunk failed', async ({
+        page,
+      }, testInfo) => {
+        skipUnlessMobile(testInfo);
+        await page.addInitScript(() => {
+          Object.defineProperty(window, 'sessionStorage', {
+            configurable: true,
+            get() {
+              throw new DOMException('denied', 'SecurityError');
+            },
+          });
+        });
+        await openWithChunk(page, (route) => route.abort('failed'));
+        await workerEvent(page, READY_EVENT);
+        await expectOnlyMessage(page);
+      });
+
+      test('the fallback Reload button matches the prompt Reload button apart from its icon at 360px and 1280px', async ({
+        page,
+        context,
+      }, testInfo) => {
+        skipUnlessMobile(testInfo);
+        await openWithChunk(page, (route) => route.abort('failed'));
+        const loaded = await context.newPage();
+        await loaded.goto('/');
+        await expect(loaded.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+        await expect(prompt(loaded)).toHaveCount(1);
+        await typeUnsavedInput(page);
+        await typeUnsavedInput(loaded);
+        await workerEvent(page, LOST_FILES_EVENT);
+        await workerEvent(loaded, LOST_FILES_EVENT);
+        const fallbackButton = messageIn(fallback(page)).getByRole('button', { name: 'Reload' });
+        const promptButton = messageIn(prompt(loaded)).getByRole('button', { name: 'Reload' });
+        await expect(promptButton.locator('svg')).toHaveCount(1);
+        await expect(fallbackButton.locator('svg')).toHaveCount(0);
+
+        for (const [width, height] of VIEWPORTS) {
+          await page.setViewportSize({ width, height });
+          await loaded.setViewportSize({ width, height });
+          await blurActiveElement(page);
+          await blurActiveElement(loaded);
+          await expect(fallbackButton).toBeVisible();
+          await expect(promptButton).toBeVisible();
+          for (const [name, target, button] of [
+            ['fallback', page, fallbackButton],
+            ['prompt', loaded, promptButton],
+          ] as const) {
+            const path = testInfo.outputPath(`reload-button-${name}-${String(width)}.png`);
+            await button.screenshot({ path });
+            await testInfo.attach(`reload-button-${name}-${String(width)}.png`, {
+              path,
+              contentType: 'image/png',
+            });
+            const cardPath = testInfo.outputPath(`card-${name}-${String(width)}.png`);
+            await target.screenshot({ path: cardPath });
+            await testInfo.attach(`card-${name}-${String(width)}.png`, {
+              path: cardPath,
+              contentType: 'image/png',
+            });
+          }
+          // The fallback has no icons, so the prompt's button is compared with its icon taken out.
+          await promptButton.locator('svg').evaluate((icon) => icon.remove());
+          const [fallbackPicture, promptPicture] = [
+            await fallbackButton.screenshot(),
+            await promptButton.screenshot(),
+          ];
+          expect((await fallbackButton.boundingBox())?.height).toBe(
+            (await promptButton.boundingBox())?.height,
+          );
+          expect(fallbackPicture.equals(promptPicture)).toBe(true);
+          await expectAccessible(page);
+          await loaded.reload();
+          await typeUnsavedInput(loaded);
+          await workerEvent(loaded, LOST_FILES_EVENT);
+          await expect(promptButton).toBeVisible();
+        }
+      });
+    });
   });
 });
 
