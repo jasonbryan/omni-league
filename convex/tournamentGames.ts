@@ -49,7 +49,6 @@ const setupValidator = v.object({
     v.null(),
     v.object({
       hasResult: v.boolean(),
-      /** The Final's winner, who wins the tournament. */
       winner: v.union(v.null(), gameTeamValidator),
       rounds: v.array(
         v.object({
@@ -230,6 +229,8 @@ const resultArgs = {
 const savedValidator = v.object({
   winnerTeamId: v.id('teams'),
   winnerName: v.string(),
+  /** What Undo sends back, so it acts only on this result. */
+  resultEnteredAt: v.number(),
   /** The round the winner joins; `null` for the Final, whose winner wins the tournament. */
   advancesTo: v.union(v.null(), v.string()),
   /** What the game held before, so the page can offer to restore it; `null` for a first result. */
@@ -311,12 +312,13 @@ async function saveFor(
   await refuseUnlessReady(ctx, game, hadResult);
   const result = resultFrom(game, tournament, program.sport, input);
   const previous = storedResultOf(game);
-  await saveResult(ctx, game, { ...result, enteredBy: user._id });
+  const resultEnteredAt = await saveResult(ctx, game, { ...result, enteredBy: user._id });
   const games = await bracketGames(ctx, tournament._id);
   const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
   return {
     winnerTeamId: result.winnerTeamId,
     winnerName: (await ctx.db.get('teams', result.winnerTeamId))?.name ?? '',
+    resultEnteredAt,
     advancesTo: game.nextGameId ? roundName(game.round + 1, rounds) : null,
     previous: hadResult ? previous : null,
   };
@@ -341,13 +343,25 @@ export const correctResult = mutation({
 });
 
 export const undoResult = mutation({
-  args: { gameId: v.id('tournamentGames'), restore: v.optional(storedResultValidator) },
+  args: {
+    gameId: v.id('tournamentGames'),
+    restore: v.optional(storedResultValidator),
+    // The `resultEnteredAt` the page was shown. Absent from the previous release's frontend, which acts on whatever the game holds.
+    expected: v.optional(v.number()),
+  },
   returns: v.null(),
-  handler: async (ctx, { gameId, restore }) => {
+  handler: async (ctx, { gameId, restore, expected }) => {
     const { game, tournament, program, user } = await requireGameOrganizer(ctx, gameId);
     await refuseUnlessReady(ctx, game, true);
+    if (expected !== undefined && game.resultEnteredAt !== expected) {
+      refuseBracket({ code: 'resultChanged', message: BRACKET_MESSAGES.resultChanged });
+    }
     if (restore) {
-      const result = checkedResult(game, tournament, program.sport, restore);
+      // The score of a forfeit is rebuilt, so a restore cannot store a forfeit with a score the sport does not give.
+      const result =
+        restore.forfeitTeamId === undefined
+          ? checkedResult(game, tournament, program.sport, restore)
+          : resultFrom(game, tournament, program.sport, { forfeitTeamId: restore.forfeitTeamId });
       await saveResult(ctx, game, { ...result, enteredBy: user._id });
     } else {
       await clearResult(ctx, game);

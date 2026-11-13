@@ -4,20 +4,18 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import type { BracketSide } from '../../../../convex/lib/bracket';
 import {
   checkScore,
+  SCORE_FIELDS,
   scoreKindOf,
   type Score,
   type ScoreDraft,
+  type ScoreField,
+  type ScoreIssue,
   type Sport,
 } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { bracketRefusalMessage } from './bracket-text';
-import {
-  FORFEIT_CHOICE_ERROR,
-  RESULT_FIELDS,
-  scoreRefusalOf,
-  type ResultField,
-} from './game-result-text';
+import { FORFEIT_CHOICE_ERROR, scoreRefusalOf } from './game-result-text';
 
 /** The score boxes: `a` and `b` are the game's first and second team, and the number is the set. */
 export type ScoreBox = 'a1' | 'b1' | 'a2' | 'b2' | 'a3' | 'b3';
@@ -43,7 +41,7 @@ export interface HeldResult {
 
 const EMPTY: ResultText = { a1: '', b1: '', a2: '', b2: '', a3: '', b3: '' };
 
-const BOXES_OF: Record<ResultField, readonly ScoreBox[]> = {
+const BOXES_OF: Record<ScoreField, readonly ScoreBox[]> = {
   set1: ['a1', 'b1'],
   set2: ['a2', 'b2'],
   set3: ['a3', 'b3'],
@@ -65,18 +63,18 @@ export class GameResultDraft {
   readonly submitting = signal(false);
   readonly alert = signal<ResultAlertKind | null>(null);
   readonly refusal = signal<string | null>(null);
-  readonly errors: Record<ResultField, Signal<string | null>>;
+  readonly errors: Record<ScoreField, Signal<string | null>>;
   readonly forfeitError: Signal<string | null>;
 
-  readonly shownFields = computed<readonly ResultField[]>(() => {
+  readonly shownFields = computed<readonly ScoreField[]>(() => {
     if (scoreKindOf(this.sport()) !== 'sets') return ['a', 'b', 'score'];
-    return RESULT_FIELDS.filter((field) => field.startsWith('set')).slice(0, this.setsPerGame());
+    return SCORE_FIELDS.filter((field) => field.startsWith('set')).slice(0, this.setsPerGame());
   });
 
   private readonly forfeitAsked = signal(false);
-  private readonly issue: Signal<{ field: ResultField; message: string } | null>;
-  private readonly shown: Record<ResultField, ShownUntilValid>;
-  private readonly serverIssue: WritableSignal<{ field: ResultField; message: string } | null>;
+  private readonly issue: Signal<ScoreIssue | null>;
+  private readonly shown: Record<ScoreField, ShownUntilValid>;
+  private readonly serverIssue: WritableSignal<ScoreIssue | null>;
 
   constructor(
     private readonly sport: () => Sport,
@@ -97,25 +95,22 @@ export class GameResultDraft {
         .map((n) => ({ a: pointsOf(model[`a${n}`]), b: pointsOf(model[`b${n}`]) }));
       return { kind: 'sets', sets };
     });
-    this.issue = computed(() => {
-      const found = checkScore(this.sport(), this.setsPerGame(), draft());
-      return found && { field: found.field as ResultField, message: found.message };
-    });
+    this.issue = computed(() => checkScore(this.sport(), this.setsPerGame(), draft()));
     this.shown = Object.fromEntries(
-      RESULT_FIELDS.map((field) => [
+      SCORE_FIELDS.map((field) => [
         field,
         new ShownUntilValid(
           () => this.issue()?.field === field,
           () => BOXES_OF[field].some((box) => this.fields[box]().dirty()),
         ),
       ]),
-    ) as Record<ResultField, ShownUntilValid>;
-    this.serverIssue = linkedSignal<ResultText, { field: ResultField; message: string } | null>({
+    ) as Record<ScoreField, ShownUntilValid>;
+    this.serverIssue = linkedSignal<ResultText, ScoreIssue | null>({
       source: () => this.model(),
       computation: () => null,
     });
     this.errors = Object.fromEntries(
-      RESULT_FIELDS.map((field) => [
+      SCORE_FIELDS.map((field) => [
         field,
         computed(() => {
           const issue = this.issue();
@@ -124,7 +119,7 @@ export class GameResultDraft {
           return server?.field === field ? server.message : null;
         }),
       ]),
-    ) as Record<ResultField, Signal<string | null>>;
+    ) as Record<ScoreField, Signal<string | null>>;
     this.forfeitError = computed(() =>
       this.forfeitAsked() && this.forfeitSide() === null ? FORFEIT_CHOICE_ERROR : null,
     );
@@ -149,10 +144,10 @@ export class GameResultDraft {
     this.alert.set(null);
     this.refusal.set(null);
     this.fields().reset();
-    for (const field of RESULT_FIELDS) this.shown[field].hide();
+    for (const field of SCORE_FIELDS) this.shown[field].hide();
   }
 
-  left(field: ResultField): void {
+  left(field: ScoreField): void {
     this.shown[field].left();
   }
 

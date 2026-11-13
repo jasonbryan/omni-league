@@ -1,30 +1,26 @@
 import { ConvexError } from 'convex/values';
 import {
   forfeitScore,
+  isScoreField,
   scoreText,
   scoreKindOf,
   type Score,
+  type ScoreField,
   type Sport,
 } from '../../../../convex/lib/sports';
 import type { AlertText } from './alert-text';
 
 const CHECK_CONNECTION = 'Check your connection and try again.';
 
-export type ResultField = 'a' | 'b' | 'score' | 'set1' | 'set2' | 'set3';
-
-export const RESULT_FIELDS: readonly ResultField[] = ['set1', 'set2', 'set3', 'a', 'b', 'score'];
-
-const RESULT_FIELD_SET: ReadonlySet<string> = new Set(RESULT_FIELDS);
-
 /** Only the field and words the server gave for a score it refused; any other failure's message is server detail. */
-export function scoreRefusalOf(error: unknown): { field: ResultField; message: string } | null {
+export function scoreRefusalOf(error: unknown): { field: ScoreField; message: string } | null {
   if (!(error instanceof ConvexError)) return null;
   const data: unknown = error.data;
   if (typeof data !== 'object' || data === null) return null;
   const { code, field, message } = data as { code?: unknown; field?: unknown; message?: unknown };
   if (code !== 'invalidScore' || typeof message !== 'string') return null;
-  if (typeof field !== 'string' || !RESULT_FIELD_SET.has(field)) return null;
-  return { field: field as ResultField, message };
+  if (!isScoreField(field)) return null;
+  return { field, message };
 }
 
 export function pointsLabel(sport: Sport, teamName: string): string {

@@ -109,6 +109,18 @@ const undo = (
     ...(restore && { restore }),
   });
 
+const undoExpecting = (
+  s: TournamentWorld,
+  game: Doc<'tournamentGames'>,
+  expected: number,
+  restore?: { score: Score; forfeitTeamId?: Id<'teams'> },
+) =>
+  s.as(s.admin).mutation(api.tournamentGames.undoResult, {
+    gameId: game._id,
+    expected,
+    ...(restore && { restore }),
+  });
+
 const setup = (s: TournamentWorld, who: Person = s.admin) =>
   s.as(who).query(api.tournamentGames.getSetup, TOURNAMENT_SLUGS);
 
@@ -170,8 +182,8 @@ describe('tournamentGames.enterResult', () => {
     });
     await useSport(s, 'beachVolleyball');
     expect(
-      await enter(s, game, { score: { kind: 'sets', sets: [{ a: 21, b: 20 }] } }).catch(refusalOf),
-    ).toEqual({ code: 'invalidScore', message: SCORE_MESSAGES.winByTwo(1), field: 'set1' });
+      await enter(s, game, { score: { kind: 'sets', sets: [{ a: 21, b: 21 }] } }).catch(refusalOf),
+    ).toEqual({ code: 'invalidScore', message: SCORE_MESSAGES.setTied(1), field: 'set1' });
     expect(await rows(s)).toEqual(before);
   });
 
@@ -230,7 +242,7 @@ describe('tournamentGames.enterResult', () => {
       ],
     };
     expect(await enter(s, await gameAt(s, 1, 2), { score: two }).catch(refusalOf)).toMatchObject({
-      field: 'set2',
+      field: 'score',
     });
   });
 
@@ -447,6 +459,87 @@ describe('tournamentGames.undoResult', () => {
     await enter(s, game, { score: ONE_SET });
     expect(await undo(s, game, { score: goals(2, 2) }).catch(refusalOf)).toMatchObject({
       code: 'invalidScore',
+    });
+  });
+});
+
+describe('an Undo for the result it was offered for', () => {
+  test('enterResult and correctResult answer with the time the result was entered', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    const saved = await enter(s, game, { score: ONE_SET });
+    expect(saved.resultEnteredAt).toBe((await gameAt(s, 1, 2)).resultEnteredAt);
+    const corrected = await correct(s, game, { score: { kind: 'sets', sets: [{ a: 12, b: 21 }] } });
+    expect(corrected.resultEnteredAt).toBe((await gameAt(s, 1, 2)).resultEnteredAt);
+  });
+
+  test('clears the result when the time it was entered still matches', async () => {
+    const { s } = await world();
+    const before = await rows(s);
+    const game = await gameAt(s, 1, 2);
+    const { resultEnteredAt } = await enter(s, game, { score: ONE_SET });
+    expect(await undoExpecting(s, game, resultEnteredAt)).toBeNull();
+    expect(await rows(s)).toEqual(before);
+  });
+
+  test("refuses after another organizer's correction, which stays with its winner in the next game", async () => {
+    const { s, teamIds } = await world();
+    const game = await gameAt(s, 1, 2);
+    const { resultEnteredAt } = await enter(s, game, { score: ONE_SET });
+    await correct(
+      s,
+      game,
+      { score: { kind: 'sets', sets: [{ a: 12, b: 21 }] } },
+      s.assignedOrganizer,
+    );
+    const before = await rows(s);
+    expect(await undoExpecting(s, game, resultEnteredAt).catch(refusalOf)).toEqual({
+      code: 'resultChanged',
+      message: BRACKET_MESSAGES.resultChanged,
+    });
+    expect(await rows(s)).toEqual(before);
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([teamIds[0], teamIds[4]]);
+  });
+
+  test('refuses a restore of an earlier result over a result that changed since', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    const corrected = await correct(s, game, { score: { kind: 'sets', sets: [{ a: 12, b: 21 }] } });
+    await correct(
+      s,
+      game,
+      { score: { kind: 'sets', sets: [{ a: 3, b: 21 }] } },
+      s.assignedOrganizer,
+    );
+    const before = await rows(s);
+    expect(
+      await undoExpecting(s, game, corrected.resultEnteredAt, corrected.previous!).catch(refusalOf),
+    ).toMatchObject({ code: 'resultChanged' });
+    expect(await rows(s)).toEqual(before);
+  });
+
+  test('an Undo with no time still acts on the result the game holds, as the previous release sent it', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    expect(await undo(s, game)).toBeNull();
+    expect((await gameAt(s, 1, 2)).winnerTeamId).toBeUndefined();
+  });
+
+  test('a restore with the team that forfeited stores the forfeit score, not the score it carried', async () => {
+    const { s, teamIds } = await world();
+    await useSport(s, 'soccer');
+    const game = await gameAt(s, 1, 2);
+    const { resultEnteredAt } = await enter(s, game, { score: goals(2, 1) });
+    await undoExpecting(s, game, resultEnteredAt, {
+      score: goals(0, 1),
+      forfeitTeamId: teamIds[3],
+    });
+    expect(await gameAt(s, 1, 2)).toMatchObject({
+      score: goals(0, 3),
+      forfeitTeamId: teamIds[3],
+      winnerTeamId: teamIds[4],
     });
   });
 });

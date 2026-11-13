@@ -15,8 +15,8 @@ import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
-import type { BracketSide } from '../../../../convex/lib/bracket';
-import { scoreKindOf } from '../../../../convex/lib/sports';
+import { BRACKET_MESSAGES, type BracketSide } from '../../../../convex/lib/bracket';
+import { scoreKindOf, type ScoreField } from '../../../../convex/lib/sports';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { focusLeftGroup } from '../../core/forms/shown-errors';
 import { Checkbox } from '../../ui/checkbox';
@@ -39,7 +39,6 @@ import {
   undoFailedText,
   undoneText,
   UNDO_OFFLINE,
-  type ResultField,
 } from './game-result-text';
 import {
   GameResultDraft,
@@ -52,26 +51,24 @@ import type { BracketGameView, ManagedTournament } from './tournament-context';
 type Saved = FunctionReturnType<typeof api.tournamentGames.enterResult>;
 
 type Status =
-  | { kind: 'saved'; text: AlertText; previous: Saved['previous'] }
+  | { kind: 'saved'; text: AlertText; previous: Saved['previous']; resultEnteredAt: number }
   | { kind: 'undone'; text: AlertText };
 
 type UndoNote = { kind: 'failed'; text: AlertText } | { kind: 'offline' };
 
 interface SetRow {
-  field: ResultField;
+  field: ScoreField;
   number: number;
   a: ScoreBox;
   b: ScoreBox;
   optional: boolean;
 }
 
-const SET_ROWS: readonly SetRow[] = [1, 2, 3].map((number) => ({
-  field: `set${number}` as ResultField,
-  number,
-  a: `a${number}` as ScoreBox,
-  b: `b${number}` as ScoreBox,
-  optional: number === 3,
-}));
+const SET_ROWS: readonly SetRow[] = [
+  { field: 'set1', number: 1, a: 'a1', b: 'b1', optional: false },
+  { field: 'set2', number: 2, a: 'a2', b: 'b2', optional: false },
+  { field: 'set3', number: 3, a: 'a3', b: 'b3', optional: true },
+];
 
 const TEXT_BUTTON =
   'inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11';
@@ -118,7 +115,7 @@ const TEXT_BUTTON =
             [class]="textButton"
             [class.opacity-50]="!online() && !undoing()"
             [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
-            (click)="undo(status.previous)"
+            (click)="undo(status.previous, status.resultEnteredAt)"
           >
             @if (undoing()) {
               <hlm-spinner data-icon="inline-start" />Undoing…
@@ -156,9 +153,7 @@ const TEXT_BUTTON =
         </button>
       } @else if (played()) {
         @if (game().locked) {
-          <p data-slot="locked" class="mt-2 text-muted-foreground">
-            The next game has a result, so this result cannot change.
-          </p>
+          <p data-slot="locked" class="mt-2 text-muted-foreground">{{ lockedText }}</p>
         } @else {
           <button
             #openButton
@@ -345,6 +340,7 @@ export class BracketGame {
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly textButton = TEXT_BUTTON;
   protected readonly saveOffline = SAVE_OFFLINE;
+  protected readonly lockedText = BRACKET_MESSAGES.nextGamePlayed;
   protected readonly undoOffline = UNDO_OFFLINE;
   protected readonly sides: readonly BracketSide[] = [0, 1];
 
@@ -423,7 +419,6 @@ export class BracketGame {
     });
   });
 
-  /** Someone else's correction leaves the game holding neither result, and Undo would revert it. */
   protected readonly undoOffered = computed(
     () => this.game().result !== null && !this.game().locked,
   );
@@ -452,7 +447,7 @@ export class BracketGame {
     return ids.length > 0 ? ids.join(' ') : null;
   }
 
-  protected left(event: FocusEvent, field: ResultField): void {
+  protected left(event: FocusEvent, field: ScoreField): void {
     if (focusLeftGroup(event)) this.draft.left(field);
   }
 
@@ -508,6 +503,7 @@ export class BracketGame {
         kind: 'saved',
         text: savedText(saved.winnerName, saved.advancesTo, correcting),
         previous: saved.previous,
+        resultEnteredAt: saved.resultEnteredAt,
       });
       this.focusStatusUnlessMoved(() => this.statusAlert()?.focus());
     } else if ('focus' in outcome) {
@@ -517,7 +513,7 @@ export class BracketGame {
     }
   }
 
-  protected async undo(previous: Saved['previous']): Promise<void> {
+  protected async undo(previous: Saved['previous'], resultEnteredAt: number): Promise<void> {
     if (this.undoing()) return;
     this.undoNote.set(null);
     if (!this.online()) {
@@ -528,6 +524,7 @@ export class BracketGame {
     try {
       await this.undoCall.run({
         gameId: this.game().gameId,
+        expected: resultEnteredAt,
         ...(previous && { restore: previous }),
       });
       this.status.set({ kind: 'undone', text: undoneText(previous !== null) });

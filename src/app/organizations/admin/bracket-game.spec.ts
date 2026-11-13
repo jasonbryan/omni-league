@@ -270,10 +270,14 @@ describe('BracketGame', () => {
       expect(error('g_2', 'set1')).toBeNull();
     });
 
-    it('refuses a set won by one point', async () => {
+    it('accepts a set won by one point, as a capped or timed set ends', async () => {
       await fill('g_2', '21', '20');
       await leave('g_2', 'b1');
-      expect(error('g_2', 'set1')).toBe('Set 1 must be won by 2 points or more.');
+      expect(error('g_2', 'set1')).toBeNull();
+      await press(button('g_2', 'Save result'));
+      expect(calls()).toEqual([
+        [ENTER, { gameId: 'g_2', score: { kind: 'sets', sets: [{ a: 21, b: 20 }] } }],
+      ]);
     });
 
     it('a submit with an error sends nothing and focuses the first field to fix', async () => {
@@ -360,12 +364,12 @@ describe('BracketGame', () => {
       o.convex.calls[0].reject(
         new ConvexError({
           code: 'invalidScore',
-          message: 'Set 1 must be won by 2 points or more.',
+          message: 'Set 1 is tied. A set needs a winner.',
           field: 'set1',
         }),
       );
       await o.flush();
-      expect(error('g_2', 'set1')).toBe('Set 1 must be won by 2 points or more.');
+      expect(error('g_2', 'set1')).toBe('Set 1 is tied. A set needs a winner.');
       expect(document.activeElement).toBe(input('g_2', 'a1'));
       expect(input('g_2', 'a1').value).toBe('21');
       expect(input('g_2', 'b1').value).toBe('15');
@@ -578,6 +582,7 @@ describe('BracketGame', () => {
       winnerName: 'Bravo',
       advancesTo: 'Final',
       previous: null,
+      resultEnteredAt: 1_000,
     };
     const PLAYED = () =>
       setupOf({
@@ -600,7 +605,7 @@ describe('BracketGame', () => {
     it('clears the result, says so, and takes focus because the Undo button is gone', async () => {
       await saveFirst();
       await press(button('g_2', 'Undo'));
-      expect(calls().at(-1)).toEqual([UNDO, { gameId: 'g_2' }]);
+      expect(calls().at(-1)).toEqual([UNDO, { gameId: 'g_2', expected: 1_000 }]);
       expectPendingSpinner(button('g_2', 'Undoing'));
       o.convex.calls[1].resolve(null);
       o.subscription(SETUP)!.emit(setupOf());
@@ -618,10 +623,18 @@ describe('BracketGame', () => {
       await press(button('g_2', 'Correct result'));
       await fill('g_2', '12', '21');
       await press(button('g_2', 'Save correction'));
-      o.convex.calls[0].resolve({ ...SAVED, winnerName: 'Charlie', previous: { score: ONE_SET } });
+      o.convex.calls[0].resolve({
+        ...SAVED,
+        winnerName: 'Charlie',
+        previous: { score: ONE_SET },
+        resultEnteredAt: 2_000,
+      });
       await o.flush();
       await press(button('g_2', 'Undo'));
-      expect(calls().at(-1)).toEqual([UNDO, { gameId: 'g_2', restore: { score: ONE_SET } }]);
+      expect(calls().at(-1)).toEqual([
+        UNDO,
+        { gameId: 'g_2', restore: { score: ONE_SET }, expected: 2_000 },
+      ]);
       o.convex.calls[1].resolve(null);
       await o.flush();
       expect(text(alertOf('g_2')!.querySelector('[data-slot="alert-title"]'))).toBe(
@@ -642,6 +655,24 @@ describe('BracketGame', () => {
       expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
         'The result could not be undone. The next game has a result, so this result cannot change.',
       );
+    });
+
+    it('shows the refusal of an Undo for a result someone else changed since, and sends nothing more', async () => {
+      await saveFirst();
+      await press(button('g_2', 'Undo'));
+      o.convex.calls[1].reject(
+        new ConvexError({
+          code: 'resultChanged',
+          message: 'Someone else changed this result, so it was not undone.',
+        }),
+      );
+      await o.flush();
+      const note = row('g_2').querySelector<HTMLElement>('[data-slot="undo-note"]');
+      expect(text(note)).toBe(
+        'The result could not be undone. Someone else changed this result, so it was not undone.',
+      );
+      expect(document.activeElement).toBe(note!.querySelector('[data-slot="alert"]'));
+      expect(calls()).toHaveLength(2);
     });
 
     it('is gone once the next game has a result', async () => {

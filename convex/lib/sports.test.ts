@@ -119,13 +119,11 @@ describe('checkScore: beach volleyball sets', () => {
     sets: scores.map(([a, b]) => ({ a, b })),
   });
 
-  test('a game of 1 set is one set won by 2 or more points', () => {
+  test('a game of 1 set is one set with a winner, however close or capped', () => {
     expect(checkScore('beachVolleyball', 1, sets([21, 15]))).toBeNull();
     expect(checkScore('beachVolleyball', 1, sets([22, 24]))).toBeNull();
-    expect(checkScore('beachVolleyball', 1, sets([21, 20]))).toEqual({
-      field: 'set1',
-      message: SCORE_MESSAGES.winByTwo(1),
-    });
+    expect(checkScore('beachVolleyball', 1, sets([21, 20]))).toBeNull();
+    expect(checkScore('beachVolleyball', 1, sets([25, 24]))).toBeNull();
   });
 
   test('refuses a tied set under that set', () => {
@@ -155,10 +153,14 @@ describe('checkScore: beach volleyball sets', () => {
     expect(checkScore('beachVolleyball', 1, sets([21.5, 10]))).toMatchObject({ field: 'set1' });
   });
 
-  test('refuses a second set in a game of 1 set', () => {
+  test('refuses a second set in a game of 1 set, and a fourth in a best of 3, on the score', () => {
     expect(checkScore('beachVolleyball', 1, sets([21, 15], [21, 10]))).toEqual({
-      field: 'set2',
+      field: 'score',
       message: SCORE_MESSAGES.extraSet(2),
+    });
+    expect(checkScore('beachVolleyball', 3, sets([21, 15], [18, 21], [15, 12], [15, 12]))).toEqual({
+      field: 'score',
+      message: SCORE_MESSAGES.extraSet(4),
     });
   });
 
@@ -176,9 +178,7 @@ describe('checkScore: beach volleyball sets', () => {
       message: SCORE_MESSAGES.setMissing(3),
     });
     expect(checkScore('beachVolleyball', 3, sets([21, 15], [18, 21], [15, 12]))).toBeNull();
-    expect(checkScore('beachVolleyball', 3, sets([21, 15], [18, 21], [15, 14]))).toMatchObject({
-      field: 'set3',
-    });
+    expect(checkScore('beachVolleyball', 3, sets([21, 15], [18, 21], [15, 14]))).toBeNull();
   });
 
   test('a trailing row left blank is dropped, a blank row between sets is not', () => {

@@ -85,15 +85,18 @@ export async function saveResult(
   ctx: MutationCtx,
   game: Doc<'tournamentGames'>,
   result: StoredResult & { winnerTeamId: Id<'teams'>; enteredBy: Id<'users'> },
-): Promise<void> {
+): Promise<number> {
+  // Later than the result it replaces, even within one millisecond, so an Undo shown the earlier one is refused.
+  const resultEnteredAt = Math.max(Date.now(), (game.resultEnteredAt ?? 0) + 1);
   await ctx.db.patch('tournamentGames', game._id, {
     winnerTeamId: result.winnerTeamId,
     score: result.score,
     forfeitTeamId: result.forfeitTeamId,
-    resultEnteredAt: Date.now(),
+    resultEnteredAt,
     resultEnteredBy: result.enteredBy,
   });
   await placeInNextGame(ctx, game, result.winnerTeamId);
+  return resultEnteredAt;
 }
 
 export async function clearResult(ctx: MutationCtx, game: Doc<'tournamentGames'>): Promise<void> {

@@ -81,24 +81,30 @@ export const FORFEIT_SCORES = {
   softball: { winner: 7, loser: 0 },
 } as const satisfies Record<Sport, { winner: number; loser: number }>;
 
-const WIN_BY = 2;
-
 export const SCORE_MESSAGES = {
   tied: 'A bracket game needs a winner, so the scores cannot be tied.',
   blank: 'Enter a score for both teams.',
   wholeNumber: `Use a whole number from 0 to ${MAX_SCORE}.`,
   wrongKind: 'This score does not fit the sport.',
   setTied: (set: number) => `Set ${set} is tied. A set needs a winner.`,
-  winByTwo: (set: number) => `Set ${set} must be won by ${WIN_BY} points or more.`,
   setMissing: (set: number) => `Enter the score of set ${set}.`,
   extraSet: (set: number) => `Set ${set} is not played, because the game is already decided.`,
 } as const;
 
+export const SCORE_FIELDS = ['a', 'b', 'score', 'set1', 'set2', 'set3'] as const;
+
+export type ScoreField = (typeof SCORE_FIELDS)[number];
+
+export function isScoreField(value: unknown): value is ScoreField {
+  return (SCORE_FIELDS as readonly unknown[]).includes(value);
+}
+
 export interface ScoreIssue {
-  /** `a` or `b` for a team's goals or runs, `score` for the pair, `set1` to `set3` for a set. */
-  field: string;
+  field: ScoreField;
   message: string;
 }
+
+const SET_FIELDS = ['set1', 'set2', 'set3'] as const;
 
 type Points = number | null;
 
@@ -108,7 +114,11 @@ function pointsIssue(points: Points): string | null {
   return whole ? null : SCORE_MESSAGES.wholeNumber;
 }
 
-function pairIssue(a: Points, b: Points, fieldOf: (side: 'a' | 'b') => string): ScoreIssue | null {
+function pairIssue(
+  a: Points,
+  b: Points,
+  fieldOf: (side: 'a' | 'b') => ScoreField,
+): ScoreIssue | null {
   const aIssue = pointsIssue(a);
   if (aIssue !== null) return { field: fieldOf('a'), message: aIssue };
   const bIssue = pointsIssue(b);
@@ -123,14 +133,18 @@ function wonSets(sets: readonly { a: number | null; b: number | null }[]): [numb
   return won;
 }
 
-function setsIssue(setsPerGame: number, drafted: readonly { a: Points; b: Points }[]) {
+function setsIssue(
+  setsPerGame: number,
+  drafted: readonly { a: Points; b: Points }[],
+): ScoreIssue | null {
   const sets = [...drafted];
   while (sets.length > 0 && sets.at(-1)!.a === null && sets.at(-1)!.b === null) sets.pop();
   const toWin = Math.floor(setsPerGame / 2) + 1;
   const wins: [number, number] = [0, 0];
   for (const [index, set] of sets.entries()) {
     const number = index + 1;
-    const field = `set${number}`;
+    // A set past the game's sets has no row on the page, so its refusal stands under the score.
+    const field = number > setsPerGame ? 'score' : (SET_FIELDS[number - 1] ?? 'score');
     if (wins[0] === toWin || wins[1] === toWin || number > setsPerGame) {
       return { field, message: SCORE_MESSAGES.extraSet(number) };
     }
@@ -140,14 +154,11 @@ function setsIssue(setsPerGame: number, drafted: readonly { a: Points; b: Points
     const bad = pairIssue(set.a, set.b, () => field);
     if (bad) return bad;
     if (set.a === set.b) return { field, message: SCORE_MESSAGES.setTied(number) };
-    if (Math.abs(set.a! - set.b!) < WIN_BY) {
-      return { field, message: SCORE_MESSAGES.winByTwo(number) };
-    }
     wins[set.a! > set.b! ? 0 : 1]++;
   }
   if (wins[0] < toWin && wins[1] < toWin) {
     const next = sets.length + 1;
-    return { field: `set${next}`, message: SCORE_MESSAGES.setMissing(next) };
+    return { field: SET_FIELDS[next - 1] ?? 'score', message: SCORE_MESSAGES.setMissing(next) };
   }
   return null;
 }
