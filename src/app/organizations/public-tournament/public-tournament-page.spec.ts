@@ -246,10 +246,12 @@ describe('PublicTournamentPage populated', () => {
     expectBareCard(cards[0], 'p-5 md:p-6 lg:sticky lg:top-24');
   });
 
-  it('shows the open card with the deadline and no action', () => {
+  it('shows the open card with the deadline and one action', () => {
     expect(text(card(harness)?.querySelector('h2'))).toBe('Registration');
     expect(spaced(card(harness))).toContain('Registration open · closes Jun 5, 2027');
-    expect(card(harness)?.querySelector('a, button')).toBeNull();
+    expect([...card(harness)!.querySelectorAll('a, button')].map(text)).toEqual([
+      'Register a team',
+    ]);
   });
 
   it('lists the dates, team limits, deadline, and location with its address', () => {
@@ -341,6 +343,35 @@ describe('PublicTournamentPage registration card', () => {
     emit();
     await settle(harness);
     expect(text(card(harness)?.querySelector('p'))).toBe(label);
+  });
+
+  it('offers Register a team on the open card, linking to the register route', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const link = card(harness)?.querySelector('a');
+    expect(text(link)).toBe('Register a team');
+    expect(link?.getAttribute('href')).toBe(`/app${TOURNAMENT_PATH}/register`);
+    expect(link?.getAttribute('data-slot')).toBe('button');
+  });
+
+  it('reads Full with no action when the tournament has reached its maximum teams', async () => {
+    const harness = await open();
+    emit({ ...BEACH_OPEN, isFull: true });
+    await settle(harness);
+    expect(text(card(harness)?.querySelector('p'))).toBe('Full');
+    expect(spaced(card(harness))).toContain('All 16 teams have registered');
+    expect(spaced(card(harness))).not.toContain('Registration open');
+    expect(card(harness)?.querySelector('a, button')).toBeNull();
+  });
+
+  it('shows Registration closed rather than Full once the deadline has passed', async () => {
+    vi.setSystemTime(at('2027-06-06'));
+    const harness = await open();
+    emit({ ...BEACH_OPEN, isFull: true });
+    await settle(harness);
+    expect(text(card(harness)?.querySelector('p'))).toBe('Registration closed');
+    expect(card(harness)?.querySelector('a, button')).toBeNull();
   });
 
   it('names the deadline on the closed card, with no action', async () => {

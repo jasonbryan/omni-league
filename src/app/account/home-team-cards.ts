@@ -41,7 +41,11 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
                 >
               </h3>
               <p hlmCardDescription class="min-w-0 wrap-anywhere">
-                {{ card.leagueName }} &middot; {{ card.seasonName }}
+                @if (card.tournamentName) {
+                  {{ card.tournamentName }}
+                } @else {
+                  {{ card.leagueName }} &middot; {{ card.seasonName }}
+                }
               </p>
               @if (card.badge; as badge) {
                 <div hlmCardAction>
@@ -57,7 +61,9 @@ const ROLE_BADGES: Readonly<Record<string, { label: string; crown: boolean } | u
             <div hlmCardContent>
               <dl class="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <dt class="text-muted-foreground">Season</dt>
+                  <dt class="text-muted-foreground">
+                    {{ card.tournamentName ? 'Tournament' : 'Season' }}
+                  </dt>
                   <dd class="mt-0.5 font-medium">{{ card.dates }}</dd>
                 </div>
                 <div>

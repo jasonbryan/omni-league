@@ -1,8 +1,14 @@
+import { v } from 'convex/values';
 import type { Doc } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { leagueDivisionLabel } from './leagueDivision';
 import { leagueLocations } from './publicLeague';
 import { sportName } from './sports';
+
+export const tournamentSlugsValidator = v.object({
+  orgSlug: v.string(),
+  tournamentSlug: v.string(),
+});
 
 export async function findTournamentBySlugs(
   ctx: Pick<QueryCtx, 'db'>,

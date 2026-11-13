@@ -25,4 +25,25 @@ describe('tournamentRegistrationCard', () => {
       deadline: 'Jun 5, 2027',
     });
   });
+
+  it('is full while registration is open and the tournament says it is full', () => {
+    expect(tournamentRegistrationCard({ ...BEACH_OPEN, isFull: true }, at('2027-04-01'))).toEqual({
+      kind: 'full',
+      maximumTeams: 16,
+    });
+  });
+
+  it('is open when the tournament has room, and when a saved copy made before `isFull` carries none', () => {
+    expect(
+      tournamentRegistrationCard({ ...BEACH_OPEN, isFull: false }, at('2027-04-01')).kind,
+    ).toBe('open');
+    expect(tournamentRegistrationCard(BEACH_OPEN, at('2027-04-01')).kind).toBe('open');
+  });
+
+  it('is closed, not full, once the deadline has passed', () => {
+    expect(tournamentRegistrationCard({ ...BEACH_OPEN, isFull: true }, at('2027-06-06'))).toEqual({
+      kind: 'closed',
+      deadline: 'Jun 5, 2027',
+    });
+  });
 });

@@ -24,3 +24,8 @@ export function registerFreeAgentPath(
 ): string {
   return registerPath(orgSlug, leagueSlug, seasonSlug, 'free-agent');
 }
+
+/** Built from the slugs, never copied from the current URL, which can carry a query string or a fragment. */
+export function registerTournamentTeamPath(orgSlug: string, tournamentSlug: string): string {
+  return `/app/organizations/${[orgSlug, 'tournaments', tournamentSlug].map(encodeURIComponent).join('/')}/register`;
+}

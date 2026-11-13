@@ -1,7 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
-import { forbidden } from './forbidden';
-import { isMinorEntry, rosteredEntriesInSeason } from './rosterWrites';
+import { forbidden, forbiddenTournamentTeam } from './forbidden';
+import { adultEntryInTournament, isMinorEntry, rosteredEntriesInSeason } from './rosterWrites';
 import { getCurrentUser } from './users';
 
 type Ctx = Pick<QueryCtx | MutationCtx, 'auth' | 'db'>;
@@ -102,7 +102,7 @@ export async function requireSeasonMemberOrOrganizer(
   league: Doc<'leagues'>,
 ): Promise<TeamReader> {
   const user = await getCurrentUser(ctx);
-  if (!user) throw forbidden();
+  if (!user || team.seasonId === undefined) throw forbidden();
   const entries = await rosteredEntriesInSeason(ctx, team.seasonId, user._id);
   const organizes = await organizesLeague(ctx, user._id, league);
   if (entries.length === 0 && !organizes) throw forbidden();
@@ -112,6 +112,46 @@ export async function requireSeasonMemberOrOrganizer(
     rosteredTeamIds: new Set(entries.map((entry) => entry.teamId)),
     organizes,
   };
+}
+
+/** A tournament team is seen by the people on it and the staff who run its tournament; other teams in the tournament do not see its roster. */
+export async function requireTournamentTeamMemberOrAdmin(
+  ctx: Ctx,
+  team: Doc<'teams'>,
+): Promise<TeamReader> {
+  const user = await getCurrentUser(ctx);
+  if (!user || team.tournamentId === undefined) throw forbidden();
+  const own = await adultEntryInTournament(ctx, team.tournamentId, user._id);
+  const ownTeamId = own?.teamId === team._id ? team._id : null;
+  const organizes = await organizesTournamentTeam(ctx, user._id, team);
+  if (ownTeamId === null && !organizes) throw forbiddenTournamentTeam();
+  return {
+    user,
+    ownTeamId,
+    rosteredTeamIds: new Set(ownTeamId ? [ownTeamId] : []),
+    organizes,
+  };
+}
+
+/** An org admin of the organization, or an organizer assigned to the tournament's program. */
+async function organizesTournamentTeam(
+  ctx: Ctx,
+  userId: Id<'users'>,
+  team: Doc<'teams'>,
+): Promise<boolean> {
+  const tournament = team.tournamentId ? await ctx.db.get('tournaments', team.tournamentId) : null;
+  const program = tournament ? await ctx.db.get('programs', tournament.programId) : null;
+  if (program?.organizationId !== team.organizationId) return false;
+  const membership = await membershipOf(ctx, userId, team.organizationId);
+  return membership !== null && mayOrganizeProgram(membership, program);
+}
+
+export async function canManageTournamentTeam(
+  ctx: Ctx,
+  userId: Id<'users'>,
+  team: Doc<'teams'>,
+): Promise<boolean> {
+  return team.captainUserId === userId || (await organizesTournamentTeam(ctx, userId, team));
 }
 
 export async function canManageTeam(
@@ -125,7 +165,7 @@ export async function canManageTeam(
 
 export async function requireTeamManager(ctx: Ctx, team: Doc<'teams'>): Promise<Doc<'users'>> {
   const user = await requireUser(ctx);
-  const league = await ctx.db.get('leagues', team.leagueId);
+  const league = team.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
   if (!league || !(await canManageTeam(ctx, user._id, team, league)))
     throw new Error('Not allowed');
   return user;

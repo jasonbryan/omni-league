@@ -8,6 +8,8 @@ import {
   requireProgramOrganizerOrForbidden,
   requireStaffOrForbidden,
 } from './lib/access';
+import { getCurrentUser } from './lib/users';
+import { adultEntryInTournament } from './lib/rosterWrites';
 import { isChoosableSlug, slugify } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
@@ -33,11 +35,16 @@ import { dateAtUtcMinus12 } from './lib/registration';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { tournamentDetailsValidator } from './lib/tournamentDetails';
-import { findTournamentBySlugs, tournamentDetails } from './lib/tournamentLookup';
+import {
+  findTournamentBySlugs,
+  tournamentDetails,
+  tournamentSlugsValidator,
+} from './lib/tournamentLookup';
 import { sportName, sportValidator, type Sport } from './lib/sports';
 import {
   checkTournamentFields,
   firstTournamentError,
+  tournamentIsFull,
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
@@ -314,7 +321,69 @@ export const getPublicPage = query({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published') return null;
-    return tournamentDetails(ctx, organization, found);
+    return {
+      ...(await tournamentDetails(ctx, organization, found)),
+      isFull: tournamentIsFull(found.tournament),
+    };
+  },
+});
+
+const registrationTeamValidator = v.object({
+  teamId: v.id('teams'),
+  name: v.string(),
+  isCaptain: v.boolean(),
+  rosterCount: v.number(),
+});
+
+/** The register route's one query. It returns no tournament id: `teams.registerForTournament` finds the tournament from the same slugs. */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: a published tournament's public fields, plus the caller's own team found from ctx.auth (getCurrentUser); an anonymous caller gets `team: null`.
+export const getForRegistration = query({
+  args: tournamentSlugsValidator.fields,
+  returns: v.union(
+    v.null(),
+    v.object({
+      organizationName: v.string(),
+      name: v.string(),
+      divisionLabel: v.string(),
+      startDate: v.string(),
+      endDate: v.string(),
+      registrationDeadline: v.string(),
+      minimumRosterSize: v.number(),
+      maximumTeams: v.number(),
+      isFull: v.boolean(),
+      team: v.union(v.null(), registrationTeamValidator),
+    }),
+  ),
+  handler: async (ctx, { orgSlug, tournamentSlug }) => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    if (!organization) return null;
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    // A draft answers like an unknown tournament, so nothing says whether its slug exists.
+    if (found?.program.status !== 'published') return null;
+    const { program, tournament } = found;
+    const user = await getCurrentUser(ctx);
+    const entry = user ? await adultEntryInTournament(ctx, tournament._id, user._id) : null;
+    const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
+    return {
+      organizationName: organization.name,
+      name: program.name,
+      divisionLabel: await leagueDivisionLabel(ctx, program),
+      startDate: tournament.startDate,
+      endDate: tournament.endDate,
+      registrationDeadline: tournament.registrationDeadline,
+      minimumRosterSize: tournament.minimumRosterSize,
+      maximumTeams: tournament.maximumTeams,
+      isFull: tournamentIsFull(tournament),
+      team:
+        team && user
+          ? {
+              teamId: team._id,
+              name: team.name,
+              isCaptain: team.captainUserId === user._id,
+              rosterCount: team.rosterCount,
+            }
+          : null,
+    };
   },
 });
 
@@ -371,6 +440,7 @@ async function publicTournamentRow(
     startDate: tournament.startDate,
     endDate: tournament.endDate,
     registrationDeadline: tournament.registrationDeadline,
+    isFull: tournamentIsFull(tournament),
   };
 }
 

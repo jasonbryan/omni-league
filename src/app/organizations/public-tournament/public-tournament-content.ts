@@ -1,9 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCalendarDays, lucideClock, lucideMapPin, lucideUsers } from '@ng-icons/lucide';
+import {
+  lucideCalendarDays,
+  lucideClock,
+  lucideMapPin,
+  lucideShirt,
+  lucideUsers,
+} from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
+import { registerTournamentTeamPath } from '../../teams/team-paths';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
+import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { HlmCard } from '../../ui/card';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
@@ -22,8 +31,10 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-tournament-content',
-  imports: [HlmBreadcrumbImports, HlmCard, NgIcon, SavedCopyNote],
-  providers: [provideIcons({ lucideCalendarDays, lucideClock, lucideMapPin, lucideUsers })],
+  imports: [HlmBreadcrumbImports, HlmCard, NgIcon, RouterLink, SavedCopyNote],
+  providers: [
+    provideIcons({ lucideCalendarDays, lucideClock, lucideMapPin, lucideShirt, lucideUsers }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -67,6 +78,21 @@ const FACT_ICON =
               @if (card.kind === 'open') {
                 <p class="text-lg font-semibold tracking-tight">
                   Registration open &middot; closes {{ card.closes }}
+                </p>
+                <a [routerLink]="registerHref()" data-slot="button" [class]="registerButton"
+                  ><ng-icon
+                    name="lucideShirt"
+                    data-icon="inline-start"
+                    aria-hidden="true"
+                  />Register a team</a
+                >
+                <p class="mt-4 text-sm text-muted-foreground">
+                  Captains register a team and play as its first player.
+                </p>
+              } @else if (card.kind === 'full') {
+                <p class="text-lg font-semibold tracking-tight">Full</p>
+                <p class="mt-2 text-sm text-muted-foreground">
+                  All {{ card.maximumTeams }} teams have registered.
                 </p>
               } @else {
                 <p class="text-lg font-semibold tracking-tight">Registration closed</p>
@@ -144,6 +170,7 @@ export class PublicTournamentContent {
   /** The viewer's clock, so the card follows the deadline after hydration. */
   readonly now = input.required<number>();
 
+  protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -163,6 +190,9 @@ export class PublicTournamentContent {
     [this.tournament().sportName, ...this.tournament().locations.map(({ name }) => name)].join(
       ' · ',
     ),
+  );
+  protected readonly registerHref = computed(() =>
+    registerTournamentTeamPath(this.tournament().organization.slug, this.tournament().slug),
   );
   protected readonly organizationHref = computed(() =>
     organizationPath(this.tournament().organization.slug),

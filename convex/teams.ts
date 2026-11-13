@@ -1,9 +1,11 @@
-import { ConvexError, v } from 'convex/values';
+import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import {
   canManageTeam,
+  canManageTournamentTeam,
   requireSeasonMemberOrOrganizer,
+  requireTournamentTeamMemberOrAdmin,
   requireUser,
   type TeamReader,
 } from './lib/access';
@@ -11,14 +13,24 @@ import { shortMinorName } from './lib/minorName';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
-import { isMinorEntry, registerTeamOrJoinWaitlist } from './lib/rosterWrites';
-import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
+import {
+  insertTournamentTeamWithCaptain,
+  isMinorEntry,
+  registerTeamOrJoinWaitlist,
+} from './lib/rosterWrites';
+import {
+  findOrganizationBySlug,
+  findSeasonBySlugs,
+  seasonSlugsValidator,
+} from './lib/seasonLookup';
 import {
   checkTeamName,
   SEASON_NOT_FOUND_CODE,
   TEAM_MESSAGES,
+  TOURNAMENT_NOT_FOUND_CODE,
   type RegistrationClosedError,
 } from './lib/teamInput';
+import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import { getCurrentUser } from './lib/users';
 
 /** More than a roster holds, so the page always lists the whole roster. */
@@ -57,6 +69,35 @@ export const register = mutation({
       name: checked.name,
       captainUserId: user._id,
     });
+  },
+});
+
+/** A tournament has no waitlist, so a full one refuses (`tournamentIsFull`). */
+export const registerForTournament = mutation({
+  args: { ...tournamentSlugsValidator.fields, name: v.string() },
+  returns: v.object({ teamId: v.id('teams') }),
+  handler: async (ctx, { name, orgSlug, tournamentSlug }) => {
+    const user = await requireUser(ctx);
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    const found = organization && (await findTournamentBySlugs(ctx, organization, tournamentSlug));
+    // A draft answers like an unknown tournament, as the register page's query does.
+    if (found?.program.status !== 'published') {
+      throw new ConvexError({ code: TOURNAMENT_NOT_FOUND_CODE });
+    }
+    const { tournament } = found;
+    if (!registrationIsOpen(tournament, Date.now())) {
+      throw new ConvexError({
+        code: 'registrationClosed',
+        message: TEAM_MESSAGES.tournamentRegistrationClosed,
+      } satisfies RegistrationClosedError);
+    }
+    const checked = checkTeamName(name);
+    if (!checked.ok) throw new ConvexError({ ...checked.error });
+    const teamId = await insertTournamentTeamWithCaptain(ctx, tournament, {
+      name: checked.name,
+      captainUserId: user._id,
+    });
+    return { teamId };
   },
 });
 
@@ -101,6 +142,8 @@ const myTeamValidator = v.object({
   registrationDeadline: v.string(),
   minimumRosterSize: v.number(),
   rosterCount: v.number(),
+  /** Set for a tournament team, whose `seasonName` and `leagueName` hold the tournament's name and the organization's, as the season fields of the previous frontend read them. */
+  tournamentName: v.optional(v.string()),
 });
 
 type MyTeamRole = 'captain' | 'player' | 'guardian';
@@ -126,12 +169,38 @@ export const listMine = query({
     for (const [teamId, entryRole] of roles) {
       const team = await ctx.db.get('teams', teamId);
       if (!team) continue;
-      const [season, league, organization] = await Promise.all([
-        ctx.db.get('seasons', team.seasonId),
-        ctx.db.get('leagues', team.leagueId),
-        ctx.db.get('organizations', team.organizationId),
+      const role =
+        entryRole === 'player' && team.captainUserId === user._id ? 'captain' : entryRole;
+      const organization = await ctx.db.get('organizations', team.organizationId);
+      if (!organization) continue;
+      if (team.tournamentId !== undefined) {
+        const tournament = await ctx.db.get('tournaments', team.tournamentId);
+        const program = tournament && (await ctx.db.get('programs', tournament.programId));
+        if (!tournament || !program) continue;
+        rows.push({
+          startDate: tournament.startDate,
+          row: {
+            teamId: team._id,
+            teamName: team.name,
+            tournamentName: program.name,
+            seasonName: program.name,
+            leagueName: organization.name,
+            organizationName: organization.name,
+            role,
+            seasonStartDate: tournament.startDate,
+            seasonEndDate: tournament.endDate,
+            registrationDeadline: tournament.registrationDeadline,
+            minimumRosterSize: tournament.minimumRosterSize,
+            rosterCount: team.rosterCount,
+          },
+        });
+        continue;
+      }
+      const [season, league] = await Promise.all([
+        team.seasonId && ctx.db.get('seasons', team.seasonId),
+        team.leagueId && ctx.db.get('leagues', team.leagueId),
       ]);
-      if (!season || !league || !organization) continue;
+      if (!season || !league) continue;
       rows.push({
         startDate: season.startDate,
         row: {
@@ -140,7 +209,7 @@ export const listMine = query({
           seasonName: season.name,
           leagueName: league.name,
           organizationName: organization.name,
-          role: entryRole === 'player' && team.captainUserId === user._id ? 'captain' : entryRole,
+          role,
           seasonStartDate: season.startDate,
           seasonEndDate: season.endDate,
           registrationDeadline: season.registrationDeadline,
@@ -171,8 +240,10 @@ const rosterRowValidator = v.object({
 const teamForMemberValidator = v.object({
   name: v.string(),
   organization: v.object({ name: v.string(), slug: v.string() }),
-  league: v.object({ name: v.string(), slug: v.string() }),
-  season: v.object({ name: v.string(), slug: v.string() }),
+  /** A tournament team's `season` and `league` are stand-ins for the previous frontend; `tournament` marks the team. */
+  league: v.optional(v.object({ name: v.string(), slug: v.string() })),
+  season: v.optional(v.object({ name: v.string(), slug: v.string() })),
+  tournament: v.optional(v.object({ name: v.string(), slug: v.string() })),
   minimumRosterSize: v.number(),
   maxRosterSize: v.optional(v.number()),
   rosterCount: v.number(),
@@ -184,10 +255,15 @@ const teamForMemberValidator = v.object({
   viewerTeamName: v.union(v.null(), v.string()),
 });
 
-async function teamAndLeague(ctx: Pick<QueryCtx, 'db'>, rawTeamId: string) {
+async function teamById(ctx: Pick<QueryCtx, 'db'>, rawTeamId: string) {
   const teamId = ctx.db.normalizeId('teams', rawTeamId);
-  const team = teamId ? await ctx.db.get('teams', teamId) : null;
-  const league = team ? await ctx.db.get('leagues', team.leagueId) : null;
+  return teamId ? ctx.db.get('teams', teamId) : null;
+}
+
+/** A tournament team has no league, so it answers null. */
+async function teamAndLeague(ctx: Pick<QueryCtx, 'db'>, rawTeamId: string) {
+  const team = await teamById(ctx, rawTeamId);
+  const league = team?.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
   return team && league ? { team, league } : null;
 }
 
@@ -196,32 +272,63 @@ async function ownTeamName(ctx: Pick<QueryCtx, 'db'>, reader: TeamReader) {
   return own?.name ?? null;
 }
 
+type TeamForMember = Infer<typeof teamForMemberValidator>;
+
+async function tournamentTeamForMember(
+  ctx: Pick<QueryCtx, 'db' | 'auth'>,
+  team: Doc<'teams'>,
+): Promise<TeamForMember | null> {
+  const reader = await requireTournamentTeamMemberOrAdmin(ctx, team);
+  const tournament = team.tournamentId && (await ctx.db.get('tournaments', team.tournamentId));
+  const program = tournament && (await ctx.db.get('programs', tournament.programId));
+  const organization = await ctx.db.get('organizations', team.organizationId);
+  if (!tournament || !program || !organization) return null;
+  const viewerCanManage = await canManageTournamentTeam(ctx, reader.user._id, team);
+  return {
+    name: team.name,
+    organization: { name: organization.name, slug: organization.slug },
+    tournament: { name: program.name, slug: program.slug },
+    // The previous frontend reads `season` and `league` without a check, so a tournament team answers with stand-ins.
+    season: { name: program.name, slug: program.slug },
+    league: { name: organization.name, slug: organization.slug },
+    minimumRosterSize: tournament.minimumRosterSize,
+    rosterCount: team.rosterCount,
+    roster: await rosterOf(ctx, team, reader, viewerCanManage),
+    viewerIsCaptain: team.captainUserId === reader.user._id,
+    viewerCanManage,
+    viewerOnTeam: reader.rosteredTeamIds.has(team._id),
+    viewerTeamName: await ownTeamName(ctx, reader),
+  };
+}
+
 /** `teamId` is a string so a malformed id answers `null`, as an unknown one does, never a validator error. */
 export const getForMember = query({
   args: { teamId: v.string() },
   returns: v.union(v.null(), teamForMemberValidator),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<TeamForMember | null> => {
+    const team = await teamById(ctx, args.teamId);
+    if (team?.tournamentId !== undefined) return tournamentTeamForMember(ctx, team);
     const found = await teamAndLeague(ctx, args.teamId);
     if (!found) return null;
-    const { team, league } = found;
-    const reader = await requireSeasonMemberOrOrganizer(ctx, team, league);
+    const { team: seasonTeam, league } = found;
+    const reader = await requireSeasonMemberOrOrganizer(ctx, seasonTeam, league);
     const { user } = reader;
-    const season = await ctx.db.get('seasons', team.seasonId);
-    const organization = await ctx.db.get('organizations', team.organizationId);
+    const season = seasonTeam.seasonId && (await ctx.db.get('seasons', seasonTeam.seasonId));
+    const organization = await ctx.db.get('organizations', seasonTeam.organizationId);
     if (!season || !organization) return null;
-    const viewerCanManage = await canManageTeam(ctx, user._id, team, league);
+    const viewerCanManage = await canManageTeam(ctx, user._id, seasonTeam, league);
     return {
-      name: team.name,
+      name: seasonTeam.name,
       organization: { name: organization.name, slug: organization.slug },
       league: { name: league.name, slug: league.slug },
       season: { name: season.name, slug: season.slug },
       minimumRosterSize: season.minimumRosterSize,
       ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
-      rosterCount: team.rosterCount,
-      roster: await rosterOf(ctx, team, reader, viewerCanManage),
-      viewerIsCaptain: team.captainUserId === user._id,
+      rosterCount: seasonTeam.rosterCount,
+      roster: await rosterOf(ctx, seasonTeam, reader, viewerCanManage),
+      viewerIsCaptain: seasonTeam.captainUserId === user._id,
       viewerCanManage,
-      viewerOnTeam: reader.rosteredTeamIds.has(team._id),
+      viewerOnTeam: reader.rosteredTeamIds.has(seasonTeam._id),
       viewerTeamName: await ownTeamName(ctx, reader),
     };
   },
@@ -240,7 +347,7 @@ export const listForSeasonMember = query({
     if (!found) return null;
     const { team, league } = found;
     const { rosteredTeamIds } = await requireSeasonMemberOrOrganizer(ctx, team, league);
-    const season = await ctx.db.get('seasons', team.seasonId);
+    const season = team.seasonId && (await ctx.db.get('seasons', team.seasonId));
     if (!season) return null;
     const teams = await ctx.db
       .query('teams')

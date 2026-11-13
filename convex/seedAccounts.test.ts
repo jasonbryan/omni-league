@@ -305,7 +305,7 @@ describe('seed:demo accounts: a new deployment', () => {
         backfilled: NO_BACKFILL,
         memberships: 5,
         invites: 1,
-        teams: 6,
+        teams: 10,
         teamInvites: 2,
         freeAgents: 6,
         accounts: ALL('created'),
@@ -599,13 +599,57 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 
   test(
+    'puts four teams in gulf-coast-beach-open, Sand Crabs captained by player@, once',
+    async () => {
+      const t = setup();
+      await run(t);
+      const tournamentTeams = () =>
+        t.run(async (ctx) => {
+          const teams = (await ctx.db.query('teams').collect()).filter((row) => row.tournamentId);
+          const tournaments = await ctx.db.query('tournaments').collect();
+          const programs = await ctx.db.query('programs').collect();
+          const users = await ctx.db.query('users').collect();
+          const { page } = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+            model: 'user',
+            paginationOpts: { numItems: 200, cursor: null },
+          })) as { page: { _id: string; email: string }[] };
+          const emailOf = (userId: string) =>
+            page.find(
+              (authUser) => authUser._id === users.find((user) => user._id === userId)?.authUserId,
+            )?.email;
+          const [only] = tournaments.filter((row) => row.teamCount !== undefined);
+          return {
+            tournament: programs.find((program) => program._id === only?.programId)?.slug,
+            teamCount: only?.teamCount,
+            captains: Object.fromEntries(
+              teams.map((team) => [team.name, [emailOf(team.captainUserId), team.rosterCount]]),
+            ),
+          };
+        });
+      expect(await tournamentTeams()).toEqual({
+        tournament: 'gulf-coast-beach-open',
+        teamCount: 4,
+        captains: {
+          'Sand Crabs': [EMAILS.player, 1],
+          'Beach Bombers': [FICTIONAL_CAPTAINS[0], 1],
+          'Set Point': [FICTIONAL_CAPTAINS[1], 1],
+          'Spike Squad': [FICTIONAL_CAPTAINS[2], 1],
+        },
+      });
+      await run(t);
+      expect((await tournamentTeams()).teamCount).toBe(4);
+    },
+    SLOW,
+  );
+
+  test(
     'adds Sand Sharks on a later run once the captain@ account exists, and nothing after that',
     async () => {
       const t = setup();
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(6);
+      expect(first.teams).toBe(10);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -734,7 +778,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(5);
+      expect(result.teams).toBe(9);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -838,7 +882,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(10);
+      expect(rosterEntries).toHaveLength(14);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);

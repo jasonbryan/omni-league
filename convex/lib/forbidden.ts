@@ -4,8 +4,24 @@ import { ConvexError } from 'convex/values';
 
 export const FORBIDDEN_CODE = 'FORBIDDEN';
 
+/** Names the kind of team a refused reader asked for, so the page can say who may see it. */
+export const TOURNAMENT_TEAM_KIND = 'tournament';
+
 export function forbidden(): ConvexError<{ code: typeof FORBIDDEN_CODE }> {
   return new ConvexError({ code: FORBIDDEN_CODE });
+}
+
+export function forbiddenTournamentTeam(): ConvexError<{
+  code: typeof FORBIDDEN_CODE;
+  team: typeof TOURNAMENT_TEAM_KIND;
+}> {
+  return new ConvexError({ code: FORBIDDEN_CODE, team: TOURNAMENT_TEAM_KIND });
+}
+
+export function isForbiddenTournamentTeam(failure: unknown): boolean {
+  if (!isForbidden(failure)) return false;
+  const data: unknown = failure instanceof ConvexError ? failure.data : null;
+  return (data as { team?: unknown }).team === TOURNAMENT_TEAM_KIND;
 }
 
 export function isForbidden(failure: unknown): boolean {

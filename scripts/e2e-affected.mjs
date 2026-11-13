@@ -91,7 +91,10 @@ export const ROUTE_SPECS = {
   'organizations/:orgSlug/sports/:sport': ['sport-view'],
   'organizations/:orgSlug/leagues/:leagueSlug': ['league-page', 'league-page-offline'],
   'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': ['season-page'],
-  'organizations/:orgSlug/tournaments/:tournamentSlug': ['tournament-page'],
+  'organizations/:orgSlug/tournaments/:tournamentSlug': [
+    'tournament-page',
+    'tournament-registration',
+  ],
   'sign-up': ['sign-up', 'auth-session', 'after-sign-in'],
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
   'invites/accept': ['accept-invite'],
@@ -114,6 +117,7 @@ export const ROUTE_SPECS = {
     'season-management',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/tournaments/:tournamentSlug/register': ['tournament-registration'],
   'app/organizations/:orgSlug/tournaments/:tournamentSlug': [
     'organization-tournaments',
     'after-sign-in',
@@ -127,7 +131,12 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/free-agent': TEAM_REGISTRATION,
-  'app/teams/:teamId': [...TEAM_REGISTRATION, ...TEAM_INVITES, 'after-sign-in'],
+  'app/teams/:teamId': [
+    ...TEAM_REGISTRATION,
+    ...TEAM_INVITES,
+    'tournament-registration',
+    'after-sign-in',
+  ],
   'app/**': ['not-found'],
   '**': ['not-found'],
 };
@@ -207,6 +216,7 @@ export const PUBLIC_QUERIES = [
   'tournaments:getPublicPage',
   'tournaments:listPublic',
   'tournaments:listOpenForOrganization',
+  'tournaments:getForRegistration',
 ];
 const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
 const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;

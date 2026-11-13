@@ -6,7 +6,7 @@ import {
 import type { HlmBadgeVariant } from '../ui/badge';
 import { seasonDates } from './league/season-dates';
 import type { PublicOpenTournamentRows } from './organization-path';
-import { BADGE_TEXT, closesText, compare } from './season-status';
+import { BADGE_TEXT, closesText, compare, FULL_BADGE_TEXT, isOpenAndFull } from './season-status';
 
 export const OPEN_TOURNAMENTS_INTRO = 'Register a team for a tournament.';
 
@@ -31,13 +31,18 @@ export function upcomingTournaments<T extends SeasonDates>(
   return tournaments.filter((tournament) => seasonPhase(tournament, nowMs) !== 'ended');
 }
 
-export function tournamentStatus(tournament: SeasonDates, nowMs: number): TournamentStatusLine {
+/** A full tournament has no waitlist, so while registration is open it reads Full and offers no Register link. */
+export function tournamentStatus(
+  tournament: SeasonDates & { isFull?: boolean | undefined },
+  nowMs: number,
+): TournamentStatusLine {
   const phase = seasonPhase(tournament, nowMs);
-  const registrationOpen = phase === 'registrationOpen';
+  const full = isOpenAndFull(phase, tournament);
+  const registrationOpen = phase === 'registrationOpen' && !full;
   const dates = seasonDates(tournament.startDate, tournament.endDate);
   return {
-    badge: BADGE_TEXT[phase],
-    badgeVariant: registrationOpen ? 'secondary' : 'muted',
+    badge: full ? FULL_BADGE_TEXT : BADGE_TEXT[phase],
+    badgeVariant: registrationOpen ? 'secondary' : full ? 'outline' : 'muted',
     registrationOpen,
     text: registrationOpen
       ? `${dates} · closes ${closesText(tournament.registrationDeadline)}`

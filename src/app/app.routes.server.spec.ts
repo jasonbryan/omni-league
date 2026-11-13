@@ -13,6 +13,7 @@ import { AppNotFoundPage } from './not-found/app-not-found-page';
 import { JoinTeamPage } from './teams/join-team-page';
 import { RegisterFreeAgentPage } from './teams/register-free-agent-page';
 import { RegisterTeamPage } from './teams/register-team-page';
+import { RegisterTournamentTeamPage } from './teams/register-tournament-team-page';
 import { TeamPage } from './teams/team-page';
 import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
@@ -264,7 +265,7 @@ describe('Route tables', () => {
     }
   });
 
-  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the guarded tournament management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -277,6 +278,7 @@ describe('Route tables', () => {
       create,
       league,
       season,
+      registerTournament,
       tournament,
       admin,
       register,
@@ -304,6 +306,13 @@ describe('Route tables', () => {
     expect(season?.path).toBe('organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug');
     expect(season?.canActivate).toEqual([requireSignedIn]);
     expect(await season?.loadComponent?.()).toBe(SeasonPage);
+    // Ahead of the admin area, whose `organizations/:slug` is a shorter prefix of the same URL space.
+    expect(registerTournament?.path).toBe(
+      'organizations/:orgSlug/tournaments/:tournamentSlug/register',
+    );
+    expect(registerTournament?.title).toBe('Register a team | Omni League');
+    expect(registerTournament?.canActivate).toBeUndefined();
+    expect(await registerTournament?.loadComponent?.()).toBe(RegisterTournamentTeamPage);
     expect(tournament?.path).toBe('organizations/:orgSlug/tournaments/:tournamentSlug');
     expect(tournament?.canActivate).toEqual([requireSignedIn]);
     expect(await tournament?.loadComponent?.()).toBe(TournamentPage);

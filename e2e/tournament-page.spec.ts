@@ -144,7 +144,7 @@ test.describe('public tournament page: in the browser', () => {
     ).toBeVisible();
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(page.locator('#registration')).toContainText('Registration open · closes');
-    await expect(page.locator('#registration').getByRole('link')).toHaveCount(0);
+    await expect(page.locator('#registration').getByRole('link')).toHaveText(['Register a team']);
     await expect(page.getByText(ADDRESS)).toBeVisible();
     await expect(page).toHaveTitle(
       /^Gulf Coast Beach Open \| E2E Tournament Page [0-9a-f]+ \| Omni League$/,
@@ -162,6 +162,7 @@ test.describe('public tournament page: in the browser', () => {
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(page.locator('#registration')).toContainText('Registration closed');
     await expect(page.locator('#registration')).not.toContainText('Registration open');
+    await expect(page.locator('#registration').getByRole('link')).toHaveCount(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, 'tournament-closed');
   });

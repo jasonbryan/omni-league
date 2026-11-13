@@ -94,7 +94,7 @@ export class RegisterCard {
   template: `
     <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
       <div data-testid="register-skeleton" class="mx-auto w-full max-w-lg">
-        <p role="status" class="sr-only">Loading the season.</p>
+        <p role="status" class="sr-only">Loading the {{ subject() }}.</p>
         <div aria-hidden="true" class="flex h-5 items-center pointer-coarse:h-11">
           <div hlmSkeleton class="rounded-md h-4 w-56"></div>
         </div>
@@ -126,6 +126,7 @@ export class RegisterCard {
 })
 export class RegisterSkeleton {
   readonly withNameField = input(false);
+  readonly subject = input('season');
 
   protected readonly rows = [0, 1, 2, 3];
 }

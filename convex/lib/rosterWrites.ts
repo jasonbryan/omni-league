@@ -1,7 +1,7 @@
 // The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `waitlistEntries`, `teams.rosterCount`,
-// `teams.pendingInviteCount`, `seasons.teamCount`, `seasons.waitlistCount`, `seasons.maxTeams`, and `seasons.maxRosterSize`
-// once the season exists, so the counters, the team and roster limits, the one-place-per-season rule, and one
-// pending invite per address hold for every way onto a roster.
+// `teams.pendingInviteCount`, `seasons.teamCount`, `seasons.waitlistCount`, `seasons.maxTeams`, `seasons.maxRosterSize`, and
+// `tournaments.teamCount` once the season or tournament exists, so the counters, the team and roster limits, the
+// one-place-per-season-or-tournament rule, and one pending invite per address hold for every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
@@ -24,6 +24,7 @@ import {
   type SeasonInputError,
 } from './seasonInput';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
+import { tournamentIsFull } from './tournamentInput';
 import {
   TEAM_MESSAGES,
   teamSortName,
@@ -36,12 +37,22 @@ import {
   type SeasonFullRefusal,
   type TeamFullRefusal,
   type TeamNameError,
+  type TournamentFullRefusal,
   type WaitingFreeAgentRefusal,
 } from './teamInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
 
 export const BACKFILL_TEAM_COUNT_SCAN_LIMIT = 1000;
+
+/** More than one person's entries in one tournament: their own, and a guardian's minors, removed ones included. */
+export const TOURNAMENT_ENTRIES_READ_LIMIT = 100;
+
+// Season rules and counters have no meaning for a tournament team, so a season-only caller that reaches one refuses.
+function seasonIdOf(row: { seasonId?: Id<'seasons'> | undefined }): Id<'seasons'> {
+  if (row.seasonId === undefined) throw new Error('Not allowed');
+  return row.seasonId;
+}
 
 export function isMinorEntry(entry: Doc<'rosterEntries'>): boolean {
   return entry.minorName !== undefined;
@@ -63,6 +74,21 @@ export async function adultEntryInSeason(
         .eq('status', 'rostered'),
     )
     .first();
+}
+
+export async function adultEntryInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'> | null> {
+  const entries = await ctx.db
+    .query('rosterEntries')
+    .withIndex('by_tournamentId_and_userId', (q) =>
+      q.eq('tournamentId', tournamentId).eq('userId', userId),
+    )
+    .order('desc')
+    .take(TOURNAMENT_ENTRIES_READ_LIMIT);
+  return entries.find((entry) => entry.status === 'rostered' && !isMinorEntry(entry)) ?? null;
 }
 
 /** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`. */
@@ -163,6 +189,7 @@ async function waitingEntryWithSortName(
 
 type Refusal =
   | SeasonFullRefusal
+  | TournamentFullRefusal
   | TeamFullRefusal
   | SeasonInputError
   | RosterRefusal
@@ -203,6 +230,26 @@ async function assertNotRostered(
   });
 }
 
+async function assertNotRosteredInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  userId: Id<'users'>,
+  teamId: Id<'teams'> | null,
+): Promise<void> {
+  const existing = await adultEntryInTournament(ctx, tournamentId, userId);
+  if (!existing) return;
+  const team = await ctx.db.get('teams', existing.teamId);
+  const teamName = team?.name ?? '';
+  if (existing.teamId === teamId) {
+    refuse({ code: 'alreadyOnTeam', teamName, message: TEAM_MESSAGES.alreadyOnTeam });
+  }
+  refuse({
+    code: 'alreadyOnAnotherTeam',
+    teamName,
+    message: TEAM_MESSAGES.alreadyOnAnotherTournamentTeam(teamName),
+  });
+}
+
 async function assertNotWaitingFreeAgent(
   ctx: ReadCtx,
   seasonId: Id<'seasons'>,
@@ -233,6 +280,8 @@ async function assertNotWaitlisted(
 async function assertTeamHasRoom(ctx: ReadCtx, teamId: Id<'teams'>): Promise<void> {
   const team = await ctx.db.get('teams', teamId);
   if (!team) throw new Error('No team has this id');
+  // A tournament sets no roster maximum.
+  if (team.seasonId === undefined) return;
   const season = await ctx.db.get('seasons', team.seasonId);
   if (!season) throw new Error('No season has this id');
   if (teamIsFull(team.rosterCount, season.maxRosterSize)) {
@@ -319,6 +368,77 @@ export async function insertTeamWithCaptain(
   return insertTeam(ctx, current, newTeam);
 }
 
+async function insertTournamentTeam(
+  ctx: MutationCtx,
+  tournament: Doc<'tournaments'>,
+  { name, captainUserId }: NewTeam,
+): Promise<Id<'teams'>> {
+  const teamId = await ctx.db.insert('teams', {
+    organizationId: tournament.organizationId,
+    tournamentId: tournament._id,
+    name,
+    sortName: teamSortName(name),
+    captainUserId,
+    rosterCount: 0,
+    pendingInviteCount: 0,
+    createdAt: Date.now(),
+  });
+  await countTournamentTeam(ctx, tournament._id);
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) throw new Error('No team has this id');
+  await addRosterEntry(ctx, team, {
+    userId: captainUserId,
+    source: 'captain',
+    addedByUserId: captainUserId,
+  });
+  return teamId;
+}
+
+// Read fresh: a caller's `Doc` may predate teams inserted since. Concurrent writers conflict on this read and the patch of `teamCount`, and retry.
+async function currentTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<Doc<'tournaments'>> {
+  const tournament = await ctx.db.get('tournaments', tournamentId);
+  if (!tournament) throw new Error('No tournament has this id');
+  return tournament;
+}
+
+async function assertTournamentTeamNameFree(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  name: string,
+): Promise<void> {
+  const team = await ctx.db
+    .query('teams')
+    .withIndex('by_tournamentId_and_sortName', (q) =>
+      q.eq('tournamentId', tournamentId).eq('sortName', teamSortName(name)),
+    )
+    .first();
+  if (team) {
+    refuse({
+      field: 'name',
+      code: 'nameTaken',
+      message: TEAM_MESSAGES.tournamentNameTaken(team.name),
+    });
+  }
+}
+
+/** A full tournament refuses: it has no waitlist. The registration window is the caller's to check. */
+export async function insertTournamentTeamWithCaptain(
+  ctx: MutationCtx,
+  tournament: Doc<'tournaments'>,
+  newTeam: NewTeam,
+): Promise<Id<'teams'>> {
+  const current = await currentTournament(ctx, tournament._id);
+  if (tournamentIsFull(current)) {
+    refuse({ code: 'tournamentFull', message: TEAM_MESSAGES.tournamentFull });
+  }
+  await assertTournamentTeamNameFree(ctx, current._id, newTeam.name);
+  await assertNotRosteredInTournament(ctx, current._id, newTeam.captainUserId, null);
+  return insertTournamentTeam(ctx, current, newTeam);
+}
+
 export type Registration =
   { status: 'registered'; teamId: Id<'teams'> } | { status: 'waitlisted'; position: number };
 
@@ -380,6 +500,14 @@ export async function promoteWaitlistEntry(
   return { teamId, teamCount: after.teamCount ?? 0, maxTeams: after.maxTeams };
 }
 
+function parentFieldsOf(
+  team: Doc<'teams'>,
+): { seasonId: Id<'seasons'> } | { tournamentId: Id<'tournaments'> } {
+  return team.tournamentId !== undefined
+    ? { tournamentId: team.tournamentId }
+    : { seasonId: seasonIdOf(team) };
+}
+
 export interface NewRosterEntry {
   userId: Id<'users'>;
   source: RosterEntrySource;
@@ -391,16 +519,21 @@ export async function addRosterEntry(
   team: Doc<'teams'>,
   entry: NewRosterEntry,
 ): Promise<Id<'rosterEntries'>> {
-  await assertNotRostered(ctx, team.seasonId, entry.userId, team._id);
-  // Placement is how a waiting free agent gets onto a roster.
-  if (entry.source !== 'placement') {
-    await assertNotWaitingFreeAgent(ctx, team.seasonId, entry.userId);
+  if (team.tournamentId !== undefined) {
+    await assertNotRosteredInTournament(ctx, team.tournamentId, entry.userId, team._id);
+  } else {
+    const seasonId = seasonIdOf(team);
+    await assertNotRostered(ctx, seasonId, entry.userId, team._id);
+    // Placement is how a waiting free agent gets onto a roster.
+    if (entry.source !== 'placement') {
+      await assertNotWaitingFreeAgent(ctx, seasonId, entry.userId);
+    }
+    await assertNotWaitlisted(ctx, seasonId, entry.userId);
   }
-  await assertNotWaitlisted(ctx, team.seasonId, entry.userId);
   await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
-    seasonId: team.seasonId,
+    ...parentFieldsOf(team),
     teamId: team._id,
     userId: entry.userId,
     status: 'rostered',
@@ -453,8 +586,9 @@ export async function addMinorEntry(
   team: Doc<'teams'>,
   entry: NewMinorEntry,
 ): Promise<Id<'rosterEntries'>> {
-  await assertNotWaitlisted(ctx, team.seasonId, entry.guardianUserId);
-  const minors = await minorEntriesInSeason(ctx, team.seasonId, entry.guardianUserId);
+  const seasonId = seasonIdOf(team);
+  await assertNotWaitlisted(ctx, seasonId, entry.guardianUserId);
+  const minors = await minorEntriesInSeason(ctx, seasonId, entry.guardianUserId);
   await assertMinorNotInSeason(ctx, minors, entry.minorName, null);
   // Removed entries count too, so adding and removing cannot grow a guardian's entries past the read window.
   if (minors.length >= MAX_MINORS_PER_GUARDIAN_IN_SEASON) {
@@ -463,7 +597,7 @@ export async function addMinorEntry(
   await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
-    seasonId: team.seasonId,
+    seasonId,
     teamId: team._id,
     userId: entry.guardianUserId,
     minorName: entry.minorName,
@@ -485,7 +619,7 @@ export async function renameMinorEntry(
   if (!isMinorEntry(entry) || entry.status !== 'rostered') {
     throw new Error('Only a rostered minor can be renamed');
   }
-  const minors = await minorEntriesInSeason(ctx, entry.seasonId, entry.userId);
+  const minors = await minorEntriesInSeason(ctx, seasonIdOf(entry), entry.userId);
   await assertMinorNotInSeason(ctx, minors, minorName, entry._id);
   await ctx.db.patch('rosterEntries', entry._id, { minorName });
 }
@@ -518,7 +652,8 @@ export async function insertPlacedFreeAgent(
   team: Doc<'teams'>,
   userId: Id<'users'>,
 ): Promise<void> {
-  if (await freeAgentInSeason(ctx, team.seasonId, userId)) {
+  const seasonId = seasonIdOf(team);
+  if (await freeAgentInSeason(ctx, seasonId, userId)) {
     refuse({ code: 'alreadyFreeAgent', message: TEAM_MESSAGES.alreadyFreeAgent });
   }
   await addRosterEntry(ctx, team, {
@@ -529,7 +664,7 @@ export async function insertPlacedFreeAgent(
   const placedAt = Date.now();
   await ctx.db.insert('freeAgents', {
     organizationId: team.organizationId,
-    seasonId: team.seasonId,
+    seasonId,
     userId,
     status: 'placed',
     registeredAt: placedAt,
@@ -575,7 +710,8 @@ export async function removeRosterEntry(
   });
   await changeRosterCount(ctx, entry.teamId, -1);
   // A minor's entry carries the guardian's id, and the guardian's own placement is not the minor's.
-  if (isMinorEntry(entry)) return;
+  // A tournament has no free agents.
+  if (isMinorEntry(entry) || entry.seasonId === undefined) return;
   const freeAgent = await freeAgentInSeason(ctx, entry.seasonId, entry.userId);
   if (freeAgent?.status === 'placed' && freeAgent.placedTeamId === entry.teamId) {
     await ctx.db.patch('freeAgents', freeAgent._id, {
@@ -624,7 +760,7 @@ export async function insertTeamInvite(
   }
   const inviteId = await ctx.db.insert('teamInvites', {
     organizationId: team.organizationId,
-    seasonId: team.seasonId,
+    seasonId: seasonIdOf(team),
     teamId: team._id,
     email: invite.email,
     tokenHash: invite.tokenHash,
@@ -719,6 +855,19 @@ async function countTeam(ctx: MutationCtx, seasonId: Id<'seasons'>): Promise<voi
   await ctx.db.patch('seasons', seasonId, { teamCount });
 }
 
+// An unset counter is recounted, which already includes the new team.
+async function countTournamentTeam(
+  ctx: MutationCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<void> {
+  const tournament = await currentTournament(ctx, tournamentId);
+  const teamCount =
+    tournament.teamCount === undefined
+      ? await recountTournamentTeams(ctx, tournamentId)
+      : tournament.teamCount + 1;
+  await ctx.db.patch('tournaments', tournamentId, { teamCount });
+}
+
 // An unset counter is recounted, which already includes the change.
 async function changeWaitlistCount(
   ctx: MutationCtx,
@@ -785,6 +934,17 @@ export async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promi
   const teams = await ctx.db
     .query('teams')
     .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', seasonId))
+    .take(BACKFILL_TEAM_COUNT_SCAN_LIMIT);
+  return teams.length;
+}
+
+export async function recountTournamentTeams(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<number> {
+  const teams = await ctx.db
+    .query('teams')
+    .withIndex('by_tournamentId_and_sortName', (q) => q.eq('tournamentId', tournamentId))
     .take(BACKFILL_TEAM_COUNT_SCAN_LIMIT);
   return teams.length;
 }
