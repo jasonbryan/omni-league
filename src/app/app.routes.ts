@@ -13,31 +13,8 @@ export const routes: Routes = [
     loadComponent: () => import('./find/find-page').then((m) => m.FindPage),
   },
   {
-    path: 'organizations/:orgSlug',
-    loadComponent: () =>
-      import('./organizations/organization-page').then((m) => m.OrganizationPage),
-  },
-  {
-    path: 'organizations/:orgSlug/sports/:sport',
-    loadComponent: () =>
-      import('./organizations/organization-page').then((m) => m.OrganizationPage),
-  },
-  {
-    path: 'organizations/:orgSlug/leagues/:leagueSlug',
-    loadComponent: () =>
-      import('./organizations/public-league/public-league-page').then((m) => m.PublicLeaguePage),
-  },
-  {
-    path: 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
-    loadComponent: () =>
-      import('./organizations/public-season/public-season-page').then((m) => m.PublicSeasonPage),
-  },
-  {
-    path: 'organizations/:orgSlug/tournaments/:tournamentSlug',
-    loadComponent: () =>
-      import('./organizations/public-tournament/public-tournament-page').then(
-        (m) => m.PublicTournamentPage,
-      ),
+    path: 'organizations',
+    loadChildren: () => import('./app.routes.organizations').then((m) => m.organizationRoutes),
   },
   {
     path: 'sign-up',

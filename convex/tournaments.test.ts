@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { StandardLevel } from './lib/divisions';
@@ -12,6 +12,7 @@ import {
   TOURNAMENT_MESSAGES,
 } from './lib/tournamentInput';
 import { PUBLIC_LIST_MAX_ROWS } from './lib/publicList';
+import type { TournamentEditable } from './lib/tournamentEdit';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import {
   defaultDivision,
@@ -831,6 +832,21 @@ describe('tournaments.getForManagement', () => {
       registrationDeadline: '2027-01-09',
       maximumTeams: 16,
       minimumRosterSize: 2,
+      sport: 'beachVolleyball',
+      teamCount: 0,
+      setsPerGame: 1,
+    });
+  });
+
+  test('gives the sets per game a beach volleyball tournament holds, and the team count', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) =>
+      ctx.db.patch('tournaments', tournamentId, { setsPerGame: 3, teamCount: 5 }),
+    );
+    expect(await s.adminA.query(api.tournaments.getForManagement, slugs)).toMatchObject({
+      setsPerGame: 3,
+      teamCount: 5,
     });
   });
 
@@ -1620,5 +1636,427 @@ describe('tournaments.listOpenForOrganization', () => {
     expect(
       await s.t.query(api.tournaments.listOpenForOrganization, { organizationSlug: 'nowhere' }),
     ).toEqual([]);
+  });
+});
+
+describe('tournaments.updateDetails and undoUpdateDetails', () => {
+  const slugs = { orgSlug: 'org-a', tournamentSlug: 'winter-doubles-classic' };
+  const TODAY = Date.parse('2026-12-20T12:00:00Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const held: TournamentEditable = {
+    startDate: '2027-01-16',
+    endDate: '2027-01-17',
+    registrationDeadline: '2027-01-09',
+    maximumTeams: 16,
+    setsPerGame: 1,
+  };
+
+  const changed: TournamentEditable = {
+    startDate: '2027-02-06',
+    endDate: '2027-02-07',
+    registrationDeadline: '2027-01-30',
+    maximumTeams: 24,
+    setsPerGame: 3,
+  };
+
+  const edit = (
+    tournamentId: Id<'tournaments'>,
+    change: Partial<TournamentEditable> = changed,
+    expected: TournamentEditable = held,
+  ) => ({ tournamentId, ...held, ...change, expected });
+
+  const rowOf = (s: Setup, tournamentId: Id<'tournaments'>) =>
+    s.t.run((ctx) => ctx.db.get('tournaments', tournamentId));
+
+  async function captains(s: Setup, count: number) {
+    await s.t.run(async (ctx) => {
+      for (let i = 1; i <= count; i++) {
+        await ctx.db.insert('users', {
+          authUserId: `captain-${i}`,
+          name: `captain-${i}`,
+          adultConfirmedAt: 1,
+        });
+      }
+    });
+  }
+
+  const registerTeam = (s: Setup, i: number) =>
+    s.t.withIdentity(identity(`captain-${i}`)).mutation(api.teams.registerForTournament, {
+      ...slugs,
+      name: `Team ${i}`,
+    });
+
+  async function publishedWithTeams(s: Setup, teams: number, maximumTeams: number) {
+    const tournamentId = await draftIn(s, { maximumTeams });
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    await captains(s, teams + 3);
+    for (let i = 1; i <= teams; i++) await registerTeam(s, i);
+    return tournamentId;
+  }
+
+  test('an org admin changes the dates, deadline, maximum, and sets per game, and nothing else changes', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    const result = await s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    expect(result).toEqual({ earlier: held, written: changed });
+    const after = await snapshot(s.t);
+    expect(after.tournaments).toEqual([{ ...before.tournaments[0], ...changed }]);
+    expect({ ...after, tournaments: [] }).toEqual({ ...before, tournaments: [] });
+  });
+
+  test('a blank end date makes a one-day tournament, and an omitted sets per game keeps the one held', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) => ctx.db.patch('tournaments', tournamentId, { setsPerGame: 3 }));
+    const rest = {
+      tournamentId,
+      startDate: '2027-02-06',
+      registrationDeadline: '2027-02-01',
+      maximumTeams: 16,
+    };
+    const result = await s.adminA.mutation(api.tournaments.updateDetails, {
+      ...rest,
+      expected: { ...held, setsPerGame: 3 },
+    });
+    expect(result.written).toEqual({
+      ...held,
+      startDate: '2027-02-06',
+      endDate: '2027-02-06',
+      registrationDeadline: '2027-02-01',
+      setsPerGame: 3,
+    });
+  });
+
+  test('a tournament that holds no sets per game reads as 1, and a save that leaves it writes 1', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    expect((await rowOf(s, tournamentId))?.setsPerGame).toBeUndefined();
+    const result = await s.adminA.mutation(api.tournaments.updateDetails, {
+      ...edit(tournamentId, { maximumTeams: 20 }),
+      setsPerGame: undefined,
+    });
+    expect(result).toEqual({ earlier: held, written: { ...held, maximumTeams: 20 } });
+  });
+
+  test('refuses sets per game other than 1 for a sport that is not beach volleyball, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s, {
+      sport: 'soccer',
+      playersPerSide: 7,
+      level: 'rec',
+      locationIds: [s.alpha],
+    });
+    const before = await snapshot(s.t);
+    await expect(
+      s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId, { setsPerGame: 3 })),
+    ).rejects.toThrow('Not allowed');
+    expect(await snapshot(s.t)).toEqual(before);
+    const result = await s.adminA.mutation(
+      api.tournaments.updateDetails,
+      edit(tournamentId, { setsPerGame: 1, maximumTeams: 8 }),
+    );
+    expect(result.written.maximumTeams).toBe(8);
+  });
+
+  test('refuses sets per game that is not 1 or 3', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await expect(
+      s.adminA.mutation(api.tournaments.updateDetails, {
+        ...edit(tournamentId),
+        setsPerGame: 2 as never,
+      }),
+    ).rejects.toThrow();
+  });
+
+  test('refuses what tournaments.create refuses, with the same messages, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    const cases = [
+      [{ endDate: '2027-01-15' }, 'endDate', 'endBeforeStart'],
+      [{ registrationDeadline: '2027-01-17' }, 'registrationDeadline', 'deadlineAfterStart'],
+      [{ startDate: '' }, 'startDate', 'dateEmpty'],
+      [{ startDate: '2027-02-30' }, 'startDate', 'dateInvalid'],
+      [{ maximumTeams: 129 }, 'maximumTeams', 'maximumTeamsInvalid'],
+      [{ maximumTeams: 1 }, 'maximumTeams', 'maximumTeamsInvalid'],
+      [{ maximumTeams: 2.5 }, 'maximumTeams', 'maximumTeamsInvalid'],
+    ] as const;
+    for (const [change, field, code] of cases) {
+      const data = await refusal(
+        s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId, change)),
+      );
+      expect(data, JSON.stringify(change)).toMatchObject({ field, code });
+      const { startDate, endDate, registrationDeadline, maximumTeams } = { ...held, ...change };
+      const shared = firstTournamentError(
+        checkTournamentFields({
+          ...{
+            name: 'Winter Doubles Classic',
+            slug: 'winter-doubles-classic',
+            sport: 'beachVolleyball' as const,
+            playersPerSide: 2,
+            level: 'open' as const,
+            ageGroup: 'adult',
+            locationCount: 1,
+          },
+          startDate,
+          endDate,
+          registrationDeadline,
+          maximumTeams,
+        }),
+      );
+      expect(data.message).toBe(shared?.message);
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a maximum below the team count with the count in the message, and accepts one equal to it', async () => {
+    vi.useFakeTimers({ now: TODAY });
+    const s = await setup();
+    const tournamentId = await publishedWithTeams(s, 3, 4);
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(
+        s.adminA.mutation(
+          api.tournaments.updateDetails,
+          edit(tournamentId, { maximumTeams: 2 }, { ...held, maximumTeams: 4 }),
+        ),
+      ),
+    ).toEqual({
+      field: 'maximumTeams',
+      code: 'maximumTeamsBelowTeams',
+      message: TOURNAMENT_MESSAGES.maximumTeamsBelowTeams(3),
+    });
+    expect(await snapshot(s.t)).toEqual(before);
+    const result = await s.adminA.mutation(
+      api.tournaments.updateDetails,
+      edit(tournamentId, { maximumTeams: 3 }, { ...held, maximumTeams: 4 }),
+    );
+    expect(result.written.maximumTeams).toBe(3);
+  });
+
+  test('a maximum raised from 4 to 6 lets two more teams register, and the seventh is refused as full', async () => {
+    vi.useFakeTimers({ now: TODAY });
+    const s = await setup();
+    const tournamentId = await publishedWithTeams(s, 4, 4);
+    await expect(registerTeam(s, 5)).rejects.toThrow();
+    await s.adminA.mutation(api.tournaments.updateDetails, {
+      ...edit(tournamentId, { maximumTeams: 6 }, { ...held, maximumTeams: 4 }),
+    });
+    expect((await s.t.query(api.tournaments.getPublicPage, slugs))?.isFull).toBe(false);
+    await registerTeam(s, 5);
+    await registerTeam(s, 6);
+    expect((await rowOf(s, tournamentId))?.teamCount).toBe(6);
+    expect((await s.t.query(api.tournaments.getPublicPage, slugs))?.isFull).toBe(true);
+    await expect(
+      registerTeam(s, 7).catch((e: unknown) => (e as ConvexError<{ message: string }>).data),
+    ).resolves.toMatchObject({
+      message: 'This tournament is full.',
+    });
+  });
+
+  test('refuses a save made from out-of-date details, with the current values, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) => ctx.db.patch('tournaments', tournamentId, { maximumTeams: 20 }));
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId))),
+    ).toEqual({
+      field: 'startDate',
+      code: 'changedSince',
+      message: TOURNAMENT_MESSAGES.changedWhileEditing,
+      current: { ...held, maximumTeams: 20 },
+    });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('an organizer assigned to the tournament saves, and one assigned to another is refused', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const other = await draftIn(s, { name: 'Other Open', slug: 'other-open' });
+    await assign(s, 'organizer-a', tournamentId);
+    const organizer = s.t.withIdentity(identity('organizer-a'));
+    await organizer.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    expect((await rowOf(s, tournamentId))?.maximumTeams).toBe(24);
+    await expect(organizer.mutation(api.tournaments.updateDetails, edit(other))).rejects.toThrow(
+      'Not allowed',
+    );
+  });
+
+  test('refuses every caller who may not organize the tournament, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.mutation(api.tournaments.updateDetails, edit(tournamentId)),
+        label,
+      ).rejects.toThrow(message);
+      await expect(
+        caller.mutation(api.tournaments.undoUpdateDetails, {
+          tournamentId,
+          earlier: held,
+          written: held,
+        }),
+        label,
+      ).rejects.toThrow(message);
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a tournament that does not exist, as it refuses another organization’s', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) => ctx.db.delete('tournaments', tournamentId));
+    await expect(
+      s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId)),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('refuses a league’s program', async () => {
+    const s = await setup();
+    const programId = await s.t.run(
+      async (ctx) =>
+        (await ctx.db.query('programs').collect()).find((program) => program.type === 'league')!
+          ._id,
+    );
+    expect(programId).toBeDefined();
+    const tournamentId = await draftIn(s);
+    await s.t.run((ctx) => ctx.db.patch('tournaments', tournamentId, { programId }));
+    await expect(
+      s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId)),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('Undo after a save brings the previous values back', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await rowOf(s, tournamentId);
+    const { earlier, written } = await s.adminA.mutation(
+      api.tournaments.updateDetails,
+      edit(tournamentId),
+    );
+    expect(
+      await s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+        tournamentId,
+        earlier,
+        written,
+      }),
+    ).toBeNull();
+    expect(await rowOf(s, tournamentId)).toMatchObject({ ...before, ...held });
+  });
+
+  test('Undo is refused with the reason when teams registered since the save fill the earlier maximum', async () => {
+    vi.useFakeTimers({ now: TODAY });
+    const s = await setup();
+    const tournamentId = await publishedWithTeams(s, 4, 4);
+    const { earlier, written } = await s.adminA.mutation(api.tournaments.updateDetails, {
+      ...edit(tournamentId, { maximumTeams: 6 }, { ...held, maximumTeams: 4 }),
+    });
+    await registerTeam(s, 5);
+    await registerTeam(s, 6);
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.tournaments.undoUpdateDetails, { tournamentId, earlier, written }),
+      ),
+    ).toEqual({
+      field: 'maximumTeams',
+      code: 'maximumTeamsBelowTeams',
+      message: TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(6, 4),
+    });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo is refused when someone else changed the details since the save, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const { earlier, written } = await s.adminA.mutation(
+      api.tournaments.updateDetails,
+      edit(tournamentId),
+    );
+    await s.t.run((ctx) => ctx.db.patch('tournaments', tournamentId, { maximumTeams: 30 }));
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.tournaments.undoUpdateDetails, { tournamentId, earlier, written }),
+      ),
+    ).toEqual({
+      field: 'startDate',
+      code: 'changedSince',
+      message: TOURNAMENT_MESSAGES.changedSince,
+    });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a maximum that is not a number or not finite, and writes nothing', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const before = await snapshot(s.t);
+    for (const maximumTeams of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(
+        await refusal(
+          s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId, { maximumTeams })),
+        ),
+        String(maximumTeams),
+      ).toMatchObject({ field: 'maximumTeams', code: 'maximumTeamsInvalid' });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo refuses earlier values that are not valid, such as a maximum below the team count', async () => {
+    vi.useFakeTimers({ now: TODAY });
+    const s = await setup();
+    const tournamentId = await publishedWithTeams(s, 3, 16);
+    const { written } = await s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+          tournamentId,
+          earlier: { ...held, maximumTeams: 2 },
+          written,
+        }),
+      ),
+    ).toMatchObject({ field: 'maximumTeams', code: 'maximumTeamsBelowTeams' });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo refuses earlier values with a blank end date, and leaves the row unchanged', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const { written } = await s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    const before = await snapshot(s.t);
+    await expect(
+      s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+        tournamentId,
+        earlier: { ...held, endDate: '' },
+        written,
+      }),
+    ).rejects.toThrow('Not allowed');
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo refuses earlier values a caller made up, such as 3 sets for soccer', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s, {
+      sport: 'soccer',
+      playersPerSide: 7,
+      level: 'rec',
+      locationIds: [s.alpha],
+    });
+    await expect(
+      s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+        tournamentId,
+        earlier: { ...held, setsPerGame: 3 },
+        written: held,
+      }),
+    ).rejects.toThrow('Not allowed');
   });
 });
