@@ -73,6 +73,7 @@ import type * as lib_teamInviteInput from "../lib/teamInviteInput.js";
 import type * as lib_tenantWrites from "../lib/tenantWrites.js";
 import type * as lib_testOnly from "../lib/testOnly.js";
 import type * as lib_tournamentDetails from "../lib/tournamentDetails.js";
+import type * as lib_tournamentEdit from "../lib/tournamentEdit.js";
 import type * as lib_tournamentInput from "../lib/tournamentInput.js";
 import type * as lib_tournamentLookup from "../lib/tournamentLookup.js";
 import type * as lib_userName from "../lib/userName.js";
@@ -169,6 +170,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tenantWrites": typeof lib_tenantWrites;
   "lib/testOnly": typeof lib_testOnly;
   "lib/tournamentDetails": typeof lib_tournamentDetails;
+  "lib/tournamentEdit": typeof lib_tournamentEdit;
   "lib/tournamentInput": typeof lib_tournamentInput;
   "lib/tournamentLookup": typeof lib_tournamentLookup;
   "lib/userName": typeof lib_userName;

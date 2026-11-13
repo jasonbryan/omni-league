@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
@@ -6,12 +6,13 @@ import { remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
-import { signUp } from './support/session';
+import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
 import { seedTournament } from './support/tournament';
-import { newUser } from './support/users';
+import { newUser, seedUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -837,5 +838,290 @@ test.describe('an assigned league organizer', () => {
     await expect(
       page.getByRole('link', { name: tenant.name, includeHidden: true }).first(),
     ).toHaveAttribute('href', managePath);
+  });
+});
+
+test.describe('Tournaments: editing the details', () => {
+  const editForm = (page: Page) => page.locator('#edit-details form');
+  const field = (page: Page, id: string) => page.locator(`#details-${id}`);
+  const saveButton = (page: Page) => editForm(page).getByRole('button', { name: /^Save changes/ });
+  const saveStatus = (page: Page) => editForm(page).locator('[data-slot="save-status"]');
+  const undoButton = (page: Page) => editForm(page).getByRole('button', { name: 'Undo' });
+
+  async function publishedWithTeams(page: Page, teams: number) {
+    const { user, tenant } = await memberOf(page, 'orgAdmin');
+    const publicPath = await seedTournament(tenant, {
+      name: 'Gulf Coast Beach Open',
+      slug: 'gulf-coast-beach-open',
+      locations: [PELICAN],
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(41),
+      registrationDeadline: dateFromToday(30),
+      maximumTeams: 4,
+    });
+    for (let i = 1; i <= teams; i++) await seedTournamentTeam(tenant, i);
+    return {
+      user,
+      tenant,
+      publicPath,
+      managePath: `/app/organizations/${tenant.slug}/tournaments/gulf-coast-beach-open`,
+    };
+  }
+
+  async function seedTournamentTeam(tenant: { slug: string }, index: number) {
+    const captain = await seedUser(newUser(`Captain ${index}`));
+    await convexRun('testing:seedTournamentTeam', {
+      organizationSlug: tenant.slug,
+      tournamentSlug: 'gulf-coast-beach-open',
+      name: `Team ${index}`,
+      captainEmail: captain.email,
+    });
+  }
+
+  async function register(browser: Browser, tenant: { slug: string }, name: string) {
+    const captain = await otherUser(browser, newUser('Captain'));
+    await captain.goto(
+      `/app/organizations/${tenant.slug}/tournaments/gulf-coast-beach-open/register`,
+    );
+    await captain.locator('#team-name').fill(name);
+    await captain.getByRole('button', { name: 'Register team' }).click();
+    await expect(captain.getByRole('heading', { level: 1, name })).toBeVisible();
+    await captain.context().close();
+  }
+
+  test('an org admin raises the maximum from 4 to 6, and two more teams register', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, publicPath, managePath } = await publishedWithTeams(page, 4);
+    await page.goto(publicPath);
+    await expect(page.locator('#registration').locator('p').first()).toHaveText('Full');
+
+    await page.goto(managePath);
+    await expect(field(page, 'maximum-teams')).toHaveValue('4');
+    await expect(field(page, 'start-date')).toHaveValue(dateFromToday(40));
+    await expect(editForm(page).locator('[data-slot="structure"]')).toHaveText(/Bracket only/);
+    await screenshot(page, testInfo, 'tournament-edit-details');
+    await expectAccessible(page);
+
+    await field(page, 'maximum-teams').fill('6');
+    await chooseChip(chipLabel(page, '3 sets'));
+    await saveButton(page).click();
+    await expect(saveStatus(page)).toContainText('Details saved.');
+    await expect(undoButton(page)).toBeVisible();
+    await expect(main(page).locator('dl')).toContainText('Up to 6 teams');
+    await screenshot(page, testInfo, 'tournament-edit-details-saved');
+    await expectAccessible(page);
+
+    await page.goto(publicPath);
+    await expect(page.locator('#registration')).toContainText('Registration open');
+    await register(browser, tenant, 'Fifth Team');
+    await register(browser, tenant, 'Sixth Team');
+    await page.reload();
+    await expect(page.locator('#registration').locator('p').first()).toHaveText('Full');
+  });
+
+  test('a maximum below the team count shows under the field on leaving it, and the form sends nothing', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await publishedWithTeams(page, 3);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('2');
+    await field(page, 'maximum-teams').blur();
+    await expect(page.locator('#details-maximum-teams-error')).toHaveText(
+      '3 teams are registered. Enter 3 or more.',
+    );
+    await saveButton(page).click();
+    await expect(field(page, 'maximum-teams')).toBeFocused();
+    await expect(saveStatus(page)).toHaveText('');
+    await screenshot(page, testInfo, 'tournament-edit-details-error');
+    await expectAccessible(page);
+    await field(page, 'maximum-teams').fill('3');
+    await expect(page.locator('#details-maximum-teams-error')).toHaveCount(0);
+  });
+
+  test('opening the page with #edit-details scrolls to the form and focuses its first field', async ({
+    page,
+  }) => {
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(`${managePath}#edit-details`);
+    await expect(field(page, 'start-date')).toBeFocused();
+    await expect(page.locator('#edit-details')).toBeInViewport();
+  });
+
+  test(
+    'an end date before the start and a deadline after it show under their fields',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { managePath } = await publishedWithTeams(page, 0);
+      await page.goto(managePath);
+      await field(page, 'end-date').fill(dateFromToday(39));
+      await field(page, 'end-date').blur();
+      await field(page, 'registration-deadline').fill(dateFromToday(41));
+      await field(page, 'registration-deadline').blur();
+      await expect(page.locator('#details-end-date-error')).toHaveText(
+        'The end date must be on or after the start date.',
+      );
+      await expect(page.locator('#details-registration-deadline-error')).toContainText(
+        'The registration deadline must be on or before the start date',
+      );
+    },
+  );
+
+  test.describe('an Undo the server refuses', () => {
+    test.use({ expectedConvexErrors: ['tournaments:undoUpdateDetails'] });
+
+    test('Undo brings the earlier values back, and is refused with the reason once teams fill the earlier maximum', async ({
+      page,
+    }, testInfo) => {
+      const { tenant, managePath } = await publishedWithTeams(page, 3);
+      await page.goto(managePath);
+      await field(page, 'maximum-teams').fill('6');
+      await saveButton(page).click();
+      await expect(saveStatus(page)).toContainText('Details saved.');
+      await undoButton(page).click();
+      await expect(saveStatus(page)).toContainText('Earlier details restored.');
+      await expect(saveStatus(page).locator('[tabindex="-1"]')).toBeFocused();
+      await expect(field(page, 'maximum-teams')).toHaveValue('4');
+
+      await field(page, 'maximum-teams').fill('6');
+      await saveButton(page).click();
+      await expect(undoButton(page)).toBeVisible();
+      await seedTournamentTeam(tenant, 4);
+      await seedTournamentTeam(tenant, 5);
+      await seedTournamentTeam(tenant, 6);
+      await undoButton(page).click();
+      await expect(saveStatus(page)).toContainText(
+        '6 teams are registered, more than the earlier maximum of 4, so it cannot be undone.',
+      );
+      await expect(field(page, 'maximum-teams')).toHaveValue('6');
+      await screenshot(page, testInfo, 'tournament-edit-details-undo-refused');
+      await expectAccessible(page);
+    });
+  });
+
+  test.describe('a save refused as out of date', () => {
+    test.use({ expectedConvexErrors: ['tournaments:updateDetails'] });
+
+    test('a form loaded before another editor saved is refused with the alert, and saving again works', async ({
+      page,
+    }, testInfo) => {
+      const { managePath } = await publishedWithTeams(page, 0);
+      await page.goto(managePath);
+      const held = await holdQueries(page, ['tournaments:getForManagement']);
+      await page.reload();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      held.release();
+      await expect(field(page, 'maximum-teams')).toHaveValue('4');
+      await field(page, 'maximum-teams').fill('9');
+      await convexRun('testing:setTournamentMaximumTeams', {
+        organizationSlug: managePath.split('/')[3],
+        tournamentSlug: 'gulf-coast-beach-open',
+        maximumTeams: 12,
+      });
+      await expect(page.getByRole('main').getByText('Up to 12 teams')).toBeVisible();
+      await expect(field(page, 'maximum-teams')).toHaveValue('9');
+      await saveButton(page).click();
+      const alert = editForm(page).getByRole('alert');
+      await expect(alert).toContainText(
+        'Someone else changed this tournament while you were editing.',
+      );
+      await expect(alert).toBeFocused();
+      await expect(field(page, 'maximum-teams')).toHaveValue('9');
+      await screenshot(page, testInfo, 'tournament-edit-details-changed');
+      await expectAccessible(page);
+      await saveButton(page).click();
+      await expect(saveStatus(page)).toContainText('Details saved.');
+      await expect(main(page).locator('dl')).toContainText('Up to 9 teams');
+    });
+  });
+
+  test.describe('a save the server fails', () => {
+    test.use({ expectedConvexErrors: ['tournaments:updateDetails'] });
+
+    test('keeps every field, shows the alert, and passes the axe helper', async ({
+      page,
+    }, testInfo) => {
+      const { managePath } = await publishedWithTeams(page, 0);
+      await failMutation(page, 'tournaments:updateDetails');
+      await page.goto(managePath);
+      await field(page, 'maximum-teams').fill('8');
+      await saveButton(page).click();
+      const alert = editForm(page).getByRole('alert');
+      await expect(alert).toContainText('The tournament details could not be saved.');
+      await expect(alert).toBeFocused();
+      await expect(field(page, 'maximum-teams')).toHaveValue('8');
+      await screenshot(page, testInfo, 'tournament-edit-details-failed');
+      await expectAccessible(page);
+    });
+  });
+
+  test('while the save is held the button reads Saving…, the fields keep their values, and the state passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const held = await holdMutations(page);
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('8');
+    held.hold();
+    await saveButton(page).click();
+    await expect(editForm(page).getByRole('button', { name: 'Saving…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(field(page, 'maximum-teams')).toHaveValue('8');
+    await screenshot(page, testInfo, 'tournament-edit-details-saving');
+    await expectAccessible(page);
+    held.release();
+    await expect(saveStatus(page)).toContainText('Details saved.');
+  });
+
+  test('after Undo the restored state passes the axe helper', async ({ page }, testInfo) => {
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('8');
+    await saveButton(page).click();
+    await undoButton(page).click();
+    await expect(saveStatus(page)).toContainText('Earlier details restored.');
+    await expect(field(page, 'maximum-teams')).toHaveValue('4');
+    await screenshot(page, testInfo, 'tournament-edit-details-restored');
+    await expectAccessible(page);
+  });
+
+  test('pressing Save offline shows the offline alert and keeps every field', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(managePath);
+    await field(page, 'maximum-teams').fill('8');
+    await context.setOffline(true);
+    await expect(saveButton(page)).toHaveAttribute('aria-disabled', 'true');
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
+    await saveButton(page).click({ force: true });
+    await expect(editForm(page).getByRole('alert')).toContainText(
+      "You're offline. Nothing was sent.",
+    );
+    await expect(field(page, 'maximum-teams')).toHaveValue('8');
+    await screenshot(page, testInfo, 'tournament-edit-details-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+
+  test('a soccer tournament offers no sets per game', VIEWPORT_AGNOSTIC, async ({ page }) => {
+    const { tenant } = await memberOf(page, 'orgAdmin');
+    await seedTournament(tenant, {
+      name: 'Kick Off Cup',
+      slug: 'kick-off-cup',
+      sport: 'soccer',
+      locations: [PELICAN],
+      division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(40),
+      registrationDeadline: dateFromToday(30),
+    });
+    await page.goto(`/app/organizations/${tenant.slug}/tournaments/kick-off-cup`);
+    await expect(field(page, 'maximum-teams')).toBeVisible();
+    await expect(editForm(page).getByText('Sets per game')).toHaveCount(0);
   });
 });

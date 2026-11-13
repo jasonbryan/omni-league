@@ -17,6 +17,7 @@ import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
+import { editableOf, type TournamentEditable } from './tournamentEdit';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX, sportValidator, type Sport, type SportCounts } from './sports';
@@ -485,6 +486,17 @@ export async function publishTournament(
   if (program.status === 'published') return;
   await ctx.db.patch('programs', program._id, { status: 'published' });
   await ctx.db.patch('tournaments', tournament._id, { status: 'published' });
+}
+
+// The caller has checked access and the input.
+export async function updateTournamentDetails(
+  ctx: MutationCtx,
+  tournament: Doc<'tournaments'>,
+  change: TournamentEditable,
+): Promise<{ earlier: TournamentEditable; written: TournamentEditable }> {
+  const earlier = editableOf(tournament);
+  await ctx.db.patch('tournaments', tournament._id, change);
+  return { earlier, written: change };
 }
 
 export const MAX_DRAFT_SEASONS_UPDATED = 200;
