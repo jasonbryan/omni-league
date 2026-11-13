@@ -617,3 +617,67 @@ describe('an existing game without result fields', () => {
     expect(bracket!.rounds[0].games[1].result).toBeNull();
   });
 });
+
+describe('the tester probes', () => {
+  test.each([
+    ['a negative score', -1],
+    ['a fractional score', 1.5],
+    ['a score above the maximum', 100],
+    ['not a number', Number.NaN],
+    ['infinity', Number.POSITIVE_INFINITY],
+  ])('the server refuses %s for goals, writing nothing', async (_name, value) => {
+    const { s } = await world();
+    await useSport(s, 'soccer');
+    const before = await rows(s);
+    expect(
+      await enter(s, await gameAt(s, 1, 2), { score: goals(value, 0) }).catch(refusalOf),
+    ).toMatchObject({
+      code: 'invalidScore',
+      field: 'a',
+    });
+    expect(await rows(s)).toEqual(before);
+  });
+
+  test('a caller with no right to the tournament cannot correct or undo a result that exists', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    const before = await rows(s);
+    for (const who of ['foreignAdmin', 'otherOrganizer', 'leagueOrganizer', 'stranger'] as const) {
+      await expect(
+        correct(s, game, { score: { kind: 'sets', sets: [{ a: 3, b: 21 }] } }, s[who]),
+      ).rejects.toThrow(/Not allowed/);
+      await expect(undo(s, game, undefined, s[who])).rejects.toThrow(/Not allowed/);
+    }
+    expect(await rows(s)).toEqual(before);
+  });
+
+  test('a second organizer entering the same game after the first is told to Correct, and the first result stays', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    const before = await rows(s);
+    expect(
+      await enter(
+        s,
+        game,
+        { score: { kind: 'sets', sets: [{ a: 3, b: 21 }] } },
+        s.assignedOrganizer,
+      ).catch(refusalOf),
+    ).toMatchObject({ code: 'resultExists' });
+    expect(await rows(s)).toEqual(before);
+  });
+
+  test('a forfeit result is locked, like a score, once the next game has a result', async () => {
+    const { s, teamIds } = await world();
+    await enter(s, await gameAt(s, 1, 2), { forfeitTeamId: teamIds[3] });
+    await enter(s, await gameAt(s, 2, 1), { score: ONE_SET });
+    expect(
+      await correct(s, await gameAt(s, 1, 2), { score: ONE_SET }).catch(refusalOf),
+    ).toMatchObject({ code: 'nextGamePlayed' });
+    expect(await undo(s, await gameAt(s, 1, 2)).catch(refusalOf)).toMatchObject({
+      code: 'nextGamePlayed',
+    });
+    expect((await gameAt(s, 1, 2)).forfeitTeamId).toBe(teamIds[3]);
+  });
+});
