@@ -161,6 +161,32 @@ describe('TeamPage: removing a player', () => {
     expect(document.activeElement).toBe(status());
   });
 
+  it('an organizer of a tournament team removing its last removable player still sees the status and its focus', async () => {
+    const [captain, marcus] = ROSTER;
+    const crabs = {
+      ...SHARKS,
+      league: undefined,
+      season: undefined,
+      tournament: { name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' },
+      rosterCount: 2,
+      roster: [{ ...captain, isViewer: false }, marcus],
+      viewerIsCaptain: false,
+      viewerOnTeam: false,
+      viewerTeamName: null,
+    };
+    await open(crabs);
+    removeButton(1)!.click();
+    await o.flush();
+    await confirm();
+    o.subscription(GET)!.emit({ ...crabs, rosterCount: 1, roster: [crabs.roster[0]] });
+    await o.flush();
+    o.convex.calls[0].resolve(null);
+    await o.flush();
+    expect(rows()).toHaveLength(1);
+    expect(text(status())).toContain('Marcus Bell was removed from Sand Sharks.');
+    expect(document.activeElement).toBe(status());
+  });
+
   it('Cancel closes it, sends nothing, and returns focus to that row’s Remove', async () => {
     await openDialog(2);
     dialogButton('Cancel').click();
