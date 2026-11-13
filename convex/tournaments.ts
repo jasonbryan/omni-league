@@ -37,7 +37,7 @@ import {
   type PublicTournaments,
   type PublicTournamentPage,
 } from './lib/publicPage';
-import { dateAtUtcMinus12 } from './lib/registration';
+import { dateAtUtcMinus12, registrationIsOpen } from './lib/registration';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { tournamentDetailsValidator } from './lib/tournamentDetails';
@@ -291,7 +291,11 @@ export const updateDetails = mutation({
     ) {
       throw new Error('Not allowed');
     }
-    await refuseSetsPerGameChangeWithBracket(ctx, tournament, input.setsPerGame);
+    await refuseBracketLockedChanges(ctx, tournament, {
+      setsPerGame: input.setsPerGame,
+      startDate: input.startDate,
+      registrationDeadline: input.registrationDeadline,
+    });
     return updateTournamentDetails(ctx, tournament, {
       startDate: input.startDate,
       endDate: endDate === '' ? input.startDate : endDate,
@@ -322,7 +326,7 @@ export const undoUpdateDetails = mutation({
     if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame) || earlier.endDate === '') {
       throw new Error('Not allowed');
     }
-    await refuseSetsPerGameChangeWithBracket(ctx, tournament, earlier.setsPerGame);
+    await refuseBracketLockedChanges(ctx, tournament, earlier);
     checkedDetails(tournament, earlier, (error) =>
       error.code === 'maximumTeamsBelowTeams'
         ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
@@ -336,19 +340,31 @@ export const undoUpdateDetails = mutation({
   },
 });
 
-// The Structure has no input here, so the sets per game is the only detail a bracket locks.
-async function refuseSetsPerGameChangeWithBracket(
+// The Structure has no input here, so the sets per game is the one detail a bracket locks besides the deadline.
+async function refuseBracketLockedChanges(
   ctx: QueryCtx,
   tournament: Doc<'tournaments'>,
-  setsPerGame: TournamentEditable['setsPerGame'] | undefined,
+  next: Pick<TournamentEditable, 'startDate' | 'registrationDeadline'> & {
+    setsPerGame: TournamentEditable['setsPerGame'] | undefined;
+  },
 ): Promise<void> {
-  if (setsPerGame === undefined || setsPerGame === editableOf(tournament).setsPerGame) return;
-  if (await bracketExists(ctx, tournament._id)) {
+  const changesSets =
+    next.setsPerGame !== undefined && next.setsPerGame !== editableOf(tournament).setsPerGame;
+  // A save that leaves registration as it was is not a reopening, so a tournament already open for another reason still saves.
+  const reopens =
+    registrationIsOpen(next, Date.now()) && !registrationIsOpen(tournament, Date.now());
+  if (!changesSets && !reopens) return;
+  if (!(await bracketExists(ctx, tournament._id))) return;
+  if (changesSets) {
     refuseBracket(
       { code: 'setsPerGameLocked', message: BRACKET_MESSAGES.setsPerGameLocked },
       { field: 'setsPerGame' },
     );
   }
+  refuseBracket(
+    { code: 'registrationReopened', message: BRACKET_MESSAGES.registrationReopened },
+    { field: 'registrationDeadline' },
+  );
 }
 
 function setsPerGameFitsSport(

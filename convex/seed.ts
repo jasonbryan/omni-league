@@ -1519,7 +1519,7 @@ async function demoBracketTournament(ctx: MutationCtx): Promise<Doc<'tournaments
   return found ? found.tournament : null;
 }
 
-/** Each team gets its partner once, up to the minimum roster size, so a roster the organizer changed is not refilled. */
+/** A team below the minimum roster size gets its partner; a roster at the minimum is not refilled. */
 async function insertDemoBracketPartners(
   ctx: MutationCtx,
   people: readonly { email: string; authUserId: string }[],

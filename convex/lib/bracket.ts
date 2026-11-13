@@ -29,6 +29,8 @@ export const BRACKET_MESSAGES = {
   firstSeed: (teamName: string) => `${teamName} is seed 1 already.`,
   lastSeed: (teamName: string) => `${teamName} is the last seed already.`,
   setsPerGameLocked: 'Sets per game cannot change once the bracket is created.',
+  registrationReopened:
+    'The bracket is created, so registration cannot reopen. Choose a deadline that has passed.',
 } as const;
 
 export const BRACKET_REFUSAL_CODES = [
@@ -41,6 +43,7 @@ export const BRACKET_REFUSAL_CODES = [
   'firstSeed',
   'lastSeed',
   'setsPerGameLocked',
+  'registrationReopened',
 ] as const;
 
 export type BracketRefusalCode = (typeof BRACKET_REFUSAL_CODES)[number];

@@ -756,6 +756,97 @@ describe('after the bracket is created', () => {
       expect((await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!.setsPerGame).toBe(3);
     });
 
+    describe('a registration deadline that reopens registration', () => {
+      const closedWithBracket = async () => {
+        const { s } = await world(['Alpha', 'Bravo']);
+        await create(s);
+        return s;
+      };
+      const saveDeadline = (s: TournamentWorld, registrationDeadline: string) =>
+        s.as(s.admin).mutation(api.tournaments.updateDetails, {
+          tournamentId: s.gulf,
+          ...HELD_AT_START,
+          registrationDeadline,
+          expected: HELD_AT_START,
+        });
+      const deadlineOf = async (s: TournamentWorld) =>
+        (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!.registrationDeadline;
+
+      test('is refused by updateDetails once the bracket exists, under the deadline field', async () => {
+        const s = await closedWithBracket();
+        expect(await saveDeadline(s, '2030-05-31').catch(refusalOf)).toEqual({
+          field: 'registrationDeadline',
+          code: 'registrationReopened',
+          message: BRACKET_MESSAGES.registrationReopened,
+        });
+        expect(await deadlineOf(s)).toBe('2030-05-20');
+      });
+
+      test('is refused for today, which keeps registration open until the day ends', async () => {
+        const s = await closedWithBracket();
+        expect(await saveDeadline(s, '2030-05-21').catch(refusalOf)).toMatchObject({
+          code: 'registrationReopened',
+        });
+      });
+
+      test('lets updateDetails move the deadline earlier, and save other details, while registration stays closed', async () => {
+        const s = await closedWithBracket();
+        expect((await saveDeadline(s, '2030-05-19')).written.registrationDeadline).toBe(
+          '2030-05-19',
+        );
+        const more = await s.as(s.admin).mutation(api.tournaments.updateDetails, {
+          tournamentId: s.gulf,
+          ...HELD_AT_START,
+          registrationDeadline: '2030-05-19',
+          maximumTeams: 8,
+          expected: { ...HELD_AT_START, registrationDeadline: '2030-05-19' },
+        });
+        expect(more.written.maximumTeams).toBe(8);
+      });
+
+      test('lets updateDetails reopen registration while no bracket exists', async () => {
+        const { s } = await world(['Alpha', 'Bravo']);
+        expect((await saveDeadline(s, '2030-05-31')).written.registrationDeadline).toBe(
+          '2030-05-31',
+        );
+      });
+
+      test('is refused by undoUpdateDetails once the bracket exists, and the deadline stays', async () => {
+        const { s } = await world(['Alpha', 'Bravo']);
+        await s.t.run((ctx) =>
+          ctx.db.patch('tournaments', s.gulf, { registrationDeadline: '2030-05-31' }),
+        );
+        const saved = await s.as(s.admin).mutation(api.tournaments.updateDetails, {
+          tournamentId: s.gulf,
+          ...HELD_AT_START,
+          expected: EXPECTED,
+        });
+        expect(saved.earlier.registrationDeadline).toBe('2030-05-31');
+        await create(s);
+        expect(
+          await s
+            .as(s.admin)
+            .mutation(api.tournaments.undoUpdateDetails, { tournamentId: s.gulf, ...saved })
+            .catch(refusalOf),
+        ).toEqual({
+          field: 'registrationDeadline',
+          code: 'registrationReopened',
+          message: BRACKET_MESSAGES.registrationReopened,
+        });
+        expect(await deadlineOf(s)).toBe('2030-05-20');
+      });
+
+      test('lets undoUpdateDetails restore an earlier deadline that is still closed', async () => {
+        const { s } = await world(['Alpha', 'Bravo']);
+        const saved = await saveDeadline(s, '2030-05-19');
+        await create(s);
+        await s
+          .as(s.admin)
+          .mutation(api.tournaments.undoUpdateDetails, { tournamentId: s.gulf, ...saved });
+        expect(await deadlineOf(s)).toBe('2030-05-20');
+      });
+    });
+
     test('changes sets per game while no bracket exists', async () => {
       const { s } = await world(['Alpha', 'Bravo']);
       const result = await s.as(s.admin).mutation(api.tournaments.updateDetails, {

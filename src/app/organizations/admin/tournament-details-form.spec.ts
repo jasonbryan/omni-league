@@ -1,4 +1,5 @@
 import { ConvexError, type Value } from 'convex/values';
+import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
 import { TOURNAMENT_MESSAGES } from '../../../../convex/lib/tournamentInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from './button-classes';
@@ -150,6 +151,14 @@ describe('TournamentDetailsForm', () => {
       expect(input('maximum-teams').disabled).toBe(false);
     });
 
+    it('shows the stored sets per game, not an unsaved choice, when a bracket locks it', async () => {
+      await open();
+      await chooseSets('3');
+      o.subscription(GET)!.emit({ ...TOURNAMENT, bracketCreated: true });
+      await o.flush();
+      expect(text(section().querySelector('[data-slot="sets-per-game"]'))).toContain('1 set');
+    });
+
     it('leaves sets per game out for a sport that has no choice', async () => {
       await open({ ...TOURNAMENT, sport: 'soccer', sportName: 'Soccer' });
       expect(sets('1')).toBeNull();
@@ -244,6 +253,36 @@ describe('TournamentDetailsForm', () => {
       expect(input('maximum-teams').value).toBe('5');
       expect(input('end-date').value).toBe('2027-01-20');
       expect(document.activeElement).toBe(input('maximum-teams'));
+    });
+  });
+
+  describe('a bracket that registration must not reopen', () => {
+    const reopened = () =>
+      new ConvexError({
+        field: 'registrationDeadline',
+        code: 'registrationReopened',
+        message: BRACKET_MESSAGES.registrationReopened,
+      });
+
+    it('shows the server’s refusal of a later deadline under Registration deadline, focuses it, and keeps the value', async () => {
+      await open({ ...TOURNAMENT, bracketCreated: true });
+      await type('registration-deadline', '2027-01-12');
+      await submit();
+      o.convex.calls[0].reject(reopened());
+      await o.flush();
+      expect(error('registration-deadline')).toBe(BRACKET_MESSAGES.registrationReopened);
+      expect(input('registration-deadline').value).toBe('2027-01-12');
+      expect(document.activeElement).toBe(input('registration-deadline'));
+    });
+
+    it('shows the same reason in the status when Undo is refused, and keeps Undo', async () => {
+      await saved();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].reject(reopened());
+      await o.flush();
+      expect(text(status())).toContain(BRACKET_MESSAGES.registrationReopened);
+      expect(text(undoButton())).toBe('Undo');
     });
   });
 

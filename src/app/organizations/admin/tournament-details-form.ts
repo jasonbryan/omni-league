@@ -204,7 +204,7 @@ const FIELD_IDS: Record<DetailsField, string> = {
         @if (hasSetsPerGame() && setsLocked()) {
           <div data-slot="sets-per-game">
             <span class="text-sm font-medium">Sets per game</span>
-            <p class="mt-1.5 text-sm">{{ details.setsPerGame() === 3 ? 'Best of 3' : '1 set' }}</p>
+            <p class="mt-1.5 text-sm">{{ storedSets() }}</p>
             <p hlmFieldDescription class="mt-1.5">
               The bracket is created, so sets per game cannot change.
             </p>
@@ -296,6 +296,9 @@ export class TournamentDetailsForm implements OnInit {
 
   protected readonly hasSetsPerGame = computed(() => setsPerGameIsChosen(this.tournament().sport));
   protected readonly setsLocked = computed(() => this.tournament().bracketCreated);
+  protected readonly storedSets = computed(() =>
+    this.tournament().setsPerGame === 3 ? 'Best of 3' : '1 set',
+  );
   protected readonly shownStatus = computed(() =>
     this.details.editedSinceLoad() ? null : this.status(),
   );
