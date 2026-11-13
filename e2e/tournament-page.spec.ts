@@ -1,4 +1,6 @@
-import { expectAccessible } from './support/a11y';
+import type { Locator } from '@playwright/test';
+import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import { seedBracket } from './support/bracket';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
@@ -59,6 +61,45 @@ async function seed(): Promise<{ tenant: Tenant; open: string; closed: string; d
   return { tenant, open, closed, draft };
 }
 
+const BRACKET_TEAMS = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
+/** Five teams make eight places: seeds 1 to 3 have byes and 4 plays 5. */
+const BRACKET_GAMES = [
+  'Game 1: (1) Alpha against Bye',
+  'Game 2: (4) Delta against (5) Echo',
+  'Game 3: (2) Bravo against Bye',
+  'Game 4: (3) Charlie against Bye',
+  'Game 1: (1) Alpha against To be decided',
+  'Game 2: (2) Bravo against (3) Charlie',
+  'Game 1: To be decided against To be decided',
+];
+
+const SEVENTEEN_TEAMS = Array.from({ length: 17 }, (_, index) => `Team ${index + 1}`);
+
+const cornersOf = (sections: Locator) =>
+  sections.evaluateAll((elements) =>
+    elements.map((element) => {
+      const { x, y } = element.getBoundingClientRect();
+      return { x, y };
+    }),
+  );
+
+async function seedBracketTournament(teamNames: readonly string[]): Promise<string> {
+  const tenant = await seedTenant({
+    name: 'E2E Tournament Bracket',
+    locations: [{ name: 'North Beach Sand Courts', address: ADDRESS }],
+  });
+  const path = await seedTournament(tenant, {
+    locations: ['North Beach Sand Courts'],
+    name: 'Labor Day Sand Slam',
+    slug: 'labor-day-sand-slam',
+    startDate: dateFromToday(30),
+    endDate: dateFromToday(31),
+    maximumTeams: 32,
+  });
+  await seedBracket(tenant, 'labor-day-sand-slam', teamNames);
+  return path;
+}
+
 test.describe('public tournament page: raw server HTML', () => {
   test(
     'a published tournament: 200, the public Cache-Control, the h1, division, dates, address, and the registration card before the details',
@@ -107,6 +148,85 @@ test.describe('public tournament page: raw server HTML', () => {
       const card = /<section\b[^>]*id="registration"[\s\S]*?<\/section>/.exec(html)?.[0];
       expect(textOf(card)).toContain('Registration closed');
       expect(textOf(card)).not.toContain('Registration open');
+    },
+  );
+
+  test(
+    'a tournament with a bracket: each round heading and every game with its seeds and teams are in the HTML, after the details',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(request, await seedBracketTournament(BRACKET_TEAMS));
+      const start = html.indexOf('id="bracket"');
+      expect(start).toBeGreaterThan(html.indexOf('id="details-heading"'));
+      const bracket = html.slice(start);
+      const headings = [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, heading]) =>
+        textOf(heading),
+      );
+      expect(headings).toEqual(['Quarterfinals', 'Semifinals', 'Final']);
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games).toEqual(BRACKET_GAMES);
+      expect(bracket).toContain('role="region"');
+      expect(bracket).toContain('aria-label="Bracket rounds"');
+      expect(bracket).toMatch(/tabindex="0"/);
+    },
+  );
+
+  test(
+    'a bracket of two teams is one Final with both seeds and no bye in the HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)),
+      );
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      const headings = [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, heading]) =>
+        textOf(heading),
+      );
+      expect(headings).toEqual(['Final']);
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games).toEqual(['Game 1: (1) Alpha against (2) Bravo']);
+    },
+  );
+
+  test(
+    'a bracket of 17 teams has five rounds, 31 games, 15 byes, and one first-round game in the HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(request, await seedBracketTournament(SEVENTEEN_TEAMS));
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      const headings = [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, heading]) =>
+        textOf(heading),
+      );
+      expect(headings).toEqual([
+        'Round of 32',
+        'Round of 16',
+        'Quarterfinals',
+        'Semifinals',
+        'Final',
+      ]);
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games).toHaveLength(31);
+      expect(games.filter((game) => game.endsWith('against Bye'))).toHaveLength(15);
+      expect(games).toContain('Game 2: (16) Team 16 against (17) Team 17');
+    },
+  );
+
+  test(
+    'a tournament without a bracket says where it will appear',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { open } = await seed();
+      const { html } = await fetchRawHtml(request, open);
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      expect(textOf(bracket)).toContain('The bracket appears here once the organizer creates it.');
+      expect(bracket).not.toContain('data-testid="bracket-game"');
     },
   );
 
@@ -165,6 +285,156 @@ test.describe('public tournament page: in the browser', () => {
     await expect(page.locator('#registration').getByRole('link')).toHaveCount(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, 'tournament-closed');
+  });
+
+  test('a tournament without a bracket says where it will appear, and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { open } = await seed();
+    await page.goto(open);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const section = page.locator('section#bracket');
+    await expect(section.getByRole('heading', { level: 2, name: 'Bracket' })).toBeVisible();
+    await expect(section).toContainText('The bracket appears here once the organizer creates it.');
+    await expect(section.getByRole('region', { name: 'Bracket rounds' })).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'tournament-bracket-empty');
+  });
+
+  test('a bracket of five teams lists every game, and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.locator('section#bracket h3')).toHaveText([
+      'Quarterfinals',
+      'Semifinals',
+      'Final',
+    ]);
+    const games = page.getByTestId('bracket-game');
+    await expect(games).toHaveCount(BRACKET_GAMES.length);
+    for (const [index, game] of BRACKET_GAMES.entries()) {
+      expect(textOf(await games.nth(index).innerHTML()), game).toBe(game);
+    }
+    await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'tournament-bracket');
+  });
+
+  // A bracket this tall fails the helper's focus-in-view walk, which asks for the focused region's centre on screen.
+  test('17 teams make five rounds: at 1280px they are columns in a labelled scroller a keyboard scrolls, with the hint shown', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'a 1280px layout');
+    await page.goto(await seedBracketTournament(SEVENTEEN_TEAMS));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const scroller = page.getByRole('region', { name: 'Bracket rounds' });
+    const rounds = scroller.locator('section');
+    await expect(rounds).toHaveCount(5);
+    await expect(scroller).toHaveAttribute('tabindex', '0');
+
+    const columns = await cornersOf(rounds);
+    expect(new Set(columns.map(({ y }) => y)).size).toBe(1);
+    expect(columns.map(({ x }) => x)).toEqual([...columns.map(({ x }) => x)].sort((a, b) => a - b));
+    expect(new Set(columns.map(({ x }) => x)).size).toBe(5);
+
+    const hint = page.getByTestId('bracket-scroll-hint');
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText('Scroll sideways for more rounds.');
+    const sizes = await scroller.evaluate((el) => ({
+      wide: el.scrollWidth,
+      shown: el.clientWidth,
+    }));
+    expect(sizes.wide).toBeGreaterThan(sizes.shown);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      1280,
+    );
+
+    await scroller.focus();
+    await expect(scroller).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await scroller.evaluate((el) => {
+      el.scrollLeft = 0;
+    });
+    await screenshot(page, testInfo, 'tournament-bracket-1280');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+
+  test('17 teams make five rounds: at 360px they stack, and the page does not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'a 360px layout');
+    await page.goto(await seedBracketTournament(SEVENTEEN_TEAMS));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const rounds = page.getByRole('region', { name: 'Bracket rounds' }).locator('section');
+    await expect(rounds).toHaveCount(5);
+    await expect(page.getByTestId('bracket-scroll-hint')).toBeHidden();
+
+    const stacked = await cornersOf(rounds);
+    expect(new Set(stacked.map(({ x }) => x)).size).toBe(1);
+    expect(stacked.map(({ y }) => y)).toEqual([...stacked.map(({ y }) => y)].sort((a, b) => a - b));
+    expect(new Set(stacked.map(({ y }) => y)).size).toBe(5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      360,
+    );
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+    await screenshot(page, testInfo, 'tournament-bracket-360');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+
+  test('a bracket of two teams is one Final and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.locator('section#bracket h3')).toHaveText(['Final']);
+    const games = page.getByTestId('bracket-game');
+    await expect(games).toHaveCount(1);
+    expect(textOf(await games.first().innerHTML())).toBe('Game 1: (1) Alpha against (2) Bravo');
+    await expect(page.getByText('Bye', { exact: true })).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
+  test('Tab reaches the labelled rounds, with a visible focus ring, and arrow keys never move the page sideways', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const scroller = page.getByRole('region', { name: 'Bracket rounds' });
+    const tab = tabKey(page);
+    for (let press = 0; press < 80; press += 1) {
+      if (await scroller.evaluate((el) => el === document.activeElement)) break;
+      await page.keyboard.press(tab);
+    }
+    await expect(scroller).toBeFocused();
+    expect(await scroller.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
+    await expect(scroller).toBeFocused();
+    const pageWidth = page.viewportSize()!.width;
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      pageWidth,
+    );
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  });
+
+  test('a small bracket fits the page, so the hint keeps its line and hides', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'a 1280px layout');
+    await page.goto(await seedBracketTournament(BRACKET_TEAMS.slice(0, 3)));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const hint = page.getByTestId('bracket-scroll-hint');
+    await expect(hint).toHaveCSS('visibility', 'hidden');
+    expect((await hint.boundingBox())?.height).toBeGreaterThan(0);
   });
 
   test.describe('a draft tournament', () => {

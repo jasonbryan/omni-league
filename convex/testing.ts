@@ -47,6 +47,7 @@ import {
   type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
+import { bracketExists, replaceBracket, tournamentTeams } from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
@@ -570,6 +571,23 @@ export const seedTournamentRosters = internalMutation({
       teamIds.push(teamId);
     }
     return { teamIds };
+  },
+});
+
+/** The bracket of the tournament's confirmed teams, in registration order, through the writer `tournamentGames.createBracket` uses. Skips the registration window and the organizer check. */
+export const seedTournamentBracket = internalMutation({
+  args: { organizationSlug: v.string(), tournamentSlug: v.string() },
+  returns: v.object({ gameCount: v.number() }),
+  handler: async (ctx, { organizationSlug, tournamentSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    if (await bracketExists(ctx, found.tournament._id)) {
+      throw new Error(`The tournament ${JSON.stringify(tournamentSlug)} has a bracket already`);
+    }
+    const { seeds } = await tournamentTeams(ctx, found.tournament);
+    return { gameCount: await replaceBracket(ctx, found.tournament._id, seeds, []) };
   },
 });
 

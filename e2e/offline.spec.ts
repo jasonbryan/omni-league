@@ -10,6 +10,7 @@ import {
   organizationTournamentSavedKeys,
 } from './support/saved-copies';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
+import { seedBracket } from './support/bracket';
 import { seedTournament } from './support/tournament';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
@@ -390,6 +391,46 @@ test.describe('a tournament page offline', () => {
       page.getByRole('heading', { level: 1, name: "This page isn't saved on this device" }),
     ).toBeVisible();
     await expect(note).toHaveCount(0);
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
+
+    await context.setOffline(false);
+  });
+
+  test('a bracket viewed online opens from its saved copy, with the note', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Bracket',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    });
+    const path = await seedTournament(tenant, {
+      name: 'Labor Day Sand Slam',
+      slug: 'labor-day-sand-slam',
+      locations: ['Alpha Field'],
+      startDate: dateFromToday(30),
+      endDate: dateFromToday(31),
+    });
+    await seedBracket(tenant, 'labor-day-sand-slam', ['Alpha', 'Bravo', 'Charlie']);
+    const games = page.getByTestId('bracket-game');
+
+    await page.goto(path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(games).toHaveCount(3);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(path);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(page.locator('section#bracket h3')).toHaveText(['Semifinals', 'Final']);
+    await expect(games).toHaveCount(3);
+    await expect(games.first()).toContainText('(1) Alpha');
     const results = await axeScan(page);
     expect(describeViolations(results.violations)).toEqual([]);
 

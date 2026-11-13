@@ -24,10 +24,12 @@ import { expectBareCard } from '../../ui/testing/card';
 import {
   at,
   BEACH_OPEN,
+  BEACH_OPEN_BRACKET,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
   tournamentQueryResults,
 } from './testing/tournament-data';
+import { spacedText } from './testing/spaced-text';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -211,6 +213,37 @@ describe('PublicTournamentPage server render', () => {
     const cards = body.querySelectorAll('main #registration [data-slot="card"]');
     expect(cards).toHaveLength(1);
     expectBareCard(cards[0], 'p-5 md:p-6 lg:sticky lg:top-24');
+  });
+
+  it('writes each round heading and every game with its seeds and teams into the raw HTML', async () => {
+    const { html, body } = await render(
+      TOURNAMENT_PATH,
+      answer({ ...BEACH_OPEN, bracket: { ...BEACH_OPEN_BRACKET, winner: 'Sand Crabs' } }),
+    );
+    const section = body.querySelector('main section#bracket')!;
+    expect([...section.querySelectorAll('h3')].map((heading) => text(heading))).toEqual([
+      'Semifinals',
+      'Final',
+    ]);
+    const games = [...section.querySelectorAll('li')].map((game) => spacedText(game));
+    expect(games).toEqual([
+      'Game 1: (1) Sand Crabs Won against (4) Dig Dogs',
+      'Game 2: (2) Net Results against (3) Dune Dashers',
+      'Game 1: (1) Sand Crabs against To be decided',
+    ]);
+    expect(text(section.querySelector('[data-testid="bracket-winner"]'))).toBe(
+      'Winner: Sand Crabs',
+    );
+    const markup = html.slice(html.indexOf('<body'));
+    expect(markup.indexOf('id="details-heading"')).toBeLessThan(markup.indexOf('id="bracket"'));
+    expect(section.querySelector('[role="region"][aria-label="Bracket rounds"]')).not.toBeNull();
+  });
+
+  it('writes the empty line into the raw HTML when there is no bracket', async () => {
+    const { body } = await render(TOURNAMENT_PATH, answer());
+    expect(text(body.querySelector('main section#bracket p'))).toBe(
+      'The bracket appears here once the organizer creates it.',
+    );
   });
 
   it('renders the closed card when the clock is past the deadline', async () => {

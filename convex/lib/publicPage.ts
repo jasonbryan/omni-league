@@ -236,10 +236,35 @@ export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
 
-// `isFull` is optional so a copy saved before it existed stays valid.
+const publicBracketPlaceValidator = v.union(
+  v.null(),
+  v.object({ name: v.string(), seed: v.optional(v.number()) }),
+);
+
+// Holds no ids: the page is cached and saved offline, and an id is an internal key.
+export const publicBracketValidator = v.object({
+  winner: v.optional(v.string()),
+  rounds: v.array(
+    v.object({
+      name: v.string(),
+      games: v.array(
+        v.object({
+          teams: v.array(publicBracketPlaceValidator),
+          bye: v.boolean(),
+          winner: v.optional(v.union(v.literal(0), v.literal(1))),
+        }),
+      ),
+    }),
+  ),
+});
+
+export type PublicBracket = Infer<typeof publicBracketValidator>;
+
+// `isFull` and `bracket` are optional so a copy saved before they existed stays valid.
 export const publicTournamentPageValidator = v.object({
   ...tournamentDetailsValidator.fields,
   isFull: v.optional(v.boolean()),
+  bracket: v.optional(publicBracketValidator),
 });
 
 export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;

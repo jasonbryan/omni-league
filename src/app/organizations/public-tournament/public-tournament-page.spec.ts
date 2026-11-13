@@ -16,6 +16,7 @@ import { PublicTournamentPage } from './public-tournament-page';
 import {
   at,
   BEACH_OPEN,
+  BEACH_OPEN_BRACKET,
   ORG_SLUG,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
@@ -420,5 +421,44 @@ describe('PublicTournamentPage not found and failures', () => {
     const view = host(harness).querySelector('app-server-error-view');
     expect(view).not.toBeNull();
     expect(view?.querySelector('a')?.getAttribute('href')).toBe(TOURNAMENT_PATH);
+  });
+});
+
+describe('PublicTournamentPage bracket', () => {
+  const bracketSection = (harness: RouterTestingHarness) =>
+    host(harness).querySelector('main section#bracket');
+
+  it('says where the bracket will appear while the tournament has none', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    expect(text(bracketSection(harness))).toBe(
+      'Bracket The bracket appears here once the organizer creates it.',
+    );
+  });
+
+  it('shows the rounds and their games after the details', async () => {
+    const harness = await open();
+    emit({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET });
+    await settle(harness);
+    const section = bracketSection(harness)!;
+    expect([...section.querySelectorAll('h3')].map(text)).toEqual(['Semifinals', 'Final']);
+    expect(section.querySelectorAll('li')).toHaveLength(3);
+    const details = host(harness).querySelector('#details-heading')!;
+    expect(
+      details.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('follows a new result without a reload', async () => {
+    const harness = await open();
+    emit({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET });
+    await settle(harness);
+    expect(bracketSection(harness)?.textContent).not.toContain('Winner:');
+    emit({ ...BEACH_OPEN, bracket: { ...BEACH_OPEN_BRACKET, winner: 'Sand Crabs' } });
+    await settle(harness);
+    expect(text(bracketSection(harness)?.querySelector('[data-testid="bracket-winner"]'))).toBe(
+      'Winner: Sand Crabs',
+    );
   });
 });
