@@ -453,7 +453,7 @@ export interface TeamPageNavigationState {
                 </div>
               </div>
             </div>
-            @if (canRemoveAny()) {
+            @if (keepRemoveDialog()) {
               <app-remove-player-dialog
                 [teamName]="team.name"
                 (dismissed)="removeDismissed($event)"
@@ -644,9 +644,14 @@ export class TeamPage {
     source: this.teamId,
     computation: () => null,
   });
-  protected readonly canRemoveAny = computed(
+  private readonly canRemoveAny = computed(
     () => this.team()?.roster.some((player) => player.viewerCanRemove) ?? false,
   );
+  // The dialog reports the removal when it closes, which can follow the roster update that took the last Remove away.
+  protected readonly keepRemoveDialog = linkedSignal<boolean, boolean>({
+    source: this.canRemoveAny,
+    computation: (removable, previous) => removable || (previous?.value ?? false),
+  });
 
   constructor() {
     // The not-found and server-error views set their own title.
