@@ -1,4 +1,3 @@
-// Keeps the dark-variant rules, which no page can use, out of the production stylesheet.
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
