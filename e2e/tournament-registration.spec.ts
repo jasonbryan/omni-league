@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
@@ -498,7 +498,8 @@ test.describe('invites and joining a tournament team', () => {
     await expect(
       dialog.getByRole('heading', { name: `Remove ${player.name} from Sand Crabs?` }),
     ).toBeVisible();
-    await expectAccessible(page);
+    // The modal holds focus, so the page-wide Tab walk does not apply.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '370-remove-confirm');
     await dialog.getByRole('button', { name: 'Remove player' }).click();
     await expect(dialog).toHaveCount(0);
