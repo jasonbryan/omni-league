@@ -27,10 +27,6 @@ import { LeaguePage } from './organizations/league/league-page';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
-import { OrganizationPage } from './organizations/organization-page';
-import { PublicLeaguePage } from './organizations/public-league/public-league-page';
-import { PublicSeasonPage } from './organizations/public-season/public-season-page';
-import { PublicTournamentPage } from './organizations/public-tournament/public-tournament-page';
 import { Placeholder } from './placeholder/placeholder';
 import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
@@ -150,15 +146,11 @@ describe('Route tables', () => {
     ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'teams/join', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, the tournament page, sign-up, sign-in, invites/accept, teams/join, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the lazy organizations routes, sign-up, sign-in, invites/accept, teams/join, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'leagues',
-      'organizations/:orgSlug',
-      'organizations/:orgSlug/sports/:sport',
-      'organizations/:orgSlug/leagues/:leagueSlug',
-      'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
-      'organizations/:orgSlug/tournaments/:tournamentSlug',
+      'organizations',
       'sign-up',
       'sign-in',
       'invites/accept',
@@ -176,40 +168,6 @@ describe('Route tables', () => {
     const route = routes.find((r) => r.path === 'leagues');
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(FindPage);
-  });
-
-  it('organizations/:orgSlug lazy-loads the organization page', async () => {
-    const route = routes.find((r) => r.path === 'organizations/:orgSlug');
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(OrganizationPage);
-  });
-
-  it('organizations/:orgSlug/sports/:sport lazy-loads the organization page, which filters to the sport', async () => {
-    const route = routes.find((r) => r.path === 'organizations/:orgSlug/sports/:sport');
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(OrganizationPage);
-  });
-
-  it('organizations/:orgSlug/leagues/:leagueSlug lazy-loads the public league page', async () => {
-    const route = routes.find((r) => r.path === 'organizations/:orgSlug/leagues/:leagueSlug');
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(PublicLeaguePage);
-  });
-
-  it('organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug lazy-loads the public season page', async () => {
-    const route = routes.find(
-      (r) => r.path === 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
-    );
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(PublicSeasonPage);
-  });
-
-  it('organizations/:orgSlug/tournaments/:tournamentSlug lazy-loads the public tournament page', async () => {
-    const route = routes.find(
-      (r) => r.path === 'organizations/:orgSlug/tournaments/:tournamentSlug',
-    );
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(PublicTournamentPage);
   });
 
   it('the last client route is **, which lazy-loads the not-found page', async () => {
