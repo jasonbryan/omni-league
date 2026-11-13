@@ -5,6 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
 import { makeFunctionReference } from 'convex/server';
 import { AuthService } from '../auth/auth.service';
+import { requestSignIn } from '../auth/password-auth';
 import { FakeAuthClient, provideFakeAuthClient } from '../auth/testing/fake-auth-client';
 import { ChangesInFlight } from '../changes-in-flight';
 import { CONVEX_CLIENT, ConvexConnection, injectMutation } from '../data/convex';
@@ -571,7 +572,7 @@ describe('AppUpdates', () => {
       auth.holdSignIn = true;
       TestBed.configureTestingModule({ providers: [provideFakeAuthClient(auth)] });
       await startOn();
-      const signIn = TestBed.inject(AuthService).signIn(credentials);
+      const signIn = TestBed.inject(AuthService).authenticate(requestSignIn, credentials);
       await vi.advanceTimersByTimeAsync(0);
 
       sw.versionReady('a', 'b');
@@ -610,7 +611,7 @@ describe('AppUpdates', () => {
       auth.signInThrows = new Error('network');
       TestBed.configureTestingModule({ providers: [provideFakeAuthClient(auth)] });
       await startOn();
-      const signIn = TestBed.inject(AuthService).signIn(credentials);
+      const signIn = TestBed.inject(AuthService).authenticate(requestSignIn, credentials);
       await vi.advanceTimersByTimeAsync(0);
       sw.versionReady('a', 'b');
       await vi.advanceTimersByTimeAsync(0);
