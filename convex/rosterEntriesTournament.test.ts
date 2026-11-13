@@ -218,6 +218,36 @@ describe('rosterEntries.addMinor for a tournament team', () => {
         'You’ve added 20 minors in this tournament, removed ones included, which is the most one guardian can add.',
     });
   });
+
+  test('keeps the duplicate check and the twenty-minor limit when the guardian has more than a hundred removed adult entries', async () => {
+    const { s, teamId } = await registered();
+    await s.t.run(async (ctx) => {
+      for (let round = 0; round < 120; round++) {
+        await ctx.db.insert('rosterEntries', {
+          organizationId: (await ctx.db.get('teams', teamId))!.organizationId,
+          tournamentId: s.gulf,
+          teamId,
+          userId: s.guardian.userId,
+          status: 'removed',
+          source: 'invite',
+          addedAt: OPEN_NOW,
+          addedByUserId: s.captain.userId,
+        });
+      }
+    });
+    expect(await addMinor(s, s.guardian, teamId, 'maya r.').catch(refusalOf)).toMatchObject({
+      code: 'minorInSeason',
+      inTournament: true,
+    });
+    for (let index = 1; index < MAX_MINORS_PER_GUARDIAN_IN_SEASON; index++) {
+      await addMinor(s, s.guardian, teamId, `Kid ${index}`);
+    }
+    expect(await addMinor(s, s.guardian, teamId, 'One More').catch(refusalOf)).toMatchObject({
+      code: 'minorLimit',
+    });
+    const minors = (await allEntries(s)).filter((row) => row.minorName !== undefined);
+    expect(minors).toHaveLength(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
+  });
 });
 
 describe('rosterEntries.renameMinor for a tournament team', () => {
