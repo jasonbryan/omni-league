@@ -150,7 +150,7 @@ describe('TournamentDetailsForm', () => {
       );
     });
 
-    it('uses the singular for one team, and says nothing for none', async () => {
+    it('uses the singular for one team', async () => {
       await open({ ...TOURNAMENT, teamCount: 1 });
       expect(text(page.querySelector('#details-maximum-teams-description'))).toBe(
         'The most teams the bracket takes, from 2 to 128. 1 team is registered.',
