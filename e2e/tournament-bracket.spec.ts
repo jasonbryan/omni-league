@@ -258,4 +258,82 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await expect(seedNames(page)).toHaveText(NAMES);
     await expect(createButton(page)).toHaveText('Create bracket');
   });
+
+  test.describe('a deadline that would reopen registration', () => {
+    const REOPENS =
+      'The bracket is created, so registration cannot reopen. Choose a deadline that has passed.';
+    const deadline = (page: Page) => page.locator('#details-registration-deadline');
+    const deadlineError = (page: Page) => page.locator('#details-registration-deadline-error');
+    const saveDetails = (page: Page) =>
+      page.locator('#edit-details form').getByRole('button', { name: /^Save changes/ });
+
+    async function expectRegistrationClosed(page: Page, tenant: Tenant) {
+      await page.goto(`${tenant.path}/tournaments/${SLUG}`);
+      await expect(page.locator('#registration')).toContainText('Registration closed');
+      await expect(page.locator('#registration').locator('a, button')).toHaveCount(0);
+      await page.goto(`/app/organizations/${tenant.slug}/tournaments/${SLUG}/register`);
+      await expect(page.locator('main [data-slot="alert"]')).toContainText(
+        'Registration for this tournament is closed.',
+      );
+      await expect(page.locator('#team-name')).toHaveCount(0);
+    }
+
+    test.describe('Save', () => {
+      test.use({ expectedConvexErrors: ['tournaments:updateDetails'] });
+
+      test('a later deadline after Create is refused under its field, and the public and register pages stay closed', async ({
+        page,
+      }, testInfo) => {
+        const { tenant, managePath } = await adminOf(page, {
+          teams: full(['Alpha', 'Bravo']),
+          registration: 'closed',
+        });
+        await page.goto(managePath);
+        await createButton(page).click();
+        await expect(
+          panel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+        ).toBeVisible();
+
+        await deadline(page).fill(dateFromToday(10));
+        await saveDetails(page).click();
+        await expect(deadlineError(page)).toHaveText(REOPENS);
+        await expect(deadline(page)).toHaveValue(dateFromToday(10));
+        await expect(deadline(page)).toBeFocused();
+        await screenshot(page, testInfo, 'bracket-deadline-refused');
+        await expectAccessible(page);
+
+        await page.reload();
+        await expect(deadline(page)).toHaveValue(dateFromToday(-2));
+        await expectRegistrationClosed(page, tenant);
+      });
+    });
+
+    test.describe('Undo', () => {
+      test.use({ expectedConvexErrors: ['tournaments:undoUpdateDetails'] });
+
+      test('Undo that would restore an open deadline after Create is refused with the same reason', async ({
+        page,
+      }) => {
+        const { tenant, managePath } = await adminOf(page, {
+          teams: full(['Alpha', 'Bravo']),
+          registration: 'open',
+        });
+        await page.goto(managePath);
+        await deadline(page).fill(dateFromToday(-2));
+        await saveDetails(page).click();
+        const undo = page.locator('#edit-details form').getByRole('button', { name: 'Undo' });
+        await expect(undo).toBeVisible();
+
+        await createButton(page).click();
+        await expect(
+          panel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+        ).toBeVisible();
+        await undo.click();
+        await expect(page.locator('#edit-details form')).toContainText(REOPENS);
+        await page.reload();
+        await expect(deadline(page)).toHaveValue(dateFromToday(-2));
+        await expectRegistrationClosed(page, tenant);
+      });
+    });
+  });
 });
