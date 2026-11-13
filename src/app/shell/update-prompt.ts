@@ -1,17 +1,11 @@
 import {
-  ApplicationRef,
   ChangeDetectionStrategy,
   Component,
   DOCUMENT,
   ElementRef,
-  EnvironmentInjector,
   afterRenderEffect,
-  createComponent,
   inject,
-  makeEnvironmentProviders,
-  provideAppInitializer,
   viewChild,
-  type EnvironmentProviders,
 } from '@angular/core';
 import { AppUpdates } from '../core/service-worker/app-updates';
 import { FLOATING_CARD_CLASSES } from '../ui/card/card-classes';
@@ -25,7 +19,7 @@ const LATER_BUTTON = `${BUTTON} hover:bg-muted hover:text-foreground dark:hover:
 /**
  * While a card shows, the page gets bottom padding and `scroll-padding-bottom` equal to the card's height plus its gap to the window edge, so a focused control is never hidden under it (WCAG 2.4.11).
  * The button classes are those of hlmBtn (default, and ghost for Later), written out as in the shell's menu button, so the prompt needs none of the helm button code.
- * The icons are Lucide's, drawn inline: the prompt loads with the first page, and `@ng-icons/lucide` there would bring every icon the app uses into the initial bundle.
+ * The icons are Lucide's, drawn inline: `@ng-icons/lucide` here would bring every icon the app uses into the prompt's chunk.
  */
 @Component({
   selector: 'app-update-prompt',
@@ -157,12 +151,6 @@ const LATER_BUTTON = `${BUTTON} hover:bg-muted hover:text-foreground dark:hover:
         </section>
       }
     }
-    <!-- Present from the start, so the text added later is announced once. -->
-    <p role="status" class="sr-only">
-      @if (updates.card() === 'ready') {
-        A new version of Omni League is ready.
-      }
-    </p>
   `,
 })
 export class UpdatePrompt {
@@ -207,18 +195,4 @@ export class UpdatePrompt {
   private focusMain(): void {
     this.document.getElementById('main')?.focus({ preventScroll: true });
   }
-}
-
-/** Added at the end of `<body>`, after the app, so Tab reaches it after the page content. It is created in the browser only and never in the server render, so the server HTML that crawlers see does not change. */
-export function provideUpdatePrompt(): EnvironmentProviders {
-  return makeEnvironmentProviders([
-    provideAppInitializer(() => {
-      if (!inject(AppUpdates).start()) return;
-      const ref = createComponent(UpdatePrompt, {
-        environmentInjector: inject(EnvironmentInjector),
-      });
-      inject(ApplicationRef).attachView(ref.hostView);
-      inject(DOCUMENT).body.append(ref.location.nativeElement as HTMLElement);
-    }),
-  ]);
 }

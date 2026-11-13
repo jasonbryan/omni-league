@@ -184,7 +184,7 @@ export default defineConfig([
       'src/app/core/auth/**/*.ts',
       'src/app/core/service-worker/**/*.ts',
       'src/app/core/*.ts',
-      'src/app/shell/update-prompt.ts',
+      'src/app/shell/update-prompt*.ts',
     ],
     ignores: ['src/**/*.spec.ts'],
     rules: {

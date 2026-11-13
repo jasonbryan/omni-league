@@ -7,7 +7,8 @@ export type ExpectedDocumentStatus = 404;
  * already has an account. A string matches the whole path, a RegExp anywhere in it.
  */
 export interface ExpectedFailedRequest {
-  status: number;
+  /** An HTTP status, or the `net::ERR_*` code Chromium logs for a request that got no response, such as one a test aborts. */
+  status: number | `net::ERR_${string}`;
   path: string | RegExp;
 }
 
@@ -24,7 +25,8 @@ export interface VerifyOptions {
 }
 
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
-const FAILED_RESOURCE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
+const FAILED_RESOURCE =
+  /^Failed to load resource: (?:the server responded with a status of (\d{3})\b|(net::ERR_[A-Z_]+))/;
 const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
 /**
  * WebKit logs an auth fetch it cancels for a leaving document as an access-control failure, which
@@ -210,7 +212,8 @@ export class ConsoleGuard {
   }
 
   private matchRequestAllowance(text: string, url: string): boolean {
-    const status = FAILED_RESOURCE.exec(text)?.[1];
+    const failure = FAILED_RESOURCE.exec(text);
+    const status = failure?.[1] ?? failure?.[2];
     if (status === undefined || !url) return false;
     let path: string;
     try {
