@@ -576,6 +576,37 @@ test.describe('invites and joining a tournament team', () => {
       await expectAccessible(page);
       await screenshot(page, testInfo, '370-join-other-team');
     });
+
+    test('a captain waiting on the tournament waitlist is refused, naming the waiting team and the tournament', async ({
+      page,
+    }, testInfo) => {
+      const { tenant } = await seed();
+      const captain = await seedUser(newUser('Captain'));
+      const { teamId } = await seedTeam(tenant, FULL, 'One', captain);
+      await seedTeam(tenant, FULL, 'Two', await seedUser(newUser('Two')));
+      const waiting = newUser('Waiting');
+      await signUp(page, waiting);
+      await convexRun('testing:seedTournamentWaitlistEntry', {
+        organizationSlug: tenant.slug,
+        tournamentSlug: FULL,
+        teamName: 'Late Lobsters',
+        captainEmail: waiting.email,
+      });
+      const token = await seedInvite(teamId, waiting.email);
+
+      await openLink(page, token);
+      await main(page).getByRole('button', { name: 'Accept invite' }).click();
+      const alert = main(page).getByRole('alert');
+      await expect(alert).toContainText(
+        'You’re on the waitlist with Late Lobsters in this tournament.',
+      );
+      await expect(alert).toContainText(
+        'Late Lobsters is at position 1. While it waits, you can’t join another team in this tournament or add a minor to one.',
+      );
+      await expect(alert).not.toContainText('season');
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '341-join-waitlisted');
+    });
   });
 
   test('a captain of another team in the tournament sees the roster, and the tournament’s teams link to each team page', async ({
