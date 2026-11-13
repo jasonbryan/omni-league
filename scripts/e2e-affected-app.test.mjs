@@ -978,6 +978,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/url-serializer.ts': MAIN_SERVER,
     'src/app/shell/follow-link.ts': SHEET,
     'src/app/shell/sheet-links.ts': SHEET,
+    'src/app/shell/update-prompt-provider.ts': MAIN_SERVER,
     'src/app/shell/update-prompt.ts': MAIN_SERVER,
     'src/app/ui/button/hlm-button.token.ts': SHEET,
     'src/app/ui/button/hlm-button.ts': SHEET,

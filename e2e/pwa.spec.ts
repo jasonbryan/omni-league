@@ -216,7 +216,7 @@ test.describe('service worker (production build)', () => {
     await installWorker(page);
     const prompt = page.locator('app-update-prompt');
     const card = prompt.locator('section');
-    const status = prompt.locator('[role="status"]');
+    const status = page.locator('app-update-fallback [role="status"]');
     await expect(card).toHaveCount(0);
     await expect(status).toHaveText('');
     // Unsaved input holds a ready version and the unrecoverable reload, so both cards show instead of the page reloading by itself.

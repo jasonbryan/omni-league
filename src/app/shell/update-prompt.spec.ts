@@ -1,4 +1,3 @@
-import { ApplicationRef } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
@@ -6,7 +5,7 @@ import { AppUpdates, RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { FakeSwUpdate } from '../core/service-worker/testing/fake-sw-update';
 import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
-import { provideUpdatePrompt, UpdatePrompt } from './update-prompt';
+import { UpdatePrompt } from './update-prompt';
 
 class FakeResizeObserver {
   static last: FakeResizeObserver | undefined;
@@ -70,7 +69,6 @@ describe('UpdatePrompt', () => {
   let unsavedField: HTMLInputElement;
 
   const card = () => host.querySelector<HTMLElement>('section');
-  const status = () => host.querySelector<HTMLElement>('[role="status"]');
   const button = (name: string) =>
     [...host.querySelectorAll('button')].find((candidate) => text(candidate) === name);
 
@@ -104,10 +102,14 @@ describe('UpdatePrompt', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows nothing until the worker has a new version, with an empty status region', () => {
+  it('shows nothing until the worker has a new version', () => {
     expect(card()).toBeNull();
-    expect(status()?.classList).toContain('sr-only');
-    expect(text(status())).toBe('');
+  });
+
+  it('holds no status region, because the page has one that the fallback owns', () => {
+    sw.versionReady('a');
+    TestBed.tick();
+    expect(host.querySelector('[role="status"]')).toBeNull();
   });
 
   describe('new version ready', () => {
@@ -128,10 +130,6 @@ describe('UpdatePrompt', () => {
       expect(text(section?.querySelector('p'))).toBe(
         "It loads by itself when you leave this page, so you can finish what you're typing.",
       );
-    });
-
-    it('announces it once in the polite status region', () => {
-      expect(text(status())).toBe('A new version of Omni League is ready.');
     });
 
     it('has Reload (default button, icon first) and Later (ghost button)', () => {
@@ -168,11 +166,10 @@ describe('UpdatePrompt', () => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    it('Later hides the card and empties the status region', () => {
+    it('Later hides the card', () => {
       button('Later')?.click();
       TestBed.tick();
       expect(card()).toBeNull();
-      expect(text(status())).toBe('');
       expect(reload).not.toHaveBeenCalled();
     });
 
@@ -245,7 +242,6 @@ describe('UpdatePrompt', () => {
           'flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive',
         ),
       );
-      expect(text(status())).toBe('');
     });
 
     it('draws the alert icon in its tile and the rotate icon first in Reload, hidden from screen readers', () => {
@@ -282,32 +278,5 @@ describe('UpdatePrompt', () => {
       expect(root.style.scrollPaddingBottom).toBe('');
       expect(document.body.style.paddingBottom).toBe('');
     });
-  });
-});
-
-describe('provideUpdatePrompt', () => {
-  afterEach(() => {
-    for (const element of document.body.querySelectorAll('app-update-prompt')) element.remove();
-  });
-
-  function bootWith(sw: FakeSwUpdate): void {
-    TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: SwUpdate, useValue: sw }, provideUpdatePrompt()],
-    });
-    TestBed.inject(ApplicationRef);
-  }
-
-  it('adds the prompt at the end of <body>, after the app, when the worker is on', () => {
-    bootWith(new FakeSwUpdate());
-    const prompts = document.body.querySelectorAll('app-update-prompt');
-    expect(prompts).toHaveLength(1);
-    expect(document.body.lastElementChild).toBe(prompts[0]);
-  });
-
-  it('adds nothing when the worker is off (development builds, the server render)', () => {
-    const sw = new FakeSwUpdate();
-    sw.isEnabled = false;
-    bootWith(sw);
-    expect(document.body.querySelector('app-update-prompt')).toBeNull();
   });
 });
