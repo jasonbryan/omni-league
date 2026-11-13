@@ -4,7 +4,6 @@ import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import {
   DEFAULT_SETS_PER_GAME,
-  sameEditable,
   type SetsPerGame,
   type TournamentEditable,
 } from '../../../../convex/lib/tournamentEdit';
@@ -175,11 +174,6 @@ export class TournamentDetails {
         ),
       ]),
     ) as Record<DetailsField, Signal<string | null>>;
-  }
-
-  holds(values: TournamentEditable): boolean {
-    const baseline = this.baseline();
-    return baseline !== null && sameEditable(baseline, values);
   }
 
   load(held: TournamentEditable): void {

@@ -311,9 +311,18 @@ export const undoUpdateDetails = mutation({
         message: TOURNAMENT_MESSAGES.changedSince,
       });
     }
-    // What `updateDetails` returned fits the sport, so a mismatch is a caller sending its own values.
-    if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame)) throw new Error('Not allowed');
-    checkedDetails(tournament, earlier);
+    // What `updateDetails` returned fits the sport and has an end date, so a mismatch is a caller sending its own values.
+    if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame) || earlier.endDate === '') {
+      throw new Error('Not allowed');
+    }
+    checkedDetails(tournament, earlier, (error) =>
+      error.code === 'maximumTeamsBelowTeams'
+        ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
+            tournament.teamCount ?? 0,
+            earlier.maximumTeams,
+          )
+        : error.message,
+    );
     await updateTournamentDetails(ctx, tournament, earlier);
     return null;
   },
@@ -329,11 +338,12 @@ function setsPerGameFitsSport(
 function checkedDetails(
   tournament: Doc<'tournaments'>,
   values: Omit<TournamentEditable, 'setsPerGame'>,
+  messageOf: (error: TournamentInputError) => string = (error) => error.message,
 ): void {
   const refusal = firstTournamentError(
     checkTournamentDetails({ ...values, teamCount: tournament.teamCount ?? 0 }),
   );
-  if (refusal) refuse(refusal);
+  if (refusal) refuse({ ...refusal, message: messageOf(refusal) });
 }
 
 export const getForManagement = query({

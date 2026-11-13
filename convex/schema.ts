@@ -179,7 +179,7 @@ export default defineSchema({
     minimumRosterSize: v.number(),
     structure: v.literal('bracket'),
     bracketType: v.literal('single'),
-    /** Beach volleyball only; absent reads as 1. */
+    /** Chosen only for beach volleyball; absent reads as 1. */
     setsPerGame: v.optional(setsPerGameValidator),
   })
     .index('by_programId', ['programId'])

@@ -940,6 +940,15 @@ test.describe('Tournaments: editing the details', () => {
     await expect(page.locator('#details-maximum-teams-error')).toHaveCount(0);
   });
 
+  test('opening the page with #edit-details scrolls to the form and focuses its first field', async ({
+    page,
+  }) => {
+    const { managePath } = await publishedWithTeams(page, 0);
+    await page.goto(`${managePath}#edit-details`);
+    await expect(field(page, 'start-date')).toBeFocused();
+    await expect(page.locator('#edit-details')).toBeInViewport();
+  });
+
   test(
     'an end date before the start and a deadline after it show under their fields',
     VIEWPORT_AGNOSTIC,
@@ -982,7 +991,9 @@ test.describe('Tournaments: editing the details', () => {
       await seedTournamentTeam(tenant, 5);
       await seedTournamentTeam(tenant, 6);
       await undoButton(page).click();
-      await expect(saveStatus(page)).toContainText('6 teams are registered. Enter 6 or more.');
+      await expect(saveStatus(page)).toContainText(
+        '6 teams are registered, more than the earlier maximum of 4, so it cannot be undone.',
+      );
       await expect(field(page, 'maximum-teams')).toHaveValue('6');
       await screenshot(page, testInfo, 'tournament-edit-details-undo-refused');
       await expectAccessible(page);

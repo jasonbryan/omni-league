@@ -1969,7 +1969,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     ).toEqual({
       field: 'maximumTeams',
       code: 'maximumTeamsBelowTeams',
-      message: TOURNAMENT_MESSAGES.maximumTeamsBelowTeams(6),
+      message: TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(6, 4),
     });
     expect(await snapshot(s.t)).toEqual(before);
   });
@@ -2025,6 +2025,21 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
         }),
       ),
     ).toMatchObject({ field: 'maximumTeams', code: 'maximumTeamsBelowTeams' });
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('Undo refuses earlier values with a blank end date, and leaves the row unchanged', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    const { written } = await s.adminA.mutation(api.tournaments.updateDetails, edit(tournamentId));
+    const before = await snapshot(s.t);
+    await expect(
+      s.adminA.mutation(api.tournaments.undoUpdateDetails, {
+        tournamentId,
+        earlier: { ...held, endDate: '' },
+        written,
+      }),
+    ).rejects.toThrow('Not allowed');
     expect(await snapshot(s.t)).toEqual(before);
   });
 

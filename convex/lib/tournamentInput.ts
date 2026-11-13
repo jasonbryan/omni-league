@@ -112,6 +112,8 @@ export const TOURNAMENT_MESSAGES = {
   maximumTeamsInvalid: `Enter a whole number from ${MIN_MAXIMUM_TEAMS} to ${MAX_MAXIMUM_TEAMS}.`,
   maximumTeamsBelowTeams: (teamCount: number) =>
     `${teamCount} teams are registered. Enter ${teamCount} or more.`,
+  undoMaximumTeamsBelowTeams: (teamCount: number, earlierMaximum: number) =>
+    `${teamCount} teams are registered, more than the earlier maximum of ${earlierMaximum}, so it cannot be undone.`,
   changedWhileEditing:
     'Someone else changed this tournament while you were editing. Check the details and save again.',
   changedSince: 'The tournament details changed since this save, so it cannot be undone.',

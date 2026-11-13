@@ -211,6 +211,12 @@ describe('checkTournamentDetails', () => {
     });
   });
 
+  test('words the Undo refusal by its reason, with the earlier maximum', () => {
+    expect(TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(6, 4)).toBe(
+      '6 teams are registered, more than the earlier maximum of 4, so it cannot be undone.',
+    );
+  });
+
   test('refuses a maximum outside 2 to 128 with the range message, before it checks the team count', () => {
     expect(detailsErrorsOf({ maximumTeams: 1, teamCount: 4 }).maximumTeams?.code).toBe(
       'maximumTeamsInvalid',

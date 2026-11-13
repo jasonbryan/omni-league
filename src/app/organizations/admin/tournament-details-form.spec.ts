@@ -143,10 +143,24 @@ describe('TournamentDetailsForm', () => {
       expect(text(section())).not.toContain('Sets per game');
     });
 
-    it('says what the maximum cannot go below', async () => {
+    it('says the range and how many teams are registered, which the maximum cannot go below', async () => {
       await open();
-      expect(text(page.querySelector('#details-maximum-teams-description'))).toContain(
-        '3 teams are registered',
+      expect(text(page.querySelector('#details-maximum-teams-description'))).toBe(
+        'The most teams the bracket takes, from 2 to 128. 3 teams are registered.',
+      );
+    });
+
+    it('uses the singular for one team, and says nothing for none', async () => {
+      await open({ ...TOURNAMENT, teamCount: 1 });
+      expect(text(page.querySelector('#details-maximum-teams-description'))).toBe(
+        'The most teams the bracket takes, from 2 to 128. 1 team is registered.',
+      );
+    });
+
+    it('says only the range when no team is registered', async () => {
+      await open({ ...TOURNAMENT, teamCount: 0 });
+      expect(text(page.querySelector('#details-maximum-teams-description'))).toBe(
+        'The most teams the bracket takes, from 2 to 128.',
       );
     });
 
@@ -327,11 +341,13 @@ describe('TournamentDetailsForm', () => {
         new ConvexError({
           field: 'maximumTeams',
           code: 'maximumTeamsBelowTeams',
-          message: TOURNAMENT_MESSAGES.maximumTeamsBelowTeams(6),
+          message: TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(6, 4),
         }),
       );
       await o.flush();
-      expect(text(status())).toContain('6 teams are registered. Enter 6 or more.');
+      expect(text(status())).toContain(
+        '6 teams are registered, more than the earlier maximum of 4, so it cannot be undone.',
+      );
       expect(text(undoButton())).toBe('Undo');
       expect(input('maximum-teams').value).toBe('6');
     });

@@ -22,6 +22,7 @@ import {
   sameEditable,
   setsPerGameIsChosen,
 } from '../../../../convex/lib/tournamentEdit';
+import { MAX_MAXIMUM_TEAMS, MIN_MAXIMUM_TEAMS } from '../../../../convex/lib/tournamentInput';
 import {
   api,
   ConvexOfflineError,
@@ -298,8 +299,9 @@ export class TournamentDetailsForm implements OnInit {
   });
   protected readonly maximumDescription = computed(() => {
     const teams = this.tournament().teamCount;
-    const range = 'The most teams the bracket takes, from 2 to 128.';
-    return teams === 0 ? range : `${range} ${teams} teams are registered.`;
+    const range = `The most teams the bracket takes, from ${MIN_MAXIMUM_TEAMS} to ${MAX_MAXIMUM_TEAMS}.`;
+    if (teams === 0) return range;
+    return `${range} ${teams} ${teams === 1 ? 'team is' : 'teams are'} registered.`;
   });
 
   private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
