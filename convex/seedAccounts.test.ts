@@ -306,7 +306,7 @@ describe('seed:demo accounts: a new deployment', () => {
         memberships: 5,
         invites: 1,
         teams: 10,
-        teamInvites: 2,
+        teamInvites: 4,
         freeAgents: 6,
         accounts: ALL('created'),
       });
@@ -630,7 +630,7 @@ describe('seed:demo accounts: the demo teams', () => {
         tournament: 'gulf-coast-beach-open',
         teamCount: 4,
         captains: {
-          'Sand Crabs': [EMAILS.player, 1],
+          'Sand Crabs': [EMAILS.player, 2],
           'Beach Bombers': [FICTIONAL_CAPTAINS[0], 1],
           'Set Point': [FICTIONAL_CAPTAINS[1], 1],
           'Spike Squad': [FICTIONAL_CAPTAINS[2], 1],
@@ -739,7 +739,7 @@ describe('seed:demo accounts: the demo teams', () => {
     async () => {
       const t = setup();
       const first = await run(t);
-      expect(first.teamInvites).toBe(2);
+      expect(first.teamInvites).toBe(4);
       const captain = await as(t, EMAILS.captain);
       const registration = await captain.query(api.seasons.getForRegistration, {
         orgSlug: GULF_COAST,
@@ -760,13 +760,49 @@ describe('seed:demo accounts: the demo teams', () => {
         ['demo-invite-1', 'pending'],
         ['demo-invite-2', 'pending'],
         ['demo-invite-player', 'accepted'],
+        ['demo-invite-tournament-1', 'pending'],
+        ['demo-invite-tournament-player', 'accepted'],
       ]);
       for (const marker of markers) expect(marker).not.toMatch(/^[0-9a-f]{64}$/);
       expect(await hashInviteToken('demo-invite-1')).toMatch(/^[0-9a-f]{64}$/);
 
       await captain.mutation(api.teamInvites.revoke, { inviteId: pending.rows[0].inviteId });
       expect((await run(t)).teamInvites).toBe(0);
-      expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(3);
+      expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(5);
+    },
+    SLOW,
+  );
+
+  test(
+    'puts one pending invite and one accepted player on Sand Crabs, once, which player@ sees',
+    async () => {
+      const t = setup();
+      await run(t);
+      expect((await run(t)).teamInvites).toBe(0);
+      const player = await as(t, EMAILS.player);
+      const teams = await player.query(api.teams.listMine, {});
+      const crabs = teams.find((team) => team.teamName === 'Sand Crabs');
+      if (!crabs) throw new Error('Sand Crabs missing');
+      expect(crabs).toMatchObject({ tournamentName: 'Gulf Coast Beach Open', rosterCount: 2 });
+      const team = await player.query(api.teams.getForMember, { teamId: crabs.teamId });
+      expect(team?.roster.map((row) => row.name)).toEqual([expect.any(String), 'Theo Grant']);
+      const pending = await player.query(api.teamInvites.listPending, { teamId: crabs.teamId });
+      expect(pending.rows.map((row) => row.email)).toEqual([`ari.silva@${DOMAIN}`]);
+      expect(pending.total).toBe(1);
+      const rows = await t.run(async (ctx) =>
+        (await ctx.db.query('teamInvites').collect()).filter((row) =>
+          row.tokenHash.startsWith('demo-invite-tournament'),
+        ),
+      );
+      expect(rows.map((row) => [row.tokenHash, row.status])).toEqual([
+        ['demo-invite-tournament-1', 'pending'],
+        ['demo-invite-tournament-player', 'accepted'],
+      ]);
+      for (const row of rows) expect(row).not.toHaveProperty('seasonId');
+      const entries = await t.run((ctx) => ctx.db.query('rosterEntries').collect());
+      const theo = entries.filter((entry) => entry.source === 'invite' && entry.tournamentId);
+      expect(theo).toHaveLength(1);
+      expect(theo[0]).not.toHaveProperty('seasonId');
     },
     SLOW,
   );
@@ -882,7 +918,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(14);
+      expect(rosterEntries).toHaveLength(15);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -1166,6 +1202,10 @@ describe('seed:demo accounts: the production guard', () => {
     [
       'insertDemoTeamPlayer',
       (t) => t.mutation(internal.seed.insertDemoTeamPlayer, { authUserId: 'someone' }),
+    ],
+    [
+      'insertDemoTournamentInvites',
+      (t) => t.mutation(internal.seed.insertDemoTournamentInvites, { people: [] }),
     ],
   ];
 

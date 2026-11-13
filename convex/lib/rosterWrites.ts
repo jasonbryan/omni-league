@@ -8,7 +8,10 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import {
   MAX_MINORS_PER_GUARDIAN_IN_SEASON,
   MINOR_MESSAGES,
+  minorInMessage,
+  minorLimitMessage,
   minorNameKey,
+  type MinorScope,
   type MinorInSeasonRefusal,
   type MinorLimitRefusal,
   type NothingChosenRefusal,
@@ -76,19 +79,61 @@ export async function adultEntryInSeason(
     .first();
 }
 
-export async function adultEntryInTournament(
+/** Removed ones included, so the minor limit counts them. */
+async function entriesInTournament(
   ctx: ReadCtx,
   tournamentId: Id<'tournaments'>,
   userId: Id<'users'>,
-): Promise<Doc<'rosterEntries'> | null> {
-  const entries = await ctx.db
+): Promise<Doc<'rosterEntries'>[]> {
+  return ctx.db
     .query('rosterEntries')
     .withIndex('by_tournamentId_and_userId', (q) =>
       q.eq('tournamentId', tournamentId).eq('userId', userId),
     )
     .order('desc')
     .take(TOURNAMENT_ENTRIES_READ_LIMIT);
+}
+
+export async function adultEntryInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'> | null> {
+  const entries = await entriesInTournament(ctx, tournamentId, userId);
   return entries.find((entry) => entry.status === 'rostered' && !isMinorEntry(entry)) ?? null;
+}
+
+export async function rosteredEntriesInTournament(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  const rostered = (await entriesInTournament(ctx, tournamentId, userId)).filter(
+    (entry) => entry.status === 'rostered',
+  );
+  const adult = rostered.find((entry) => !isMinorEntry(entry));
+  const minors = rostered.filter(isMinorEntry);
+  return adult ? [adult, ...minors] : minors;
+}
+
+export async function adultEntryInTeamParent(
+  ctx: ReadCtx,
+  team: Doc<'teams'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'> | null> {
+  return team.tournamentId !== undefined
+    ? adultEntryInTournament(ctx, team.tournamentId, userId)
+    : adultEntryInSeason(ctx, seasonIdOf(team), userId);
+}
+
+export async function rosteredEntriesInTeamParent(
+  ctx: ReadCtx,
+  team: Doc<'teams'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return team.tournamentId !== undefined
+    ? rosteredEntriesInTournament(ctx, team.tournamentId, userId)
+    : rosteredEntriesInSeason(ctx, seasonIdOf(team), userId);
 }
 
 /** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`. */
@@ -104,6 +149,19 @@ async function minorEntriesInSeason(
     )
     .take(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
 }
+
+async function minorEntriesIn(
+  ctx: ReadCtx,
+  parent: { seasonId?: Id<'seasons'> | undefined; tournamentId?: Id<'tournaments'> | undefined },
+  guardianUserId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return parent.tournamentId !== undefined
+    ? (await entriesInTournament(ctx, parent.tournamentId, guardianUserId)).filter(isMinorEntry)
+    : minorEntriesInSeason(ctx, seasonIdOf(parent), guardianUserId);
+}
+
+const scopeOf = (parent: { tournamentId?: Id<'tournaments'> | undefined }): MinorScope =>
+  parent.tournamentId !== undefined ? 'tournament' : 'season';
 
 export async function rosteredEntriesInSeason(
   ctx: ReadCtx,
@@ -554,8 +612,9 @@ export interface NewMinorEntry {
 }
 
 // A minor has no identity beyond its guardian and name, so the check cannot match minors across guardians.
-async function assertMinorNotInSeason(
+async function assertMinorNotIn(
   ctx: ReadCtx,
+  scope: MinorScope,
   minors: Doc<'rosterEntries'>[],
   minorName: string,
   renamedEntryId: Id<'rosterEntries'> | null,
@@ -576,7 +635,8 @@ async function assertMinorNotInSeason(
     code: 'minorInSeason',
     minorName: same.minorName,
     teamName,
-    message: MINOR_MESSAGES.minorInSeason(same.minorName, teamName),
+    ...(scope === 'tournament' && { inTournament: true as const }),
+    message: minorInMessage(scope, same.minorName, teamName),
   });
 }
 
@@ -586,18 +646,19 @@ export async function addMinorEntry(
   team: Doc<'teams'>,
   entry: NewMinorEntry,
 ): Promise<Id<'rosterEntries'>> {
-  const seasonId = seasonIdOf(team);
-  await assertNotWaitlisted(ctx, seasonId, entry.guardianUserId);
-  const minors = await minorEntriesInSeason(ctx, seasonId, entry.guardianUserId);
-  await assertMinorNotInSeason(ctx, minors, entry.minorName, null);
+  const parent = parentFieldsOf(team);
+  if ('seasonId' in parent) await assertNotWaitlisted(ctx, parent.seasonId, entry.guardianUserId);
+  const minors = await minorEntriesIn(ctx, parent, entry.guardianUserId);
+  const scope = scopeOf(team);
+  await assertMinorNotIn(ctx, scope, minors, entry.minorName, null);
   // Removed entries count too, so adding and removing cannot grow a guardian's entries past the read window.
   if (minors.length >= MAX_MINORS_PER_GUARDIAN_IN_SEASON) {
-    refuse({ field: 'minorName', code: 'minorLimit', message: MINOR_MESSAGES.minorLimit });
+    refuse({ field: 'minorName', code: 'minorLimit', message: minorLimitMessage(scope) });
   }
   await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
-    seasonId,
+    ...parent,
     teamId: team._id,
     userId: entry.guardianUserId,
     minorName: entry.minorName,
@@ -619,8 +680,8 @@ export async function renameMinorEntry(
   if (!isMinorEntry(entry) || entry.status !== 'rostered') {
     throw new Error('Only a rostered minor can be renamed');
   }
-  const minors = await minorEntriesInSeason(ctx, seasonIdOf(entry), entry.userId);
-  await assertMinorNotInSeason(ctx, minors, minorName, entry._id);
+  const minors = await minorEntriesIn(ctx, entry, entry.userId);
+  await assertMinorNotIn(ctx, scopeOf(entry), minors, minorName, entry._id);
   await ctx.db.patch('rosterEntries', entry._id, { minorName });
 }
 
@@ -750,6 +811,7 @@ export async function insertTeamInvite(
   team: Doc<'teams'>,
   invite: NewTeamInvite,
 ): Promise<Id<'teamInvites'>> {
+  const parent = parentFieldsOf(team);
   await assertTeamHasRoom(ctx, team._id);
   if (await pendingTeamInvite(ctx, team._id, invite.email)) {
     refuse({
@@ -760,7 +822,7 @@ export async function insertTeamInvite(
   }
   const inviteId = await ctx.db.insert('teamInvites', {
     organizationId: team.organizationId,
-    seasonId: seasonIdOf(team),
+    ...('seasonId' in parent && { seasonId: parent.seasonId }),
     teamId: team._id,
     email: invite.email,
     tokenHash: invite.tokenHash,

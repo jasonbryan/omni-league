@@ -12,12 +12,12 @@ import {
 import { requireTeamManager, requireUser } from './lib/access';
 import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
-import { findUsableTeamInvite } from './lib/inviteLookup';
+import { findUsableTeamInvite, publishedTeamParent, teamParentName } from './lib/inviteLookup';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
 import { checkMinorName } from './lib/minorName';
 import {
   acceptTeamInvite,
-  adultEntryInSeason,
+  adultEntryInTeamParent,
   insertTeamInvite,
   revokeTeamInvite,
 } from './lib/rosterWrites';
@@ -69,7 +69,6 @@ export const create = action({
 async function isOnTeam(
   ctx: Pick<MutationCtx, 'db' | 'runQuery'>,
   team: Doc<'teams'>,
-  seasonId: Id<'seasons'>,
   email: string,
 ): Promise<boolean> {
   const authUserId = await authUserIdByEmail(ctx, email);
@@ -79,11 +78,11 @@ async function isOnTeam(
     .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
     .unique();
   if (!user) return false;
-  const entry = await adultEntryInSeason(ctx, seasonId, user._id);
+  const entry = await adultEntryInTeamParent(ctx, team, user._id);
   return entry?.teamId === team._id;
 }
 
-// Someone on another team of the season is not refused here, so a captain learns nothing about
+// Someone on another team of the season or tournament is not refused here, so a captain learns nothing about
 // other teams; accepting refuses them.
 export const insertPending = internalMutation({
   args: { teamId: v.id('teams'), email: v.string(), tokenHash: v.string() },
@@ -92,13 +91,12 @@ export const insertPending = internalMutation({
     await requireUser(ctx);
     const team = await teamOf(ctx, args.teamId);
     const user = await requireTeamManager(ctx, team);
-    const season = team.seasonId ? await ctx.db.get('seasons', team.seasonId) : null;
-    if (season?.status !== 'published') throw new Error('Not allowed');
+    if (!(await publishedTeamParent(ctx, team))) throw new Error('Not allowed');
 
     const checked = checkTeamInviteEmail(args.email);
     if (!checked.ok) refuse(checked.error);
     const { email } = checked;
-    if (await isOnTeam(ctx, team, season._id, email)) {
+    if (await isOnTeam(ctx, team, email)) {
       refuse({
         field: 'email',
         code: 'alreadyOnTeam',
@@ -166,28 +164,42 @@ export const getByToken = query({
     v.object({
       status: v.literal('valid'),
       teamName: v.string(),
+      /** A tournament team's `seasonName` and `leagueName` hold the tournament's name and the organization's, as the previous frontend reads them. */
       seasonName: v.string(),
       leagueName: v.string(),
       organizationName: v.string(),
       expiresAt: v.number(),
+      tournamentName: v.optional(v.string()),
+      tournamentSlug: v.optional(v.string()),
+      organizationSlug: v.optional(v.string()),
     }),
     v.object({ status: v.literal('invalid') }),
   ),
   handler: async (ctx, { token }) => {
     const found = await findUsableTeamInvite(ctx, token, Date.now());
     if (!found) return { status: 'invalid' as const };
-    const { invite, team, season } = found;
-    const league = team.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
+    const { invite, team, parent } = found;
     const organization = await ctx.db.get('organizations', team.organizationId);
-    if (!league || !organization) return { status: 'invalid' as const };
-    return {
+    if (!organization) return { status: 'invalid' as const };
+    const common = {
       status: 'valid' as const,
       teamName: team.name,
-      seasonName: season.name,
-      leagueName: league.name,
       organizationName: organization.name,
       expiresAt: invite.expiresAt,
     };
+    if (parent.kind === 'tournament') {
+      return {
+        ...common,
+        seasonName: parent.program.name,
+        leagueName: organization.name,
+        tournamentName: parent.program.name,
+        tournamentSlug: parent.program.slug,
+        organizationSlug: organization.slug,
+      };
+    }
+    const league = team.leagueId ? await ctx.db.get('leagues', team.leagueId) : null;
+    if (!league) return { status: 'invalid' as const };
+    return { ...common, seasonName: parent.season.name, leagueName: league.name };
   },
 });
 
@@ -216,7 +228,7 @@ export const accept = mutation({
     }
     const found = await findUsableTeamInvite(ctx, token, Date.now());
     if (!found) refuseAccept('invalid');
-    const { invite, team, season } = found;
+    const { invite, team, parent } = found;
 
     const accountEmail = (await authEmailOf(ctx, user.authUserId)) ?? '';
     if (accountEmail === '' || !timingSafeEqual(accountEmail, invite.email)) {
@@ -225,7 +237,7 @@ export const accept = mutation({
 
     // The writer refuses this too; here the refusal also carries the id, so the page links to the
     // caller's own team.
-    const entry = joinSelf ? await adultEntryInSeason(ctx, season._id, user._id) : null;
+    const entry = joinSelf ? await adultEntryInTeamParent(ctx, team, user._id) : null;
     if (entry?.teamId === team._id) {
       throw new ConvexError({
         code: 'alreadyOnTeam' satisfies TeamInviteAcceptCode,
@@ -239,7 +251,7 @@ export const accept = mutation({
     return {
       teamId: team._id,
       teamName: team.name,
-      seasonName: season.name,
+      seasonName: teamParentName(parent),
       captainName: captain?.name ?? '',
       joinedSelf: joinSelf,
       minorName,

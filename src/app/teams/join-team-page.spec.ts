@@ -32,6 +32,18 @@ const INVITE = {
   organizationName: 'Gulf Coast Sport & Social',
   expiresAt: EXPIRES,
 };
+// A tournament team fills the season and league fields the previous frontend reads.
+const TOURNAMENT_INVITE = {
+  status: 'valid',
+  teamName: 'Sand Crabs',
+  seasonName: 'Gulf Coast Beach Open',
+  leagueName: 'Gulf Coast Sport & Social',
+  organizationName: 'Gulf Coast Sport & Social',
+  expiresAt: EXPIRES,
+  tournamentName: 'Gulf Coast Beach Open',
+  tournamentSlug: 'gulf-coast-beach-open',
+  organizationSlug: 'gulf-coast-sport-social',
+};
 const JOINED = {
   teamId: 'team123',
   teamName: 'Sand Sharks',
@@ -255,6 +267,107 @@ describe('JoinTeamPage', () => {
       ]);
       expect(page.querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Team invite | Omni League');
+    });
+  });
+
+  describe('a tournament team', () => {
+    it('names the tournament, linking to its page, in place of the season and league', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(TOURNAMENT_INVITE);
+      expect(text(page.querySelector('h1'))).toBe('Join Sand Crabs');
+      const rows = [...page.querySelectorAll('dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+      expect(rows).toEqual([
+        ['Team', 'Sand Crabs'],
+        ['Tournament', 'Gulf Coast Beach Open'],
+        ['Organization', 'Gulf Coast Sport & Social'],
+        ['Expires', 'Oct 23, 2026'],
+      ]);
+      expect(
+        [...page.querySelectorAll('dl a')].map((a) => [text(a), a.getAttribute('href')]),
+      ).toEqual([
+        [
+          'Gulf Coast Beach Open',
+          '/organizations/gulf-coast-sport-social/tournaments/gulf-coast-beach-open',
+        ],
+      ]);
+    });
+
+    it('a season invite carries no link in its details', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite(INVITE);
+      expect(page.querySelectorAll('dl a')).toHaveLength(0);
+    });
+
+    it('on another team in the tournament: says so in the tournament’s words and offers the minor', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(TOURNAMENT_INVITE);
+      await ctx.signIn();
+      ctx.accept()?.click();
+      await ctx.flush();
+      ctx.call()?.reject(
+        new ConvexError({
+          code: 'alreadyOnAnotherTeam',
+          teamName: 'Net Results',
+          message: 'Already on Net Results in this tournament.',
+        }),
+      );
+      await ctx.flush();
+      const alert = ctx.page.querySelector('[role="alert"]');
+      expect([
+        text(alert?.querySelector('[data-slot="alert-title"]')),
+        text(alert?.querySelector('[data-slot="alert-description"]')),
+      ]).toEqual([
+        'You’re already on Net Results in this tournament.',
+        'Each person plays on one team per tournament, so you can’t join Sand Crabs yourself. You can still add a minor you’re responsible for.',
+      ]);
+      expectSelfBlocked(ctx.page, 'Not available: you’re on Net Results in this tournament.');
+    });
+
+    it('on success: names the tournament as the roster’s', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(TOURNAMENT_INVITE);
+      await ctx.signIn();
+      ctx.accept()?.click();
+      await ctx.flush();
+      await ctx.emitInvite({ status: 'invalid' });
+      ctx.call()?.resolve({
+        ...JOINED,
+        teamName: 'Sand Crabs',
+        seasonName: 'Gulf Coast Beach Open',
+      });
+      await ctx.flush();
+      expect(text(ctx.page.querySelector('h1 + p'))).toBe(
+        'You’re on the roster for Gulf Coast Beach Open. Tasha Greene is the captain.',
+      );
+    });
+
+    it('a minor already in the tournament shows the tournament’s words under the field', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(TOURNAMENT_INVITE);
+      await ctx.signIn();
+      checkbox(ctx.page, 'join-minor').click();
+      await ctx.flush();
+      typeMinor(ctx.page, 'theo  bell');
+      await ctx.flush();
+      ctx.accept()?.click();
+      await ctx.flush();
+      ctx.call()?.reject(
+        new ConvexError({
+          field: 'minorName',
+          code: 'minorInSeason',
+          minorName: 'Theo Bell',
+          teamName: 'Net Results',
+          inTournament: true,
+          message: 'Theo Bell is already on Net Results in this tournament.',
+        }),
+      );
+      await ctx.flush();
+      expect(text(ctx.page.querySelector('#minor-name-error'))).toBe(
+        'Theo Bell is already on Net Results in this tournament.',
+      );
     });
   });
 

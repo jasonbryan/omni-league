@@ -21,7 +21,7 @@ describe('nextStep', () => {
     expect(nextStep([team()], NOW)).toEqual({
       teamId: 'k1',
       teamName: 'Sand Sharks',
-      leagueName: 'Sunday Reverse Coed 4s',
+      programName: 'Sunday Reverse Coed 4s',
       playersNeeded: 1,
       minimumRosterSize: 4,
       registrationDeadline: '2027-05-23',
@@ -48,8 +48,29 @@ describe('nextStep', () => {
     );
   });
 
-  it('names nothing for a tournament team, whose captain has no invites to send yet', () => {
-    expect(nextStep([team({ tournamentName: 'Gulf Coast Beach Open' })], NOW)).toBeNull();
+  it('names a captained tournament team below its minimum by the tournament, not the organization', () => {
+    const crabs = team({
+      teamId: 't1',
+      teamName: 'Sand Crabs',
+      leagueName: 'Gulf Coast Sport & Social',
+      tournamentName: 'Gulf Coast Beach Open',
+      minimumRosterSize: 2,
+      rosterCount: 1,
+    });
+    expect(nextStep([crabs], NOW)).toEqual({
+      teamId: 't1',
+      teamName: 'Sand Crabs',
+      programName: 'Gulf Coast Beach Open',
+      playersNeeded: 1,
+      minimumRosterSize: 2,
+      registrationDeadline: '2027-05-23',
+    });
+  });
+
+  it('names nothing for a tournament team that meets its minimum, or that the user only plays on', () => {
+    const tournament = { tournamentName: 'Gulf Coast Beach Open', minimumRosterSize: 2 };
+    expect(nextStep([team({ ...tournament, rosterCount: 2 })], NOW)).toBeNull();
+    expect(nextStep([team({ ...tournament, rosterCount: 1, role: 'player' })], NOW)).toBeNull();
   });
 
   it('names nothing for a team the user only plays on or guards', () => {

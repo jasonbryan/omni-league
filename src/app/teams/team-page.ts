@@ -139,11 +139,12 @@ export interface TeamPageNavigationState {
               </h1>
               <p class="mt-3 text-balance text-muted-foreground">
                 @if (forbiddenTournamentTeam()) {
-                  Only its players and the people who run it can see it.
+                  Only the players on teams in its tournament and the people who run it can see it.
                 } @else {
                   Only the players on teams in its season and the league&rsquo;s organizers can see
-                  it. If you were removed from the team, ask the captain to invite you again.
+                  it.
                 }
+                If you were removed from the team, ask the captain to invite you again.
               </p>
               <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
                 ><ng-icon name="lucideArrowLeft" data-icon="inline-start" aria-hidden="true" />Go to
@@ -217,7 +218,7 @@ export interface TeamPageNavigationState {
                         name="lucideCrown"
                         class="mt-0.5 shrink-0 text-base"
                         aria-hidden="true"
-                      /><span>{{ captainLine() }}</span>
+                      /><span>{{ captainLine }}</span>
                     </p>
                   } @else if (team.viewerCanManage) {
                     <p class="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
@@ -240,7 +241,7 @@ export interface TeamPageNavigationState {
                     </p>
                   }
                 </div>
-                @if (team.viewerCanManage && !team.tournament) {
+                @if (team.viewerCanManage) {
                   <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
                   <a
                     [href]="path() + '#invite'"
@@ -260,7 +261,7 @@ export interface TeamPageNavigationState {
                   #registeredStatus
                   kind="success"
                   [title]="registeredTitle()"
-                  [description]="registeredDescription()"
+                  [description]="registeredDescription"
                   class="mt-4"
                 />
               }
@@ -392,7 +393,7 @@ export interface TeamPageNavigationState {
                       }
                     </ul>
                   </section>
-                  @if (team.viewerCanManage && !team.tournament) {
+                  @if (team.viewerCanManage) {
                     <app-team-pending-invites
                       [rows]="pending.value()?.rows"
                       [total]="pending.value()?.total"
@@ -434,7 +435,7 @@ export interface TeamPageNavigationState {
                         </p>
                       </div>
                     </section>
-                  } @else if (!team.tournament) {
+                  } @else {
                     @if (team.viewerCanManage && teamIdOf(); as id) {
                       <app-team-invite-panel [teamId]="id" />
                     }
@@ -442,14 +443,13 @@ export interface TeamPageNavigationState {
                       <app-add-minor-panel [teamId]="id" [teamName]="team.name" />
                     }
                   }
-                  @if (!team.tournament) {
-                    <app-season-teams-panel
-                      [rows]="seasonTeams.value()?.rows"
-                      [total]="seasonTeams.value()?.total"
-                      [failed]="seasonTeams.error() !== undefined"
-                      [currentTeamId]="teamId()"
-                    />
-                  }
+                  <app-season-teams-panel
+                    [rows]="seasonTeams.value()?.rows"
+                    [total]="seasonTeams.value()?.total"
+                    [failed]="seasonTeams.error() !== undefined"
+                    [currentTeamId]="teamId()"
+                    [scope]="team.tournament ? 'tournament' : 'season'"
+                  />
                 </div>
               </div>
             </div>
@@ -516,12 +516,12 @@ export class TeamPage {
   protected readonly pending = injectQuery(api.teamInvites.listPending, () => {
     const id = this.teamIdOf();
     const team = this.team();
-    return id && team?.viewerCanManage && !team.tournament ? { teamId: id } : skipToken;
+    return id && team?.viewerCanManage ? { teamId: id } : skipToken;
   });
 
   protected readonly seasonTeams = injectQuery(api.teams.listForSeasonMember, () => {
     const id = this.teamIdOf();
-    return id && !this.team()?.tournament ? { teamId: id } : skipToken;
+    return id ? { teamId: id } : skipToken;
   });
 
   protected readonly viewerNote = computed(() => {
@@ -542,7 +542,7 @@ export class TeamPage {
     if (team.viewerTeamName === null) return null;
     return {
       icon: 'lucideEye',
-      text: `You’re on ${team.viewerTeamName}. Teams in a season see each other’s rosters, so everyone who plays is listed.`,
+      text: `You’re on ${team.viewerTeamName}. Teams in a ${team.tournament ? 'tournament' : 'season'} see each other’s rosters, so everyone who plays is listed.`,
     };
   });
 
@@ -567,20 +567,12 @@ export class TeamPage {
       ? `${team.name} is registered for ${team.tournament?.name ?? this.seasonName()}.`
       : '';
   });
-  protected readonly registeredDescription = computed(() =>
-    this.team()?.tournament
-      ? 'You’re the captain and the first player on the roster.'
-      : 'Invite your players next. Each invite link is shown once.',
-  );
-  protected readonly captainLine = computed(() =>
-    this.team()?.tournament
-      ? 'You’re the captain.'
-      : 'You’re the captain. You invite players and manage the roster.',
-  );
+  protected readonly registeredDescription =
+    'Invite your players next. Each invite link is shown once.';
+  protected readonly captainLine = 'You’re the captain. You invite players and manage the roster.';
   protected readonly organizerLine = computed(() => {
-    const team = this.team();
-    if (team?.tournament) return `You’re an organizer of ${team.organization.name}.`;
-    return `You’re an organizer of ${this.leagueName()}, so you can manage this team’s roster.`;
+    const organized = this.team()?.tournament?.name ?? this.leagueName();
+    return `You’re an organizer of ${organized}, so you can manage this team’s roster.`;
   });
   protected readonly seasonName = computed(() => this.team()?.season?.name ?? '');
   protected readonly leagueName = computed(() => this.team()?.league?.name ?? '');

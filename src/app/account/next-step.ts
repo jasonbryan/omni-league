@@ -15,7 +15,7 @@ export interface TeamForNextStep {
 export interface NextStep {
   teamId: string;
   teamName: string;
-  leagueName: string;
+  programName: string;
   playersNeeded: number;
   minimumRosterSize: number;
   registrationDeadline: string;
@@ -28,7 +28,6 @@ export function nextStep(teams: readonly TeamForNextStep[], nowMs: number): Next
   const [first] = teams
     .filter(
       (team) =>
-        team.tournamentName === undefined &&
         team.role === 'captain' &&
         team.rosterCount < team.minimumRosterSize &&
         registrationIsOpen(
@@ -45,7 +44,7 @@ export function nextStep(teams: readonly TeamForNextStep[], nowMs: number): Next
     ? {
         teamId: first.teamId,
         teamName: first.teamName,
-        leagueName: first.leagueName,
+        programName: first.tournamentName ?? first.leagueName,
         playersNeeded: first.minimumRosterSize - first.rosterCount,
         minimumRosterSize: first.minimumRosterSize,
         registrationDeadline: first.registrationDeadline,

@@ -33,7 +33,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
       <div
         class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
       >
-        <h2 id="season-teams-heading" class="font-semibold">Teams in this season</h2>
+        <h2 id="season-teams-heading" class="font-semibold">Teams in this {{ scope() }}</h2>
         @if (count(); as count) {
           <p data-testid="season-teams-count" class="text-sm text-muted-foreground tabular-nums">
             {{ count }}
@@ -44,7 +44,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
         <div class="px-4 py-4 md:px-5">
           <app-admin-alert
             kind="error"
-            title="The season’s teams could not be loaded."
+            [title]="'The ' + scope() + '’s teams could not be loaded.'"
             description="Check your connection and try again."
           />
         </div>
@@ -73,7 +73,7 @@ export function seasonTeamsCount(shown: number, total: number): string {
           }
         </ul>
       } @else {
-        <p role="status" class="sr-only">Loading the season’s teams.</p>
+        <p role="status" class="sr-only">Loading the {{ scope() }}’s teams.</p>
         <div aria-hidden="true" class="divide-y divide-border">
           @for (placeholder of placeholders; track placeholder) {
             <div class="flex min-h-11 items-center px-4 py-2.5 md:px-5">
@@ -90,6 +90,7 @@ export class SeasonTeamsPanel {
   readonly total = input<number | undefined>();
   readonly failed = input(false);
   readonly currentTeamId = input.required<string>();
+  readonly scope = input<'season' | 'tournament'>('season');
 
   protected readonly placeholders = [1, 2, 3];
   protected readonly href = teamPath;

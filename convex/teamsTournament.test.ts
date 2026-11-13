@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { FORBIDDEN_CODE } from './lib/forbidden';
-import { addMinorEntry, addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
+import { addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
 import {
   defaultDivision,
   insertDraftTournament,
@@ -592,7 +592,6 @@ describe('teams.getForMember for a tournament team', () => {
   test.each([
     ['a signed-out caller', null],
     ['a stranger', 'stranger'],
-    ['a captain of another team in the tournament', 'rival'],
     ['an admin of another organization', 'admin-b'],
     ['an organizer assigned to another tournament', 'organizer-other'],
     ['an organizer assigned to no program', 'organizer-none'],
@@ -604,11 +603,6 @@ describe('teams.getForMember for a tournament team', () => {
     expect((failure as { team?: string }).team).toBe(
       authUserId === null ? undefined : 'tournament',
     );
-  });
-
-  test('answers null for the season team list of a tournament team', async () => {
-    const { s, teamId } = await registered();
-    expect(await as(s, 'captain').query(api.teams.listForSeasonMember, { teamId })).toBeNull();
   });
 });
 
@@ -637,7 +631,7 @@ describe('teams.listMine for a tournament team', () => {
   });
 });
 
-describe('the season-only writes refuse a tournament team', () => {
+describe('the roster writer keeps a tournament team out of seasons', () => {
   test('a person added to a tournament team is rostered in the tournament, never in a season', async () => {
     vi.useFakeTimers({ now: OPEN_NOW });
     const s = await setup();
@@ -653,33 +647,5 @@ describe('the season-only writes refuse a tournament team', () => {
     expect(entries.map((entry) => entry.tournamentId)).toEqual([s.gulf, s.gulf]);
     expect(entries.some((entry) => 'seasonId' in entry)).toBe(false);
     await expectCountersMatchRecount(s);
-  });
-
-  test('adding a minor, inviting, and removing are refused, and nothing changes', async () => {
-    vi.useFakeTimers({ now: OPEN_NOW });
-    const s = await setup();
-    const { teamId } = await register(s, 'captain', 'Sand Crabs');
-    const before = await rows(s);
-    await expect(
-      as(s, 'captain').mutation(api.rosterEntries.addMinor, { teamId, minorName: 'Kid' }),
-    ).rejects.toThrow();
-    await expect(
-      s.t.run(async (ctx) =>
-        addMinorEntry(ctx, (await ctx.db.get('teams', teamId))!, {
-          guardianUserId: s.captain,
-          minorName: 'Kid',
-          source: 'guardian',
-          addedByUserId: s.captain,
-        }),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      as(s, 'captain').action(api.teamInvites.create, { teamId, email: 'new@example.test' }),
-    ).rejects.toThrow();
-    const entryId = before.entries[0]._id;
-    await expect(
-      as(s, 'admin-a').mutation(api.rosterEntries.remove, { rosterEntryId: entryId }),
-    ).rejects.toThrow();
-    expect(await rows(s)).toEqual(before);
   });
 });

@@ -297,7 +297,8 @@ export default defineSchema({
   // A pending invite is not a roster entry.
   teamInvites: defineTable({
     organizationId: v.id('organizations'),
-    seasonId: v.id('seasons'),
+    /** Set with the team's `seasonId`; a tournament team's invite has none, and the team names its tournament. */
+    seasonId: v.optional(v.id('seasons')),
     teamId: v.id('teams'),
     /** Trimmed and lowercased, so an address matches whatever its case. */
     email: v.string(),

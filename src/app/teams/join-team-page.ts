@@ -44,6 +44,7 @@ import { InviteOfflineAlert } from '../invites/invite-offline-alert';
 import { TeamInviteTokenStore } from '../invites/invite-token-store';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
 import { formatDay } from '../organizations/admin/format-day';
+import { publicTournamentPath } from '../organizations/public-tournament/public-tournament-path';
 import { PageLoadStatus } from '../public-layout/page-load-status';
 import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
@@ -63,6 +64,16 @@ interface TeamInviteSummary {
   leagueName: string;
   organizationName: string;
   expiresAt: number;
+  /** Set for a tournament team, whose `seasonName` and `leagueName` are stand-ins. */
+  tournamentName?: string | undefined;
+  tournamentSlug?: string | undefined;
+  organizationSlug?: string | undefined;
+}
+
+interface DetailRow {
+  term: string;
+  value: string;
+  href?: string;
 }
 
 interface JoinedTeam {
@@ -306,7 +317,13 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                     @for (row of details(); track row.term) {
                       <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
                         <dt class="text-muted-foreground">{{ row.term }}</dt>
-                        <dd class="font-medium sm:text-end">{{ row.value }}</dd>
+                        <dd class="font-medium sm:text-end">
+                          @if (row.href) {
+                            <a [routerLink]="row.href" [class]="inlineLink">{{ row.value }}</a>
+                          } @else {
+                            {{ row.value }}
+                          }
+                        </dd>
                       </div>
                     }
                   </dl>
@@ -576,6 +593,7 @@ export class JoinTeamPage {
   protected readonly returnToParams = { returnTo: JOIN_TEAM_PATH };
   protected readonly path = JOIN_TEAM_PATH;
   protected readonly offlineDescription = OFFLINE_DESCRIPTION;
+  protected readonly inlineLink = 'underline underline-offset-4 hover:text-foreground';
 
   /** Read again only when the guard captures another link while the page is open; a new token starts the page over. */
   private readonly token = linkedSignal({
@@ -635,7 +653,7 @@ export class JoinTeamPage {
   protected readonly joinSelfDescription = computed(() => {
     const blocked = this.selfBlocked();
     if (blocked?.kind === 'otherTeam') {
-      return `Not available: you’re on ${blocked.teamName} in this season.`;
+      return `Not available: you’re on ${blocked.teamName} in this ${this.playsIn()}.`;
     }
     if (blocked?.kind === 'freeAgent') return 'Not available: an organizer places free agents.';
     return 'You play on this team.';
@@ -675,13 +693,32 @@ export class JoinTeamPage {
 
   protected readonly view = computed<View>(() => (this.stalled() ? 'loadFailed' : this.phase()));
 
-  protected readonly details = computed(() => {
+  private readonly playsIn = computed(() =>
+    this.summary()?.tournamentName === undefined ? 'season' : 'tournament',
+  );
+
+  protected readonly details = computed<DetailRow[]>(() => {
     const invite = this.summary();
     if (!invite) return [];
+    const where: DetailRow[] =
+      invite.tournamentName === undefined
+        ? [
+            { term: 'Season', value: invite.seasonName },
+            { term: 'League', value: invite.leagueName },
+          ]
+        : [
+            {
+              term: 'Tournament',
+              value: invite.tournamentName,
+              ...(invite.organizationSlug &&
+                invite.tournamentSlug && {
+                  href: publicTournamentPath(invite.organizationSlug, invite.tournamentSlug),
+                }),
+            },
+          ];
     return [
       { term: 'Team', value: invite.teamName },
-      { term: 'Season', value: invite.seasonName },
-      { term: 'League', value: invite.leagueName },
+      ...where,
       { term: 'Organization', value: invite.organizationName },
       { term: 'Expires', value: formatDay(invite.expiresAt) },
     ];
@@ -708,6 +745,7 @@ export class JoinTeamPage {
     const refusal = this.refusal();
     const teamName = this.summary()?.teamName ?? '';
     const leagueName = this.summary()?.leagueName ?? '';
+    const playsIn = this.playsIn();
     switch (refusal?.kind) {
       case 'emailMismatch':
         return {
@@ -724,8 +762,8 @@ export class JoinTeamPage {
       case 'alreadyOnAnotherTeam':
         return {
           alert: 'info',
-          title: `You’re already on ${refusal.teamName} in this season.`,
-          description: `Each person plays on one team per season, so you can’t join ${teamName} yourself. You can still add a minor you’re responsible for.`,
+          title: `You’re already on ${refusal.teamName} in this ${playsIn}.`,
+          description: `Each person plays on one team per ${playsIn}, so you can’t join ${teamName} yourself. You can still add a minor you’re responsible for.`,
         };
       case 'waitingFreeAgent':
         return {
