@@ -83,17 +83,28 @@ export const SESSION = '@session';
 export const ROUTE_SPECS = {
   '': ['install', 'pwa', 'pwa-kill-switch'],
   leagues: ['find-a-league'],
+  organizations: ['not-found'],
+  'organizations/': ['not-found'],
   'organizations/:orgSlug': [
     'organization-page',
     'organization-page-manage',
     'organization-filters',
+    'organization-route-preload',
   ],
-  'organizations/:orgSlug/sports/:sport': ['sport-view'],
-  'organizations/:orgSlug/leagues/:leagueSlug': ['league-page', 'league-page-offline'],
-  'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': ['season-page'],
+  'organizations/:orgSlug/sports/:sport': ['sport-view', 'organization-route-preload'],
+  'organizations/:orgSlug/leagues/:leagueSlug': [
+    'league-page',
+    'league-page-offline',
+    'organization-route-preload',
+  ],
+  'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': [
+    'season-page',
+    'organization-route-preload',
+  ],
   'organizations/:orgSlug/tournaments/:tournamentSlug': [
     'tournament-page',
     'tournament-registration',
+    'organization-route-preload',
   ],
   'sign-up': ['sign-up', 'auth-session', 'after-sign-in'],
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
@@ -300,6 +311,7 @@ const CLIENT_ROUTE_TABLES = [
   'src/app/app.routes.ts',
   'src/app/app.routes.app.ts',
   'src/app/app.routes.invites.ts',
+  'src/app/app.routes.organizations.ts',
 ];
 const ROUTE_TABLES = new Set([...CLIENT_ROUTE_TABLES, 'src/app/app.routes.server.ts']);
 // `import type`, `export … from`, `export * from`, and multi-line named imports all end in `from '…'`.
