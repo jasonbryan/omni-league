@@ -18,6 +18,7 @@ import {
   lucideCalendarDays,
   lucideCircleCheck,
   lucideCircleDashed,
+  lucideCopy,
   lucideGlobe,
   lucideMapPin,
   lucideUsers,
@@ -32,6 +33,7 @@ import { seasonDates } from '../league/season-dates';
 import { publicTournamentNames } from '../public-tournament/public-tournament-names';
 import { publicTournamentPath } from '../public-tournament/public-tournament-path';
 import { AdminAlert } from './admin-alert';
+import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import {
   PublishTournamentDialog,
@@ -63,6 +65,7 @@ import { tournamentPath } from './tournament-path';
       lucideCalendarDays,
       lucideCircleCheck,
       lucideCircleDashed,
+      lucideCopy,
       lucideGlobe,
       lucideMapPin,
       lucideUsers,
@@ -111,27 +114,44 @@ import { tournamentPath } from './tournament-path';
                   {{ tournament.divisionLabel }}
                 </p>
               </div>
-              @if (tournament.status === 'published') {
-                <a
-                  [routerLink]="publicPath()"
-                  [state]="names()"
-                  data-slot="button"
-                  [class]="outlineButton"
-                  ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
-                  public page</a
-                >
-              } @else {
-                <button
-                  #publishButton
-                  type="button"
-                  data-slot="button"
-                  aria-haspopup="dialog"
-                  [class]="primaryButton"
-                  (click)="publish()"
-                >
-                  <ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />Publish
-                </button>
-              }
+              <div class="flex flex-wrap items-center gap-2">
+                @if (tournament.role === 'orgAdmin') {
+                  <a
+                    [routerLink]="copyPath()"
+                    [queryParams]="{ copyOf: tournament.slug }"
+                    fragment="create-tournament"
+                    data-slot="button"
+                    [class]="outlineButton"
+                    ><ng-icon name="lucideCopy" data-icon="inline-start" aria-hidden="true" />Copy
+                    to a new tournament</a
+                  >
+                }
+                @if (tournament.status === 'published') {
+                  <a
+                    [routerLink]="publicPath()"
+                    [state]="names()"
+                    data-slot="button"
+                    [class]="outlineButton"
+                    ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
+                    public page</a
+                  >
+                } @else {
+                  <button
+                    #publishButton
+                    type="button"
+                    data-slot="button"
+                    aria-haspopup="dialog"
+                    [class]="primaryButton"
+                    (click)="publish()"
+                  >
+                    <ng-icon
+                      name="lucideGlobe"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Publish
+                  </button>
+                }
+              </div>
             </div>
             @if (published()) {
               <app-admin-alert
@@ -279,6 +299,10 @@ export class TournamentManagement {
   protected readonly publicPath = computed(() => {
     const tournament = this.tournament();
     return tournament ? publicTournamentPath(tournament.organization.slug, tournament.slug) : '';
+  });
+  protected readonly copyPath = computed(() => {
+    const tournament = this.tournament();
+    return tournament ? adminPath(tournament.organization.slug, 'tournaments') : '';
   });
   protected readonly names = computed(() => {
     const tournament = this.tournament();

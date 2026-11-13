@@ -4,6 +4,8 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import type { StandardLevel } from './lib/divisions';
+import type { Sport } from './lib/sports';
 import {
   checkTournamentFields,
   firstTournamentError,
@@ -665,7 +667,11 @@ describe('tournaments.listForOrganization', () => {
   });
 });
 
-type Overrides = Partial<ReturnType<typeof valid>> & { customLevelId?: Id<'customLevels'> };
+type Overrides = Partial<Omit<ReturnType<typeof valid>, 'sport' | 'level'>> & {
+  sport?: Sport;
+  level?: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
+};
 
 async function draftIn(s: Setup, overrides: Overrides = {}) {
   const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
@@ -972,6 +978,229 @@ describe('tournaments.getForManagement', () => {
     await forbiddenBy(
       s.adminB.query(api.tournaments.getForManagement, { ...slugs, tournamentSlug: 'unknown' }),
     );
+  });
+});
+
+describe('tournaments.getForCopy', () => {
+  const args = { organizationSlug: 'org-a', slug: 'winter-doubles-classic' };
+
+  test('gives an org admin what a copy starts from, with the next free web address and no dates', async () => {
+    const s = await setup();
+    await draftIn(s, { locationIds: [s.bravo, s.alpha] });
+    expect(await s.adminA.query(api.tournaments.getForCopy, args)).toEqual({
+      name: 'Winter Doubles Classic',
+      slug: 'winter-doubles-classic-2',
+      sport: 'beachVolleyball',
+      locationIds: [s.bravo, s.alpha],
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'open',
+      ageGroup: 'adult',
+      maximumTeams: 16,
+      structure: 'bracket',
+      bracketType: 'single',
+    });
+  });
+
+  test('carries a custom level, and copies a published tournament too', async () => {
+    const s = await setup();
+    const customLevelId = await s.t.run((ctx) =>
+      insertCustomLevel(ctx, s.organizationA, {
+        sport: 'beachVolleyball',
+        name: 'Sandy',
+        standardLevel: 'rec',
+      }),
+    );
+    const tournamentId = await draftIn(s, { customLevelId });
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    const copy = await s.adminA.query(api.tournaments.getForCopy, args);
+    expect(copy).toMatchObject({ level: 'rec', customLevelId });
+  });
+
+  test('offers the next address no league, tournament, or other program of the organization holds', async () => {
+    const s = await setup();
+    await draftIn(s);
+    await draftIn(s, { name: 'Winter Doubles Classic 2', slug: 'winter-doubles-classic-2' });
+    await s.t.run((ctx) =>
+      ctx.db.insert('programs', {
+        ...tournamentProgramFields(s.organizationA, 'winter-doubles-classic-3'),
+        type: 'league',
+      }),
+    );
+    expect((await s.adminA.query(api.tournaments.getForCopy, args))?.slug).toBe(
+      'winter-doubles-classic-4',
+    );
+  });
+
+  test('derives the address from the name and keeps it within 60 characters with its suffix', async () => {
+    const s = await setup();
+    const name = `Gulf ${'Coast '.repeat(12)}Open`;
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      ...valid(s),
+      name,
+      slug: name.toLowerCase().replaceAll(' ', '-').slice(0, 60).replace(/-+$/, ''),
+    });
+    const source = await programOf(s, tournamentId);
+    const copy = await s.adminA.query(api.tournaments.getForCopy, {
+      organizationSlug: 'org-a',
+      slug: source.slug,
+    });
+    expect(copy?.name).toBe(name);
+    expect(copy?.slug).toHaveLength(60);
+    expect(copy?.slug.endsWith('-2')).toBe(true);
+  });
+
+  test('is null for an unknown web address, a league’s, and another organization’s tournament', async () => {
+    const s = await setup();
+    await draftIn(s);
+    await s.t.run(async (ctx) => {
+      const programId = await ctx.db.insert('programs', {
+        ...tournamentProgramFields(s.organizationB, 'b-open'),
+        locationIds: [s.bField],
+      });
+      await ctx.db.insert('tournaments', {
+        programId,
+        organizationId: s.organizationB,
+        status: 'published',
+        sport: 'soccer',
+        startDate: '2027-01-16',
+        endDate: '2027-01-16',
+        registrationDeadline: '2027-01-09',
+        maximumTeams: 8,
+        minimumRosterSize: 4,
+        structure: 'bracket',
+        bracketType: 'single',
+      });
+    });
+    for (const slug of ['no-such-tournament', 'coed-7v7', 'b-open']) {
+      expect(
+        await s.adminA.query(api.tournaments.getForCopy, { organizationSlug: 'org-a', slug }),
+        slug,
+      ).toBeNull();
+    }
+  });
+
+  test('refuses a signed-out caller, a league organizer, a non-member, and an org admin of another organization', async () => {
+    const s = await setup();
+    await draftIn(s);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(caller.query(api.tournaments.getForCopy, args), label).rejects.toThrow(message);
+    }
+  });
+
+  test('creating from the copy of a published tournament writes a draft row of the source’s sport, on the tournament and on its program', async () => {
+    const s = await setup();
+    const sourceId = await draftIn(s, {
+      sport: 'soccer',
+      playersPerSide: 7,
+      level: 'rec',
+      locationIds: [s.alpha],
+    });
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId: sourceId });
+    const { structure, bracketType, ...fields } = (await s.adminA.query(
+      api.tournaments.getForCopy,
+      args,
+    ))!;
+    expect([structure, bracketType]).toEqual(['bracket', 'single']);
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      organizationId: s.organizationA,
+      ...fields,
+      startDate: '2028-01-15',
+      registrationDeadline: '2028-01-08',
+    });
+    const copy = await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId));
+    expect(copy).toMatchObject({ status: 'draft', sport: 'soccer' });
+    expect((await programOf(s, tournamentId)).status).toBe('draft');
+    expect((await programOf(s, sourceId)).status).toBe('published');
+  });
+
+  test('a published copy of a soccer tournament is listed publicly under soccer, and its draft is not', async () => {
+    const s = await setup();
+    const sourceId = await draftIn(s, {
+      sport: 'soccer',
+      playersPerSide: 7,
+      level: 'rec',
+      locationIds: [s.alpha],
+    });
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId: sourceId });
+    const { structure, bracketType, ...fields } = (await s.adminA.query(
+      api.tournaments.getForCopy,
+      args,
+    ))!;
+    expect([structure, bracketType]).toEqual(['bracket', 'single']);
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      organizationId: s.organizationA,
+      ...fields,
+      startDate: inDays(60),
+      registrationDeadline: inDays(50),
+    });
+    expect(slugsOf(await listPublic(s))).not.toContain(fields.slug);
+    await s.adminA.mutation(api.tournaments.publish, { tournamentId });
+    for (const sport of [undefined, 'soccer' as const]) {
+      const list = await listPublic(s, { ...(sport && { sport }) });
+      expect(slugsOf(list), String(sport)).toContain(fields.slug);
+      expect(list.rows.find((row) => row.slug === fields.slug)).toMatchObject({
+        name: 'Winter Doubles Classic',
+        sportName: 'Soccer',
+        startDate: inDays(60),
+      });
+    }
+    expect(slugsOf(await listPublic(s, { sport: 'beachVolleyball' }))).not.toContain(fields.slug);
+  });
+
+  test('refuses a league organizer assigned to the source tournament, as it refuses an unassigned one', async () => {
+    const s = await setup();
+    const tournamentId = await draftIn(s);
+    await assign(s, 'organizer-a', tournamentId);
+    await expect(
+      s.t.withIdentity(identity('organizer-a')).query(api.tournaments.getForCopy, args),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('refuses an unknown organization as it refuses another organization’s', async () => {
+    const s = await setup();
+    await expect(
+      s.adminA.query(api.tournaments.getForCopy, { ...args, organizationSlug: 'nowhere' }),
+    ).rejects.toThrow('Not allowed');
+    await expect(
+      s.adminA.query(api.tournaments.getForCopy, { ...args, organizationSlug: 'org-b' }),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('creating from the copy adds a draft tournament and its program, and no team, bracket, or result', async () => {
+    const s = await setup();
+    await draftIn(s);
+    const rowCounts = () =>
+      s.t.run(async (ctx) =>
+        Object.fromEntries(
+          await Promise.all(
+            Object.keys(schema.tables).map(
+              async (table) =>
+                [
+                  table,
+                  (await ctx.db.query(table as keyof typeof schema.tables).collect()).length,
+                ] as const,
+            ),
+          ),
+        ),
+      );
+    const before = await rowCounts();
+    const copy = (await s.adminA.query(api.tournaments.getForCopy, args))!;
+    const { structure, bracketType, ...fields } = copy;
+    expect([structure, bracketType]).toEqual(['bracket', 'single']);
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      organizationId: s.organizationA,
+      ...fields,
+      startDate: '2028-01-15',
+      registrationDeadline: '2028-01-08',
+    });
+    expect(await rowCounts()).toEqual({
+      ...before,
+      programs: before['programs'] + 1,
+      tournaments: before['tournaments'] + 1,
+    });
+    const program = await programOf(s, tournamentId);
+    expect(program).toMatchObject({ status: 'draft', slug: 'winter-doubles-classic-2' });
   });
 });
 

@@ -10,7 +10,7 @@ import {
 } from './lib/access';
 import { getCurrentUser } from './lib/users';
 import { adultEntryInTournament } from './lib/rosterWrites';
-import { isChoosableSlug } from './lib/slugs';
+import { isChoosableSlug, slugify } from './lib/slugs';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import {
@@ -48,7 +48,12 @@ import {
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
-import { insertDraftTournament, leagueSlugTaken, publishTournament } from './lib/tenantWrites';
+import {
+  insertDraftTournament,
+  leagueSlugTaken,
+  nextFreeSlug,
+  publishTournament,
+} from './lib/tenantWrites';
 
 export const ADMIN_TOURNAMENTS_LIMIT = 200;
 
@@ -257,6 +262,51 @@ export const getForManagement = query({
       role: membership.role,
       status: found.program.status,
       ...(await tournamentDetails(ctx, organization, found)),
+    };
+  },
+});
+
+export const getForCopy = query({
+  args: { organizationSlug: v.string(), slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      name: v.string(),
+      slug: v.string(),
+      sport: sportValidator,
+      locationIds: v.array(v.id('locations')),
+      gender: genderValidator,
+      playersPerSide: v.number(),
+      level: standardLevelValidator,
+      customLevelId: v.optional(v.id('customLevels')),
+      ageGroup: ageGroupValidator,
+      maximumTeams: v.number(),
+      structure: v.literal('bracket'),
+      bracketType: v.literal('single'),
+    }),
+  ),
+  handler: async (ctx, { organizationSlug, slug }) => {
+    // Signed in first, so an unknown organization and another organization's look alike.
+    await requireUser(ctx);
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) throw new Error('Not allowed');
+    await requireOrgAdmin(ctx, organization._id);
+    const found = await findTournamentBySlugs(ctx, organization, slug);
+    if (!found) return null;
+    const { program, tournament } = found;
+    return {
+      name: program.name,
+      slug: await nextFreeSlug(ctx, organization._id, slugify(program.name)),
+      sport: program.sport,
+      locationIds: program.locationIds,
+      gender: program.gender,
+      playersPerSide: program.playersPerSide,
+      level: program.level,
+      ...(program.customLevelId && { customLevelId: program.customLevelId }),
+      ageGroup: program.ageGroup,
+      maximumTeams: tournament.maximumTeams,
+      structure: tournament.structure,
+      bracketType: tournament.bracketType,
     };
   },
 });

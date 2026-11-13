@@ -5,16 +5,24 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   signal,
+  untracked,
   viewChild,
   viewChildren,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCheck, lucideCircleAlert, lucidePlus, lucideSparkles } from '@ng-icons/lucide';
+import {
+  lucideCheck,
+  lucideCircleAlert,
+  lucideCopy,
+  lucidePlus,
+  lucideSparkles,
+} from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
@@ -34,7 +42,12 @@ import { LeagueDivisionFields, type DivisionErrors } from './league-division-fie
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { tournamentPath } from './tournament-path';
-import { TOURNAMENT_FORM_ALERTS, TournamentForm, type TournamentField } from './tournament-form';
+import {
+  TOURNAMENT_FORM_ALERTS,
+  TournamentForm,
+  type TournamentCopy,
+  type TournamentField,
+} from './tournament-form';
 import { WebAddressStatus } from './web-address-status';
 
 const DATE_FIELDS = [
@@ -93,6 +106,7 @@ const FOCUS_SELECTOR: Record<
     provideIcons({
       lucideCheck,
       lucideCircleAlert,
+      lucideCopy,
       lucidePlus,
       lucideSparkles,
     }),
@@ -129,6 +143,18 @@ const FOCUS_SELECTOR: Record<
       <p id="create-tournament-note" class="mb-5 text-sm text-muted-foreground">
         New tournaments start as drafts, which only your staff see.
       </p>
+      @if (copiedFrom(); as source) {
+        <p
+          data-slot="copy-note"
+          class="mb-5 flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground"
+        >
+          <ng-icon name="lucideCopy" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
+          <span
+            >Copied from {{ source }}. Enter the dates and the registration deadline. Teams, the
+            bracket, and results are not copied.</span
+          >
+        </p>
+      }
       <div hlmFieldGroup [class]="clearanceClass">
         <div
           hlmField
@@ -441,6 +467,8 @@ export class TournamentCreateForm {
   readonly organizationName = input.required<string>();
   readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly { locationId: Id<'locations'>; name: string }[]>();
+  /** Read once, so a later answer of the source never undoes what the user typed. */
+  readonly copy = input<TournamentCopy | null>(null);
 
   protected readonly online = injectOnline();
   private readonly webAddress = injectSlugAvailability({
@@ -479,9 +507,24 @@ export class TournamentCreateForm {
   private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
+  protected readonly copiedFrom = signal<string | null>(null);
+  private copyLoaded = false;
+
   protected readonly filledMessage = computed(() =>
     filledFromNameMessage(this.form.division.filledFromName()),
   );
+
+  constructor() {
+    effect(() => {
+      const copy = this.copy();
+      if (copy === null || this.copyLoaded) return;
+      this.copyLoaded = true;
+      untracked(() => {
+        this.form.loadCopy(copy);
+        this.copiedFrom.set(copy.name);
+      });
+    });
+  }
 
   protected chooseSport(key: string): void {
     const sport = (Object.keys(SPORT_NAMES) as Sport[]).find((candidate) => candidate === key);
@@ -528,6 +571,7 @@ export class TournamentCreateForm {
     );
     if (outcome.sent) {
       this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
+      this.copiedFrom.set(null);
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {
