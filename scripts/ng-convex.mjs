@@ -4,6 +4,7 @@ import { constants } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { builtStylesheetProblems } from './dark-exclusion.mjs';
 import { checkServerBundle } from './edge-bundle.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
 import { writeStagingSlotFile } from './staging-slot-file.mjs';
@@ -144,6 +145,14 @@ async function afterBuild() {
     );
   }
   const browserDir = join(root, 'dist', 'omni-league', 'browser');
+  const darkProblems = await builtStylesheetProblems(browserDir);
+  for (const problem of darkProblems) console.error(problem);
+  if (darkProblems.length > 0) {
+    throw new Error(
+      'the built stylesheet holds dark-variant rules that no page can use (scripts/dark-exclusion.mjs)',
+    );
+  }
+  console.log('dark-exclusion: PASS (no :is(.dark *) in the built stylesheet)');
   if (await writeStagingSlotFile(browserDir, process.env)) {
     console.log(`staging slot: ${process.env.STAGING_SLOT}`);
   }
