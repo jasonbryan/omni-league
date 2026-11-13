@@ -1530,14 +1530,24 @@ describe('AuthService', () => {
       expect(signedInAtSettle).toEqual([true]);
     });
 
-    it.each<[string, (auth: AuthService) => Promise<unknown>]>([
-      ['sign-up', (auth) => auth.authenticate(requestSignUp, INPUT)],
-      ['sign-in', (auth) => auth.authenticate(requestSignIn, CREDENTIALS)],
-    ])('answers unexpected for a %s without a client, and makes no request', async (_, request) => {
+    it('answers unexpected for a sign-up without a client, and never calls the request', async () => {
       const auth = configure(null);
-      await expect(request(auth)).resolves.toEqual({ ok: false, error: 'unexpected' });
-      expect(client.signUps).toEqual([]);
-      expect(client.signIns).toEqual([]);
+      const request = vi.fn(requestSignUp);
+      await expect(auth.authenticate(request, INPUT)).resolves.toEqual({
+        ok: false,
+        error: 'unexpected',
+      });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('answers unexpected for a sign-in without a client, and never calls the request', async () => {
+      const auth = configure(null);
+      const request = vi.fn(requestSignIn);
+      await expect(auth.authenticate(request, CREDENTIALS)).resolves.toEqual({
+        ok: false,
+        error: 'unexpected',
+      });
+      expect(request).not.toHaveBeenCalled();
     });
   });
 
