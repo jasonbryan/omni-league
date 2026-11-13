@@ -29,6 +29,7 @@ import {
   TOURNAMENT_PATH,
   tournamentQueryResults,
 } from './testing/tournament-data';
+import { spacedText } from './testing/spaced-text';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -224,12 +225,7 @@ describe('PublicTournamentPage server render', () => {
       'Semifinals',
       'Final',
     ]);
-    const games = [...section.querySelectorAll('li')].map((game) =>
-      game.innerHTML
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim(),
-    );
+    const games = [...section.querySelectorAll('li')].map((game) => spacedText(game));
     expect(games).toEqual([
       'Game 1: (1) Sand Crabs Won against (4) Dig Dogs',
       'Game 2: (2) Net Results against (3) Dune Dashers',

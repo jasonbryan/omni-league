@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { PublicBracket as PublicBracketData } from '../../../../convex/lib/publicPage';
 import { PublicBracket } from './public-bracket';
+import { spacedText } from './testing/spaced-text';
 
 type Game = PublicBracketData['rounds'][number]['games'][number];
 
@@ -28,12 +29,7 @@ function create(bracket: PublicBracketData | undefined) {
   return { fixture, host: fixture.nativeElement as HTMLElement };
 }
 
-// The template drops the whitespace between elements, so `textContent` runs one into the next.
-const text = (el: Element | null | undefined) =>
-  (el?.innerHTML ?? '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const text = spacedText;
 
 const games = (host: HTMLElement) => [...host.querySelectorAll('li[data-testid="bracket-game"]')];
 
