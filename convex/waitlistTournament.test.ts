@@ -503,3 +503,95 @@ describe('waitlist.promote with a tournament entry', () => {
     expect((await snapshot(s)).waiting[0]?.status).toBe('waiting');
   });
 });
+
+describe('a tournament waitlist counter across joins and promotions', () => {
+  const waitingRows = async (s: TournamentWorld) =>
+    (await s.as(s.admin).query(api.waitlist.listForTournament, TOURNAMENT_SLUGS))!;
+  const promote = (s: TournamentWorld, waitlistEntryId: Id<'waitlistEntries'>) =>
+    s.as(s.admin).mutation(api.waitlist.promoteForTournament, { waitlistEntryId });
+
+  test('falls to zero once every waiting team is promoted, and then a new team registers directly', async () => {
+    const s = await fullTournament();
+    await join(s, s.captain, 'Late Lobsters');
+    vi.advanceTimersByTime(1000);
+    await join(s, s.player, 'Later Larks');
+    await raiseMaximumTeams(s, MAXIMUM_TEAMS + 3);
+    for (const row of (await waitingRows(s)).rows) await promote(s, row.waitlistEntryId);
+
+    const after = await snapshot(s);
+    expect(after.tournament).toMatchObject({ teamCount: MAXIMUM_TEAMS + 2, waitlistCount: 0 });
+    expect(await waitingRows(s)).toEqual({ rows: [], waitlistCount: 0 });
+    expect(await join(s, s.stranger, 'Walk Ins')).toEqual({ status: 'registered', teamId: ANY_ID });
+  });
+
+  test('decrements a counter that was never set by recounting the waiting entries', async () => {
+    const s = await fullTournament();
+    await join(s, s.captain, 'Late Lobsters');
+    vi.advanceTimersByTime(1000);
+    await join(s, s.player, 'Later Larks');
+    await raiseMaximumTeams(s, MAXIMUM_TEAMS + 1);
+    await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { waitlistCount: undefined }));
+    const { rows } = await waitingRows(s);
+    await promote(s, rows[0].waitlistEntryId);
+    expect((await snapshot(s)).tournament?.waitlistCount).toBe(1);
+  });
+
+  test('keeps the counter equal to the waiting entries after a refused promotion', async () => {
+    const s = await fullTournament();
+    await join(s, s.captain, 'Late Lobsters');
+    const { rows } = await waitingRows(s);
+    await promote(s, rows[0].waitlistEntryId).catch(refusalOf);
+    const after = await snapshot(s);
+    expect(after.tournament?.waitlistCount).toBe(
+      after.waiting.filter((row) => row.status === 'waiting').length,
+    );
+  });
+
+  test('lets only one of two simultaneous joins with the same team name onto the waitlist', async () => {
+    const s = await fullTournament();
+    const results = await Promise.all([
+      join(s, s.captain, 'Late Lobsters').catch(refusalOf),
+      join(s, s.player, 'late lobsters').catch(refusalOf),
+    ]);
+    expect(
+      results.filter((result) => (result as { status?: string }).status === 'waitlisted'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => (result as { code?: string }).code === 'nameTaken'),
+    ).toHaveLength(1);
+    const after = await snapshot(s);
+    expect(after.waiting).toHaveLength(1);
+    expect(after.tournament?.waitlistCount).toBe(1);
+  });
+
+  test('lets only one of two simultaneous joins by the same captain onto the waitlist', async () => {
+    const s = await fullTournament();
+    const results = await Promise.all([
+      join(s, s.captain, 'Late Lobsters').catch(refusalOf),
+      join(s, s.captain, 'Later Larks').catch(refusalOf),
+    ]);
+    expect(
+      results.filter((result) => (result as { status?: string }).status === 'waitlisted'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => (result as { code?: string }).code === 'onWaitlist'),
+    ).toHaveLength(1);
+    const after = await snapshot(s);
+    expect(after.waiting).toHaveLength(1);
+    expect(after.tournament?.waitlistCount).toBe(1);
+  });
+
+  test('refuses the previous registration function to a waiting captain once room exists', async () => {
+    const s = await fullTournament();
+    await join(s, s.captain, 'Late Lobsters');
+    await raiseMaximumTeams(s, MAXIMUM_TEAMS + 2);
+    const failure = await s
+      .as(s.captain)
+      .mutation(api.teams.registerForTournament, { ...TOURNAMENT_SLUGS, name: 'Late Lobsters 2' })
+      .catch(refusalOf);
+    expect(failure).toMatchObject({ code: 'tournamentFull' });
+    const after = await snapshot(s);
+    expect(after.teams).toHaveLength(MAXIMUM_TEAMS);
+    expect(after.waiting).toHaveLength(1);
+  });
+});
