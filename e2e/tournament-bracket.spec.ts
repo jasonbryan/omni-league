@@ -512,6 +512,33 @@ test.describe('Tournaments: bracket results', () => {
     );
   });
 
+  test('a forfeit cleared after a reload is restored by Undo as a forfeit by the same team', async ({
+    page,
+  }) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterButton(game).click();
+    await game.getByRole('checkbox', { name: 'A team forfeits' }).click();
+    await game.locator('label', { hasText: 'Echo' }).click();
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toBeVisible();
+    await page.reload();
+
+    await clearButton(game).click();
+    const cleared = savedStatus(game, 'Result cleared');
+    await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+    await undoButton(cleared).click();
+    await expect(savedStatus(game, 'Result restored')).toContainText(
+      'Delta advances to the Semifinals.',
+    );
+    await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–0 Echo. Echo forfeited. Delta won.',
+    );
+    await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Delta');
+  });
+
   test('a best of 3 needs the third set when the teams split the first two', async ({
     page,
   }, testInfo) => {
@@ -755,6 +782,31 @@ test.describe('Tournaments: bracket results shared between organizers and the pu
       await expect(clearButton(game)).toBeVisible();
       await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Echo');
       await screenshot(page, testInfo, 'bracket-result-undo-gone');
+      await expectAccessible(page);
+    });
+  });
+
+  test('Undo on Result cleared goes with no press when another organizer corrects a game that feeds it', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const seeded = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await withSecondOrganizer(browser, page, seeded, async (otherPage) => {
+      await page.goto(seeded.managePath);
+      await createBracket(page);
+      await enterSet(gameOf(page, 'Game 2: Delta v Echo'), '21', '15');
+      const semifinal = gameOf(page, 'Game 1: Alpha v Delta');
+      await enterSet(semifinal, '21', '10');
+      await expect(savedStatus(semifinal, 'Result saved')).toBeVisible();
+      await clearButton(semifinal).click();
+      await expect(undoButton(savedStatus(semifinal, 'Result cleared'))).toBeVisible();
+
+      await correctOnOtherPage(otherPage, seeded.managePath);
+      await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Echo');
+      const changed = gameOf(page, 'Game 1: Alpha v Echo');
+      await expect(enterButton(changed)).toBeVisible();
+      await expect(undoButton(changed)).toHaveCount(0);
+      await screenshot(page, testInfo, 'bracket-result-cleared-undo-gone');
       await expectAccessible(page);
     });
   });
