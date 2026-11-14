@@ -7,7 +7,7 @@ import { hashInviteToken } from './lib/inviteToken';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { insertTournamentProgram, modules } from './test.setup';
+import { insertCampProgram, insertTournamentProgram, modules } from './test.setup';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -115,6 +115,37 @@ describe('testing:addInvite', () => {
     await expect(
       t.mutation(internal.testing.addInvite, { ...INVITE, tournamentNames: ['Missing'] }),
     ).rejects.toThrow(/No tournament/);
+    expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
+  });
+
+  test('names camps, which the invite then lists apart from tournaments', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const programId = await t.run(async (ctx) => {
+      const organization = (await ctx.db.query('organizations').first())!;
+      return insertCampProgram(ctx, organization._id, 'Junior Beach Camp', 'junior-beach-camp');
+    });
+    const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    await t.mutation(internal.testing.addInvite, {
+      ...INVITE,
+      leagueNames: [],
+      campNames: ['Junior Beach Camp'],
+      expiresAt: Date.now() + 60_000,
+      token,
+    });
+    const [row] = await t.run((ctx) => ctx.db.query('invites').collect());
+    expect(row).toMatchObject({ leagueIds: [], programIds: [programId] });
+    const answer = await t.query(api.invites.getByToken, { token });
+    expect(answer).toMatchObject({ status: 'valid', campNames: ['Junior Beach Camp'] });
+    expect('tournamentNames' in answer).toBe(false);
+  });
+
+  test('refuses a camp that does not exist', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    await expect(
+      t.mutation(internal.testing.addInvite, { ...INVITE, campNames: ['Missing'] }),
+    ).rejects.toThrow(/No camp/);
     expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
   });
 

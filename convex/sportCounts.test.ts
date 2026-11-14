@@ -250,6 +250,7 @@ describe('a league written before the backfill, then the backfill', () => {
       leagues: 0,
       seasons: 0,
       tournaments: 0,
+      camps: 0,
       backfilled: {
         organizations: 0,
         locations: 0,

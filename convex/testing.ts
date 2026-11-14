@@ -34,6 +34,7 @@ import { programStatusValidator } from './lib/programs';
 import { sportValidator } from './lib/sports';
 import {
   divisionSeedValidator,
+  insertDraftCamp,
   insertDraftTournament,
   insertLeague,
   insertSeason,
@@ -421,6 +422,40 @@ export const seedTournament = internalMutation({
       await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
     }
     return { slug: tournament.slug };
+  },
+});
+
+// Skips `camps.create`'s rules.
+export const seedCamp = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    sport: sportValidator,
+    locationNames: v.array(v.string()),
+    minimumAge: v.number(),
+    maximumAge: v.number(),
+  },
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, { organizationSlug, locationNames, ...camp }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    if (await programSlugTaken(ctx, organization._id, camp.slug)) {
+      throw new Error(`The web address ${JSON.stringify(camp.slug)} is taken`);
+    }
+    const locationIds: Id<'locations'>[] = [];
+    for (const name of locationNames) {
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization._id).eq('name', name),
+        )
+        .first();
+      if (!location) throw new Error(`No location is named ${JSON.stringify(name)}`);
+      locationIds.push(location._id);
+    }
+    await insertDraftCamp(ctx, organization._id, { ...camp, locationIds });
+    return { slug: camp.slug };
   },
 });
 
@@ -1119,13 +1154,23 @@ export const addInvite = internalMutation({
     role: roleValidator,
     leagueNames: v.optional(v.array(v.string())),
     tournamentNames: v.optional(v.array(v.string())),
+    campNames: v.optional(v.array(v.string())),
     expiresAt: v.number(),
     token: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (
     ctx,
-    { organizationSlug, email, role, leagueNames = [], tournamentNames = [], expiresAt, token },
+    {
+      organizationSlug,
+      email,
+      role,
+      leagueNames = [],
+      tournamentNames = [],
+      campNames = [],
+      expiresAt,
+      token,
+    },
   ) => {
     assertTestDeployment();
     const organization = await ctx.db
@@ -1147,17 +1192,22 @@ export const addInvite = internalMutation({
       leagueIds.push(league._id);
     }
     const programIds = [];
-    for (const name of tournamentNames) {
-      const program = (
-        await ctx.db
-          .query('programs')
-          .withIndex('by_organizationId_and_type_and_status_and_sortName', (q) =>
-            q.eq('organizationId', organization._id).eq('type', 'tournament'),
-          )
-          .collect()
-      ).find((row) => row.name === name);
-      if (!program) throw new Error(`No tournament named ${JSON.stringify(name)}`);
-      programIds.push(program._id);
+    for (const [type, names] of [
+      ['tournament', tournamentNames],
+      ['camp', campNames],
+    ] as const) {
+      for (const name of names) {
+        const program = (
+          await ctx.db
+            .query('programs')
+            .withIndex('by_organizationId_and_type_and_status_and_sortName', (q) =>
+              q.eq('organizationId', organization._id).eq('type', type),
+            )
+            .collect()
+        ).find((row) => row.name === name);
+        if (!program) throw new Error(`No ${type} named ${JSON.stringify(name)}`);
+        programIds.push(program._id);
+      }
     }
     await insertPendingInvite(ctx, {
       organizationId: organization._id,
