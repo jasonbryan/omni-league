@@ -394,7 +394,7 @@ test.describe('public tournament page: in the browser', () => {
     await expect(line).toBeVisible();
     expect(textOf(await line.innerHTML())).toBe(THREE_SET_LINE);
     await expect(page.getByTestId('bracket-game').nth(1)).toHaveText(
-      /Echo\s+Score: 21–15, 18–21, 15–10$/,
+      /Echo\s+Score: 21–15, 18–21, 15–10\s*$/,
     );
     await expectAccessible(page);
     expect(await checkReflow(page)).toMatchObject({ passed: true });
