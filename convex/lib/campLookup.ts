@@ -1,9 +1,20 @@
-import type { Doc } from '../_generated/dataModel';
+import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { leagueLocations } from './publicLeague';
 import { sportName } from './sports';
 
 export const CAMP_SESSIONS_LIMIT = 200;
+
+export async function recountCampSessions(
+  ctx: Pick<QueryCtx, 'db'>,
+  campId: Id<'camps'>,
+): Promise<number> {
+  const sessions = await ctx.db
+    .query('campSessions')
+    .withIndex('by_campId_and_startDate', (q) => q.eq('campId', campId))
+    .take(CAMP_SESSIONS_LIMIT);
+  return sessions.length;
+}
 
 export async function findCampBySlugs(
   ctx: Pick<QueryCtx, 'db'>,

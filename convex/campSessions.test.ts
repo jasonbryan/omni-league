@@ -477,6 +477,71 @@ describe('camps.listForOrganization session counts', () => {
   });
 });
 
+describe('the camp’s sessionCount counter', () => {
+  const camp = (s: Setup, campId = s.junior.campId) =>
+    s.t.run((ctx) => ctx.db.get('camps', campId));
+  const listed = async (s: Setup) =>
+    Object.fromEntries(
+      (
+        await s.adminA.query(api.camps.listForOrganization, { organizationId: s.organizationA })
+      ).map((row) => [row.slug, row.sessionCount]),
+    );
+  const uncount = (s: Setup, campId = s.junior.campId) =>
+    s.t.run((ctx) => ctx.db.patch('camps', campId, { sessionCount: undefined }));
+
+  test('is raised by each add and lowered by each delete, on that camp only', async () => {
+    const s = await setup();
+    const first = await s.adminA.mutation(api.campSessions.add, valid(s));
+    await s.adminA.mutation(api.campSessions.add, { ...valid(s), name: 'Week 2' });
+    await s.adminA.mutation(api.campSessions.add, { ...valid(s), campId: s.fall.campId });
+    expect((await camp(s))?.sessionCount).toBe(2);
+    expect((await camp(s, s.fall.campId))?.sessionCount).toBe(1);
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId: first.campSessionId });
+    expect((await camp(s))?.sessionCount).toBe(1);
+  });
+
+  test('is not changed by a refused add or a refused delete', async () => {
+    const s = await setup();
+    const { campSessionId } = await s.adminA.mutation(api.campSessions.add, valid(s));
+    await s.t.run((ctx) => ctx.db.patch('campSessions', campSessionId, { registeredCount: 1 }));
+    await expect(
+      s.adminA.mutation(api.campSessions.add, { ...valid(s), places: 0 }),
+    ).rejects.toThrow();
+    await expect(s.adminA.mutation(api.campSessions.remove, { campSessionId })).rejects.toThrow();
+    expect((await camp(s))?.sessionCount).toBe(1);
+  });
+
+  test('is what the Camps list returns, without reading the sessions', async () => {
+    const s = await setup();
+    await s.adminA.mutation(api.campSessions.add, valid(s));
+    await s.t.run((ctx) => ctx.db.patch('camps', s.junior.campId, { sessionCount: 7 }));
+    expect((await listed(s))['junior-beach-volleyball-camp']).toBe(7);
+  });
+
+  test('is recounted for the list when a camp has no counter yet', async () => {
+    const s = await setup();
+    await s.adminA.mutation(api.campSessions.add, valid(s));
+    await s.adminA.mutation(api.campSessions.add, { ...valid(s), name: 'Week 2' });
+    await uncount(s);
+    expect((await camp(s))?.sessionCount).toBeUndefined();
+    expect(await listed(s)).toEqual({
+      'junior-beach-volleyball-camp': 2,
+      'fall-break-camp': 0,
+    });
+  });
+
+  test('is recounted, including the change, by an add or a delete on a camp with no counter', async () => {
+    const s = await setup();
+    const { campSessionId } = await s.adminA.mutation(api.campSessions.add, valid(s));
+    await uncount(s);
+    await s.adminA.mutation(api.campSessions.add, { ...valid(s), name: 'Week 2' });
+    expect((await camp(s))?.sessionCount).toBe(2);
+    await uncount(s);
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId });
+    expect((await camp(s))?.sessionCount).toBe(1);
+  });
+});
+
 describe('insertCampSession', () => {
   test('writes a session of the camp with no registrations', async () => {
     const s = await setup();

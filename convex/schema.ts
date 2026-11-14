@@ -233,11 +233,12 @@ export default defineSchema({
     /** Whole years, `MIN_CAMP_AGE` to `MAX_CAMP_AGE`, with `minimumAge` no higher than `maximumAge`. */
     minimumAge: v.number(),
     maximumAge: v.number(),
+    /** Kept by `insertCampSession` and `deleteCampSession`; absent on a camp that has had no session written since it was created, which readers recount. */
+    sessionCount: v.optional(v.number()),
   })
     .index('by_programId', ['programId'])
     .index('by_organizationId', ['organizationId']),
 
-  // A dated session of a camp. Written by `convex/campSessions.ts` and `convex/lib/tenantWrites.ts`.
   campSessions: defineTable({
     campId: v.id('camps'),
     organizationId: v.id('organizations'),

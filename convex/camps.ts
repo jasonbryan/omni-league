@@ -11,7 +11,7 @@ import {
   firstCampError,
   type CampInputError,
 } from './lib/campInput';
-import { CAMP_SESSIONS_LIMIT, campDetails, findCampBySlugs } from './lib/campLookup';
+import { campDetails, findCampBySlugs, recountCampSessions } from './lib/campLookup';
 import { programStatusValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
@@ -119,12 +119,7 @@ export const listForOrganization = query({
         minimumAge: camp.minimumAge,
         maximumAge: camp.maximumAge,
         status: program.status,
-        sessionCount: (
-          await ctx.db
-            .query('campSessions')
-            .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
-            .take(CAMP_SESSIONS_LIMIT)
-        ).length,
+        sessionCount: camp.sessionCount ?? (await recountCampSessions(ctx, camp._id)),
       });
     }
     return rows;

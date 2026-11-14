@@ -8,7 +8,7 @@ import {
   type CampSessionInputError,
 } from './lib/campSessionInput';
 import { CAMP_SESSIONS_LIMIT } from './lib/campLookup';
-import { insertCampSession } from './lib/tenantWrites';
+import { deleteCampSession, insertCampSession } from './lib/tenantWrites';
 
 function refuse(error: CampSessionInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -85,7 +85,7 @@ export const remove = mutation({
         message: CAMP_SESSION_MESSAGES.hasRegistrations(session.registeredCount),
       });
     }
-    await ctx.db.delete('campSessions', campSessionId);
+    await deleteCampSession(ctx, session);
     return null;
   },
 });

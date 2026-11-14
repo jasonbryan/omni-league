@@ -13,6 +13,7 @@ import {
   type Gender,
   type StandardLevel,
 } from './divisions';
+import { recountCampSessions } from './campLookup';
 import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
@@ -519,14 +520,14 @@ export interface NewCampSession {
   registrationDeadline: string;
 }
 
-// The caller has checked access and the input.
-export function insertCampSession(
+// The caller has checked access and the input. An unset counter is recounted, which already includes the change.
+export async function insertCampSession(
   ctx: MutationCtx,
   camp: Doc<'camps'>,
   session: NewCampSession,
 ): Promise<Id<'campSessions'>> {
   const { dailyStartTime, dailyEndTime, ...fixed } = session;
-  return ctx.db.insert('campSessions', {
+  const id = await ctx.db.insert('campSessions', {
     ...fixed,
     ...(dailyStartTime !== undefined && { dailyStartTime }),
     ...(dailyEndTime !== undefined && { dailyEndTime }),
@@ -534,6 +535,32 @@ export function insertCampSession(
     organizationId: camp.organizationId,
     registeredCount: 0,
   });
+  await changeCampSessionCount(ctx, camp._id, 1);
+  return id;
+}
+
+// The caller has checked access and that the session has no registrations.
+export async function deleteCampSession(
+  ctx: MutationCtx,
+  session: Doc<'campSessions'>,
+): Promise<void> {
+  await ctx.db.delete('campSessions', session._id);
+  await changeCampSessionCount(ctx, session.campId, -1);
+}
+
+async function changeCampSessionCount(
+  ctx: MutationCtx,
+  campId: Id<'camps'>,
+  change: 1 | -1,
+): Promise<void> {
+  // Read again: a caller that inserts several sessions holds a camp whose counter is already out of date.
+  const camp = await ctx.db.get('camps', campId);
+  if (!camp) throw new Error(`Camp ${campId} does not exist`);
+  const sessionCount =
+    camp.sessionCount === undefined
+      ? await recountCampSessions(ctx, campId)
+      : Math.max(0, camp.sessionCount + change);
+  await ctx.db.patch('camps', campId, { sessionCount });
 }
 
 export async function publishTournament(

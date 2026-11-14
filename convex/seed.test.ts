@@ -1405,6 +1405,7 @@ describe('seed:demo camp sessions', () => {
     expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(3);
     const { camp, rows } = await sessionsOfJunior(t);
     expect(rows.map((row) => row.name)).toEqual(['Week 1', 'Week 2', 'Week 3']);
+    expect(camp.sessionCount).toBe(3);
     expect(rows.map((row) => row.startDate)).toEqual(['2026-11-10', '2026-11-17', '2026-11-24']);
     for (const row of rows) {
       expect(row).toMatchObject({
