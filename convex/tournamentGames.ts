@@ -65,9 +65,11 @@ const setupValidator = v.object({
                 v.object({
                   score: scoreValidator,
                   forfeitTeamId: v.union(v.null(), v.id('teams')),
+                  /** What an Undo or a Clear sends back as `expected`, so it acts only on this result. */
+                  resultEnteredAt: v.number(),
                 }),
               ),
-              /** The next game has a result, so Undo and Correct are refused. */
+              /** The next game has a result, so Undo, Clear, and Correct are refused. */
               locked: v.boolean(),
             }),
           ),
@@ -79,7 +81,14 @@ const setupValidator = v.object({
 
 function resultViewOf(game: Doc<'tournamentGames'>) {
   const stored = storedResultOf(game);
-  return stored && { score: stored.score, forfeitTeamId: stored.forfeitTeamId ?? null };
+  return (
+    stored && {
+      score: stored.score,
+      forfeitTeamId: stored.forfeitTeamId ?? null,
+      // The one writer sets the time with the score, so 0 only satisfies the optional field's type.
+      resultEnteredAt: game.resultEnteredAt ?? 0,
+    }
+  );
 }
 
 function nextHasResult(
