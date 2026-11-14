@@ -53,6 +53,7 @@ import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
 import { SeasonTeamsPanel } from './season-teams-panel';
 import { RenameMinorForm, type RenameMinorOutcome } from './rename-minor-form';
+import { ScoreReportPanel } from './score-report-panel';
 import { TeamInviteLanding } from './team-invite-landing';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
@@ -90,6 +91,7 @@ export interface TeamPageNavigationState {
     RemovePlayerDialog,
     RenameMinorForm,
     RouterLink,
+    ScoreReportPanel,
     SeasonTeamsPanel,
     ServerErrorView,
     Shell,
@@ -267,6 +269,9 @@ export interface TeamPageNavigationState {
               }
               <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
                 <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
+                  @if (team.tournament && team.viewerIsCaptain && teamIdOf(); as id) {
+                    <app-score-report-panel [teamId]="id" />
+                  }
                   <section aria-labelledby="roster-heading" hlmCard size="bare" class="${PANEL}">
                     <div
                       class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"

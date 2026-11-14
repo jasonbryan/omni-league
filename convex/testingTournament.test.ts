@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
@@ -191,6 +192,61 @@ describe('testing:seedTournamentRosters', () => {
     await expect(t.mutation(internal.testing.seedTournamentRosters, ROSTERS)).rejects.toThrow(
       /No tournament/,
     );
+  });
+});
+
+describe('testing:seedTournamentRosters with a captain account', () => {
+  const CAPTAIN = {
+    name: 'Team Captain',
+    email: 'captain.t1u2@example.test',
+    password: 'a random per-run passphrase',
+  };
+
+  async function withCaptain() {
+    vi.stubEnv('IS_TEST', 'true');
+    vi.stubEnv('CONVEX_SITE_URL', 'http://127.0.0.1:3211');
+    vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
+    vi.stubEnv('SITE_URL', 'http://localhost:4000');
+    const t = convexTest(schema, modules);
+    betterAuthTest.register(t, 'betterAuth');
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [CAPTAIN] });
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    return t;
+  }
+
+  test('makes the account the captain of the team that names it, and the other teams keep a seeded captain', async () => {
+    const t = await withCaptain();
+    await t.mutation(internal.testing.seedTournamentRosters, {
+      organizationSlug: TENANT.organization.slug,
+      tournamentSlug: TOURNAMENT.slug,
+      teams: [{ name: 'Sand Crabs', captainEmail: CAPTAIN.email }, { name: 'Net Results' }],
+    });
+    const account = await t.query(internal.testing.accountByEmail, { email: CAPTAIN.email });
+    expect(account).not.toBeNull();
+    const [crabs, results] = await t.run(async (ctx) => {
+      const teams = await ctx.db.query('teams').collect();
+      const captain = await Promise.all(
+        teams.map((team) => ctx.db.get('users', team.captainUserId)),
+      );
+      return teams.map((team, index) => ({
+        name: team.name,
+        rosterCount: team.rosterCount,
+        captainName: captain[index]!.name,
+      }));
+    });
+    expect(crabs).toEqual({ name: 'Sand Crabs', rosterCount: 2, captainName: CAPTAIN.name });
+    expect(results.captainName).not.toBe(CAPTAIN.name);
+  });
+
+  test('refuses an email that has no account', async () => {
+    const t = await withCaptain();
+    await expect(
+      t.mutation(internal.testing.seedTournamentRosters, {
+        organizationSlug: TENANT.organization.slug,
+        tournamentSlug: TOURNAMENT.slug,
+        teams: [{ name: 'Sand Crabs', captainEmail: 'nobody@example.test' }],
+      }),
+    ).rejects.toThrow(/No account has the email/);
   });
 });
 

@@ -169,15 +169,39 @@ export class GameResultDraft {
       if (side === null) return { sent: false, focus: 'forfeit' };
       body = { forfeitTeamId: teamIds[side] };
     } else {
-      for (const field of this.shownFields()) this.shown[field].submitted();
-      const issue = this.issue();
-      if (issue) return { sent: false, focus: BOXES_OF[issue.field][0] };
+      const unfinished = this.unfinishedScore();
+      if (unfinished) return unfinished;
       body = { score: this.completeScore() };
     }
+    return this.dispatch(online, () => send(body));
+  }
+
+  async submitScore<Result>(
+    online: boolean,
+    send: (score: Score) => Promise<Result>,
+  ): Promise<ResultOutcome<Result>> {
+    this.alert.set(null);
+    this.refusal.set(null);
+    const unfinished = this.unfinishedScore();
+    if (unfinished) return unfinished;
+    const score = this.completeScore();
+    return this.dispatch(online, () => send(score));
+  }
+
+  private unfinishedScore(): ResultOutcome<never> | null {
+    for (const field of this.shownFields()) this.shown[field].submitted();
+    const issue = this.issue();
+    return issue ? { sent: false, focus: BOXES_OF[issue.field][0] } : null;
+  }
+
+  private async dispatch<Result>(
+    online: boolean,
+    send: () => Promise<Result>,
+  ): Promise<ResultOutcome<Result>> {
     if (!online) return this.showAlert('offline');
     this.submitting.set(true);
     try {
-      return { sent: true, result: await send(body) };
+      return { sent: true, result: await send() };
     } catch (failure) {
       return this.failed(failure);
     } finally {
