@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { FORBIDDEN_CODE } from './lib/forbidden';
-import { POOL_MESSAGES, type Pool } from './lib/pools';
+import { POOL_MESSAGES, poolCountsFor, poolNameAt, snakeSplit, type Pool } from './lib/pools';
 import {
   OPEN_NOW,
   TOURNAMENT_SLUGS,
@@ -806,5 +806,85 @@ describe('pool games and the readers of bracket games', () => {
     const captained = game.teamIds[0]!;
     const view = await s.as(s.captain).query(api.scoreReports.forTeam, { teamId: captained });
     expect(view).toMatchObject({ game: null });
+  });
+});
+
+describe('every team count and pool count', () => {
+  test.each([4, 5])('%s confirmed teams offer no split and no games', async (count) => {
+    const { s } = await world(count);
+    for (const poolCount of [2, 3, 4]) {
+      expect(await split(s, poolCount).catch(refusalOf)).toMatchObject({ code: 'teamLimits' });
+    }
+    expect(await createGames(s).catch(refusalOf)).toMatchObject({ code: 'notSplit' });
+    expect(await poolGames(s)).toEqual([]);
+  });
+
+  test.each(Array.from({ length: 11 }, (_, index) => index + 6))(
+    '%s teams split in snake order and play a full round robin in each pool',
+    async (count) => {
+      const { s } = await world(count);
+      const offered = poolCountsFor(count);
+      expect(offered.length).toBeGreaterThan(0);
+      for (const poolCount of offered) {
+        await split(s, poolCount);
+        const expected = snakeSplit(count, poolCount);
+        for (const [index, seeds] of expected.entries()) {
+          expect(await namesIn(s, poolNameAt(index))).toEqual(
+            seeds.map((seed) => `Team ${String(seed).padStart(2, '0')}`),
+          );
+          expect(seeds.length).toBeGreaterThanOrEqual(3);
+          expect(seeds.length).toBeLessThanOrEqual(8);
+        }
+        const gameCount = expected.reduce(
+          (total, seeds) => total + (seeds.length * (seeds.length - 1)) / 2,
+          0,
+        );
+        expect(await createGames(s, true)).toMatchObject({ gameCount });
+        const rows = await poolGames(s);
+        expect(rows).toHaveLength(gameCount);
+        for (const [index, seeds] of expected.entries()) {
+          const inPool = rows.filter((game) => game.pool === poolNameAt(index));
+          expect(inPool).toHaveLength((seeds.length * (seeds.length - 1)) / 2);
+          expect(new Set(inPool.map((game) => [...game.teamIds].sort().join('|'))).size).toBe(
+            inPool.length,
+          );
+        }
+      }
+    },
+  );
+
+  test('a pool count that leaves a pool outside 3 to 8 teams is refused for every team count', async () => {
+    for (let count = 6; count <= 16; count++) {
+      const { s } = await world(count);
+      const offered = poolCountsFor(count);
+      for (let poolCount = 2; poolCount <= 8; poolCount++) {
+        if (offered.includes(poolCount)) continue;
+        expect(await split(s, poolCount).catch(refusalOf)).toMatchObject({ code: 'poolSize' });
+      }
+      expect((await teamRows(s)).every((team) => team.pool === undefined)).toBe(true);
+    }
+  });
+});
+
+describe('a score report that sits on a pool game', () => {
+  test('an organizer cannot confirm it, and the pool game keeps no result', async () => {
+    const { s } = await world(6);
+    await split(s, 2);
+    await createGames(s);
+    const game = (await poolGames(s))[0];
+    const teamId = game.teamIds[0]!;
+    const reportId = await s.t.run((ctx) =>
+      ctx.db.insert('scoreReports', {
+        gameId: game._id,
+        teamId,
+        reportedByUserId: s.captain.userId,
+        score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+        reportedAt: 5,
+      }),
+    );
+    await expect(
+      s.as(s.admin).mutation(api.scoreReports.confirm, { reportId, expected: 5 }),
+    ).rejects.toThrow(/Not allowed/);
+    expect((await poolGames(s)).every((row) => row.winnerTeamId === undefined)).toBe(true);
   });
 });
