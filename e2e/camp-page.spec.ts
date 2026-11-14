@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { checkReflow, expectAccessible } from './support/a11y';
+import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
 import { seedCamp, seedCampSession, seedPublishedCamp, type CampSessionSeed } from './support/camp';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -243,7 +243,7 @@ test.describe('Camps: the management page and Publish', () => {
     await expect(publishDialog(page)).toContainText(`Publish ${JUNIOR.name}?`);
     await expect(publishDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, 'camp-publish-dialog');
-    await expectAccessible(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await publishDialog(page).getByRole('button', { name: 'Cancel' }).click();
     await expect(publishDialog(page)).toHaveCount(0);
     await expect(publishButton(page)).toBeFocused();
@@ -276,7 +276,7 @@ test.describe('Camps: the management page and Publish', () => {
     const button = publishButton(page);
     await expect(button).toHaveAttribute('aria-disabled', 'true');
     await expect(main(page).getByText('Add a session first.')).toBeVisible();
-    await button.click();
+    await button.click({ force: true });
     await expect(publishDialog(page)).toHaveCount(0);
     await screenshot(page, testInfo, 'camp-publish-needs-session');
     await expectAccessible(page);
