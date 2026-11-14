@@ -194,6 +194,55 @@ describe('testing:seedTournamentRosters', () => {
   });
 });
 
+describe('testing:seedTournamentBracket', () => {
+  const ARGS = { organizationSlug: 'e2e-org-t1u2', tournamentSlug: 'gulf-coast-beach-open' };
+
+  async function withTeams(names: string[]) {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, { ...TOURNAMENT, status: 'published' });
+    await t.mutation(internal.testing.seedTournamentRosters, {
+      ...ARGS,
+      teams: names.map((name) => ({ name })),
+    });
+    return t;
+  }
+
+  test('throws with IS_TEST unset and writes nothing', async () => {
+    const t = await withTeams(['Alpha', 'Bravo']);
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(t.mutation(internal.testing.seedTournamentBracket, ARGS)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('tournamentGames').collect())).toEqual([]);
+  });
+
+  test('creates the bracket of the confirmed teams, which the public page then shows', async () => {
+    const t = await withTeams(['Alpha', 'Bravo', 'Charlie']);
+    await expect(t.mutation(internal.testing.seedTournamentBracket, ARGS)).resolves.toEqual({
+      gameCount: 3,
+    });
+    const page = await t.query(api.tournaments.getPublicPage, {
+      orgSlug: ARGS.organizationSlug,
+      tournamentSlug: ARGS.tournamentSlug,
+    });
+    expect(page?.bracket?.rounds.map((round) => round.name)).toEqual(['Semifinals', 'Final']);
+  });
+
+  test('refuses a second bracket, an unknown organization, and an unknown tournament', async () => {
+    const t = await withTeams(['Alpha', 'Bravo']);
+    await t.mutation(internal.testing.seedTournamentBracket, ARGS);
+    await expect(t.mutation(internal.testing.seedTournamentBracket, ARGS)).rejects.toThrow(
+      /has a bracket already/,
+    );
+    await expect(
+      t.mutation(internal.testing.seedTournamentBracket, { ...ARGS, organizationSlug: 'nowhere' }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.seedTournamentBracket, { ...ARGS, tournamentSlug: 'nowhere' }),
+    ).rejects.toThrow(/No tournament/);
+  });
+});
+
 describe('testing:seedTournamentWaitlistEntry', () => {
   const ENTRY = {
     organizationSlug: 'e2e-org-t1u2',

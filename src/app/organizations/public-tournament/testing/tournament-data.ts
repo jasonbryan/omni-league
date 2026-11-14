@@ -1,3 +1,4 @@
+import type { PublicBracket } from '../../../../../convex/lib/publicPage';
 import type { PublicTournamentData } from '../public-tournament-view';
 
 export const ORG_SLUG = 'gulf-coast-sport-social';
@@ -18,6 +19,32 @@ export const BEACH_OPEN: PublicTournamentData = {
   registrationDeadline: '2027-06-05',
   minimumRosterSize: 2,
   maximumTeams: 16,
+};
+
+export const BEACH_OPEN_BRACKET: PublicBracket = {
+  rounds: [
+    {
+      name: 'Semifinals',
+      games: [
+        {
+          teams: [
+            { name: 'Sand Crabs', seed: 1 },
+            { name: 'Dig Dogs', seed: 4 },
+          ],
+          bye: false,
+          winner: 0,
+        },
+        {
+          teams: [
+            { name: 'Net Results', seed: 2 },
+            { name: 'Dune Dashers', seed: 3 },
+          ],
+          bye: false,
+        },
+      ],
+    },
+    { name: 'Final', games: [{ teams: [{ name: 'Sand Crabs', seed: 1 }, null], bye: false }] },
+  ],
 };
 
 export const TOURNAMENT_ARGS = { orgSlug: ORG_SLUG, tournamentSlug: TOURNAMENT_SLUG };
