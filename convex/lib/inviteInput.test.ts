@@ -4,6 +4,7 @@ import {
   checkInviteAssignments,
   INVITE_LIFETIME_MS,
   INVITE_MESSAGES,
+  NOTHING_OFFERED,
   MAX_INVITE_EMAIL_LENGTH,
   normaliseInviteEmail,
 } from './inviteInput';
@@ -53,23 +54,25 @@ describe('inviteInput', () => {
     expect(checkInviteEmail(long)).toMatchObject({ ok: false });
   });
 
-  test('refuses a league organizer with no league, and with no league or tournament once tournaments are offered', () => {
-    expect(checkInviteAssignments(0, 0, false)).toEqual({
+  test('refuses a league organizer with nothing chosen, naming what the organization offers', () => {
+    const message = (tournaments: boolean, camps: boolean) =>
+      checkInviteAssignments(0, 0, { tournaments, camps })?.message;
+    expect(message(false, false)).toBe('Choose at least one league.');
+    expect(message(true, false)).toBe('Choose at least one league or tournament.');
+    expect(message(false, true)).toBe('Choose at least one league or camp.');
+    expect(message(true, true)).toBe('Choose at least one league, tournament, or camp.');
+    expect(checkInviteAssignments(0, 0, NOTHING_OFFERED)).toEqual({
       field: 'leagues',
       code: 'leaguesEmpty',
       message: 'Choose at least one league.',
     });
-    expect(checkInviteAssignments(0, 0, true)).toEqual({
-      field: 'leagues',
-      code: 'leaguesEmpty',
-      message: 'Choose at least one league or tournament.',
-    });
   });
 
   test('accepts a league organizer with a league, a tournament, or both', () => {
-    expect(checkInviteAssignments(1, 0, false)).toBeNull();
-    expect(checkInviteAssignments(0, 1, true)).toBeNull();
-    expect(checkInviteAssignments(2, 3, true)).toBeNull();
+    expect(checkInviteAssignments(1, 0, NOTHING_OFFERED)).toBeNull();
+    expect(checkInviteAssignments(0, 1, { tournaments: true, camps: false })).toBeNull();
+    expect(checkInviteAssignments(0, 1, { tournaments: false, camps: true })).toBeNull();
+    expect(checkInviteAssignments(2, 3, { tournaments: true, camps: true })).toBeNull();
   });
 
   test('the server messages name the address', () => {

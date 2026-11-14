@@ -16,3 +16,11 @@ export async function assignablePrograms(
   }
   return programs;
 }
+
+/** The type names a program in its own list, so a camp never reads as a tournament. */
+export function programsOfType(
+  programs: readonly Doc<'programs'>[],
+  type: Doc<'programs'>['type'],
+): Doc<'programs'>[] {
+  return programs.filter((program) => program.type === type);
+}

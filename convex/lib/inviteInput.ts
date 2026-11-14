@@ -36,7 +36,6 @@ export const INVITE_MESSAGES = {
   emailEmpty: 'Enter their email address.',
   emailInvalid: 'Enter an email address like name@example.com.',
   leaguesEmpty: 'Choose at least one league.',
-  assignmentEmpty: 'Choose at least one league or tournament.',
   alreadyMember: (email: string) => `${email} is already on your staff.`,
   alreadyInvited: (email: string) =>
     `${email} already has a pending invite. To send a new link, revoke that invite first.`,
@@ -79,14 +78,31 @@ export function checkInviteEmail(
   return { ok: true, email: normalised };
 }
 
+/** The program types the invite's picker lists besides leagues. */
+export interface ProgramOffers {
+  tournaments: boolean;
+  camps: boolean;
+}
+
+export const NOTHING_OFFERED: ProgramOffers = { tournaments: false, camps: false };
+
+const ASSIGNMENT_EMPTY = {
+  tournaments: 'Choose at least one league or tournament.',
+  camps: 'Choose at least one league or camp.',
+  both: 'Choose at least one league, tournament, or camp.',
+} as const;
+
+function emptyMessage({ tournaments, camps }: ProgramOffers): string {
+  if (tournaments && camps) return ASSIGNMENT_EMPTY.both;
+  if (tournaments) return ASSIGNMENT_EMPTY.tournaments;
+  return camps ? ASSIGNMENT_EMPTY.camps : INVITE_MESSAGES.leaguesEmpty;
+}
+
 export function checkInviteAssignments(
   leagueCount: number,
   programCount: number,
-  tournamentsOffered: boolean,
+  offers: ProgramOffers,
 ): InviteInputError | null {
   if (leagueCount + programCount > 0) return null;
-  const message = tournamentsOffered
-    ? INVITE_MESSAGES.assignmentEmpty
-    : INVITE_MESSAGES.leaguesEmpty;
-  return { field: 'leagues', code: 'leaguesEmpty', message };
+  return { field: 'leagues', code: 'leaguesEmpty', message: emptyMessage(offers) };
 }
