@@ -333,6 +333,17 @@ describe('tournaments.getPublicPage bracket scores', () => {
     expect((await bracketOf(s))!.rounds[0].games[1]).toMatchObject({ winner: 1, score: corrected });
   });
 
+  test('leaves score and forfeit off a game whose forfeiting team is not in its places', async () => {
+    const s = await worldWithBracket(FIVE);
+    await delta(s, { score: forfeitScore('beachVolleyball', 1, 1), forfeitSide: 1 });
+    const game = await gameAt(s, 1, 2);
+    const outsider = await teamIdOf(s, 'Alpha');
+    await s.t.run((ctx) => ctx.db.patch('tournamentGames', game._id, { forfeitTeamId: outsider }));
+    const shown = (await bracketOf(s))!.rounds[0].games[1];
+    expect(shown).not.toHaveProperty('score');
+    expect(shown).not.toHaveProperty('forfeit');
+  });
+
   test('holds no ids, the forfeiting team included', async () => {
     const s = await worldWithBracket(FIVE);
     await delta(s, { score: forfeitScore('beachVolleyball', 1, 1), forfeitSide: 1 });

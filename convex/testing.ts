@@ -623,11 +623,7 @@ export const seedTournamentBracket = internalMutation({
   },
 });
 
-/**
- * One bracket result through the writer `tournamentGames.enterResult` uses, skipping the organizer check. The score rules still
- * apply: the winner comes from the score, a tie and a score the tournament's sets do not allow are refused, and a forfeit gets the
- * sport's forfeit score.
- */
+/** One bracket result through the writer `tournamentGames.enterResult` uses, with its score rules. Skips the organizer check. */
 export const seedTournamentResult = internalMutation({
   args: {
     organizationSlug: v.string(),
