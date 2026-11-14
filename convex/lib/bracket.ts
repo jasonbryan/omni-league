@@ -36,6 +36,8 @@ export const BRACKET_MESSAGES = {
   noResult: 'This game has no result.',
   nextGamePlayed: 'The next game has a result, so this result cannot change.',
   resultChanged: 'Someone else changed this result first. The game shows their result now.',
+  reportsClosed: 'This game has a result, so it takes no more score reports.',
+  reportChanged: 'The team reported a different score first. The game shows it now.',
 } as const;
 
 export const BRACKET_REFUSAL_CODES = [
@@ -55,6 +57,8 @@ export const BRACKET_REFUSAL_CODES = [
   'noResult',
   'nextGamePlayed',
   'resultChanged',
+  'reportsClosed',
+  'reportChanged',
 ] as const;
 
 export type BracketRefusalCode = (typeof BRACKET_REFUSAL_CODES)[number];

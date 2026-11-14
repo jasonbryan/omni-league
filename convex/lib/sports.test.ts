@@ -7,6 +7,7 @@ import {
   SCORE_MESSAGES,
   scoreKindOf,
   scoreText,
+  scoresEqual,
   scoreWinnerSide,
   SPORT_NAMES,
   SPORT_SEGMENTS,
@@ -269,5 +270,32 @@ describe('scoreText', () => {
         ],
       }),
     ).toBe('21–15, 18–21');
+  });
+});
+
+describe('scoresEqual', () => {
+  const sets = (...pairs: [number, number][]) => ({
+    kind: 'sets' as const,
+    sets: pairs.map(([a, b]) => ({ a, b })),
+  });
+
+  test('two scores with the same sets are equal, whatever order the keys came in', () => {
+    expect(scoresEqual(sets([21, 18]), { kind: 'sets', sets: [{ b: 18, a: 21 }] })).toBe(true);
+    expect(scoresEqual(sets([21, 15], [18, 21], [15, 9]), sets([21, 15], [18, 21], [15, 9]))).toBe(
+      true,
+    );
+  });
+
+  test('a different set, or a different number of sets, is not equal', () => {
+    expect(scoresEqual(sets([21, 18]), sets([21, 19]))).toBe(false);
+    expect(scoresEqual(sets([21, 18]), sets([18, 21]))).toBe(false);
+    expect(scoresEqual(sets([21, 15], [21, 10]), sets([21, 15]))).toBe(false);
+  });
+
+  test('goals and runs compare both sides, and a kind never equals another', () => {
+    expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, { kind: 'goals', a: 3, b: 1 })).toBe(true);
+    expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, { kind: 'goals', a: 1, b: 3 })).toBe(false);
+    expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, { kind: 'runs', a: 3, b: 1 })).toBe(false);
+    expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, sets([3, 1]))).toBe(false);
   });
 });

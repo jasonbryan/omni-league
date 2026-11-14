@@ -521,7 +521,6 @@ test.describe('Camp sessions: opening the camp page', () => {
     await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}#add-session`);
     await expect(page).toHaveTitle(`${JUNIOR.name} | ${tenant.name} | Omni League`);
     await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
-    // The link lands on the form: Name has focus and the form is on screen, so a new camp needs no second press.
     await expect(page.locator('#add-session #name')).toBeFocused();
     await expect(page.locator('#add-session #name')).toBeInViewport();
     await expect(main(page).locator('h1 + div [data-slot="badge"]').first()).toHaveText('Draft');

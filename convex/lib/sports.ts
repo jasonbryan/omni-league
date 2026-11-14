@@ -201,3 +201,17 @@ export function scoreText(score: Score): string {
   if (score.kind !== 'sets') return `${score.a}–${score.b}`;
   return score.sets.map(({ a, b }) => `${a}–${b}`).join(', ');
 }
+
+export function scoresEqual(first: Score, second: Score): boolean {
+  if (first.kind === 'sets' || second.kind === 'sets') {
+    return (
+      first.kind === 'sets' &&
+      second.kind === 'sets' &&
+      first.sets.length === second.sets.length &&
+      first.sets.every(
+        (set, index) => set.a === second.sets[index].a && set.b === second.sets[index].b,
+      )
+    );
+  }
+  return first.kind === second.kind && first.a === second.a && first.b === second.b;
+}

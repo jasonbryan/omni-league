@@ -13,6 +13,9 @@ const STAGE = 'bracket';
 // A bracket of the most teams a tournament takes has one game fewer than teams.
 const BRACKET_GAMES_READ_LIMIT = MAX_MAXIMUM_TEAMS;
 
+/** A team reports once for its game, and a game has two teams. */
+export const REPORTS_PER_GAME = 2;
+
 export function refuseBracket(refusal: BracketRefusal, extra: object = {}): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...refusal, ...extra });
@@ -69,6 +72,22 @@ export async function nextGameOf(
   return game.nextGameId ? ctx.db.get('tournamentGames', game.nextGameId) : null;
 }
 
+export function reportsOfGame(
+  ctx: ReadCtx,
+  gameId: Id<'tournamentGames'>,
+): Promise<Doc<'scoreReports'>[]> {
+  return ctx.db
+    .query('scoreReports')
+    .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', gameId))
+    .take(REPORTS_PER_GAME);
+}
+
+async function deleteReportsOfGame(ctx: MutationCtx, gameId: Id<'tournamentGames'>): Promise<void> {
+  for (const report of await reportsOfGame(ctx, gameId)) {
+    await ctx.db.delete('scoreReports', report._id);
+  }
+}
+
 async function placeInNextGame(
   ctx: MutationCtx,
   game: Doc<'tournamentGames'>,
@@ -76,6 +95,10 @@ async function placeInNextGame(
 ): Promise<void> {
   const next = await nextGameOf(ctx, game);
   if (!next) return;
+  // A report names the score against the opponent the team had, so another team or an emptied place voids it, and an Undo of the feeder's Clear does not bring it back.
+  if (next.teamIds.some((placed, side) => side === game.nextSide && placed !== teamId)) {
+    await deleteReportsOfGame(ctx, next._id);
+  }
   await ctx.db.patch('tournamentGames', next._id, {
     teamIds: next.teamIds.map((placed, side) => (side === game.nextSide ? teamId : placed)),
   });
@@ -142,7 +165,10 @@ export async function replaceBracket(
   seeds: readonly Doc<'teams'>[],
   replaced: readonly Doc<'tournamentGames'>[],
 ): Promise<number> {
-  for (const game of replaced) await ctx.db.delete('tournamentGames', game._id);
+  for (const game of replaced) {
+    await deleteReportsOfGame(ctx, game._id);
+    await ctx.db.delete('tournamentGames', game._id);
+  }
   await saveSeeds(ctx, seeds);
   const teamOf = (seed: number | null): Id<'teams'> | null =>
     seed === null ? null : seeds[seed - 1]._id;

@@ -78,6 +78,7 @@ const BRACKET = {
           winnerTeamId: 'tm_alpha',
           result: null,
           locked: false,
+          reports: [],
         },
         {
           gameId: 'g_2',
@@ -86,6 +87,7 @@ const BRACKET = {
           winnerTeamId: null,
           result: null,
           locked: false,
+          reports: [],
         },
       ],
     },
@@ -100,6 +102,7 @@ const BRACKET = {
           winnerTeamId: null,
           result: null,
           locked: false,
+          reports: [],
         },
       ],
     },

@@ -8,6 +8,7 @@ import { TeamPage } from './team-page';
 const GET = 'teams:getForMember';
 const LIST = 'teams:listForSeasonMember';
 const PENDING = 'teamInvites:listPending';
+const FOR_TEAM = 'scoreReports:forTeam';
 
 @Component({ template: '' })
 class Start {}
@@ -109,6 +110,45 @@ describe('TeamPage: a tournament team', () => {
     expect(main().querySelector('a[href$="#invite"]')).not.toBeNull();
     expect(o.subscription(PENDING)?.args).toEqual({ teamId: 'team_crabs' });
     expect(o.subscription(LIST)?.args).toEqual({ teamId: 'team_crabs' });
+  });
+
+  it('shows the captain the Report score panel above the roster, and asks for the team’s game', async () => {
+    await open();
+    const panel = main().querySelector('app-score-report-panel')!;
+    expect(panel).not.toBeNull();
+    expect(
+      panel.compareDocumentPosition(
+        main().querySelector('section[aria-labelledby="roster-heading"]')!,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(o.subscription(FOR_TEAM)?.args).toEqual({ teamId: 'team_crabs' });
+    o.subscription(FOR_TEAM)!.emit({ sport: 'beachVolleyball', setsPerGame: 1, game: null });
+    await o.flush();
+    expect(text(panel.querySelector('h2'))).toBe('Report score');
+    expect(text(panel.querySelector('[data-slot="empty"] p'))).toBe('No game to report right now.');
+  });
+
+  it('shows a player who is not the captain no Report score panel, and asks for no game', async () => {
+    await open({
+      ...CRABS,
+      viewerIsCaptain: false,
+      viewerCanManage: false,
+      roster: [{ ...CRABS.roster[0], isCaptain: false }],
+    });
+    expect(main().querySelector('app-score-report-panel')).toBeNull();
+    expect(o.subscription(FOR_TEAM)).toBeUndefined();
+  });
+
+  it('shows an organizer on no roster no Report score panel', async () => {
+    await open({
+      ...CRABS,
+      viewerIsCaptain: false,
+      viewerOnTeam: false,
+      viewerTeamName: null,
+      roster: [{ ...CRABS.roster[0], isViewer: false }],
+    });
+    expect(main().querySelector('app-score-report-panel')).toBeNull();
+    expect(o.subscription(FOR_TEAM)).toBeUndefined();
   });
 
   it('names the teams panel for the tournament, and links each team', async () => {

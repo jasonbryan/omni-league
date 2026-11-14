@@ -51,6 +51,24 @@ function advancesText(winnerName: string, advancesTo: string | null): string {
     : `${winnerName} advances to the ${advancesTo}.`;
 }
 
+export function reportedText(
+  reporter: string,
+  teams: readonly [string, string],
+  score: Score,
+): string {
+  return `${reporter} reported ${teams[0]} ${scoreText(score)} ${teams[1]}.`;
+}
+
+export function confirmedText(winnerName: string, advancesTo: string | null): AlertText {
+  return { title: 'Report confirmed', description: advancesText(winnerName, advancesTo) };
+}
+
+export function confirmFailedText(refusal: string | null): AlertText {
+  return { title: 'The report could not be confirmed.', description: refusal ?? CHECK_CONNECTION };
+}
+
+export const CONFIRM_OFFLINE = 'The game is still reported. Try again when you’re connected.';
+
 export function savedText(
   winnerName: string,
   advancesTo: string | null,

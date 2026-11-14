@@ -1141,8 +1141,8 @@ export const AREAS = [
   {
     name: 'convex tournament bracket',
     test: (file) =>
-      named('convex/', ['tournamentGames'])(file) ||
-      named('convex/lib/', ['bracket', 'tournamentBracket'])(file),
+      named('convex/', ['tournamentGames', 'scoreReports'])(file) ||
+      named('convex/lib/', ['bracket', 'gameResults', 'scoreReports', 'tournamentBracket'])(file),
     specs: ['tournament-bracket', 'organization-tournaments', 'tournament-registration'],
   },
   {

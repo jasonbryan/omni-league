@@ -18,6 +18,7 @@ const SETUP = 'tournamentGames:getSetup';
 const ENTER = 'tournamentGames:enterResult';
 const CORRECT = 'tournamentGames:correctResult';
 const UNDO = 'tournamentGames:undoResult';
+const CONFIRM = 'scoreReports:confirm';
 
 const TOURNAMENT = {
   tournamentId: 'tn_winter',
@@ -54,6 +55,13 @@ interface GameFixture {
   winnerTeamId: string | null;
   result: { score: unknown; forfeitTeamId: string | null; resultEnteredAt: number } | null;
   locked: boolean;
+  reports: {
+    reportId: string;
+    teamId: string;
+    teamName: string;
+    score: unknown;
+    reportedAt: number;
+  }[];
 }
 
 const game = (
@@ -68,10 +76,20 @@ const game = (
   winnerTeamId: null,
   result: null,
   locked: false,
+  reports: [],
   ...more,
 });
 
 const ONE_SET = { kind: 'sets', sets: [{ a: 21, b: 15 }] };
+const OTHER_SET = { kind: 'sets', sets: [{ a: 18, b: 21 }] };
+
+const reportBy = (teamName: string, score: object = ONE_SET, reportedAt = 2_000) => ({
+  reportId: `sr_${teamName.toLowerCase()}`,
+  teamId: `tm_${teamName.toLowerCase()}`,
+  teamName,
+  score,
+  reportedAt,
+});
 
 const stored = (score: object = ONE_SET, forfeitTeamId: string | null = null, at = 1_000) => ({
   score,
@@ -1126,6 +1144,216 @@ describe('BracketGame', () => {
     it('is not shown before then', async () => {
       await open();
       expect(page.querySelector('[data-slot="winner"]')).toBeNull();
+    });
+  });
+  describe('a reported game', () => {
+    const REPORTED = (...reports: ReturnType<typeof reportBy>[]) =>
+      setupOf({ semi: game('g_2', 2, ['Bravo', 'Charlie'], { reports }) });
+    const reportsOf = (gameId: string) =>
+      [...row(gameId).querySelectorAll('[data-slot="report"]')].map((li) =>
+        text(li.querySelector('span')),
+      );
+    const SAVED = {
+      winnerTeamId: 'tm_bravo',
+      winnerName: 'Bravo',
+      advancesTo: 'Final',
+      previous: null,
+      resultEnteredAt: 5_000,
+    };
+
+    it('reads Reported with the team’s score, Confirm and Correct score, and no Enter result', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      expect(text(row('g_2').querySelector('[data-slot="reports"] [data-slot="badge"]'))).toBe(
+        'Reported',
+      );
+      expect(reportsOf('g_2')).toEqual(['Bravo reported Bravo 21–15 Charlie.']);
+      expect(text(button('g_2', 'Confirm'))).toBe('Confirm the score reported by Bravo');
+      expect(text(button('g_2', 'Correct score'))).toBe('Correct score Bravo v Charlie');
+      expect(button('g_2', 'Enter result')).toBeUndefined();
+      expect(row('g_2').querySelector('[data-slot="game-result"]')).toBeNull();
+    });
+
+    it('a game with no report keeps Enter result', async () => {
+      await open();
+      expect(button('g_2', 'Enter result')).toBeDefined();
+      expect(button('g_2', 'Confirm')).toBeUndefined();
+      expect(row('g_2').querySelector('[data-slot="reports"]')).toBeNull();
+    });
+
+    it('two reports that agree read as one line from both teams, with one Confirm', async () => {
+      await open(REPORTED(reportBy('Bravo'), reportBy('Charlie')));
+      expect(reportsOf('g_2')).toEqual(['Both teams reported Bravo 21–15 Charlie.']);
+      expect(
+        [...row('g_2').querySelectorAll('button')].filter((b) => text(b)?.startsWith('Confirm')),
+      ).toHaveLength(1);
+    });
+
+    it('two reports that differ show both, each with its own Confirm, and say they differ', async () => {
+      await open(REPORTED(reportBy('Bravo'), reportBy('Charlie', OTHER_SET)));
+      expect(reportsOf('g_2')).toEqual([
+        'Bravo reported Bravo 21–15 Charlie.',
+        'Charlie reported Bravo 18–21 Charlie.',
+      ]);
+      expect(text(row('g_2').querySelector('[data-slot="reports"] > p'))).toContain(
+        'The two teams reported different scores.',
+      );
+      expect(
+        [...row('g_2').querySelectorAll('button')]
+          .filter((b) => text(b)?.startsWith('Confirm'))
+          .map((b) => text(b)),
+      ).toEqual(['Confirm the score reported by Bravo', 'Confirm the score reported by Charlie']);
+    });
+
+    it('Confirm sends the report and the time it was shown, and shows Confirming… until the answer', async () => {
+      await open(REPORTED(reportBy('Bravo', ONE_SET, 2_345)));
+      const confirm = button('g_2', 'Confirm')!;
+      await press(confirm);
+      expect(calls()).toEqual([[CONFIRM, { reportId: 'sr_bravo', expected: 2_345 }]]);
+      const pending = button('g_2', 'Confirming');
+      expectPendingSpinner(pending);
+      expect(text(pending)).toBe('Confirming…');
+      expect(pending!.getAttribute('aria-disabled')).toBe('true');
+      await press(pending);
+      expect(calls()).toHaveLength(1);
+    });
+
+    it('says Report confirmed with where the winner goes and an Undo, and takes focus because Confirm is gone', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].resolve(SAVED);
+      o.subscription(SETUP)!.emit(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored(ONE_SET, null, 5_000),
+          }),
+          final: game('g_3', 1, ['Alpha', 'Bravo']),
+        }),
+      );
+      await o.flush();
+      const alert = statusOf('g_2')!;
+      expect(titleOf('g_2')).toBe('Report confirmed');
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toContain(
+        'Bravo advances to the Final.',
+      );
+      expect(button('g_2', 'Undo')).toBeDefined();
+      expect(document.activeElement).toBe(alert);
+      expect(row('g_2').querySelector('[data-slot="reports"]')).toBeNull();
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 21–15 Charlie. Bravo won.',
+      );
+    });
+
+    it('Undo after a confirm clears the result, and the game reads Reported again', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].resolve(SAVED);
+      o.subscription(SETUP)!.emit(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored(ONE_SET, null, 5_000),
+          }),
+        }),
+      );
+      await o.flush();
+      await press(button('g_2', 'Undo'));
+      expect(calls()[1]).toEqual([UNDO, { gameId: 'g_2', expected: 5_000 }]);
+      o.convex.calls[1].resolve(null);
+      o.subscription(SETUP)!.emit(REPORTED(reportBy('Bravo')));
+      await o.flush();
+      expect(titleOf('g_2')).toBe('Result undone');
+      expect(reportsOf('g_2')).toEqual(['Bravo reported Bravo 21–15 Charlie.']);
+    });
+
+    it('a refusal because the team changed its report shows in an alert, in the server’s words, and drops nothing else', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].reject(
+        new ConvexError({
+          code: 'reportChanged',
+          message: 'The team reported a different score first. The game shows it now.',
+        }),
+      );
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The report could not be confirmed. The team reported a different score first. The game shows it now.',
+      );
+      expect(document.activeElement).toBe(row('g_2').querySelector('[data-slot="alert"]'));
+      o.subscription(SETUP)!.emit(REPORTED(reportBy('Bravo', OTHER_SET, 3_000)));
+      await o.flush();
+      expect(reportsOf('g_2')).toEqual(['Bravo reported Bravo 18–21 Charlie.']);
+      expect(button('g_2', 'Confirm')).toBeDefined();
+    });
+
+    it('a failure it cannot word names no server detail, and Confirm can be pressed again', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The report could not be confirmed. Check your connection and try again.',
+      );
+      expect(row('g_2').textContent).not.toContain('secret');
+      expect(button('g_2', 'Confirm')!.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    it('offline, Confirm looks disabled, and a press says the game is still reported without sending', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await goOffline();
+      const confirm = button('g_2', 'Confirm')!;
+      expect(confirm.getAttribute('aria-disabled')).toBe('true');
+      expect(confirm.classList.contains('opacity-50')).toBe(true);
+      await press(confirm);
+      expect(calls()).toEqual([]);
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toContain(
+        'The game is still reported. Try again when you’re connected.',
+      );
+    });
+
+    it('Correct score opens the form with the reported score, and Save sends it as the result', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Correct score'));
+      expect(form('g_2')).not.toBeNull();
+      expect(input('g_2', 'a1').value).toBe('21');
+      expect(input('g_2', 'b1').value).toBe('15');
+      expect(row('g_2').querySelector('[data-slot="reports"]')).toBeNull();
+      await fill('g_2', '21', '19');
+      await press(button('g_2', 'Save result'));
+      expect(calls()).toEqual([
+        [ENTER, { gameId: 'g_2', score: { kind: 'sets', sets: [{ a: 21, b: 19 }] } }],
+      ]);
+    });
+
+    it('Correct score starts blank when the two reports differ', async () => {
+      await open(REPORTED(reportBy('Bravo'), reportBy('Charlie', OTHER_SET)));
+      await press(button('g_2', 'Correct score'));
+      expect(input('g_2', 'a1').value).toBe('');
+      expect(input('g_2', 'b1').value).toBe('');
+    });
+
+    it('Cancel closes the form without sending, and focus returns to Correct score', async () => {
+      await open(REPORTED(reportBy('Bravo')));
+      await press(button('g_2', 'Correct score'));
+      await press(button('g_2', 'Cancel'));
+      expect(form('g_2')).toBeNull();
+      expect(calls()).toEqual([]);
+      expect(document.activeElement).toBe(button('g_2', 'Correct score'));
+    });
+
+    it('a game that has a result shows no reports', async () => {
+      await open(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored(),
+            reports: [reportBy('Bravo')],
+          }),
+        }),
+      );
+      expect(row('g_2').querySelector('[data-slot="reports"]')).toBeNull();
+      expect(button('g_2', 'Confirm')).toBeUndefined();
+      expect(button('g_2', 'Correct result')).toBeDefined();
     });
   });
 });

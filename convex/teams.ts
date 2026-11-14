@@ -9,6 +9,7 @@ import {
   requireUser,
   type TeamReader,
 } from './lib/access';
+import { setsPerGameOf } from './lib/gameResults';
 import { shortMinorName } from './lib/minorName';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
@@ -31,6 +32,7 @@ import {
   TOURNAMENT_NOT_FOUND_CODE,
   type RegistrationClosedError,
 } from './lib/teamInput';
+import { sportValidator } from './lib/sports';
 import { bracketExists } from './lib/tournamentBracket';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import { getCurrentUser } from './lib/users';
@@ -278,7 +280,14 @@ const teamForMemberValidator = v.object({
   /** A tournament team's `season` and `league` are stand-ins for the previous frontend; `tournament` marks the team. */
   league: v.optional(v.object({ name: v.string(), slug: v.string() })),
   season: v.optional(v.object({ name: v.string(), slug: v.string() })),
-  tournament: v.optional(v.object({ name: v.string(), slug: v.string() })),
+  tournament: v.optional(
+    v.object({
+      name: v.string(),
+      slug: v.string(),
+      sport: v.optional(sportValidator),
+      setsPerGame: v.optional(v.number()),
+    }),
+  ),
   minimumRosterSize: v.number(),
   maxRosterSize: v.optional(v.number()),
   rosterCount: v.number(),
@@ -322,7 +331,12 @@ async function tournamentTeamForMember(
   return {
     name: team.name,
     organization: { name: organization.name, slug: organization.slug },
-    tournament: { name: program.name, slug: program.slug },
+    tournament: {
+      name: program.name,
+      slug: program.slug,
+      sport: tournament.sport,
+      setsPerGame: setsPerGameOf(tournament),
+    },
     // The previous frontend reads `season` and `league` without a check, so a tournament team answers with stand-ins.
     season: { name: program.name, slug: program.slug },
     league: { name: organization.name, slug: organization.slug },

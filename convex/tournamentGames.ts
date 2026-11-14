@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
-import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { mutation, query, type QueryCtx } from './_generated/server';
 import {
   requireGameOrganizer,
   requireProgramOrganizerOrForbidden,
@@ -8,39 +8,33 @@ import {
   requireTournamentOrganizer,
 } from './lib/access';
 import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, roundName } from './lib/bracket';
-import { registrationIsOpen } from './lib/registration';
-import { findOrganizationBySlug } from './lib/seasonLookup';
 import {
-  checkScore,
-  forfeitScore,
-  scoreValidator,
-  scoreWinnerSide,
-  type Score,
-  type Sport,
-} from './lib/sports';
-import { DEFAULT_SETS_PER_GAME } from './lib/tournamentEdit';
+  checkedResult,
+  resultFrom,
+  refuseUnlessReady,
+  saveFor,
+  savedValidator,
+  storedResultValidator,
+} from './lib/gameResults';
+import { registrationIsOpen } from './lib/registration';
+import { reportsInPlaceOrder, reportViewValidator } from './lib/scoreReports';
+import { findOrganizationBySlug } from './lib/seasonLookup';
+import { scoreValidator } from './lib/sports';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import {
   bracketGames,
   bracketHasResult,
   clearResult,
   gameHasResult,
-  nextGameOf,
   refuseBracket,
   replaceBracket,
   saveResult,
   saveSeeds,
   storedResultOf,
   tournamentTeams,
-  type StoredResult,
 } from './lib/tournamentBracket';
 
 const gameTeamValidator = v.union(v.null(), v.object({ teamId: v.id('teams'), name: v.string() }));
-
-const storedResultValidator = v.object({
-  score: scoreValidator,
-  forfeitTeamId: v.optional(v.id('teams')),
-});
 
 const setupValidator = v.object({
   seeds: v.array(v.object({ teamId: v.id('teams'), name: v.string(), rosterCount: v.number() })),
@@ -71,6 +65,7 @@ const setupValidator = v.object({
               ),
               /** The next game has a result, so Undo, Clear, and Correct are refused. */
               locked: v.boolean(),
+              reports: v.array(reportViewValidator),
             }),
           ),
         }),
@@ -109,6 +104,11 @@ async function bracketView(
     if (teamId === null || names.has(teamId)) continue;
     names.set(teamId, (await ctx.db.get('teams', teamId))?.name ?? '');
   }
+  const reports = new Map<Id<'tournamentGames'>, Doc<'scoreReports'>[]>();
+  for (const game of games) {
+    const open = !gameHasResult(game) && game.teamIds.every((teamId) => teamId !== null);
+    reports.set(game._id, open ? await reportsInPlaceOrder(ctx, game) : []);
+  }
   const rounds = games.reduce((most, game) => Math.max(most, game.round), 0);
   const byId = new Map(games.map((game) => [game._id, game]));
   const final = games.find((game) => game.round === rounds);
@@ -130,6 +130,13 @@ async function bracketView(
           winnerTeamId: game.winnerTeamId ?? null,
           result: gameHasResult(game) ? resultViewOf(game) : null,
           locked: nextHasResult(game, byId),
+          reports: (reports.get(game._id) ?? []).map((reported) => ({
+            reportId: reported._id,
+            teamId: reported.teamId,
+            teamName: names.get(reported.teamId) ?? '',
+            score: reported.score,
+            reportedAt: reported.reportedAt,
+          })),
         })),
     })),
   };
@@ -234,104 +241,6 @@ const resultArgs = {
   score: v.optional(scoreValidator),
   forfeitTeamId: v.optional(v.id('teams')),
 };
-
-const savedValidator = v.object({
-  winnerTeamId: v.id('teams'),
-  winnerName: v.string(),
-  /** What Undo sends back, so it acts only on this result. */
-  resultEnteredAt: v.number(),
-  /** The round the winner joins; `null` for the Final, whose winner wins the tournament. */
-  advancesTo: v.union(v.null(), v.string()),
-  /** What the game held before, so the page can offer to restore it; `null` for a first result. */
-  previous: v.union(v.null(), storedResultValidator),
-});
-
-interface ResultInput {
-  score?: Score | undefined;
-  forfeitTeamId?: Id<'teams'> | undefined;
-}
-
-const setsPerGameOf = (tournament: Doc<'tournaments'>) =>
-  tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
-
-function checkedResult(
-  game: Doc<'tournamentGames'>,
-  tournament: Doc<'tournaments'>,
-  sport: Sport,
-  result: StoredResult,
-): StoredResult & { winnerTeamId: Id<'teams'> } {
-  const issue = checkScore(sport, setsPerGameOf(tournament), result.score);
-  if (issue)
-    refuseBracket({ code: 'invalidScore', message: issue.message }, { field: issue.field });
-  const winnerTeamId = game.teamIds[scoreWinnerSide(result.score)!]!;
-  const { forfeitTeamId } = result;
-  if (
-    forfeitTeamId !== undefined &&
-    (forfeitTeamId === winnerTeamId || !game.teamIds.includes(forfeitTeamId))
-  ) {
-    throw new Error('Not allowed');
-  }
-  return { ...result, winnerTeamId };
-}
-
-function resultFrom(
-  game: Doc<'tournamentGames'>,
-  tournament: Doc<'tournaments'>,
-  sport: Sport,
-  { score, forfeitTeamId }: ResultInput,
-): StoredResult & { winnerTeamId: Id<'teams'> } {
-  // The page sends one or the other, so both or neither is a caller sending its own arguments.
-  if ((score === undefined) === (forfeitTeamId === undefined)) throw new Error('Not allowed');
-  if (forfeitTeamId === undefined) return checkedResult(game, tournament, sport, { score: score! });
-  const side = game.teamIds.indexOf(forfeitTeamId);
-  if (side !== 0 && side !== 1) throw new Error('Not allowed');
-  return checkedResult(game, tournament, sport, {
-    score: forfeitScore(sport, setsPerGameOf(tournament), side),
-    forfeitTeamId,
-  });
-}
-
-async function refuseUnlessReady(
-  ctx: QueryCtx,
-  game: Doc<'tournamentGames'>,
-  expectResult: boolean,
-): Promise<void> {
-  if (game.teamIds.some((teamId) => teamId === null)) {
-    refuseBracket({ code: 'gameNotReady', message: BRACKET_MESSAGES.gameNotReady });
-  }
-  if (gameHasResult(game) !== expectResult) {
-    refuseBracket(
-      expectResult
-        ? { code: 'noResult', message: BRACKET_MESSAGES.noResult }
-        : { code: 'resultExists', message: BRACKET_MESSAGES.resultExists },
-    );
-  }
-  const next = await nextGameOf(ctx, game);
-  if (next && gameHasResult(next)) {
-    refuseBracket({ code: 'nextGamePlayed', message: BRACKET_MESSAGES.nextGamePlayed });
-  }
-}
-
-async function saveFor(
-  ctx: MutationCtx,
-  { game, tournament, program, user }: Awaited<ReturnType<typeof requireGameOrganizer>>,
-  input: ResultInput,
-  hadResult: boolean,
-) {
-  await refuseUnlessReady(ctx, game, hadResult);
-  const result = resultFrom(game, tournament, program.sport, input);
-  const previous = storedResultOf(game);
-  const resultEnteredAt = await saveResult(ctx, game, { ...result, enteredBy: user._id });
-  const games = await bracketGames(ctx, tournament._id);
-  const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
-  return {
-    winnerTeamId: result.winnerTeamId,
-    winnerName: (await ctx.db.get('teams', result.winnerTeamId))?.name ?? '',
-    resultEnteredAt,
-    advancesTo: game.nextGameId ? roundName(game.round + 1, rounds) : null,
-    previous: hadResult ? previous : null,
-  };
-}
 
 export const enterResult = mutation({
   args: resultArgs,

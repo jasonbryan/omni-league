@@ -226,6 +226,17 @@ export default defineSchema({
     'slot',
   ]),
 
+  // A captain's reported score for a game of their team, one row per team and game. Written by `convex/scoreReports.ts`, and deleted with its game or when the game's teams change by `convex/lib/tournamentBracket.ts`.
+  scoreReports: defineTable({
+    gameId: v.id('tournamentGames'),
+    teamId: v.id('teams'),
+    reportedByUserId: v.id('users'),
+    /** `a` is the game's first team, as in `tournamentGames.score`. */
+    score: scoreValidator,
+    /** What a confirm sends back as `expected`, so it acts only on the score the organizer saw. */
+    reportedAt: v.number(),
+  }).index('by_gameId_and_teamId', ['gameId', 'teamId']),
+
   // The camp part of a program of type `camp`; `programs` holds its name, slug, sport, status, and locations. Written only by `convex/lib/tenantWrites.ts`.
   camps: defineTable({
     programId: v.id('programs'),
