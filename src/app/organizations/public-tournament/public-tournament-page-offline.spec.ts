@@ -189,6 +189,17 @@ describe('PublicTournamentPage offline', () => {
     );
   });
 
+  it('shows a copy saved before score and forfeit existed with no score line, and the games and note intact', async () => {
+    plant(tournamentQueryResults({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    const section = host(harness).querySelector('main section#bracket');
+    expect(section?.querySelectorAll('[data-testid="bracket-game"]')).toHaveLength(3);
+    expect(section?.querySelectorAll('[data-testid="bracket-score"]')).toHaveLength(0);
+    expect(section?.textContent).not.toContain('Score');
+    expect(note(harness)).not.toBeNull();
+  });
+
   describe('no saved copy', () => {
     it('offline: shows the not-saved view at once, with Try again to the tournament page asked for', async () => {
       plant();
