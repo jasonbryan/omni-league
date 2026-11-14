@@ -66,7 +66,11 @@ export const report = mutation({
     const user = await requireUser(ctx);
     const game = await ctx.db.get('tournamentGames', gameId);
     const team = await ctx.db.get('teams', teamId);
-    if (!game || team?.captainUserId !== user._id || !game.teamIds.includes(team._id)) {
+    if (
+      game?.stage !== 'bracket' ||
+      team?.captainUserId !== user._id ||
+      !game.teamIds.includes(team._id)
+    ) {
       throw new Error('Not allowed');
     }
     if (game.winnerTeamId !== undefined) {

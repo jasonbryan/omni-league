@@ -36,6 +36,7 @@ import { AdminAlert } from './admin-alert';
 import { adminPath } from './admin-path';
 import { BracketPanel } from './bracket-panel';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { PoolsPanel } from './pools-panel';
 import {
   PublishTournamentDialog,
   type PublishTournamentOutcome,
@@ -58,6 +59,7 @@ import { WaitlistPanel } from './waitlist-panel';
     HlmSkeleton,
     NgIcon,
     NotFoundView,
+    PoolsPanel,
     PublishTournamentDialog,
     RouterLink,
     ServerErrorView,
@@ -251,12 +253,21 @@ import { WaitlistPanel } from './waitlist-panel';
               [maxTeams]="tournament.maximumTeams"
               [promotionClosed]="tournament.bracketCreated"
             />
-            <app-bracket-panel
-              class="mt-4 max-w-2xl md:mt-6"
-              [tournament]="tournament"
-              [view]="bracket()"
-              [retryHref]="retryHref()"
-            />
+            @if (tournament.structure === 'pools') {
+              <app-pools-panel
+                class="mt-4 max-w-2xl md:mt-6"
+                [tournament]="tournament"
+                [view]="pools()"
+                [retryHref]="retryHref()"
+              />
+            } @else {
+              <app-bracket-panel
+                class="mt-4 max-w-2xl md:mt-6"
+                [tournament]="tournament"
+                [view]="bracket()"
+                [retryHref]="retryHref()"
+              />
+            }
             <section
               #editSection
               id="edit-details"
@@ -325,6 +336,7 @@ export class TournamentManagement {
   protected readonly tournament = this.context.tournament;
   protected readonly waitlist = this.context.waitlist;
   protected readonly bracket = this.context.bracket;
+  protected readonly pools = this.context.pools;
   protected readonly dates = computed(() => {
     const tournament = this.tournament();
     return tournament ? seasonDates(tournament.startDate, tournament.endDate) : '';
@@ -356,10 +368,14 @@ export class TournamentManagement {
   private readonly publishDialog = viewChild(PublishTournamentDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
   private readonly bracketPanel = viewChild(BracketPanel);
+  private readonly poolsPanel = viewChild(PoolsPanel);
 
   protected readonly published = signal(false);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
-  protected readonly recreateOpen = computed(() => this.bracketPanel()?.dialogOpen() ?? false);
+  protected readonly recreateOpen = computed(
+    () =>
+      (this.bracketPanel()?.dialogOpen() ?? false) || (this.poolsPanel()?.dialogOpen() ?? false),
+  );
 
   constructor() {
     effect(() => this.landOnceTheFormRenders());

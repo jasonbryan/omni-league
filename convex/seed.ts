@@ -57,6 +57,8 @@ import {
   tournamentTeams as seededTeamsOf,
 } from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
+import { assignPools, poolGames, poolSetup, replacePoolGames } from './lib/tournamentPools';
+import type { Structure } from './lib/tournamentEdit';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import { scoreWinnerSide, type Score, type Sport } from './lib/sports';
@@ -652,6 +654,7 @@ interface DemoTournament {
   endDaysFromRun: number;
   deadlineDaysFromRun: number;
   maximumTeams: number;
+  structure?: Structure;
   status: 'draft' | 'published';
 }
 
@@ -707,6 +710,20 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     endDaysFromRun: 5,
     deadlineDaysFromRun: -3,
     maximumTeams: 8,
+    status: 'published',
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Fall Pool Play Open',
+    slug: 'fall-pool-play-open',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 6,
+    endDaysFromRun: 7,
+    deadlineDaysFromRun: -3,
+    maximumTeams: 8,
+    structure: 'pools',
     status: 'published',
   },
 ];
@@ -853,6 +870,7 @@ async function ensureTournament(
     endDate: addCalendarDays(today, demo.endDaysFromRun),
     registrationDeadline: addCalendarDays(today, demo.deadlineDaysFromRun),
     maximumTeams: demo.maximumTeams,
+    ...(demo.structure && { structure: demo.structure }),
   });
   if (demo.status === 'published') {
     await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
@@ -1141,12 +1159,21 @@ const DEMO_BRACKET_PARTNERS = [
   { email: `ines.costa@${DEMO_ACCOUNT_DOMAIN}`, name: 'Ines Costa' },
 ] as const;
 
+/** The second player of the last four `DEMO_POOL_TEAMS`, beside `DEMO_BRACKET_PARTNERS` for the first four, signed up as the captains are. */
+const DEMO_POOL_PARTNERS = [
+  { email: `abby.lund@${DEMO_ACCOUNT_DOMAIN}`, name: 'Abby Lund' },
+  { email: `marcus.webb@${DEMO_ACCOUNT_DOMAIN}`, name: 'Marcus Webb' },
+  { email: `tara.nguyen@${DEMO_ACCOUNT_DOMAIN}`, name: 'Tara Nguyen' },
+  { email: `dev.kapoor@${DEMO_ACCOUNT_DOMAIN}`, name: 'Dev Kapoor' },
+] as const;
+
 const FICTIONAL_PEOPLE: readonly { email: string; name: string }[] = [
   ...DEMO_CAPTAINS,
   ...DEMO_FREE_AGENT_PEOPLE,
   DEMO_PLACED_FREE_AGENT,
   DEMO_REMOVED_PLAYER,
   ...DEMO_BRACKET_PARTNERS,
+  ...DEMO_POOL_PARTNERS,
 ];
 
 /** player@ waits in another season than its team's, so the one-place rule holds. */
@@ -1279,6 +1306,63 @@ export const DEMO_BRACKET_TEAMS: readonly {
     name: 'Wave Riders',
     captainEmail: DEMO_FREE_AGENT_PEOPLE[2].email,
     partnerEmail: DEMO_BRACKET_PARTNERS[3].email,
+  },
+];
+
+/** Registration is closed, so its teams are confirmed with two players each, split into 2 pools of 4 with their games. */
+export const DEMO_POOL_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'fall-pool-play-open',
+} as const;
+
+/** The pools the demo teams are split into. */
+const DEMO_POOL_COUNT = 2;
+
+/** Each team is inserted by name in `DEMO_POOL_TOURNAMENT`, in seed order, once both players' accounts exist. */
+export const DEMO_POOL_TEAMS: readonly {
+  name: string;
+  captainEmail: string;
+  partnerEmail: string;
+}[] = [
+  {
+    name: 'Tidal Wave',
+    captainEmail: DEMO_CAPTAINS[0].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[0].email,
+  },
+  {
+    name: 'Dune Runners',
+    captainEmail: DEMO_CAPTAINS[1].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[1].email,
+  },
+  {
+    name: 'Gull Force',
+    captainEmail: DEMO_CAPTAINS[2].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[2].email,
+  },
+  {
+    name: 'Sandbar Six',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[0].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[3].email,
+  },
+  {
+    name: 'Reef Breakers',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
+    partnerEmail: DEMO_POOL_PARTNERS[0].email,
+  },
+  {
+    name: 'Driftwood',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[2].email,
+    partnerEmail: DEMO_POOL_PARTNERS[1].email,
+  },
+  {
+    name: 'Kelp Crushers',
+    captainEmail: DEMO_PLACED_FREE_AGENT.email,
+    partnerEmail: DEMO_POOL_PARTNERS[2].email,
+  },
+  {
+    name: 'Shell Shock',
+    captainEmail: DEMO_REMOVED_PLAYER.email,
+    partnerEmail: DEMO_POOL_PARTNERS[3].email,
   },
 ];
 
@@ -1601,8 +1685,11 @@ export const insertDemoTeams = internalMutation({
         DEMO_FULL_TOURNAMENT_TEAMS,
         captains,
       )) +
-      (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains));
-    await insertDemoBracketPartners(ctx, captains);
+      (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains)) +
+      (await insertTournamentTeams(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains));
+    await insertDemoPartners(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains);
+    await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
+    await insertDemoPools(ctx);
     await insertDemoBracket(ctx);
     await insertDemoBracketResults(ctx, captains);
     await insertDemoBracketReport(ctx, captains);
@@ -1660,22 +1747,28 @@ async function insertTournamentTeams(
   return inserted;
 }
 
-async function demoBracketTournament(ctx: MutationCtx): Promise<Doc<'tournaments'> | null> {
-  const organization = await organizationBySlug(ctx, DEMO_BRACKET_TOURNAMENT.orgSlug);
+async function demoTournament(
+  ctx: MutationCtx,
+  slugs: { orgSlug: string; tournamentSlug: string },
+): Promise<Doc<'tournaments'> | null> {
+  const organization = await organizationBySlug(ctx, slugs.orgSlug);
   const found =
-    organization &&
-    (await findTournamentBySlugs(ctx, organization, DEMO_BRACKET_TOURNAMENT.tournamentSlug));
+    organization && (await findTournamentBySlugs(ctx, organization, slugs.tournamentSlug));
   return found ? found.tournament : null;
 }
 
+const demoBracketTournament = (ctx: MutationCtx) => demoTournament(ctx, DEMO_BRACKET_TOURNAMENT);
+
 /** A team below the minimum roster size gets its partner; a roster at the minimum is not refilled. */
-async function insertDemoBracketPartners(
+async function insertDemoPartners(
   ctx: MutationCtx,
+  slugs: { orgSlug: string; tournamentSlug: string },
+  teams: readonly { name: string; partnerEmail: string }[],
   people: readonly { email: string; authUserId: string }[],
 ): Promise<void> {
-  const tournament = await demoBracketTournament(ctx);
+  const tournament = await demoTournament(ctx, slugs);
   if (!tournament) return;
-  for (const { name, partnerEmail } of DEMO_BRACKET_TEAMS) {
+  for (const { name, partnerEmail } of teams) {
     const authUserId = people.find((person) => person.email === partnerEmail)?.authUserId;
     const team = await ctx.db
       .query('teams')
@@ -1706,6 +1799,16 @@ async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
   const { seeds } = await seededTeamsOf(ctx, tournament);
   if (seeds.length < DEMO_BRACKET_TEAMS.length) return;
   await replaceBracket(ctx, tournament._id, seeds, []);
+}
+
+/** Once, and only with every demo team confirmed, so the pools are never made from some of them and left out of date. */
+async function insertDemoPools(ctx: MutationCtx): Promise<void> {
+  const tournament = await demoTournament(ctx, DEMO_POOL_TOURNAMENT);
+  if (!tournament || (await poolGames(ctx, tournament._id)).length > 0) return;
+  const setup = await poolSetup(ctx, tournament);
+  if (setup.seeds.length < DEMO_POOL_TEAMS.length) return;
+  await assignPools(ctx, setup, DEMO_POOL_COUNT);
+  await replacePoolGames(ctx, tournament._id, (await poolSetup(ctx, tournament)).pools, []);
 }
 
 /** Entered by the demo admin, and only on a bracket with no result, so a result an organizer entered on a reused deployment is kept. */

@@ -836,6 +836,8 @@ describe('tournaments.getForManagement', () => {
       teamCount: 0,
       setsPerGame: 1,
       bracketCreated: false,
+      structure: 'bracket',
+      poolGamesCreated: false,
     });
   });
 
@@ -1654,6 +1656,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     registrationDeadline: '2027-01-09',
     maximumTeams: 16,
     setsPerGame: 1,
+    structure: 'bracket',
   };
 
   const changed: TournamentEditable = {
@@ -1662,6 +1665,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     registrationDeadline: '2027-01-30',
     maximumTeams: 24,
     setsPerGame: 3,
+    structure: 'bracket',
   };
 
   const edit = (

@@ -1,3 +1,4 @@
+import { POOL_REFUSAL_CODES } from './pools';
 import { formatCalendarDate } from './seasonInput';
 
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
@@ -59,6 +60,7 @@ export const BRACKET_REFUSAL_CODES = [
   'resultChanged',
   'reportsClosed',
   'reportChanged',
+  ...POOL_REFUSAL_CODES,
 ] as const;
 
 export type BracketRefusalCode = (typeof BRACKET_REFUSAL_CODES)[number];

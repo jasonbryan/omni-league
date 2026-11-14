@@ -56,7 +56,11 @@ import {
   type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
-import { DEFAULT_SETS_PER_GAME, setsPerGameValidator } from './lib/tournamentEdit';
+import {
+  DEFAULT_SETS_PER_GAME,
+  setsPerGameValidator,
+  structureValidator,
+} from './lib/tournamentEdit';
 import {
   bracketExists,
   gameHasResult,
@@ -536,6 +540,24 @@ export const setTournamentSetsPerGame = internalMutation({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
     await ctx.db.patch('tournaments', found.tournament._id, { setsPerGame });
+    return null;
+  },
+});
+
+/** The structure an organizer would choose on the tournament's details, so a test can open a Pools, then bracket tournament. */
+export const setTournamentStructure = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    structure: structureValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, structure }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    await ctx.db.patch('tournaments', found.tournament._id, { structure });
     return null;
   },
 });

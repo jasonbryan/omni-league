@@ -24,12 +24,17 @@ export type BracketGameView = NonNullable<
 export type BracketView =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: BracketSetup };
 
+export type PoolsSetup = NonNullable<FunctionReturnType<typeof api.tournamentGames.getPools>>;
+
+export type PoolsView =
+  { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: PoolsSetup };
+
 export type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
 /**
  * The query waits until Convex has accepted the token, so its first answer is the caller's own. The waitlist is asked only once the
  * tournament has answered, so a refused caller or an unknown web address never reaches it, and the page stays on its skeleton until both answer.
- * The seeds and bracket are asked at the same time, but the page does not wait for them: their panel shows its own skeleton.
+ * The seeds and bracket (or, for Pools, then bracket, the pools) are asked at the same time, but the page does not wait for them: their panel shows its own skeleton.
  */
 @Injectable()
 export class TournamentContext {
@@ -64,8 +69,16 @@ export class TournamentContext {
     this.frameState() === 'ready' ? this.params() : skipToken,
   );
 
+  private readonly playsPools = computed(
+    () => this.frameState() === 'ready' && this.result.value()?.structure === 'pools',
+  );
+
   private readonly bracketQuery = injectQuery(api.tournamentGames.getSetup, () =>
-    this.frameState() === 'ready' ? this.params() : skipToken,
+    this.frameState() === 'ready' && !this.playsPools() ? this.params() : skipToken,
+  );
+
+  private readonly poolsQuery = injectQuery(api.tournamentGames.getPools, () =>
+    this.playsPools() ? this.params() : skipToken,
   );
 
   readonly state = computed<TournamentState>(() => {
@@ -89,6 +102,13 @@ export class TournamentContext {
     if (this.state() !== 'ready') return { status: 'loading' };
     const setup = this.bracketQuery.value();
     if (this.bracketQuery.error() || setup === null) return { status: 'error' };
+    return setup === undefined ? { status: 'loading' } : { status: 'ready', setup };
+  });
+
+  readonly pools = computed<PoolsView>(() => {
+    if (this.state() !== 'ready') return { status: 'loading' };
+    const setup = this.poolsQuery.value();
+    if (this.poolsQuery.error() || setup === null) return { status: 'error' };
     return setup === undefined ? { status: 'loading' } : { status: 'ready', setup };
   });
 }

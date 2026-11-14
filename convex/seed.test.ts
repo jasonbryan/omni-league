@@ -34,7 +34,7 @@ const ROWS = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 4,
+  tournaments: 5,
   camps: 2,
   campSessions: 3,
 };
@@ -1047,6 +1047,8 @@ describe('seed:demo', () => {
       DEMO_TOURNAMENT_TEAMS,
       DEMO_BRACKET_TOURNAMENT,
       DEMO_BRACKET_TEAMS,
+      DEMO_POOL_TOURNAMENT,
+      DEMO_POOL_TEAMS,
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
       DEMO_WAITLIST_ENTRY,
@@ -1075,6 +1077,8 @@ describe('seed:demo', () => {
     expect(DEMO_TOURNAMENT.tournamentSlug).toBe('gulf-coast-beach-open');
     expect(DEMO_BRACKET_TOURNAMENT.tournamentSlug).toBe('labor-day-sand-slam');
     expect(DEMO_BRACKET_TEAMS).toHaveLength(6);
+    expect(DEMO_POOL_TOURNAMENT.tournamentSlug).toBe('fall-pool-play-open');
+    expect(DEMO_POOL_TEAMS).toHaveLength(8);
     expect(DEMO_TOURNAMENT_TEAMS.map((team) => team.name)).toEqual([
       'Sand Crabs',
       'Beach Bombers',
@@ -1210,7 +1214,7 @@ describe('seed:demo tournaments', () => {
     expect(second.tournaments).toBe(0);
     const { organizationId, location, program, tournaments, tournament } =
       await winterDoublesClassic(t);
-    expect(tournaments).toHaveLength(4);
+    expect(tournaments).toHaveLength(5);
     expect(program).toMatchObject({
       organizationId,
       type: 'tournament',
@@ -1278,8 +1282,8 @@ describe('seed:demo tournaments', () => {
     const beach = { organizationSlug: slug, page: 1, sport: 'beachVolleyball' as const };
     const names = (rows: { name: string }[]) => rows.map((row) => row.name);
     const OPEN = ['Gulf Coast Beach Open', 'Gulf Coast King of the Beach'];
-    // The Labor Day Sand Slam has closed registration and ends first, so only the lists of upcoming tournaments hold it.
-    const UPCOMING = ['Labor Day Sand Slam', ...OPEN];
+    // The Labor Day Sand Slam and the Fall Pool Play Open have closed registration and end first, so only the lists of upcoming tournaments hold them.
+    const UPCOMING = ['Labor Day Sand Slam', 'Fall Pool Play Open', ...OPEN];
     expect(
       names((await t.query(api.tournaments.listPublic, { organizationSlug: slug, page: 1 })).rows),
     ).toEqual(UPCOMING);
@@ -1309,9 +1313,9 @@ describe('seed:demo tournaments', () => {
       });
     });
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.tournaments).toBe(3);
+    expect(result.tournaments).toBe(4);
     const held = await winterDoublesClassic(t);
-    expect(held.tournaments).toHaveLength(3);
+    expect(held.tournaments).toHaveLength(4);
     expect(held.program?.type).toBe('league');
   });
 });

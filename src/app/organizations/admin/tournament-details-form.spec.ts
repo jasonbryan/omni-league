@@ -24,6 +24,7 @@ const HELD = {
   registrationDeadline: '2027-01-09',
   maximumTeams: 4,
   setsPerGame: 1,
+  structure: 'bracket',
 };
 
 const TOURNAMENT = {
@@ -41,6 +42,7 @@ const TOURNAMENT = {
   minimumRosterSize: 2,
   teamCount: 3,
   bracketCreated: false,
+  poolGamesCreated: false,
   ...HELD,
 };
 
@@ -68,6 +70,7 @@ describe('TournamentDetailsForm', () => {
   const input = (id: string) => page.querySelector<HTMLInputElement>(`#details-${id}`)!;
   const save = () => form().querySelector<HTMLButtonElement>('button[type="submit"]')!;
   const sets = (key: string) => page.querySelector<HTMLInputElement>(`#sets-per-game-${key}`);
+  const structure = (key: string) => page.querySelector<HTMLInputElement>(`#structure-${key}`);
   const status = () => form().querySelector<HTMLElement>('[data-slot="save-status"]')!;
   const alertBox = () => form().querySelector<HTMLElement>('[data-slot="alert"]');
   const undoButton = () =>
@@ -90,6 +93,13 @@ describe('TournamentDetailsForm', () => {
 
   async function chooseSets(key: string) {
     const radio = sets(key)!;
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    await o.harness.fixture.whenStable();
+  }
+
+  async function chooseStructure(key: string) {
+    const radio = structure(key)!;
     radio.checked = true;
     radio.dispatchEvent(new Event('change', { bubbles: true }));
     await o.harness.fixture.whenStable();
@@ -126,13 +136,38 @@ describe('TournamentDetailsForm', () => {
       );
     });
 
-    it('shows the structure as text, not a field', async () => {
+    it('offers the structure as Bracket only, chosen, or Pools, then bracket', async () => {
       await open();
-      expect(text(section().querySelector('[data-slot="structure"]'))).toBe(
-        'StructureBracket only',
-      );
-      expect(section().querySelector('input[name="structure"], select')).toBeNull();
+      expect(text(section().querySelector('[data-slot="structure"] legend'))).toBe('Structure');
+      expect(
+        [...section().querySelectorAll('[data-slot="structure"] label')].map((label) =>
+          text(label),
+        ),
+      ).toEqual(['Bracket only', 'Pools, then bracket']);
+      expect(structure('bracket')!.checked).toBe(true);
+      expect(structure('pools')!.checked).toBe(false);
     });
+
+    it('shows a Pools, then bracket tournament with that choice made', async () => {
+      await open({ ...TOURNAMENT, structure: 'pools' });
+      expect(structure('pools')!.checked).toBe(true);
+    });
+
+    it.each([
+      ['a bracket', { bracketCreated: true }],
+      ['pool games', { poolGamesCreated: true }],
+    ])(
+      'shows the structure as text with the reason once %s exist, and keeps the other fields editable',
+      async (_, games) => {
+        await open({ ...TOURNAMENT, structure: 'pools', ...games });
+        expect(structure('bracket')).toBeNull();
+        expect(structure('pools')).toBeNull();
+        expect(text(section().querySelector('[data-slot="structure"]'))).toBe(
+          'StructurePools, then bracketGames are created, so the structure cannot change.',
+        );
+        expect(input('maximum-teams').disabled).toBe(false);
+      },
+    );
 
     it('offers sets per game as 1 or 3 for beach volleyball', async () => {
       await open();
@@ -149,6 +184,13 @@ describe('TournamentDetailsForm', () => {
         'Sets per gameBest of 3 The bracket is created, so sets per game cannot change.',
       );
       expect(input('maximum-teams').disabled).toBe(false);
+    });
+
+    it('shows sets per game as text with the pool wording once pool games are created', async () => {
+      await open({ ...TOURNAMENT, setsPerGame: 3, poolGamesCreated: true });
+      expect(text(section().querySelector('[data-slot="sets-per-game"]'))).toBe(
+        'Sets per gameBest of 3 Sets per game cannot change once the pool games are created.',
+      );
     });
 
     it('shows the stored sets per game, not an unsaved choice, when a bracket locks it', async () => {
@@ -302,6 +344,7 @@ describe('TournamentDetailsForm', () => {
             registrationDeadline: '2027-01-09',
             maximumTeams: 6,
             setsPerGame: 3,
+            structure: 'bracket',
             expected: HELD,
           },
         ],
@@ -320,6 +363,30 @@ describe('TournamentDetailsForm', () => {
       await type('end-date', '');
       await submit();
       expect(o.convex.calls[0].args).not.toHaveProperty('endDate');
+    });
+
+    it('sends the structure chosen, and Undo restores the earlier one', async () => {
+      await open();
+      await chooseStructure('pools');
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({
+        structure: 'pools',
+        expected: { structure: 'bracket' },
+      });
+      o.convex.calls[0].resolve({
+        earlier: HELD,
+        written: { ...HELD, structure: 'pools' },
+      });
+      await o.flush();
+      expect(text(status())).toBe('Details saved.Undo');
+      expect(structure('pools')!.checked).toBe(true);
+    });
+
+    it('sends no structure once games exist, so the held one stays', async () => {
+      await open({ ...TOURNAMENT, poolGamesCreated: true });
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('structure');
     });
 
     it('sends no sets per game once the bracket is created, so the held value stays', async () => {

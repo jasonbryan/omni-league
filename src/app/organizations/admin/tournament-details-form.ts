@@ -22,6 +22,7 @@ import {
   sameEditable,
   setsPerGameIsChosen,
 } from '../../../../convex/lib/tournamentEdit';
+import { POOL_MESSAGES } from '../../../../convex/lib/pools';
 import { MAX_MAXIMUM_TEAMS, MIN_MAXIMUM_TEAMS } from '../../../../convex/lib/tournamentInput';
 import {
   api,
@@ -55,6 +56,11 @@ const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
 const SETS_OPTIONS: readonly ChipOption[] = [
   { key: '1', label: '1 set' },
   { key: '3', label: '3 sets' },
+];
+
+const STRUCTURE_OPTIONS: readonly ChipOption[] = [
+  { key: 'bracket', label: 'Bracket only' },
+  { key: 'pools', label: 'Pools, then bracket' },
 ];
 
 const DATE_FIELDS = [
@@ -197,16 +203,30 @@ const FIELD_IDS: Record<DetailsField, string> = {
             </div>
           }
         </div>
-        <div data-slot="structure">
-          <span class="text-sm font-medium">Structure</span>
-          <p class="mt-1.5 text-sm">Bracket only</p>
-        </div>
+        @if (structureLocked()) {
+          <div data-slot="structure">
+            <span class="text-sm font-medium">Structure</span>
+            <p class="mt-1.5 text-sm">{{ storedStructure() }}</p>
+            <p hlmFieldDescription class="mt-1.5">{{ structureLockedText }}</p>
+          </div>
+        } @else {
+          <div data-slot="structure">
+            <app-chip-radio-group
+              name="structure"
+              legend="Structure"
+              [options]="structureOptions"
+              [value]="details.structure()"
+              description="Pools split the teams into round-robin pools before the bracket."
+              (chosen)="chooseStructure($event)"
+            />
+          </div>
+        }
         @if (hasSetsPerGame() && setsLocked()) {
           <div data-slot="sets-per-game">
             <span class="text-sm font-medium">Sets per game</span>
             <p class="mt-1.5 text-sm">{{ storedSets() }}</p>
             <p hlmFieldDescription class="mt-1.5">
-              The bracket is created, so sets per game cannot change.
+              {{ setsLockedText() }}
             </p>
           </div>
         } @else if (hasSetsPerGame()) {
@@ -285,6 +305,8 @@ export class TournamentDetailsForm implements OnInit {
   protected readonly alerts = DETAILS_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
   protected readonly setsOptions = SETS_OPTIONS;
+  protected readonly structureOptions = STRUCTURE_OPTIONS;
+  protected readonly structureLockedText = POOL_MESSAGES.structureLocked;
 
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
@@ -295,7 +317,19 @@ export class TournamentDetailsForm implements OnInit {
   protected readonly undoNote = signal<string | null>(null);
 
   protected readonly hasSetsPerGame = computed(() => setsPerGameIsChosen(this.tournament().sport));
-  protected readonly setsLocked = computed(() => this.tournament().bracketCreated);
+  protected readonly gamesCreated = computed(
+    () => this.tournament().bracketCreated || this.tournament().poolGamesCreated,
+  );
+  protected readonly setsLocked = this.gamesCreated;
+  protected readonly structureLocked = this.gamesCreated;
+  protected readonly storedStructure = computed(() =>
+    this.tournament().structure === 'pools' ? 'Pools, then bracket' : 'Bracket only',
+  );
+  protected readonly setsLockedText = computed(() =>
+    this.tournament().bracketCreated
+      ? 'The bracket is created, so sets per game cannot change.'
+      : POOL_MESSAGES.setsPerGameLocked,
+  );
   protected readonly storedSets = computed(() =>
     this.tournament().setsPerGame === 3 ? 'Best of 3' : '1 set',
   );
@@ -345,6 +379,10 @@ export class TournamentDetailsForm implements OnInit {
     this.details.setsPerGame.set(key === '3' ? 3 : 1);
   }
 
+  protected chooseStructure(key: string): void {
+    this.details.structure.set(key === 'pools' ? 'pools' : 'bracket');
+  }
+
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
     if (this.details.submitting() || this.undoing()) return;
@@ -353,7 +391,10 @@ export class TournamentDetailsForm implements OnInit {
     const tournamentId = this.tournament().tournamentId;
     const outcome = await this.details.submit(
       this.online(),
-      this.hasSetsPerGame() && !this.setsLocked(),
+      {
+        setsPerGame: this.hasSetsPerGame() && !this.setsLocked(),
+        structure: !this.structureLocked(),
+      },
       (values, expected) => this.updateCall.run({ tournamentId, ...values, expected }),
     );
     if (outcome.sent) {
