@@ -929,7 +929,7 @@ interface ReportWorld {
 async function withReportWorld(
   page: Page,
   browser: Browser,
-  { bracket = true }: { bracket?: boolean },
+  { bracket = true, setsPerGame = 1 }: { bracket?: boolean; setsPerGame?: 1 | 3 },
   use: (world: ReportWorld) => Promise<void>,
 ) {
   const seeded = await adminOf(page, { teams: [], registration: 'closed' });
@@ -951,6 +951,13 @@ async function withReportWorld(
         ...(name === 'Spike Squad' && { captainEmail: captains[1].email }),
       })),
     })) as { teamIds: string[] };
+    if (setsPerGame === 3) {
+      await convexRun('testing:setTournamentSetsPerGame', {
+        organizationSlug: seeded.tenant.slug,
+        tournamentSlug: SLUG,
+        setsPerGame,
+      });
+    }
     if (bracket) {
       await convexRun('testing:seedTournamentBracket', {
         organizationSlug: seeded.tenant.slug,
@@ -1335,35 +1342,44 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
     ['the form', true],
     ['the empty state', false],
   ] as const) {
-    test(`its skeleton is as tall as ${state}, so the roster below does not move`, async ({
-      page,
-      browser,
-    }, testInfo) => {
-      await withReportWorld(page, browser, { bracket }, async (world) => {
-        const { crabs } = world;
-        const held = await holdQueries(crabs, ['scoreReports:forTeam']);
-        await crabs.goto(world.teamPath('Sand Crabs'));
-        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
-        await expect.poll(() => held.isHolding()).toBe(true);
-        const before = await reportPanel(crabs).boundingBox();
-        const rosterBefore = await rosterTop(crabs);
+    for (const setsPerGame of [1, 3] as const) {
+      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px.
+      for (const width of [360, 1280]) {
+        test(`at ${width}px its skeleton is as tall as ${state} of a ${setsPerGame === 1 ? 'game of 1 set' : 'best of 3'}, so the roster below does not move`, async ({
+          page,
+          browser,
+        }, testInfo) => {
+          await withReportWorld(page, browser, { bracket, setsPerGame }, async (world) => {
+            const { crabs } = world;
+            await crabs.setViewportSize({ width, height: 900 });
+            const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+            await crabs.goto(world.teamPath('Sand Crabs'));
+            await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+            await expect.poll(() => held.isHolding()).toBe(true);
+            const before = await reportPanel(crabs).boundingBox();
+            const rosterBefore = await rosterTop(crabs);
 
-        held.release();
-        await expect(
-          bracket
-            ? reportBox(crabs, 'Sand Crabs')
-            : reportPanel(crabs).locator('[data-slot="empty"]'),
-        ).toBeVisible();
-        const after = await reportPanel(crabs).boundingBox();
-        testInfo.annotations.push({
-          type: 'panel height',
-          description: `skeleton ${before?.height}, loaded ${after?.height}`,
+            held.release();
+            await expect(
+              bracket
+                ? reportPanel(crabs).locator('form')
+                : reportPanel(crabs).locator('[data-slot="empty"]'),
+            ).toBeVisible();
+            if (bracket) {
+              await expect(reportPanel(crabs).locator('legend')).toHaveCount(setsPerGame);
+            }
+            const after = await reportPanel(crabs).boundingBox();
+            testInfo.annotations.push({
+              type: 'panel height',
+              description: `skeleton ${before?.height}, loaded ${after?.height}`,
+            });
+            expect(before).not.toBeNull();
+            expect(after?.height).toBeCloseTo(before?.height ?? -1, 0);
+            expect(await rosterTop(crabs)).toBeCloseTo(rosterBefore ?? -1, 0);
+          });
         });
-        expect(before).not.toBeNull();
-        expect(after?.height).toBeCloseTo(before?.height ?? -1, 0);
-        expect(await rosterTop(crabs)).toBeCloseTo(rosterBefore ?? -1, 0);
-      });
-    });
+      }
+    }
   }
 });
 

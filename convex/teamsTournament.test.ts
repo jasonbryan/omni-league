@@ -559,6 +559,22 @@ describe('teams.getForMember for a tournament team', () => {
     expect(team).not.toHaveProperty('maxRosterSize');
   });
 
+  test('gives the tournament its sport and sets per game, which a best of 3 changes', async () => {
+    const { s, teamId } = await registered();
+    const tournament = () =>
+      as(s, 'captain')
+        .query(api.teams.getForMember, { teamId })
+        .then((team) => team?.tournament);
+    expect(await tournament()).toEqual({
+      name: 'Gulf Coast Beach Open',
+      slug: 'gulf-coast-beach-open',
+      sport: 'beachVolleyball',
+      setsPerGame: 1,
+    });
+    await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { setsPerGame: 3 }));
+    expect(await tournament()).toMatchObject({ setsPerGame: 3 });
+  });
+
   test('gives an admin of the organization the team', async () => {
     const { s, teamId } = await registered();
     expect(await as(s, 'admin-a').query(api.teams.getForMember, { teamId })).toMatchObject({
