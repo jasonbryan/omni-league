@@ -10,7 +10,7 @@ export interface CampSeed {
   maximumAge: number;
 }
 
-/** Skips the rules of `camps.create`. Local runs only. */
+/** Local runs only. */
 export async function seedCamp(tenant: Tenant, camp: CampSeed): Promise<string> {
   const { slug } = (await convexRun('testing:seedCamp', {
     organizationSlug: tenant.slug,

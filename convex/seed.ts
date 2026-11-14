@@ -718,7 +718,6 @@ interface DemoCamp {
   maximumAge: number;
 }
 
-// Drafts: a camp has no sessions to open registration for until it is published. Insert-only like the rest.
 const DEMO_CAMPS: readonly DemoCamp[] = [
   {
     organizationSlug: 'gulf-coast-sport-social',

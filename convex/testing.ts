@@ -425,7 +425,6 @@ export const seedTournament = internalMutation({
   },
 });
 
-// Skips `camps.create`'s rules.
 export const seedCamp = internalMutation({
   args: {
     organizationSlug: v.string(),

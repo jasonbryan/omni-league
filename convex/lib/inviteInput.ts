@@ -78,7 +78,6 @@ export function checkInviteEmail(
   return { ok: true, email: normalised };
 }
 
-/** The program types the invite's picker lists besides leagues. */
 export interface ProgramOffers {
   tournaments: boolean;
   camps: boolean;
