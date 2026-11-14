@@ -1366,3 +1366,48 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
     });
   }
 });
+
+test.describe('Tournaments: the Roster card while the Report score panel loads', () => {
+  const rosterTop = async (page: Page) =>
+    (await page.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+
+  for (const width of [360, 1280]) {
+    test(`at ${width}px the Roster card keeps its place when the form arrives, and when a reported game gives way to the empty state`, async ({
+      page,
+      browser,
+    }) => {
+      await withReportWorld(page, browser, {}, async (world) => {
+        const { crabs, managePath } = world;
+        await crabs.setViewportSize({ width, height: 900 });
+        const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+        await crabs.goto(world.teamPath('Sand Crabs'));
+        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+        await expect.poll(() => held.isHolding()).toBe(true);
+        const skeleton = await rosterTop(crabs);
+        held.release();
+        await expect(reportBox(crabs, 'Sand Crabs')).toBeVisible();
+        expect(await rosterTop(crabs)).toBeCloseTo(skeleton ?? -1, 0);
+
+        await reportBox(crabs, 'Sand Crabs').fill('21');
+        await reportBox(crabs, 'Spike Squad').fill('18');
+        await reportButton(crabs).click();
+        await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+        await page.goto(managePath);
+        await confirmButtons(gameOf(page, FIRST_SEMIFINAL)).click();
+        await expect(savedStatus(gameOf(page, FIRST_SEMIFINAL), 'Report confirmed')).toBeVisible();
+        await crabs.reload();
+        await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toBeVisible();
+        const settled = await rosterTop(crabs);
+        const heldAgain = await holdQueries(crabs, ['scoreReports:forTeam']);
+        await crabs.reload();
+        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+        await expect.poll(() => heldAgain.isHolding()).toBe(true);
+        expect(await rosterTop(crabs)).toBeCloseTo(settled ?? -1, 0);
+        heldAgain.release();
+        await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toBeVisible();
+        expect(await rosterTop(crabs)).toBeCloseTo(settled ?? -1, 0);
+      });
+    });
+  }
+});
