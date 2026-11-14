@@ -1,6 +1,6 @@
 import type { Locator } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
-import { seedBracket } from './support/bracket';
+import { seedBestOfThree, seedBracket, seedResult, type SeededResult } from './support/bracket';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
@@ -83,7 +83,18 @@ const cornersOf = (sections: Locator) =>
     }),
   );
 
-async function seedBracketTournament(teamNames: readonly string[]): Promise<string> {
+const THREE_SETS = [
+  { a: 21, b: 15 },
+  { a: 18, b: 21 },
+  { a: 15, b: 10 },
+];
+const THREE_SET_LINE = 'Score: 21–15, 18–21, 15–10';
+const DELTA_V_ECHO = { round: 1, slot: 2 };
+
+async function seedBracketTournament(
+  teamNames: readonly string[],
+  results: { game: { round: number; slot: number }; result: SeededResult }[] = [],
+): Promise<string> {
   const tenant = await seedTenant({
     name: 'E2E Tournament Bracket',
     locations: [{ name: 'North Beach Sand Courts', address: ADDRESS }],
@@ -96,7 +107,11 @@ async function seedBracketTournament(teamNames: readonly string[]): Promise<stri
     endDate: dateFromToday(31),
     maximumTeams: 32,
   });
+  await seedBestOfThree(tenant, 'labor-day-sand-slam');
   await seedBracket(tenant, 'labor-day-sand-slam', teamNames);
+  for (const { game, result } of results) {
+    await seedResult(tenant, 'labor-day-sand-slam', game, result);
+  }
   return path;
 }
 
@@ -170,6 +185,47 @@ test.describe('public tournament page: raw server HTML', () => {
       expect(bracket).toContain('role="region"');
       expect(bracket).toContain('aria-label="Bracket rounds"');
       expect(bracket).toMatch(/tabindex="0"/);
+    },
+  );
+
+  test(
+    'a played game: its score line, with the screen-reader label, is in the HTML after both teams',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedBracketTournament(BRACKET_TEAMS, [
+          { game: DELTA_V_ECHO, result: { score: { kind: 'sets', sets: THREE_SETS } } },
+        ]),
+      );
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      expect(bracket).toContain('21–15');
+      expect(bracket).toContain('18–21');
+      expect(bracket).toContain('Score:');
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games[1]).toBe(`Game 2: (4) Delta Won against (5) Echo ${THREE_SET_LINE}`);
+      expect(games.filter((game) => game.includes('Score:'))).toHaveLength(1);
+    },
+  );
+
+  test(
+    'a forfeit: the line names the team that forfeited and no score is in the HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedBracketTournament(BRACKET_TEAMS, [
+          { game: DELTA_V_ECHO, result: { forfeitSide: 1 } },
+        ]),
+      );
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      const games = [
+        ...bracket.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g),
+      ].map(([game]) => textOf(game));
+      expect(games[1]).toBe('Game 2: (4) Delta Won against (5) Echo Echo forfeited');
+      expect(bracket).not.toContain('Score:');
     },
   );
 
@@ -321,6 +377,28 @@ test.describe('public tournament page: in the browser', () => {
     await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, 'tournament-bracket');
+  });
+
+  test('a played game shows its three-set score, passes the axe helper, and does not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    await page.goto(
+      await seedBracketTournament(BRACKET_TEAMS, [
+        { game: DELTA_V_ECHO, result: { score: { kind: 'sets', sets: THREE_SETS } } },
+      ]),
+    );
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const line = page.getByTestId('bracket-score');
+    await expect(line).toHaveCount(1);
+    await expect(line).toBeVisible();
+    expect(textOf(await line.innerHTML())).toBe(THREE_SET_LINE);
+    await expect(page.getByTestId('bracket-game').nth(1)).toHaveText(
+      /Echo\s+Score: 21–15, 18–21, 15–10\s*$/,
+    );
+    await expectAccessible(page);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+    await screenshot(page, testInfo, 'tournament-bracket-score');
   });
 
   // A bracket this tall fails the helper's focus-in-view walk, which asks for the focused region's centre on screen.

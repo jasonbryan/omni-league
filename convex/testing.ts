@@ -31,7 +31,14 @@ import {
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel, isPlayersPerSideOfSport } from './lib/divisions';
 import { programStatusValidator } from './lib/programs';
-import { sportValidator } from './lib/sports';
+import {
+  checkScore,
+  forfeitScore,
+  scoreValidator,
+  scoreWinnerSide,
+  sportValidator,
+  type Score,
+} from './lib/sports';
 import {
   divisionSeedValidator,
   insertDraftTournament,
@@ -47,7 +54,14 @@ import {
   type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
-import { bracketExists, replaceBracket, tournamentTeams } from './lib/tournamentBracket';
+import { DEFAULT_SETS_PER_GAME, setsPerGameValidator } from './lib/tournamentEdit';
+import {
+  bracketExists,
+  gameHasResult,
+  replaceBracket,
+  saveResult,
+  tournamentTeams,
+} from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
@@ -438,6 +452,24 @@ export const setTournamentMaximumTeams = internalMutation({
   },
 });
 
+/** The sets per game an organizer would choose on the tournament's details, so a test can play a best-of-3 game. */
+export const setTournamentSetsPerGame = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    setsPerGame: setsPerGameValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, setsPerGame }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    await ctx.db.patch('tournaments', found.tournament._id, { setsPerGame });
+    return null;
+  },
+});
+
 const seasonSeedValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -588,6 +620,64 @@ export const seedTournamentBracket = internalMutation({
     }
     const { seeds } = await tournamentTeams(ctx, found.tournament);
     return { gameCount: await replaceBracket(ctx, found.tournament._id, seeds, []) };
+  },
+});
+
+/** One bracket result through the writer `tournamentGames.enterResult` uses, with its score rules. Skips the organizer check. */
+export const seedTournamentResult = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    round: v.number(),
+    slot: v.number(),
+    score: v.optional(scoreValidator),
+    forfeitSide: v.optional(v.union(v.literal(0), v.literal(1))),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, round, slot, score, forfeitSide }) => {
+    assertTestDeployment();
+    if ((score === undefined) === (forfeitSide === undefined)) {
+      throw new Error('Give either a score or a forfeitSide');
+    }
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const { tournament } = found;
+    const game = await ctx.db
+      .query('tournamentGames')
+      .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
+        q
+          .eq('tournamentId', tournament._id)
+          .eq('stage', 'bracket')
+          .eq('round', round)
+          .eq('slot', slot),
+      )
+      .unique();
+    if (!game) throw new Error(`No game is in round ${round}, slot ${slot}`);
+    if (game.teamIds.includes(null)) {
+      throw new Error(`The game in round ${round}, slot ${slot} is not ready: a place has no team`);
+    }
+    if (gameHasResult(game)) {
+      throw new Error(`The game in round ${round}, slot ${slot} has a result already`);
+    }
+    const setsPerGame = tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
+    const played: Score = score ?? forfeitScore(tournament.sport, setsPerGame, forfeitSide!);
+    const issue = checkScore(tournament.sport, setsPerGame, played);
+    if (issue) throw new Error(issue.message);
+    const winnerSide = scoreWinnerSide(played);
+    if (winnerSide === null) throw new Error('The score has no winner');
+    const enteredBy = await ctx.db.insert('users', {
+      authUserId: `e2e-result-${tournamentSlug}-${round}-${slot}`,
+      name: 'E2E result',
+      adultConfirmedAt: 1,
+    });
+    await saveResult(ctx, game, {
+      score: played,
+      ...(forfeitSide !== undefined && { forfeitTeamId: game.teamIds[forfeitSide]! }),
+      winnerTeamId: game.teamIds[winnerSide]!,
+      enteredBy,
+    });
+    return null;
   },
 });
 

@@ -5,7 +5,8 @@ import type { PublicBracket } from './publicPage';
 import { bracketGames, gameHasResult } from './tournamentBracket';
 
 type Game = Doc<'tournamentGames'>;
-type Place = PublicBracket['rounds'][number]['games'][number]['teams'][number];
+type PublicGame = PublicBracket['rounds'][number]['games'][number];
+type Place = PublicGame['teams'][number];
 
 export async function publicBracket(
   ctx: Pick<QueryCtx, 'db'>,
@@ -34,10 +35,23 @@ export async function publicBracket(
             teams: game.teamIds.map(placeOf),
             bye: game.round === 1 && game.teamIds.includes(null),
             ...(winnerPlace === 0 || winnerPlace === 1 ? { winner: winnerPlace } : {}),
+            ...resultOf(game),
           };
         }),
     })),
   };
+}
+
+type Result = Pick<PublicGame, 'score' | 'forfeit'>;
+
+/** A forfeit is a side and never its stored score, which the page would otherwise show as a played game. */
+function resultOf(game: Game): Result {
+  if (!gameHasResult(game)) return {};
+  if (game.forfeitTeamId !== undefined) {
+    const side = game.teamIds.indexOf(game.forfeitTeamId);
+    return side === 0 || side === 1 ? { forfeit: side } : {};
+  }
+  return game.score ? { score: game.score } : {};
 }
 
 async function teamsOf(
