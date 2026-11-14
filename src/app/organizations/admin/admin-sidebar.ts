@@ -10,6 +10,7 @@ import {
   lucideLayoutDashboard,
   lucideMapPin,
   lucideSwords,
+  lucideTent,
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -41,6 +42,7 @@ import { adminPath } from './admin-path';
       lucideLayoutDashboard,
       lucideMapPin,
       lucideSwords,
+      lucideTent,
       lucideTrophy,
       lucideUsers,
     }),
@@ -154,6 +156,7 @@ export class AdminSidebar {
       programs: [
         link('Leagues', 'lucideTrophy', 'leagues', this.counts.leagues(), true),
         link('Tournaments', 'lucideSwords', 'tournaments', null, true),
+        link('Camps', 'lucideTent', 'camps', null, true),
       ],
       settings: [
         link('Locations', 'lucideMapPin', 'locations', this.counts.locations()),
