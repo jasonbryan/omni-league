@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -199,7 +199,7 @@ test.describe('Tournaments: pools', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, 'pools-recreate-confirm');
-    await expectAccessible(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(createButton(page)).toBeFocused();
