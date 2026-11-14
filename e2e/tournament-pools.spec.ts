@@ -390,6 +390,31 @@ test.describe('Tournaments: pools', () => {
     await expect(page.getByRole('alertdialog', { name: 'Recreate the pool games?' })).toBeVisible();
     await expectNoSidewaysScroll(page);
   });
+
+  test('on a touch screen every button and pool choice in the panel is 44px or more', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, 'touch targets apply on touch screens only');
+    const { managePath } = await adminOf(page, { teams: full(TWELVE.slice(0, 8)) });
+    await page.goto(managePath);
+    await expect(splitButton(page)).toBeVisible();
+    await split(page, 2);
+    await createButton(page).click();
+    await expect(
+      panel(page).getByRole('status').filter({ hasText: 'Pool games created' }),
+    ).toBeVisible();
+
+    const targets = panel(page).locator('button, label');
+    const heights = await targets.evaluateAll((elements) =>
+      elements.map((element) => ({
+        name: element.textContent?.trim().slice(0, 40) ?? '',
+        height: element.getBoundingClientRect().height,
+      })),
+    );
+    expect(heights.length).toBeGreaterThan(10);
+    expect(heights.filter((target) => target.height < 44)).toEqual([]);
+  });
 });
 
 test.describe('Tournaments: the structure', () => {
