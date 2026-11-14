@@ -5,7 +5,7 @@ const CHECK_CONNECTION = 'Check your connection and try again.';
 
 export const NO_GAME_TITLE = 'No game to report right now.';
 
-export const NO_GAME_TEXT = 'Your next game shows here once both teams are set.';
+export const NO_GAME_TEXT = 'A game shows here once both of its teams are set.';
 
 export const LOAD_FAILED: AlertText = {
   title: 'The game could not be loaded.',

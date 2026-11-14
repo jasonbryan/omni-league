@@ -1326,3 +1326,43 @@ test.describe('Tournaments: Confirm of a report the team changed', () => {
     });
   });
 });
+
+test.describe('Tournaments: the Report score panel while it loads', () => {
+  const rosterTop = async (page: Page) =>
+    (await page.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+
+  for (const [state, bracket] of [
+    ['the form', true],
+    ['the empty state', false],
+  ] as const) {
+    test(`its skeleton is as tall as ${state}, so the roster below does not move`, async ({
+      page,
+      browser,
+    }, testInfo) => {
+      await withReportWorld(page, browser, { bracket }, async (world) => {
+        const { crabs } = world;
+        const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+        await crabs.goto(world.teamPath('Sand Crabs'));
+        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+        await expect.poll(() => held.isHolding()).toBe(true);
+        const before = await reportPanel(crabs).boundingBox();
+        const rosterBefore = await rosterTop(crabs);
+
+        held.release();
+        await expect(
+          bracket
+            ? reportBox(crabs, 'Sand Crabs')
+            : reportPanel(crabs).locator('[data-slot="empty"]'),
+        ).toBeVisible();
+        const after = await reportPanel(crabs).boundingBox();
+        testInfo.annotations.push({
+          type: 'panel height',
+          description: `skeleton ${before?.height}, loaded ${after?.height}`,
+        });
+        expect(before).not.toBeNull();
+        expect(after?.height).toBeCloseTo(before?.height ?? -1, 0);
+        expect(await rosterTop(crabs)).toBeCloseTo(rosterBefore ?? -1, 0);
+      });
+    });
+  }
+});

@@ -1182,7 +1182,7 @@ const DEMO_BRACKET_REPORT = {
   score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
 } as const;
 
-/** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. player@ captains Sand Crabs, which plays Sun Chasers in the first semifinal. */
+/** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. */
 export const DEMO_BRACKET_TEAMS: readonly {
   name: string;
   captainEmail: string;

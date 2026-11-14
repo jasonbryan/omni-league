@@ -44,7 +44,10 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
               [setsPerGame]="value.setsPerGame"
             />
           } @empty {
-            <div class="flex flex-col items-center px-6 py-10 text-center" data-slot="empty">
+            <div
+              class="flex min-h-54 flex-col items-center justify-center px-6 py-10 text-center pointer-coarse:min-h-57"
+              data-slot="empty"
+            >
               <span
                 class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
                 ><ng-icon name="lucideClipboardCheck" class="text-xl" aria-hidden="true"
@@ -56,15 +59,20 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
             </div>
           }
         } @else {
-          <div class="px-4 py-4 md:px-5">
+          <div class="min-h-54 px-4 py-4 pointer-coarse:min-h-57 md:px-5">
             <p role="status" class="sr-only">Loading the game.</p>
             <div aria-hidden="true">
-              <div hlmSkeleton class="rounded-md h-5 w-64 max-w-full"></div>
-              <div class="mt-4 grid grid-cols-2 gap-3">
-                <div hlmSkeleton class="rounded-md h-9"></div>
-                <div hlmSkeleton class="rounded-md h-9"></div>
+              <div hlmSkeleton class="rounded-md h-6 w-64 max-w-full"></div>
+              <div hlmSkeleton class="rounded-md mt-3 h-5 w-12"></div>
+              <div class="mt-2 grid grid-cols-2 gap-3">
+                @for (box of boxes; track box) {
+                  <div>
+                    <div hlmSkeleton class="rounded-md h-5 w-20 max-w-full"></div>
+                    <div hlmSkeleton class="rounded-md mt-2 h-9 pointer-coarse:h-11"></div>
+                  </div>
+                }
               </div>
-              <div hlmSkeleton class="rounded-md mt-4 h-9 w-32"></div>
+              <div hlmSkeleton class="rounded-md mt-4 h-9 w-32 pointer-coarse:h-11"></div>
             </div>
           </div>
         }
@@ -78,6 +86,7 @@ export class ScoreReportPanel {
   protected readonly query = injectQuery(api.scoreReports.forTeam, () => ({
     teamId: this.teamId(),
   }));
+  protected readonly boxes = [0, 1];
   protected readonly loadFailed = LOAD_FAILED;
   protected readonly noGameTitle = NO_GAME_TITLE;
   protected readonly noGameText = NO_GAME_TEXT;

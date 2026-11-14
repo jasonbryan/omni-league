@@ -157,12 +157,10 @@ const TEXT_BUTTON =
     @if (!formMode()) {
       @if (canEnter() && reportedLines().length > 0) {
         <div data-slot="reports" class="mt-2 flex flex-col gap-2">
-          <p>
+          <p class="flex flex-wrap items-center gap-x-2">
             <span hlmBadge variant="secondary">Reported</span>
             @if (reportedLines().length > 1) {
-              <span class="ms-2 text-muted-foreground"
-                >The two teams reported different scores.</span
-              >
+              <span class="text-muted-foreground">The two teams reported different scores.</span>
             }
           </p>
           <ul role="list" class="flex flex-col gap-2">

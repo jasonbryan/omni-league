@@ -95,7 +95,7 @@ async function placeInNextGame(
 ): Promise<void> {
   const next = await nextGameOf(ctx, game);
   if (!next) return;
-  // A report names the score against the opponent the team had, so another team in the place voids it.
+  // A report names the score against the opponent the team had, so another team or an emptied place voids it, and an Undo of the feeder's Clear does not bring it back.
   if (next.teamIds.some((placed, side) => side === game.nextSide && placed !== teamId)) {
     await deleteReportsOfGame(ctx, next._id);
   }

@@ -43,7 +43,7 @@ export type ReportableGame = NonNullable<
   imports: [AdminAlert, AdminOfflineAlert, GameScoreFields, HlmSpinner, NgIcon],
   providers: [provideIcons({ lucidePencil })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block px-4 py-4 md:px-5' },
+  host: { class: 'block min-h-54 px-4 py-4 pointer-coarse:min-h-57 md:px-5' },
   template: `
     <p class="font-medium" data-slot="game-label">{{ label() }}</p>
     @if (status(); as status) {
