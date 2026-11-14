@@ -1232,3 +1232,96 @@ test.describe('Tournaments: score reports', () => {
     });
   });
 });
+
+test.describe('Tournaments: a confirmed report, then Clear and Undo', () => {
+  test('Clear result returns the game to Reported with its Confirm, and Undo enters the score again', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      await page.goto(managePath);
+      await confirmButtons(gameOf(page, FIRST_SEMIFINAL)).click();
+      await page.reload();
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 21–18 Spike Squad. Sand Crabs won.',
+      );
+      await expect(game.locator('[data-slot="report"]')).toHaveCount(0);
+
+      await clearButton(game).click();
+      const cleared = savedStatus(game, 'Result cleared');
+      await expect(cleared).toBeFocused();
+      await expect(game.locator('[data-slot="badge"]')).toHaveText('Reported');
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+      ]);
+      await expect(confirmButtons(game)).toHaveCount(1);
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: To be decided v To be decided');
+
+      await undoButton(cleared).click();
+      await expect(savedStatus(game, 'Result restored')).toContainText(
+        'Sand Crabs advances to the Final.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 21–18 Spike Squad. Sand Crabs won.',
+      );
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: Sand Crabs v To be decided');
+    });
+  });
+});
+
+test.describe('Tournaments: Confirm of a report the team changed', () => {
+  test.use({ expectedConvexErrors: ['scoreReports:confirm'] });
+
+  test('is refused in the server’s words, nothing is confirmed, and the game then shows the new report', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      // The organizer's page keeps the first report until its updates are released, which is the only way to press Confirm after the change.
+      const held = await holdQueries(page, ['tournamentGames:getSetup'], { holdFromStart: false });
+      await page.goto(managePath);
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+      ]);
+      held.holdNextAnswer();
+
+      await crabs.getByRole('button', { name: 'Change score' }).click();
+      await reportBox(crabs, 'Spike Squad').fill('10');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toHaveText(
+        'Your report: Sand Crabs 21–10 Spike Squad.',
+      );
+      await expect.poll(() => held.isHolding()).toBe(true);
+
+      await confirmButtons(game).click();
+      const note = game.locator('[data-slot="undo-note"]');
+      await expect(note).toContainText(
+        'The report could not be confirmed. The team reported a different score first. The game shows it now.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+
+      held.release();
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–10 Spike Squad.',
+      ]);
+      await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: To be decided v To be decided');
+    });
+  });
+});

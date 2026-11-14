@@ -686,3 +686,198 @@ describe('scoreReports.forTeam', () => {
     expect((await forTeam(s, s.captain, teamId))?.game).toBeNull();
   });
 });
+
+describe('a confirmed report, then Correct, Clear, and Undo', () => {
+  const enter = (s: TournamentWorld, game: Doc<'tournamentGames'>, score: Score) =>
+    s.as(s.admin).mutation(api.tournamentGames.enterResult, { gameId: game._id, score });
+  const correct = (s: TournamentWorld, game: Doc<'tournamentGames'>, score: Score) =>
+    s.as(s.admin).mutation(api.tournamentGames.correctResult, { gameId: game._id, score });
+  const clear = (s: TournamentWorld, game: Doc<'tournamentGames'>) =>
+    s.as(s.admin).mutation(api.tournamentGames.undoResult, { gameId: game._id });
+
+  test('Correct changes a confirmed score and moves the other team into the Final', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    expect(await correct(s, game, set(10, 21))).toMatchObject({
+      winnerTeamId: teamIds['Spike Squad'],
+      previous: { score: set(21, 18) },
+    });
+    expect((await gameAt(s, 1, 1)).score).toEqual(set(10, 21));
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([teamIds['Spike Squad'], null]);
+    expect((await setupGame(s, 1, 1)).reports).toEqual([]);
+  });
+
+  test('Correct is refused once the next game has a result, and the confirmed score stays', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    await enter(s, await bombersSemifinal(w), set(21, 10));
+    await enter(s, await gameAt(s, 2, 1), set(21, 15));
+
+    await expectRefused(correct(s, game, set(10, 21)), 'nextGamePlayed');
+    await expectRefused(clear(s, game), 'nextGamePlayed');
+    expect(await gameAt(s, 1, 1)).toMatchObject({
+      winnerTeamId: teamIds['Sand Crabs'],
+      score: set(21, 18),
+    });
+  });
+
+  test('Clear returns the game to Reported with the same report, and the winner leaves the Final', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await report(s, s.rivalPlayer, game, teamIds['Spike Squad'], set(19, 21));
+    const rowsBefore = await reportRows(s);
+    await confirm(
+      s,
+      s.admin,
+      rowsBefore.find((row) => row.teamId === teamIds['Sand Crabs'])!,
+    );
+    await clear(s, game);
+
+    const shown = await setupGame(s, 1, 1);
+    expect(shown.result).toBeNull();
+    expect(shown.reports.map((view) => [view.teamName, view.score])).toEqual([
+      ['Sand Crabs', set(21, 18)],
+      ['Spike Squad', set(19, 21)],
+    ]);
+    expect(await reportRows(s)).toEqual(rowsBefore);
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([null, null]);
+  });
+
+  test('Undo of a Clear restores the confirmed score and the winner advances again', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    await clear(s, game);
+
+    expect(await enter(s, game, set(21, 18))).toMatchObject({
+      winnerTeamId: teamIds['Sand Crabs'],
+    });
+    expect(await gameAt(s, 1, 1)).toMatchObject({ score: set(21, 18) });
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([teamIds['Sand Crabs'], null]);
+    expect((await setupGame(s, 1, 1)).reports).toEqual([]);
+  });
+
+  test('a cleared game takes a new report from the captain again, which replaces the old one', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    await expectRefused(
+      report(s, s.captain, game, teamIds['Sand Crabs'], set(5, 21)),
+      'reportsClosed',
+    );
+    await clear(s, game);
+
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(5, 21));
+    const rows = await reportRows(s);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].score).toEqual(set(5, 21));
+  });
+
+  test('Clear of a semifinal drops the report of the Final it fed, which named another opponent', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    await enter(s, await bombersSemifinal(w), set(21, 10));
+    const final = await gameAt(s, 2, 1);
+    await report(s, s.captain, final, teamIds['Sand Crabs'], set(21, 12));
+    const finalReports = async () =>
+      (await reportRows(s)).filter((row) => row.gameId === final._id);
+    expect(await finalReports()).toHaveLength(1);
+
+    await clear(s, game);
+    expect(await finalReports()).toEqual([]);
+  });
+});
+
+describe('reports sent at the same time', () => {
+  test('the two captains reporting together each keep their own row', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await Promise.all([
+      report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18)),
+      report(s, s.rivalPlayer, game, teamIds['Spike Squad'], set(19, 21)),
+    ]);
+    expect((await reportRows(s)).map((row) => row.teamId).sort()).toEqual(
+      [teamIds['Sand Crabs'], teamIds['Spike Squad']].sort(),
+    );
+  });
+
+  test('two Confirms of different reports settle the game once, and the other is refused', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    await report(s, s.rivalPlayer, game, teamIds['Spike Squad'], set(19, 21));
+    const [first, second] = await reportRows(s);
+    const outcomes = await Promise.allSettled([
+      confirm(s, s.admin, first),
+      confirm(s, s.assignedOrganizer, second),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual(['fulfilled', 'rejected']);
+    const rejected = outcomes.find((outcome) => outcome.status === 'rejected');
+    expect(refusalOf(rejected?.reason)).toMatchObject({ code: 'resultExists' });
+    expect((await gameAt(s, 1, 1)).score).toBeDefined();
+  });
+
+  test('a report and a Confirm of the earlier one never confirm the unseen score', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
+    const seen = (await reportRows(s))[0];
+    await Promise.allSettled([
+      report(s, s.captain, game, teamIds['Sand Crabs'], set(5, 21)),
+      confirm(s, s.admin, seen),
+    ]);
+    const stored = await gameAt(s, 1, 1);
+    // Either the Confirm ran first (and the later report is refused) or the report did (and the Confirm is refused).
+    if (stored.score) expect(stored.score).toEqual(set(21, 18));
+    else expect((await reportRows(s))[0].score).toEqual(set(5, 21));
+  });
+});
+
+describe('invalid input and a removed report', () => {
+  const noSets: Score = { kind: 'sets', sets: [] };
+
+  test.each([
+    ['a negative score', set(-1, 21)],
+    ['a fractional score', set(21.5, 10)],
+    ['a score of NaN', set(Number.NaN, 10)],
+    ['no sets', noSets],
+  ])('%s is refused and nothing is stored', async (_label, score) => {
+    const w = await world();
+    const { s, teamIds } = w;
+    await expect(
+      report(s, s.captain, await crabsSemifinal(w), teamIds['Sand Crabs'], score),
+    ).rejects.toThrow();
+    expect(await reportRows(s)).toEqual([]);
+  });
+
+  test('a Confirm of a report that the recreated bracket removed is refused', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    await report(s, s.captain, await crabsSemifinal(w), teamIds['Sand Crabs'], set(21, 18));
+    const row = (await reportRows(s))[0];
+    await s.as(s.admin).mutation(api.tournamentGames.createBracket, {
+      tournamentId: s.gulf,
+      replace: true,
+    });
+    await expect(confirm(s, s.admin, row)).rejects.toThrow('Not allowed');
+    expect((await gameAt(s, 1, 1)).winnerTeamId).toBeUndefined();
+  });
+});
