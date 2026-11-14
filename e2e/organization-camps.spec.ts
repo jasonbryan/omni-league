@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
-import { seedCamp } from './support/camp';
+import { seedCamp, seedCampSession } from './support/camp';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -72,7 +72,11 @@ test.describe('Camps: creating a draft', () => {
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created' });
-    await expect(status).toHaveText('Junior Beach Volleyball Camp created.');
+    await expect(status).toContainText('Junior Beach Volleyball Camp created.');
+    await expect(status.getByRole('link', { name: 'Add sessions' })).toHaveAttribute(
+      'href',
+      `${base}/camps/junior-beach-volleyball-camp`,
+    );
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#minimum-age')).toHaveValue('');
     await expect(submit(page)).toBeFocused();
@@ -82,6 +86,7 @@ test.describe('Camps: creating a draft', () => {
     await expect(row.locator('h3')).toHaveText('Junior Beach Volleyball Camp');
     await expect(row.locator('[data-slot="badge"]')).toHaveText('Draft');
     await expect(row).toContainText('Ages 9 to 14');
+    await expect(row.locator('[data-slot="session-count"]')).toHaveText('No sessions yet');
     await screenshot(page, testInfo, 'camps-created');
     await expectAccessible(page);
   });
@@ -418,10 +423,13 @@ test.describe('Camps: an invited league organizer', () => {
     });
     const camps = nav.getByRole('list', { name: 'Your camps', includeHidden: true });
     await expect(camps.getByRole('listitem', { includeHidden: true })).toHaveText([JUNIOR.name]);
-    await expect(camps.getByRole('link', { includeHidden: true })).toHaveCount(0);
+    await expect(camps.getByRole('link', { includeHidden: true })).toHaveAttribute(
+      'href',
+      `/app/organizations/${tenant.slug}/camps/${JUNIOR.slug}`,
+    );
   });
 
-  test('the assigned camps are text rows with the tent icon and no link, and the sidebar passes the axe helper', async ({
+  test('the assigned camps are links with the tent icon that open their pages, and the sidebar passes the axe helper', async ({
     page,
     isMobile,
   }, testInfo) => {
@@ -454,9 +462,471 @@ test.describe('Camps: an invited league organizer', () => {
     const camps = nav.getByRole('list', { name: 'Your camps' });
     await expect(camps).toBeVisible();
     await expect(camps.getByRole('listitem')).toHaveText([FALL.name, JUNIOR.name]);
-    await expect(camps.getByRole('link')).toHaveCount(0);
+    await expect(camps.getByRole('link')).toHaveText([FALL.name, JUNIOR.name]);
     await expect(camps.locator('ng-icon[name="lucideTent"]')).toHaveCount(2);
     await screenshot(page, testInfo, 'camp-sidebar-rows');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+
+    await camps.getByRole('link', { name: JUNIOR.name }).click();
+    await expect(page).toHaveURL(
+      `${baseURL}/app/organizations/${tenant.slug}/camps/${JUNIOR.slug}`,
+    );
+    await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
+    if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
+    await expect(
+      page
+        .getByRole('navigation', { name: `${tenant.name} leagues and camps` })
+        .getByRole('link', { name: JUNIOR.name }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+const campPage = (tenant: { slug: string }, slug = JUNIOR.slug) =>
+  `/app/organizations/${tenant.slug}/camps/${slug}`;
+const sessionsCard = (page: Page) => page.locator('#sessions');
+const sessionRows = (page: Page) => page.locator('#sessions-list > li');
+const addForm = (page: Page) => page.locator('#add-session form');
+const addButton = (page: Page) => addForm(page).getByRole('button', { name: /^Add session/ });
+
+async function fillSession(
+  page: Page,
+  session: { name: string; start: string; end: string; deadline: string },
+) {
+  await page.locator('#add-session #name').fill(session.name);
+  await page.locator('#add-session #start-date').fill(session.start);
+  await page.locator('#add-session #end-date').fill(session.end);
+  await page.locator('#add-session #registration-deadline').fill(session.deadline);
+}
+
+const WEEK_1 = { name: 'Week 1', start: '2027-07-05', end: '2027-07-09', deadline: '2027-07-01' };
+const WEEK_2 = { name: 'Week 2', start: '2027-07-12', end: '2027-07-16', deadline: '2027-07-08' };
+const WEEK_3 = { name: 'Week 3', start: '2027-07-19', end: '2027-07-23', deadline: '2027-07-15' };
+
+async function adminWithCamp(page: Page) {
+  const admin = await memberOf(page, 'orgAdmin');
+  await seedCamp(admin.tenant, { ...JUNIOR, locations: [PELICAN], minimumAge: 9, maximumAge: 14 });
+  return { ...admin, camp: campPage(admin.tenant) };
+}
+
+test.describe('Camp sessions: opening the camp page', () => {
+  test('Add sessions in the success status opens the camp page, and a new camp has no sessions', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/camps`);
+    await fillValid(page, JUNIOR.name);
+    await submit(page).click();
+    await form(page).getByRole('link', { name: 'Add sessions' }).click();
+
+    await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}`);
+    await expect(page).toHaveTitle(`${JUNIOR.name} | ${tenant.name} | Omni League`);
+    await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
+    await expect(main(page).locator('h1 + div [data-slot="badge"]').first()).toHaveText('Draft');
+    await expect(main(page).locator('#details')).toContainText('Ages 9 to 14');
+    await expect(main(page).locator('#details')).toContainText(PELICAN);
+    await expect(sessionsCard(page)).toContainText('No sessions yet');
+    await screenshot(page, testInfo, 'camp-empty');
+    await expectAccessible(page);
+
+    await sessionsCard(page).getByRole('button', { name: 'Add a session' }).click();
+    await expect(page.locator('#add-session #name')).toBeFocused();
+  });
+
+  test('the camp’s name in the Camps list opens its page, and the breadcrumb leads back', async ({
+    page,
+  }) => {
+    const { tenant, base } = await adminWithCamp(page);
+    await page.goto(`${base}/camps`);
+    await rows(page).first().getByRole('link', { name: JUNIOR.name }).click();
+    await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}`);
+    const crumbs = main(page).getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(crumbs.getByRole('link', { name: 'Camps' })).toHaveAttribute(
+      'href',
+      `${base}/camps`,
+    );
+    await expect(crumbs.getByRole('link', { name: JUNIOR.name })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await crumbs.getByRole('link', { name: 'Camps' }).click();
+    await expect(page).toHaveURL(`${baseURL}${base}/camps`);
+  });
+});
+
+test.describe('Camp sessions: adding', () => {
+  test('a session added shows in date order with its places, and the form keeps the times and places', async ({
+    page,
+  }, testInfo) => {
+    const { camp, base } = await adminWithCamp(page);
+    await page.goto(camp);
+    await page.locator('#add-session #daily-start-time').fill('09:00');
+    await page.locator('#add-session #daily-end-time').fill('12:00');
+    await page.locator('#add-session #places').fill('20');
+
+    for (const week of [WEEK_3, WEEK_1, WEEK_2]) {
+      await fillSession(page, week);
+      await addButton(page).click();
+      await expect(
+        addForm(page).getByRole('status').filter({ hasText: 'Session added.' }),
+      ).toBeVisible();
+      await expect(page.locator('#add-session #name')).toHaveValue('');
+      await expect(page.locator('#add-session #places')).toHaveValue('20');
+      await expect(addButton(page)).toBeFocused();
+    }
+
+    await expect(sessionRows(page).locator('h3')).toHaveText(['Week 1', 'Week 2', 'Week 3']);
+    const first = sessionRows(page).first();
+    await expect(first.locator('[data-slot="session-places"]')).toHaveText('20 places');
+    await expect(first.locator('[data-slot="session-dates"]')).toHaveText('Jul 5 – Jul 9, 2027');
+    await expect(first.locator('[data-slot="session-times"]')).toHaveText('9 AM to 12 PM');
+    await expect(first.locator('[data-slot="session-deadline"]')).toHaveText(
+      'Registration closes Jul 1, 2027',
+    );
+    await screenshot(page, testInfo, 'camp-sessions');
+    await expectAccessible(page);
+
+    await page.goto(`${base}/camps`);
+    await expect(rows(page).first().locator('[data-slot="session-count"]')).toHaveText(
+      '3 sessions',
+    );
+  });
+
+  test('a session with no times shows none, and one place is "1 place"', async ({ page }) => {
+    const { camp } = await adminWithCamp(page);
+    await page.goto(camp);
+    await fillSession(page, WEEK_1);
+    await page.locator('#add-session #places').fill('1');
+    await addButton(page).click();
+    const row = sessionRows(page).first();
+    await expect(row.locator('[data-slot="session-places"]')).toHaveText('1 place');
+    await expect(row.locator('[data-slot="session-times"]')).toHaveCount(0);
+  });
+
+  test(
+    'an end before the start, and a deadline after it, show under the field on leaving it, and the server is not asked',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { camp } = await adminWithCamp(page);
+      await page.goto(camp);
+      await page.locator('#add-session #start-date').fill('2027-07-05');
+      await page.locator('#add-session #end-date').fill('2027-07-04');
+      await page.locator('#add-session #end-date').blur();
+      await expect(page.locator('#add-session #end-date-error')).toHaveText(
+        'The end date must be on or after the start date.',
+      );
+      await page.locator('#add-session #end-date').fill('2027-07-09');
+      await expect(page.locator('#add-session #end-date-error')).toHaveCount(0);
+
+      await page.locator('#add-session #registration-deadline').fill('2027-07-06');
+      await page.locator('#add-session #registration-deadline').blur();
+      await expect(page.locator('#add-session #registration-deadline-error')).toHaveText(
+        'The registration deadline must be on or before the start date, Jul 5, 2027.',
+      );
+    },
+  );
+
+  test('an empty submit shows every message, focuses Name, and adds nothing', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await adminWithCamp(page);
+    await page.goto(camp);
+    await addButton(page).click();
+    await expect(page.locator('#add-session #name-error')).toBeVisible();
+    await expect(page.locator('#add-session #places-error')).toHaveText(
+      'Enter the number of places, from 1 to 500.',
+    );
+    await expect(page.locator('#add-session #name')).toBeFocused();
+    await expect(sessionRows(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'camp-session-errors');
+    await expectAccessible(page);
+  });
+
+  test('a session starting before its end time is refused by the form, and one time alone asks for the other', async ({
+    page,
+  }) => {
+    const { camp } = await adminWithCamp(page);
+    await page.goto(camp);
+    await fillSession(page, WEEK_1);
+    await page.locator('#add-session #places').fill('20');
+    await page.locator('#add-session #daily-start-time').fill('09:00');
+    await addButton(page).click();
+    await expect(page.locator('#add-session #daily-end-time-error')).toHaveText(
+      'Enter the end time, or clear the start time.',
+    );
+    await page.locator('#add-session #daily-end-time').fill('08:00');
+    await page.locator('#add-session #daily-end-time').blur();
+    await expect(page.locator('#add-session #daily-end-time-error')).toContainText(
+      'The end time must be after the start time, 9 AM.',
+    );
+  });
+});
+
+test.describe('Camp sessions: Delete and Undo', () => {
+  test('Delete removes a session at once, and Undo brings it back unchanged', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await adminWithCamp(page);
+    await seedCampSession(tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+      dailyStartTime: '09:00',
+      dailyEndTime: '12:00',
+      places: 20,
+      registrationDeadline: WEEK_1.deadline,
+    });
+    await seedCampSession(tenant, JUNIOR.slug, {
+      name: 'Week 2',
+      startDate: WEEK_2.start,
+      endDate: WEEK_2.end,
+    });
+    await page.goto(campPage(tenant));
+    const first = sessionRows(page).first();
+    const before = await first.innerText();
+    await first.getByRole('button', { name: 'Delete Week 1' }).click();
+
+    const status = sessionsCard(page).locator('[data-slot="session-status"]');
+    await expect(status).toContainText('Week 1 deleted.');
+    await expect(sessionRows(page).locator('h3')).toHaveText(['Week 2']);
+    await expect(status.locator('[tabindex="-1"]')).toBeFocused();
+    await screenshot(page, testInfo, 'camp-session-deleted');
+    await expectAccessible(page);
+
+    await status.getByRole('button', { name: 'Undo' }).click();
+    await expect(status).toContainText('Week 1 restored.');
+    await expect(sessionRows(page).locator('h3')).toHaveText(['Week 1', 'Week 2']);
+    expect(await sessionRows(page).first().innerText()).toBe(before);
+  });
+
+  test('a session with registrations shows its count and has no Delete', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await adminWithCamp(page);
+    await seedCampSession(tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+      registeredCount: 4,
+    });
+    await seedCampSession(tenant, JUNIOR.slug, {
+      name: 'Week 2',
+      startDate: WEEK_2.start,
+      endDate: WEEK_2.end,
+    });
+    await page.goto(campPage(tenant));
+    const first = sessionRows(page).first();
+    await expect(first.locator('[data-slot="session-registered"]')).toHaveText('4 registered');
+    await expect(first.getByRole('button')).toHaveCount(0);
+    await expect(
+      sessionRows(page).nth(1).getByRole('button', { name: 'Delete Week 2' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, 'camp-session-registered');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('Camp sessions: loading and failure states', () => {
+  test('the camp and the sessions show skeletons while their answers are held', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await adminWithCamp(page);
+    const held = await holdQueries(page, ['camps:getForManagement']);
+    await page.goto(camp);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByRole('status').filter({ hasText: 'Loading the camp.' })).toBeAttached();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveCount(0);
+    await screenshot(page, testInfo, 'camp-loading');
+    await expectAccessible(page);
+    held.release();
+    await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
+  });
+
+  test('the sessions held back show their own skeleton inside the card', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await adminWithCamp(page);
+    const held = await holdQueries(page, ['campSessions:listForCamp']);
+    await page.goto(camp);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      sessionsCard(page).getByRole('status').filter({ hasText: 'Loading the sessions.' }),
+    ).toBeAttached();
+    await expect(page.locator('#add-session form')).toBeVisible();
+    await screenshot(page, testInfo, 'camp-sessions-loading');
+    await expectAccessible(page);
+    held.release();
+    await expect(sessionsCard(page)).toContainText('No sessions yet');
+  });
+
+  test('a sessions list that fails to load shows the alert, and the form stays', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await adminWithCamp(page);
+    await failFirstAnswer(page, 'campSessions:listForCamp');
+    await page.goto(camp);
+    await expect(sessionsCard(page).getByRole('alert')).toContainText(
+      'The sessions could not be loaded.',
+    );
+    await expect(addForm(page)).toBeVisible();
+    await screenshot(page, testInfo, 'camp-sessions-load-error');
+    await expectAccessible(page);
+  });
+
+  test('pressing Add session offline shows the offline alert and keeps every field', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { camp } = await adminWithCamp(page);
+    await page.goto(camp);
+    await fillSession(page, WEEK_1);
+    await page.locator('#add-session #places').fill('20');
+    await context.setOffline(true);
+    await expect(addButton(page)).toHaveAttribute('aria-disabled', 'true');
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
+    await addButton(page).click({ force: true });
+    await expect(addForm(page).getByRole('alert')).toContainText(
+      "You're offline. Nothing was sent.",
+    );
+    await expect(page.locator('#add-session #name')).toHaveValue('Week 1');
+    await expect(page.locator('#add-session #places')).toHaveValue('20');
+    await screenshot(page, testInfo, 'camp-session-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+
+  test.describe('an add the server fails', () => {
+    test.use({ expectedConvexErrors: ['campSessions:add'] });
+
+    test('keeps every field and the alert says what to do', async ({ page }, testInfo) => {
+      const { camp } = await adminWithCamp(page);
+      await failMutation(page, 'campSessions:add');
+      await page.goto(camp);
+      await fillSession(page, WEEK_1);
+      await page.locator('#add-session #places').fill('20');
+      await addButton(page).click();
+      await expect(addForm(page).getByRole('alert')).toContainText(
+        'The session could not be added.',
+      );
+      await expect(page.locator('#add-session #name')).toHaveValue('Week 1');
+      await expect(page.locator('#add-session #start-date')).toHaveValue(WEEK_1.start);
+      await expect(page.locator('#add-session #end-date')).toHaveValue(WEEK_1.end);
+      await expect(page.locator('#add-session #registration-deadline')).toHaveValue(
+        WEEK_1.deadline,
+      );
+      await expect(page.locator('#add-session #places')).toHaveValue('20');
+      await screenshot(page, testInfo, 'camp-session-add-error');
+      await expectAccessible(page);
+    });
+  });
+});
+
+test.describe('who may open a camp’s page', () => {
+  function sentFrames(page: Page): string[] {
+    const frames: string[] = [];
+    page.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => {
+        frames.push(String(frame.payload));
+      });
+    });
+    return frames;
+  }
+
+  const noAccess = (page: Page) =>
+    main(page).getByRole('heading', { level: 1, name: 'You can’t manage this camp' });
+
+  async function organizerOf(page: Page, campSlugs: string[]) {
+    const { user, tenant } = await memberOf(page, null);
+    await seedCamps(tenant);
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      leagueSlugs: [],
+      campSlugs,
+    });
+    return tenant;
+  }
+
+  test('a league organizer assigned to the camp opens it with the organizer sidebar, and adds a session', async ({
+    page,
+    isMobile,
+  }, testInfo) => {
+    const tenant = await organizerOf(page, [JUNIOR.slug]);
+    await page.goto(campPage(tenant));
+    await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
+    const crumbs = main(page).getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(crumbs.getByRole('link', { name: 'Your organizations' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
+    if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
+    const nav = page.getByRole('navigation', { name: `${tenant.name} camps` });
+    await expect(nav.getByRole('link', { name: JUNIOR.name })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(nav.getByRole('link', { name: FALL.name })).toHaveCount(0);
+    if (isMobile) await page.keyboard.press('Escape');
+    await screenshot(page, testInfo, 'camp-organizer');
+    await expectAccessible(page);
+
+    await fillSession(page, WEEK_1);
+    await page.locator('#add-session #places').fill('20');
+    await addButton(page).click();
+    await expect(sessionRows(page).locator('h3')).toHaveText(['Week 1']);
+  });
+
+  for (const [label, role] of [
+    ['a league organizer assigned another camp', 'organizer'],
+    ['a signed-in user with no membership', null],
+  ] as const) {
+    test(
+      `${label} sees the no-access view, and no camp data is requested`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const tenant =
+          role === 'organizer'
+            ? await organizerOf(page, [FALL.slug])
+            : await memberOf(page, null).then(async (member) => {
+                await seedCamps(member.tenant);
+                return member.tenant;
+              });
+        const frames = sentFrames(page);
+        await page.goto(campPage(tenant));
+        await expect(noAccess(page)).toBeVisible();
+        expect(frames.join('\n')).toContain('camps:getForManagement');
+        expect(frames.join('\n')).not.toContain('campSessions:listForCamp');
+      },
+    );
+  }
+
+  test('the no-access view passes the axe helper', async ({ page }, testInfo) => {
+    const { tenant } = await memberOf(page, null);
+    await seedCamps(tenant);
+    await page.goto(campPage(tenant));
+    await expect(noAccess(page)).toBeVisible();
+    await screenshot(page, testInfo, 'camp-no-access');
+    await expectAccessible(page);
+  });
+
+  test('an org admin of another organization sees the no-access view', async ({ page }) => {
+    await memberOf(page, 'orgAdmin');
+    const other = await seedTenant({ name: 'E2E Other Camps', locations: LOCATIONS });
+    await seedCamps(other);
+    await page.goto(campPage(other));
+    await expect(noAccess(page)).toBeVisible();
+  });
+
+  test('another organization’s camp slug under this organization is not found', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await memberOf(page, 'orgAdmin');
+    const other = await seedTenant({ name: 'E2E Other Camps', locations: LOCATIONS });
+    await seedCamp(other, { ...FALL, locations: [PELICAN], minimumAge: 9, maximumAge: 14 });
+    await page.goto(campPage(tenant, FALL.slug));
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, 'camp-not-found');
+    await expectAccessible(page);
   });
 });
