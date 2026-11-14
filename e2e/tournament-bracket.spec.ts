@@ -911,10 +911,7 @@ const reportBox = (page: Page, team: string) =>
   reportPanel(page).getByRole('textbox', { name: team, exact: true });
 const reportButton = (page: Page) =>
   reportPanel(page).getByRole('button', { name: 'Report score' });
-const reportedLines = (game: Locator) =>
-  game.locator('[data-slot="report"] span').filter({
-    hasText: 'reported',
-  });
+const reportedLines = (game: Locator) => game.locator('[data-slot="report"] > span:first-child');
 const confirmButtons = (game: Locator) => game.getByRole('button', { name: /^Confirm/ });
 const correctScoreButton = (game: Locator) => game.getByRole('button', { name: /^Correct score/ });
 
@@ -1121,7 +1118,7 @@ test.describe('Tournaments: score reports', () => {
       await reportBox(crabs, 'Spike Squad').fill('18');
       await reportButton(crabs).click();
       await crabs.getByRole('button', { name: 'Change score' }).click();
-      await expect(reportBox(crabs, 'Spike Squad')).toBeFocused();
+      await expect(reportBox(crabs, 'Sand Crabs')).toBeFocused();
       await expect(reportBox(crabs, 'Sand Crabs')).toHaveValue('21');
       await reportBox(crabs, 'Spike Squad').fill('10');
       await reportButton(crabs).click();
