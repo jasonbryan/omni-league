@@ -1,3 +1,4 @@
+import type { Score } from '../../convex/lib/sports';
 import { convexRun } from './convex';
 import type { Tenant } from './tenant';
 
@@ -15,5 +16,22 @@ export async function seedBracket(
   await convexRun('testing:seedTournamentBracket', {
     organizationSlug: tenant.slug,
     tournamentSlug,
+  });
+}
+
+export type SeededResult = { score: Score } | { forfeitSide: 0 | 1 };
+
+/** One result for the game in a round and slot, through the writer the organizer's page uses, with the score rules. Local runs only. */
+export async function seedResult(
+  tenant: Tenant,
+  tournamentSlug: string,
+  game: { round: number; slot: number },
+  result: SeededResult,
+): Promise<void> {
+  await convexRun('testing:seedTournamentResult', {
+    organizationSlug: tenant.slug,
+    tournamentSlug,
+    ...game,
+    ...result,
   });
 }

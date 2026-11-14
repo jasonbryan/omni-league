@@ -33,4 +33,42 @@ describe('a saved tournament page checked against the current shape', () => {
     const bracket = { rounds: [{ ...round, games: [game] }] };
     expect(matches({ ...BEACH_OPEN, bracket })).toBe(false);
   });
+
+  describe('with a score or a forfeit', () => {
+    const [round] = BEACH_OPEN_BRACKET.rounds;
+    const copyWith = (game: object) => ({
+      ...BEACH_OPEN,
+      bracket: { rounds: [{ ...round, games: [{ ...round.games[0], ...game }] }] },
+    });
+    const SCORE = { kind: 'sets', sets: [{ a: 21, b: 15 }] };
+
+    it('accepts a copy saved before score and forfeit existed', () => {
+      for (const game of round.games) {
+        expect(game).not.toHaveProperty('score');
+        expect(game).not.toHaveProperty('forfeit');
+      }
+      expect(matches({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET })).toBe(true);
+    });
+
+    it.each([
+      ['sets', SCORE],
+      ['goals', { kind: 'goals', a: 3, b: 1 }],
+      ['runs', { kind: 'runs', a: 7, b: 2 }],
+    ])('accepts a game with a %s score', (_, score) => {
+      expect(matches(copyWith({ winner: 0, score }))).toBe(true);
+    });
+
+    it.each([0, 1])('accepts a game with a forfeit in place %i', (forfeit) => {
+      expect(matches(copyWith({ winner: 1, forfeit }))).toBe(true);
+    });
+
+    it('rejects a forfeit that is not a place in the game', () => {
+      expect(matches(copyWith({ forfeit: 2 }))).toBe(false);
+    });
+
+    it('rejects a score of an unknown kind and a score that is not a pair', () => {
+      expect(matches(copyWith({ score: { kind: 'points', a: 1, b: 0 } }))).toBe(false);
+      expect(matches(copyWith({ score: { kind: 'goals', a: 'three', b: 1 } }))).toBe(false);
+    });
+  });
 });

@@ -8,10 +8,13 @@ import {
   viewChild,
 } from '@angular/core';
 import type { PublicBracket as PublicBracketData } from '../../../../convex/lib/publicPage';
+import { scoreText } from '../../../../convex/lib/sports';
 import { HlmBadge } from '../../ui/badge';
 import { HlmCard } from '../../ui/card';
 
-const TEAM = 'flex items-center justify-between gap-3 px-3 py-2';
+const ROW = 'px-3 py-2';
+const TEAM = `flex items-center justify-between gap-3 ${ROW}`;
+type Game = PublicBracketData['rounds'][number]['games'][number];
 
 @Component({
   selector: 'app-public-bracket',
@@ -92,6 +95,15 @@ const TEAM = 'flex items-center justify-between gap-3 px-3 py-2';
                         }
                       </div>
                     }
+                    @if (game.forfeit !== undefined) {
+                      <div data-testid="bracket-score" class="${ROW} text-sm text-muted-foreground">
+                        {{ forfeitText(game) }}
+                      </div>
+                    } @else if (game.score; as score) {
+                      <div data-testid="bracket-score" class="${ROW} text-sm text-muted-foreground">
+                        <span class="sr-only">Score: </span>{{ scoreText(score) }}
+                      </div>
+                    }
                   </li>
                 }
               </ol>
@@ -108,6 +120,13 @@ const TEAM = 'flex items-center justify-between gap-3 px-3 py-2';
 })
 export class PublicBracket {
   readonly bracket = input<PublicBracketData | undefined>(undefined);
+
+  protected readonly scoreText = scoreText;
+
+  protected forfeitText(game: Game): string {
+    const team = game.forfeit === undefined ? null : game.teams[game.forfeit];
+    return team ? `${team.name} forfeited` : 'Forfeit';
+  }
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   /** Shown until the browser has measured the rounds, so a page with no script still carries the hint. */

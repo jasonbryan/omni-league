@@ -162,6 +162,33 @@ describe('PublicTournamentPage offline', () => {
     expect(note(harness)).not.toBeNull();
   });
 
+  it('shows the score lines from a saved copy opened offline, under the saved-copy note', async () => {
+    const bracket = structuredClone(BEACH_OPEN_BRACKET);
+    bracket.rounds[0].games[0].score = {
+      kind: 'sets',
+      sets: [
+        { a: 21, b: 15 },
+        { a: 18, b: 21 },
+        { a: 15, b: 10 },
+      ],
+    };
+    bracket.rounds[0].games[1].forfeit = 1;
+    plant(tournamentQueryResults({ ...BEACH_OPEN, bracket }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    const lines = [
+      ...host(harness).querySelectorAll('main section#bracket [data-testid="bracket-score"]'),
+    ];
+    expect(lines.map(text)).toEqual(['Score: 21–15, 18–21, 15–10', 'Dune Dashers forfeited']);
+    const main = host(harness).querySelector('main')!;
+    expect(
+      note(harness)!.compareDocumentPosition(lines[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(main.querySelector('h1')!.parentElement?.lastElementChild?.tagName).toBe(
+      'APP-SAVED-COPY-NOTE',
+    );
+  });
+
   describe('no saved copy', () => {
     it('offline: shows the not-saved view at once, with Try again to the tournament page asked for', async () => {
       plant();
