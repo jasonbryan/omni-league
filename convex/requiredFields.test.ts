@@ -282,6 +282,7 @@ describe('every writer sets the required fields', () => {
     expect(Object.keys(result).sort()).toEqual(
       [
         'backfilled',
+        'campSessions',
         'camps',
         'customLevels',
         'leagues',

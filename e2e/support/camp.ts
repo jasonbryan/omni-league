@@ -23,3 +23,29 @@ export async function seedCamp(tenant: Tenant, camp: CampSeed): Promise<string> 
   })) as { slug: string };
   return slug;
 }
+
+export interface CampSessionSeed {
+  name: string;
+  startDate: string;
+  endDate: string;
+  dailyStartTime?: string;
+  dailyEndTime?: string;
+  places?: number;
+  registrationDeadline?: string;
+  registeredCount?: number;
+}
+
+/** Skips the rules of `campSessions.add`. Local runs only. */
+export async function seedCampSession(
+  tenant: Tenant,
+  campSlug: string,
+  session: CampSessionSeed,
+): Promise<void> {
+  await convexRun('testing:seedCampSession', {
+    organizationSlug: tenant.slug,
+    campSlug,
+    ...session,
+    places: session.places ?? 20,
+    registrationDeadline: session.registrationDeadline ?? session.startDate,
+  });
+}

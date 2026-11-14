@@ -424,6 +424,7 @@ describe('camps.listForOrganization', () => {
       minimumAge: 10,
       maximumAge: 16,
       status: 'draft',
+      sessionCount: 0,
     });
     expect(rows[1]).toMatchObject({ campId: first.campId, programId, status: 'draft' });
   });

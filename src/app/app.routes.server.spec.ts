@@ -20,6 +20,7 @@ import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminTournaments } from './organizations/admin/admin-tournaments';
 import { AdminCamps } from './organizations/admin/admin-camps';
+import { CampPage } from './organizations/admin/camp-page';
 import { AdminStaff } from './organizations/admin/admin-staff';
 import { TournamentPage } from './organizations/admin/tournament-page';
 import { AdminDetails } from './organizations/admin/admin-details';
@@ -224,7 +225,7 @@ describe('Route tables', () => {
     }
   });
 
-  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the guarded camp management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -239,6 +240,7 @@ describe('Route tables', () => {
       season,
       registerTournament,
       tournament,
+      camp,
       admin,
       register,
       registerFreeAgent,
@@ -275,6 +277,9 @@ describe('Route tables', () => {
     expect(tournament?.path).toBe('organizations/:orgSlug/tournaments/:tournamentSlug');
     expect(tournament?.canActivate).toEqual([requireSignedIn]);
     expect(await tournament?.loadComponent?.()).toBe(TournamentPage);
+    expect(camp?.path).toBe('organizations/:orgSlug/camps/:campSlug');
+    expect(camp?.canActivate).toEqual([requireSignedIn]);
+    expect(await camp?.loadComponent?.()).toBe(CampPage);
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);

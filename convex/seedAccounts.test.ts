@@ -281,6 +281,7 @@ const DATA = {
   seasons: 8,
   tournaments: 4,
   camps: 2,
+  campSessions: 3,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -993,6 +994,7 @@ describe('seed:demo accounts: a second run', () => {
         seasons: 0,
         tournaments: 0,
         camps: 0,
+        campSessions: 0,
         logos: 0,
         backfilled: NO_BACKFILL,
         memberships: 0,

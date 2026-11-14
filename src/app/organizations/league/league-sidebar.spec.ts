@@ -1,4 +1,4 @@
-import { SIDEBAR_ROW, SIDEBAR_ROW_CURRENT, SIDEBAR_ROW_TEXT } from '../../shell/sidebar-classes';
+import { SIDEBAR_ROW, SIDEBAR_ROW_CURRENT } from '../../shell/sidebar-classes';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -257,26 +257,25 @@ describe('LeagueSidebar', () => {
         ],
       },
     ];
-    const campRows = () => [
-      ...page.querySelectorAll<HTMLElement>('nav ul[aria-label="Your camps"] li'),
+    const campLinks = () => [
+      ...page.querySelectorAll<HTMLAnchorElement>('nav ul[aria-label="Your camps"] a'),
     ];
 
-    it('lists the assigned camps of this organization after the tournaments as rows that are not links, with the camp icon', async () => {
+    it('lists the assigned camps of this organization after the tournaments as links to their pages, none marked on a league page, with the camp icon', async () => {
       await open(COED_AS_ORGANIZER);
       await answer(WITH_CAMPS);
-      expect(campRows().map((item) => text(item))).toEqual([
-        'Fall Break Camp',
-        'Junior Beach Volleyball Camp',
+      const base = `/app/organizations/${GULF.slug}/camps`;
+      expect(campLinks().map(row)).toEqual([
+        ['Fall Break Camp', `${base}/fall-break-camp`, null],
+        ['Junior Beach Volleyball Camp', `${base}/junior-beach-volleyball-camp`, null],
       ]);
-      expect(page.querySelectorAll('nav ul[aria-label="Your camps"] a')).toHaveLength(0);
       const lists = [...page.querySelectorAll('nav ul[aria-label]')].map((ul) =>
         ul.getAttribute('aria-label'),
       );
       expect(lists).toEqual(['Your leagues', 'Your tournaments', 'Your camps']);
-      for (const item of campRows()) {
-        const content = item.firstElementChild!;
-        expect(tokens(content.className)).toEqual(tokens(SIDEBAR_ROW_TEXT));
-        expect(content.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideTent');
+      for (const link of campLinks()) {
+        expect(tokens(link.className)).toEqual(tokens(OTHER_CLASS));
+        expect(link.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideTent');
       }
     });
 
@@ -303,7 +302,7 @@ describe('LeagueSidebar', () => {
           camps: [{ name: 'Lakeside Camp', slug: 'lakeside-camp' }],
         },
       ]);
-      expect(campRows()).toEqual([]);
+      expect(campLinks()).toEqual([]);
       expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Camp');
     });
   });

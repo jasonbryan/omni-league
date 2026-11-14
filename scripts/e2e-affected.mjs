@@ -135,6 +135,7 @@ export const ROUTE_SPECS = {
     'tournament-bracket',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/camps/:campSlug': ['organization-camps', 'after-sign-in'],
   'app/organizations/:slug': ['organization-admin', 'after-sign-in'],
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
@@ -1132,7 +1133,9 @@ export const AREAS = [
   },
   {
     name: 'convex camps',
-    test: (file) => named('convex/', ['camps'])(file) || named('convex/lib/', ['campInput'])(file),
+    test: (file) =>
+      named('convex/', ['camps', 'campSessions'])(file) ||
+      named('convex/lib/', ['campInput', 'campLookup', 'campSessionInput'])(file),
     specs: ['organization-camps'],
   },
   {

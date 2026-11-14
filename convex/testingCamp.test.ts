@@ -70,3 +70,57 @@ describe('testing:seedCamp', () => {
     await expect(t.mutation(internal.testing.seedCamp, CAMP)).rejects.toThrow(/web address/);
   });
 });
+
+describe('testing:seedCampSession', () => {
+  const SESSION = {
+    organizationSlug: 'e2e-org-c4m9',
+    campSlug: 'junior-beach-volleyball-camp',
+    name: 'Week 1',
+    startDate: '2027-07-05',
+    endDate: '2027-07-09',
+    dailyStartTime: '09:00',
+    dailyEndTime: '12:00',
+    places: 20,
+    registrationDeadline: '2027-07-01',
+  };
+
+  async function withCamp() {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedCamp, CAMP);
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await withCamp();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.seedCampSession, SESSION)).rejects.toThrow(/IS_TEST/);
+    expect(await t.run((ctx) => ctx.db.query('campSessions').collect())).toEqual([]);
+  });
+
+  test('inserts a session of the camp, with no registrations unless the seed says so', async () => {
+    const t = await withCamp();
+    await t.mutation(internal.testing.seedCampSession, SESSION);
+    await t.mutation(internal.testing.seedCampSession, {
+      ...SESSION,
+      name: 'Week 2',
+      registeredCount: 4,
+    });
+    expect(await t.run((ctx) => ctx.db.query('campSessions').collect())).toEqual([
+      expect.objectContaining({ name: 'Week 1', places: 20, registeredCount: 0 }),
+      expect.objectContaining({ name: 'Week 2', registeredCount: 4 }),
+    ]);
+  });
+
+  test('refuses an unknown organization and a camp it does not have', async () => {
+    const t = await withCamp();
+    await expect(
+      t.mutation(internal.testing.seedCampSession, { ...SESSION, organizationSlug: 'nowhere' }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.seedCampSession, { ...SESSION, campSlug: 'nowhere' }),
+    ).rejects.toThrow(/No camp/);
+  });
+});
