@@ -97,7 +97,7 @@ export class CampSessionFormState {
   readonly errors: Record<CampSessionField, Signal<string | null>>;
 
   constructor() {
-    // `required` puts the attribute on the inputs; the messages are ours, so the form and `campSessions.add` agree.
+    // `required` puts the attribute on the inputs; the messages come from `campSessionInput.ts`, so the form and `campSessions.add` agree.
     this.fields = form(this.model, (path) => {
       required(path.name);
       required(path.startDate);

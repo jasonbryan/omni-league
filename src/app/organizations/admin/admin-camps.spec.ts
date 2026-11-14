@@ -11,6 +11,7 @@ import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { AdminArea } from './admin-area';
 import { AdminCamps } from './admin-camps';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { ROW_TITLE_LINK } from './link-classes';
 import {
   adminRoutes,
   COASTAL,
@@ -230,9 +231,9 @@ describe('AdminCamps', () => {
       ]);
     });
 
-    it('gives the name link a 44px touch target on touch screens', async () => {
+    it('draws the name link as the Tournaments list does, underlined at rest with a 44px touch target', async () => {
       await open(CAMPS);
-      expect(items()[0].querySelector('h3 a')!.className).toContain('pointer-coarse:min-h-11');
+      expect(tokens(items()[0].querySelector('h3 a')!.className)).toEqual(tokens(ROW_TITLE_LINK));
     });
 
     it('a failed list shows the destructive alert, never the error message', async () => {
@@ -503,7 +504,7 @@ describe('AdminCamps', () => {
       const next = status.querySelector<HTMLAnchorElement>('a')!;
       expect([text(next), next.getAttribute('href')]).toEqual([
         'Add sessions',
-        `/app/organizations/${COASTAL.slug}/camps/junior-beach-volleyball-camp`,
+        `/app/organizations/${COASTAL.slug}/camps/junior-beach-volleyball-camp#add-session`,
       ]);
       expect(status.getAttribute('role')).toBe('status');
       expect(status.nextElementSibling).toBe(submitButton());

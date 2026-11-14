@@ -26,6 +26,7 @@ import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
+import { ADD_SESSION_FRAGMENT } from './camp-add-session-landing';
 import { campPath } from './camp-path';
 import { CAMP_FORM_ALERTS, CampForm, type CampField } from './camp-form';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
@@ -300,6 +301,7 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
                 >
                 <a
                   [routerLink]="campHref(created.slug)"
+                  [fragment]="addSessionFragment"
                   class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
                   >Add sessions</a
                 >
@@ -360,6 +362,7 @@ export class CampCreateForm {
   protected readonly createdTitleClass = CREATED_TITLE;
 
   protected readonly created = signal<{ name: string; slug: string } | null>(null);
+  protected readonly addSessionFragment = ADD_SESSION_FRAGMENT;
   protected readonly campHref = (slug: string) => campPath(this.organizationSlug(), slug);
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');

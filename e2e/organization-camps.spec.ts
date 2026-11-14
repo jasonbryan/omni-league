@@ -518,18 +518,36 @@ test.describe('Camp sessions: opening the camp page', () => {
     await submit(page).click();
     await form(page).getByRole('link', { name: 'Add sessions' }).click();
 
-    await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}`);
+    await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}#add-session`);
     await expect(page).toHaveTitle(`${JUNIOR.name} | ${tenant.name} | Omni League`);
     await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
+    // The link lands on the form: Name has focus and the form is on screen, so a new camp needs no second press.
+    await expect(page.locator('#add-session #name')).toBeFocused();
+    await expect(page.locator('#add-session #name')).toBeInViewport();
     await expect(main(page).locator('h1 + div [data-slot="badge"]').first()).toHaveText('Draft');
     await expect(main(page).locator('#details')).toContainText('Ages 9 to 14');
     await expect(main(page).locator('#details')).toContainText(PELICAN);
     await expect(sessionsCard(page)).toContainText('No sessions yet');
     await screenshot(page, testInfo, 'camp-empty');
     await expectAccessible(page);
+  });
 
-    await sessionsCard(page).getByRole('button', { name: 'Add a session' }).click();
+  test('a camp page opened with #add-session lands on the form, and the empty state’s Add a session link does the same', async ({
+    page,
+  }) => {
+    const { camp } = await adminWithCamp(page);
+    await page.goto(`${camp}#add-session`);
+    await expect(main(page).getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
     await expect(page.locator('#add-session #name')).toBeFocused();
+    await expect(page.locator('#add-session #name')).toBeInViewport();
+
+    await page.goto(camp);
+    await expect(sessionsCard(page)).toContainText('No sessions yet');
+    const link = sessionsCard(page).getByRole('link', { name: 'Add a session' });
+    await expect(link).toHaveAttribute('href', `${camp}#add-session`);
+    await link.click();
+    await expect(page.locator('#add-session #name')).toBeFocused();
+    await expect(page.locator('#add-session #name')).toBeInViewport();
   });
 
   test('the camp’s name in the Camps list opens its page, and the breadcrumb leads back', async ({

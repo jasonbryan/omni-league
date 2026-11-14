@@ -152,7 +152,9 @@ const FOCUS_SELECTOR: Record<CampSessionField, string> = {
           @for (date of dates; track date.field) {
             <div
               hlmField
-              [class.sm:col-span-2]="date.field === 'registrationDeadline'"
+              [class]="
+                date.field === 'registrationDeadline' ? 'sm:max-lg:col-span-2 lg:col-span-2' : ''
+              "
               [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
               [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
             >
@@ -333,10 +335,6 @@ export class CampSessionForm {
     } else {
       this.focusAfterRender(() => this.failureAlert()?.focus());
     }
-  }
-
-  focusName(): void {
-    this.focusField('name');
   }
 
   private focusField(field: CampSessionField): void {

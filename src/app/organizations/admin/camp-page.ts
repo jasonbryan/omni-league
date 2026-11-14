@@ -2,13 +2,14 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { LeagueSidebar } from '../league/league-sidebar';
 import { Shell, ShellSidebar } from '../../shell';
 import { AdminSidebar } from './admin-sidebar';
+import { CampAddSessionLanding } from './camp-add-session-landing';
 import { CampContext } from './camp-context';
 import { CampManagement } from './camp-management';
 
 @Component({
   selector: 'app-camp-page',
   imports: [AdminSidebar, LeagueSidebar, Shell, ShellSidebar, CampManagement],
-  providers: [CampContext],
+  providers: [CampContext, CampAddSessionLanding],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell [sidebarPending]="context.state() === 'loading'">

@@ -36,6 +36,7 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { campPath } from './camp-path';
 import { CampCreateForm } from './camp-create-form';
+import { ROW_TITLE_LINK } from './link-classes';
 import { CreateFormLanding } from './create-form-landing';
 import { injectSectionJump } from './section-jump';
 
@@ -101,11 +102,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                   <li class="px-4 py-3.5 md:px-5">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                       <h3 class="me-1 font-medium">
-                        <a
-                          [routerLink]="campHref(row.slug)"
-                          class="rounded-sm underline-offset-4 hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
-                          >{{ row.name }}</a
-                        >
+                        <a [routerLink]="campHref(row.slug)" [class]="rowLink">{{ row.name }}</a>
                       </h3>
                       @if (row.status === 'published') {
                         <span hlmBadge variant="default"
@@ -253,6 +250,7 @@ export class AdminCamps {
   protected readonly placeholders = [1, 2, 3];
   protected readonly skeletonFields = [1, 2, 3];
   protected readonly ages = campAgesLabel;
+  protected readonly rowLink = ROW_TITLE_LINK;
   protected readonly campHref = (slug: string) => campPath(this.context.slug(), slug);
   protected readonly sessions = (count: number) =>
     count === 0 ? 'No sessions yet' : `${count} ${count === 1 ? 'session' : 'sessions'}`;

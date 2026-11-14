@@ -277,13 +277,15 @@ describe('CampManagement', () => {
       expect(page.querySelector('#add-session form')).not.toBeNull();
     });
 
-    it('empty: says what will appear and has the action that fills it, which moves focus to Name', async () => {
+    it('empty: says what will appear and has the link to the form that fills it, which moves focus to Name', async () => {
       await open(CAMP, []);
       expect(text(sessionsCard())).toContain('No sessions yet');
-      const add = [...sessionsCard().querySelectorAll<HTMLButtonElement>('button')].find(
-        (b) => text(b) === 'Add a session',
+      const add = [...sessionsCard().querySelectorAll<HTMLAnchorElement>('a')].find(
+        (a) => text(a) === 'Add a session',
       )!;
       expect(add).toBeDefined();
+      expect(add.getAttribute('href')).toBe(`${CAMP_URL}#add-session`);
+      expect(add.getAttribute('data-slot')).toBe('button');
       page.querySelector<HTMLElement>('#add-session')!.scrollIntoView = vi.fn();
       add.click();
       await o.flush();

@@ -37,6 +37,7 @@ import {
   offlineTitle,
   ConvexOfflineError,
 } from '../../core/data/convex';
+import { isPlainClick } from '../../shell/follow-link';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
 import { HlmBadge } from '../../ui/badge';
@@ -45,12 +46,13 @@ import { HlmSkeleton } from '../../ui/skeleton';
 import { seasonDates } from '../league/season-dates';
 import { AdminAlert } from './admin-alert';
 import { OUTLINE_BUTTON } from './button-classes';
+import { ADD_SESSION_FRAGMENT, CampAddSessionLanding } from './camp-add-session-landing';
 import { CampBreadcrumb } from './camp-breadcrumb';
 import { CampContext, type CampSessionRow } from './camp-context';
 import { CampNoAccess } from './camp-no-access';
 import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
-import { FOOTER_STATUS } from './footer-status';
+import { injectSectionJump } from './section-jump';
 
 const DELETE_FAILED = 'Check your connection and try again.';
 const RESTORE_FAILED = 'could not be restored. Try again.';
@@ -312,18 +314,19 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                         Add a session with its dates, places, and registration deadline.
                       </p>
                       <div class="mt-5">
-                        <button
-                          type="button"
+                        <!-- The fragment link is explicit: a bare #add-session would resolve against <base href="/"> to the home page. -->
+                        <a
+                          [href]="addPath()"
                           data-slot="button"
                           [class]="outlineButton"
-                          (click)="addSession()"
+                          (click)="jumpToForm($event)"
                         >
                           <ng-icon
                             name="lucidePlus"
                             data-icon="inline-start"
                             aria-hidden="true"
                           />Add a session
-                        </button>
+                        </a>
                       </div>
                     </div>
                   }
@@ -398,6 +401,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
 export class CampManagement {
   private readonly context = inject(CampContext);
   private readonly injector = inject(Injector);
+  private readonly landing = inject(CampAddSessionLanding);
   private readonly title = inject(Title);
   private readonly removeCall = injectMutation(api.campSessions.remove);
   private readonly addCall = injectMutation(api.campSessions.add);
@@ -405,7 +409,8 @@ export class CampManagement {
 
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
-  protected readonly statusClass = `${FOOTER_STATUS} mb-0 flex flex-wrap items-center gap-x-3 gap-y-1`;
+  protected readonly statusClass =
+    'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground';
   protected readonly placeholders = [1, 2];
   protected readonly detailRows = [1, 2];
 
@@ -420,6 +425,9 @@ export class CampManagement {
     const camp = this.camp();
     return camp ? campAgesLabel(camp.minimumAge, camp.maximumAge) : '';
   });
+  protected readonly addPath = computed(
+    () => `${campPath(this.context.orgSlug(), this.context.campSlug())}#${ADD_SESSION_FRAGMENT}`,
+  );
   protected readonly retryHref = computed(() =>
     campPath(this.context.orgSlug(), this.context.campSlug()),
   );
@@ -433,9 +441,12 @@ export class CampManagement {
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly addSection = viewChild<ElementRef<HTMLElement>>('addSection');
-  private readonly addForm = viewChild(CampSessionForm);
+  private readonly sectionJump = injectSectionJump((section) =>
+    section.querySelector<HTMLElement>('#name'),
+  );
 
   constructor() {
+    effect(() => this.landOnceTheFormRenders());
     // The no-access and not-found views set their own title.
     effect(() => {
       const camp = this.camp();
@@ -459,9 +470,27 @@ export class CampManagement {
     return formatCalendarDate(row.registrationDeadline);
   }
 
-  protected addSession(): void {
-    this.addSection()?.nativeElement.scrollIntoView();
-    this.addForm()?.focusName();
+  protected jumpToForm(event: MouseEvent): void {
+    if (!isPlainClick(event)) return;
+    const section = this.addSection()?.nativeElement;
+    if (!section) return;
+    event.preventDefault();
+    this.sectionJump.jump(section);
+  }
+
+  private landOnceTheFormRenders(): void {
+    if (!this.landing.pending()) return;
+    const state = this.state();
+    if (state === 'loading') return;
+    this.landing.settle();
+    if (state !== 'ready') return;
+    afterNextRender(
+      () => {
+        const section = this.addSection()?.nativeElement;
+        if (section) this.sectionJump.jump(section);
+      },
+      { injector: this.injector },
+    );
   }
 
   protected async remove(row: CampSessionRow): Promise<void> {
