@@ -1,5 +1,5 @@
 import { v, type Infer, type Validator } from 'convex/values';
-import { sportValidator } from './sports';
+import { scoreValidator, sportValidator } from './sports';
 import { tournamentDetailsValidator } from './tournamentDetails';
 
 // These live apart from the function modules and import no function code, so the Angular app can
@@ -241,7 +241,10 @@ const publicBracketPlaceValidator = v.union(
   v.object({ name: v.string(), seed: v.optional(v.number()) }),
 );
 
+const publicBracketSideValidator = v.union(v.literal(0), v.literal(1));
+
 // Holds no ids: the page is cached and saved offline, and an id is an internal key.
+// `score` and `forfeit` are optional so a copy saved before they existed stays valid.
 export const publicBracketValidator = v.object({
   winner: v.optional(v.string()),
   rounds: v.array(
@@ -251,7 +254,10 @@ export const publicBracketValidator = v.object({
         v.object({
           teams: v.array(publicBracketPlaceValidator),
           bye: v.boolean(),
-          winner: v.optional(v.union(v.literal(0), v.literal(1))),
+          winner: v.optional(publicBracketSideValidator),
+          score: v.optional(scoreValidator),
+          // The place of the team that forfeited, in place of `score`, which holds the sport's forfeit score.
+          forfeit: v.optional(publicBracketSideValidator),
         }),
       ),
     }),

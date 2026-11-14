@@ -239,6 +239,26 @@ describe('PublicTournamentPage server render', () => {
     expect(section.querySelector('[role="region"][aria-label="Bracket rounds"]')).not.toBeNull();
   });
 
+  it('writes each game’s score line, with its screen-reader label, and a forfeit line into the raw HTML', async () => {
+    const bracket = structuredClone(BEACH_OPEN_BRACKET);
+    bracket.rounds[0].games[0].score = {
+      kind: 'sets',
+      sets: [
+        { a: 21, b: 15 },
+        { a: 18, b: 21 },
+        { a: 15, b: 10 },
+      ],
+    };
+    bracket.rounds[0].games[1].forfeit = 0;
+    const { html, body } = await render(TOURNAMENT_PATH, answer({ ...BEACH_OPEN, bracket }));
+    const lines = [
+      ...body.querySelectorAll('main section#bracket [data-testid="bracket-score"]'),
+    ].map((line) => spacedText(line));
+    expect(lines).toEqual(['Score: 21–15, 18–21, 15–10', 'Net Results forfeited']);
+    expect(html).toContain('>Score: </span>');
+    expect(html).toContain('21–15, 18–21, 15–10');
+  });
+
   it('writes the empty line into the raw HTML when there is no bracket', async () => {
     const { body } = await render(TOURNAMENT_PATH, answer());
     expect(text(body.querySelector('main section#bracket p'))).toBe(
