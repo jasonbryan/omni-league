@@ -63,6 +63,12 @@ describe('TeamPage: rosters in a season', () => {
       a.getAttribute('aria-current'),
     ]);
 
+  it('shows the captain of a season team no Report score panel, because only a bracket game takes one', async () => {
+    await open({ ...PARTY, viewerIsCaptain: true, viewerCanManage: true });
+    expect(main().querySelector('app-score-report-panel')).toBeNull();
+    expect(o.subscription('scoreReports:forTeam')).toBeUndefined();
+  });
+
   it('draws the season teams panel as a bare helm card', async () => {
     await open(PARTY);
     expectBareCard(seasonPanel(), 'overflow-hidden');

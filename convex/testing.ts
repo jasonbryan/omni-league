@@ -604,7 +604,13 @@ export const seedTournamentRosters = internalMutation({
     organizationSlug: v.string(),
     tournamentSlug: v.string(),
     // Players default to the tournament's minimum roster size.
-    teams: v.array(v.object({ name: v.string(), players: v.optional(v.number()) })),
+    teams: v.array(
+      v.object({
+        name: v.string(),
+        players: v.optional(v.number()),
+        captainEmail: v.optional(v.string()),
+      }),
+    ),
   },
   returns: v.object({ teamIds: v.array(v.id('teams')) }),
   handler: async (ctx, { organizationSlug, tournamentSlug, teams }) => {
@@ -614,14 +620,15 @@ export const seedTournamentRosters = internalMutation({
     if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
     const { tournament } = found;
     const teamIds: Id<'teams'>[] = [];
-    for (const { name, players = tournament.minimumRosterSize } of teams) {
+    for (const { name, players = tournament.minimumRosterSize, captainEmail } of teams) {
       const player = (number: number) =>
         ctx.db.insert('users', {
           authUserId: `e2e-roster-${tournamentSlug}-${name}-${number}`,
           name: `${name} ${number}`,
           adultConfirmedAt: 1,
         });
-      const captainUserId = await player(1);
+      const captainUserId =
+        captainEmail === undefined ? await player(1) : (await userByEmail(ctx, captainEmail))._id;
       const teamId = await insertTournamentTeamWithCaptain(ctx, tournament, {
         name,
         captainUserId,

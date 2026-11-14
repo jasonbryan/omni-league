@@ -50,6 +50,7 @@ import {
   bracketExists,
   bracketGames,
   bracketHasResult,
+  gameHasResult,
   replaceBracket,
   saveResult,
   tournamentTeams as seededTeamsOf,
@@ -1169,6 +1170,18 @@ const DEMO_BRACKET_RESULTS: readonly { slot: number; score: Score }[] = [
   { slot: 4, score: { kind: 'sets', sets: [{ a: 18, b: 21 }] } },
 ];
 
+/**
+ * Shoreline Smash's captain has reported the score of the second semifinal, Shoreline Smash v Wave Riders, so it reads Reported
+ * on the organizer's page. The first semifinal, which player@'s Sand Crabs plays, has no report.
+ */
+const DEMO_BRACKET_REPORT = {
+  round: 2,
+  slot: 2,
+  teamName: 'Shoreline Smash',
+  captainEmail: DEMO_CAPTAINS[1].email,
+  score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
+} as const;
+
 /** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. */
 export const DEMO_BRACKET_TEAMS: readonly {
   name: string;
@@ -1191,8 +1204,8 @@ export const DEMO_BRACKET_TEAMS: readonly {
     partnerEmail: DEMO_BRACKET_PARTNERS[0].email,
   },
   {
-    name: 'Dune Dashers',
-    captainEmail: DEMO_FREE_AGENT_PEOPLE[0].email,
+    name: 'Sand Crabs',
+    captainEmail: `player@${DEMO_ACCOUNT_DOMAIN}`,
     partnerEmail: DEMO_BRACKET_PARTNERS[1].email,
   },
   {
@@ -1530,6 +1543,7 @@ export const insertDemoTeams = internalMutation({
     await insertDemoBracketPartners(ctx, captains);
     await insertDemoBracket(ctx);
     await insertDemoBracketResults(ctx, captains);
+    await insertDemoBracketReport(ctx, captains);
     await insertDemoTournamentWaitlistEntry(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return tournamentTeams;
@@ -1655,6 +1669,44 @@ async function insertDemoBracketResults(
     if (!game || !winnerTeamId) continue;
     await saveResult(ctx, game, { score, winnerTeamId, enteredBy: admin._id });
   }
+}
+
+/** Only on a game with no result and no report from the team, so a result or report on a reused deployment is kept. */
+async function insertDemoBracketReport(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const { round, slot, teamName, captainEmail, score } = DEMO_BRACKET_REPORT;
+  const tournament = await demoBracketTournament(ctx);
+  const authUserId = people.find((person) => person.email === captainEmail)?.authUserId;
+  if (!tournament || authUserId === undefined) return;
+  const game = (await bracketGames(ctx, tournament._id)).find(
+    (row) => row.round === round && row.slot === slot,
+  );
+  const team = await ctx.db
+    .query('teams')
+    .withIndex('by_tournamentId_and_sortName', (q) =>
+      q.eq('tournamentId', tournament._id).eq('sortName', teamSortName(teamName)),
+    )
+    .first();
+  const captain = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  if (!game || !team || !captain || !game.teamIds.includes(team._id)) return;
+  if (gameHasResult(game) || game.teamIds.includes(null)) return;
+  const reported = await ctx.db
+    .query('scoreReports')
+    .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', game._id).eq('teamId', team._id))
+    .first();
+  if (reported) return;
+  await ctx.db.insert('scoreReports', {
+    gameId: game._id,
+    teamId: team._id,
+    reportedByUserId: captain._id,
+    score,
+    reportedAt: Date.now(),
+  });
 }
 
 async function insertDemoWaitlistEntry(

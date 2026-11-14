@@ -905,3 +905,539 @@ test.describe('Tournaments: an Undo the server refuses after another organizer c
     });
   });
 });
+
+const reportPanel = (page: Page) => page.getByTestId('score-report');
+const reportBox = (page: Page, team: string) =>
+  reportPanel(page).getByRole('textbox', { name: team, exact: true });
+const reportButton = (page: Page) =>
+  reportPanel(page).getByRole('button', { name: 'Report score' });
+const reportedLines = (game: Locator) => game.locator('[data-slot="report"] > span:first-child');
+const confirmButtons = (game: Locator) => game.getByRole('button', { name: /^Confirm/ });
+const correctScoreButton = (game: Locator) => game.getByRole('button', { name: /^Correct score/ });
+
+interface ReportWorld {
+  tenant: Tenant;
+  managePath: string;
+  crabs: Page;
+  squad: Page;
+  teamPath: (name: string) => string;
+}
+
+/**
+ * Four teams, so the first semifinal is Sand Crabs v Spike Squad, each of those two with a captain who has signed in on a page of their own.
+ */
+async function withReportWorld(
+  page: Page,
+  browser: Browser,
+  { bracket = true, setsPerGame = 1 }: { bracket?: boolean; setsPerGame?: 1 | 3 },
+  use: (world: ReportWorld) => Promise<void>,
+) {
+  const seeded = await adminOf(page, { teams: [], registration: 'closed' });
+  const contexts = await Promise.all(
+    [0, 1].map(() => browser.newContext({ baseURL, viewport: page.viewportSize() })),
+  );
+  try {
+    const [crabs, squad] = await Promise.all(contexts.map((context) => context.newPage()));
+    const captains = [newUser('Crabs'), newUser('Squad')];
+    await signUp(crabs, captains[0]);
+    await signUp(squad, captains[1]);
+    const names = ['Sand Crabs', 'Beach Bombers', 'Set Point', 'Spike Squad'];
+    const { teamIds } = (await convexRun('testing:seedTournamentRosters', {
+      organizationSlug: seeded.tenant.slug,
+      tournamentSlug: SLUG,
+      teams: names.map((name) => ({
+        name,
+        ...(name === 'Sand Crabs' && { captainEmail: captains[0].email }),
+        ...(name === 'Spike Squad' && { captainEmail: captains[1].email }),
+      })),
+    })) as { teamIds: string[] };
+    if (setsPerGame === 3) {
+      await convexRun('testing:setTournamentSetsPerGame', {
+        organizationSlug: seeded.tenant.slug,
+        tournamentSlug: SLUG,
+        setsPerGame,
+      });
+    }
+    if (bracket) {
+      await convexRun('testing:seedTournamentBracket', {
+        organizationSlug: seeded.tenant.slug,
+        tournamentSlug: SLUG,
+      });
+    }
+    await use({
+      ...seeded,
+      crabs,
+      squad,
+      teamPath: (name) => `/app/teams/${teamIds[names.indexOf(name)]}`,
+    });
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+}
+
+const FIRST_SEMIFINAL = 'Game 1: Sand Crabs v Spike Squad';
+
+test.describe('Tournaments: score reports', () => {
+  test('a captain reports 21–18, the organizer sees it as reported while the public bracket has no winner, and Confirm advances the winner', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, tenant, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await expect(reportPanel(crabs).locator('[data-slot="game-label"]')).toHaveText(
+        'Semifinals: Sand Crabs v Spike Squad',
+      );
+      await expect(reportBox(crabs, 'Sand Crabs')).toBeVisible();
+      await screenshot(crabs, testInfo, 'score-report-form');
+      await expectAccessible(crabs);
+
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      const status = reportPanel(crabs).getByRole('status').filter({ hasText: 'Score reported' });
+      await expect(status).toBeFocused();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toHaveText(
+        'Your report: Sand Crabs 21–18 Spike Squad.',
+      );
+      await screenshot(crabs, testInfo, 'score-report-reported');
+      await expectAccessible(crabs);
+
+      await page.goto(managePath);
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(game.locator('[data-slot="badge"]')).toHaveText('Reported');
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+      ]);
+      await expect(enterButton(game)).toHaveCount(0);
+      await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+      await screenshot(page, testInfo, 'score-report-organizer-reported');
+      await expectAccessible(page);
+
+      const publicContext = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+      try {
+        const visitor = await publicContext.newPage();
+        await visitor.goto(`${tenant.path}/tournaments/${SLUG}`);
+        await expect(visitor.getByTestId('bracket-game')).toHaveCount(3);
+        await expect(visitor.getByText('Won', { exact: true })).toHaveCount(0);
+        await expect(visitor.getByTestId('bracket-winner')).toHaveCount(0);
+
+        await confirmButtons(game).click();
+        const confirmed = savedStatus(game, 'Report confirmed');
+        await expect(confirmed).toContainText('Sand Crabs advances to the Final.');
+        await expect(confirmed).toBeFocused();
+        await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+          'Sand Crabs 21–18 Spike Squad. Sand Crabs won.',
+        );
+        await expect(gameLabels(page).nth(2)).toHaveText('Game 1: Sand Crabs v To be decided');
+        await screenshot(page, testInfo, 'score-report-organizer-confirmed');
+
+        await visitor.reload();
+        await expect(
+          visitor.getByTestId('bracket-game').nth(0).getByText('Won', { exact: true }),
+        ).toHaveCount(1);
+      } finally {
+        await publicContext.close();
+      }
+
+      await crabs.reload();
+      await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toContainText(
+        'No game to report right now.',
+      );
+    });
+  });
+
+  test('two reports that differ show both, and Confirm on one of them settles the game', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, squad, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      await squad.goto(world.teamPath('Spike Squad'));
+      await reportBox(squad, 'Sand Crabs').fill('19');
+      await reportBox(squad, 'Spike Squad').fill('21');
+      await reportButton(squad).click();
+      await expect(reportPanel(squad).locator('[data-slot="reported"]')).toHaveText(
+        'Your report: Sand Crabs 19–21 Spike Squad.',
+      );
+
+      await page.goto(managePath);
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+        'Spike Squad reported Sand Crabs 19–21 Spike Squad.',
+      ]);
+      await expect(game).toContainText('The two teams reported different scores.');
+      await expect(confirmButtons(game)).toHaveCount(2);
+      await screenshot(page, testInfo, 'score-report-organizer-differing');
+      await expectAccessible(page);
+
+      await confirmButtons(game).nth(1).click();
+      await expect(savedStatus(game, 'Report confirmed')).toContainText(
+        'Spike Squad advances to the Final.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 19–21 Spike Squad. Spike Squad won.',
+      );
+    });
+  });
+
+  test('Correct score opens the form with the reported score, and the organizer’s own score becomes the result', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      await page.goto(managePath);
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await correctScoreButton(game).click();
+      await expect(scoreInput(game, 'a1')).toHaveValue('21');
+      await expect(scoreInput(game, 'b1')).toHaveValue('18');
+      await fillSet(game, '21', '12');
+      await saveButton(game).click();
+      await expect(savedStatus(game, 'Result saved')).toContainText('Sand Crabs advances');
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 21–12 Spike Squad. Sand Crabs won.',
+      );
+    });
+  });
+
+  test('a captain changes the report until the organizer confirms, and the organizer sees the latest one', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await crabs.getByRole('button', { name: 'Change score' }).click();
+      await expect(reportBox(crabs, 'Sand Crabs')).toBeFocused();
+      await expect(reportBox(crabs, 'Sand Crabs')).toHaveValue('21');
+      await reportBox(crabs, 'Spike Squad').fill('10');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toHaveText(
+        'Your report: Sand Crabs 21–10 Spike Squad.',
+      );
+
+      await page.goto(managePath);
+      await expect(reportedLines(gameOf(page, FIRST_SEMIFINAL))).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–10 Spike Squad.',
+      ]);
+    });
+  });
+
+  test('a team with no bracket yet shows the empty state, and its states do not scroll sideways at 320px', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await withReportWorld(page, browser, { bracket: false }, async (world) => {
+      const { crabs } = world;
+      await crabs.setViewportSize({ width: 320, height: 640 });
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toContainText(
+        'No game to report right now.',
+      );
+      await expectNoSidewaysScroll(crabs);
+      await screenshot(crabs, testInfo, 'score-report-empty');
+      await expectAccessible(crabs);
+    });
+  });
+
+  test('the form, the report, and the organizer’s Reported states do not scroll sideways at 320px', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, squad, managePath } = world;
+      await crabs.setViewportSize({ width: 320, height: 640 });
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await expect(reportBox(crabs, 'Sand Crabs')).toBeVisible();
+      await expectNoSidewaysScroll(crabs);
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+      await expectNoSidewaysScroll(crabs);
+
+      await squad.goto(world.teamPath('Spike Squad'));
+      await reportBox(squad, 'Sand Crabs').fill('19');
+      await reportBox(squad, 'Spike Squad').fill('21');
+      await reportButton(squad).click();
+      await expect(reportPanel(squad).locator('[data-slot="reported"]')).toBeVisible();
+
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto(managePath);
+      await expect(confirmButtons(gameOf(page, FIRST_SEMIFINAL))).toHaveCount(2);
+      await expectNoSidewaysScroll(page);
+    });
+  });
+
+  test('a tied score shows its error under the set, keeps the scores, and sends nothing', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('21');
+      await reportButton(crabs).focus();
+      await expect(reportPanel(crabs).locator('[data-slot="field-error"]')).toHaveText(
+        'Set 1 is tied. A set needs a winner.',
+      );
+      await reportButton(crabs).click();
+      await expect(reportBox(crabs, 'Sand Crabs')).toBeFocused();
+      await expect(reportBox(crabs, 'Spike Squad')).toHaveValue('21');
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toHaveCount(0);
+      await screenshot(crabs, testInfo, 'score-report-tied');
+      await expectAccessible(crabs);
+    });
+  });
+
+  test('offline, Report score looks disabled, a press shows the offline alert, and the scores stay', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await crabs.context().setOffline(true);
+      try {
+        await expect(reportButton(crabs)).toHaveAttribute('aria-disabled', 'true', {
+          timeout: 5_000,
+        });
+        // `force`: Playwright treats aria-disabled as not actionable, and the page must still answer.
+        await reportButton(crabs).click({ force: true });
+        const alert = reportPanel(crabs).getByRole('alert');
+        await expect(alert).toContainText('Your scores are still here.');
+        await expect(alert).toBeFocused();
+        await expect(reportBox(crabs, 'Sand Crabs')).toHaveValue('21');
+      } finally {
+        await crabs.context().setOffline(false);
+      }
+      await expect(reportButton(crabs)).not.toHaveAttribute('aria-disabled', /.*/, {
+        timeout: 20_000,
+      });
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+    });
+  });
+});
+
+test.describe('Tournaments: a confirmed report, then Clear and Undo', () => {
+  test('Clear result returns the game to Reported with its Confirm, and Undo enters the score again', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      await page.goto(managePath);
+      await confirmButtons(gameOf(page, FIRST_SEMIFINAL)).click();
+      await expect(savedStatus(gameOf(page, FIRST_SEMIFINAL), 'Report confirmed')).toBeVisible();
+      await page.reload();
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 21–18 Spike Squad. Sand Crabs won.',
+      );
+      await expect(game.locator('[data-slot="report"]')).toHaveCount(0);
+
+      await clearButton(game).click();
+      const cleared = savedStatus(game, 'Result cleared');
+      await expect(cleared).toBeFocused();
+      await expect(game.locator('[data-slot="badge"]')).toHaveText('Reported');
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+      ]);
+      await expect(confirmButtons(game)).toHaveCount(1);
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: To be decided v To be decided');
+
+      await undoButton(cleared).click();
+      await expect(savedStatus(game, 'Result restored')).toContainText(
+        'Sand Crabs advances to the Final.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Sand Crabs 21–18 Spike Squad. Sand Crabs won.',
+      );
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: Sand Crabs v To be decided');
+    });
+  });
+});
+
+test.describe('Tournaments: Confirm of a report the team changed', () => {
+  test.use({ expectedConvexErrors: ['scoreReports:confirm'] });
+
+  test('is refused in the server’s words, nothing is confirmed, and the game then shows the new report', async ({
+    page,
+    browser,
+  }) => {
+    await withReportWorld(page, browser, {}, async (world) => {
+      const { crabs, managePath } = world;
+      await crabs.goto(world.teamPath('Sand Crabs'));
+      await reportBox(crabs, 'Sand Crabs').fill('21');
+      await reportBox(crabs, 'Spike Squad').fill('18');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+      // The organizer's page keeps the first report until its updates are released, which is the only way to press Confirm after the change.
+      const held = await holdQueries(page, ['tournamentGames:getSetup'], { holdFromStart: false });
+      await page.goto(managePath);
+      const game = gameOf(page, FIRST_SEMIFINAL);
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–18 Spike Squad.',
+      ]);
+      held.holdNextAnswer();
+
+      await crabs.getByRole('button', { name: 'Change score' }).click();
+      await reportBox(crabs, 'Spike Squad').fill('10');
+      await reportButton(crabs).click();
+      await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toHaveText(
+        'Your report: Sand Crabs 21–10 Spike Squad.',
+      );
+      await expect.poll(() => held.isHolding()).toBe(true);
+
+      await confirmButtons(game).click();
+      const note = game.locator('[data-slot="undo-note"]');
+      await expect(note).toContainText(
+        'The report could not be confirmed. The team reported a different score first. The game shows it now.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+
+      held.release();
+      await expect(reportedLines(game)).toHaveText([
+        'Sand Crabs reported Sand Crabs 21–10 Spike Squad.',
+      ]);
+      await expect(game.locator('[data-slot="game-result"]')).toHaveCount(0);
+      await expect(gameLabels(page).nth(2)).toHaveText('Game 1: To be decided v To be decided');
+    });
+  });
+});
+
+test.describe('Tournaments: the Report score panel while it loads', () => {
+  const rosterTop = async (page: Page) =>
+    (await page.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+
+  for (const [state, bracket] of [
+    ['the form', true],
+    ['the empty state', false],
+  ] as const) {
+    for (const setsPerGame of [1, 3] as const) {
+      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px.
+      for (const width of [360, 1280]) {
+        test(`at ${width}px its skeleton is as tall as ${state} of a ${setsPerGame === 1 ? 'game of 1 set' : 'best of 3'}, so the roster below does not move`, async ({
+          page,
+          browser,
+        }, testInfo) => {
+          await withReportWorld(page, browser, { bracket, setsPerGame }, async (world) => {
+            const { crabs } = world;
+            await crabs.setViewportSize({ width, height: 900 });
+            const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+            await crabs.goto(world.teamPath('Sand Crabs'));
+            await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+            await expect.poll(() => held.isHolding()).toBe(true);
+            const before = await reportPanel(crabs).boundingBox();
+            const rosterBefore = await rosterTop(crabs);
+            const parts = (selector: string) =>
+              reportPanel(crabs)
+                .locator(selector)
+                .evaluateAll((els) =>
+                  els.map((el) => `${el.tagName}:${el.getBoundingClientRect().height}`).join(' '),
+                );
+            const skeletonParts = await parts('[data-slot="skeleton"]');
+
+            held.release();
+            await expect(
+              bracket
+                ? reportPanel(crabs).locator('form')
+                : reportPanel(crabs).locator('[data-slot="empty"]'),
+            ).toBeVisible();
+            if (bracket) {
+              await expect(reportPanel(crabs).locator('legend')).toHaveCount(setsPerGame);
+            }
+            const after = await reportPanel(crabs).boundingBox();
+            testInfo.annotations.push({
+              type: 'panel height',
+              description: `skeleton ${before?.height}, loaded ${after?.height}`,
+            });
+            const loadedParts = await parts(
+              '[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"]',
+            );
+            expect(before).not.toBeNull();
+            const shift = Math.abs((after?.height ?? Infinity) - (before?.height ?? -1));
+            expect(shift, `skeleton: ${skeletonParts} || loaded: ${loadedParts}`).toBeLessThan(0.5);
+            const rosterShift = Math.abs(
+              ((await rosterTop(crabs)) ?? Infinity) - (rosterBefore ?? -1),
+            );
+            expect(rosterShift).toBeLessThan(0.5);
+          });
+        });
+      }
+    }
+  }
+});
+
+test.describe('Tournaments: the Roster card while the Report score panel loads', () => {
+  const rosterTop = async (page: Page) =>
+    (await page.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+
+  for (const width of [360, 1280]) {
+    test(`at ${width}px the Roster card keeps its place when the form arrives, and when a reported game gives way to the empty state`, async ({
+      page,
+      browser,
+    }) => {
+      await withReportWorld(page, browser, {}, async (world) => {
+        const { crabs, managePath } = world;
+        await crabs.setViewportSize({ width, height: 900 });
+        const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+        await crabs.goto(world.teamPath('Sand Crabs'));
+        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+        await expect.poll(() => held.isHolding()).toBe(true);
+        const skeleton = await rosterTop(crabs);
+        held.release();
+        await expect(reportBox(crabs, 'Sand Crabs')).toBeVisible();
+        expect(await rosterTop(crabs)).toBeCloseTo(skeleton ?? -1, 0);
+
+        await reportBox(crabs, 'Sand Crabs').fill('21');
+        await reportBox(crabs, 'Spike Squad').fill('18');
+        await reportButton(crabs).click();
+        await expect(reportPanel(crabs).locator('[data-slot="reported"]')).toBeVisible();
+
+        await page.goto(managePath);
+        await confirmButtons(gameOf(page, FIRST_SEMIFINAL)).click();
+        await expect(savedStatus(gameOf(page, FIRST_SEMIFINAL), 'Report confirmed')).toBeVisible();
+        await crabs.reload();
+        await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toBeVisible();
+        const settled = await rosterTop(crabs);
+        const heldAgain = await holdQueries(crabs, ['scoreReports:forTeam']);
+        await crabs.reload();
+        await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+        await expect.poll(() => heldAgain.isHolding()).toBe(true);
+        expect(await rosterTop(crabs)).toBeCloseTo(settled ?? -1, 0);
+        heldAgain.release();
+        await expect(reportPanel(crabs).locator('[data-slot="empty"]')).toBeVisible();
+        expect(await rosterTop(crabs)).toBeCloseTo(settled ?? -1, 0);
+      });
+    });
+  }
+});

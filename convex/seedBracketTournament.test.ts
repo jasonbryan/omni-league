@@ -203,3 +203,74 @@ describe('seed:demo: the Labor Day Sand Slam first round has results', () => {
     expect((await laborDay(t)).games.every((game) => game.score === undefined)).toBe(true);
   });
 });
+
+describe('seed:demo: the Labor Day Sand Slam semifinals for the score reports', () => {
+  const reportRows = (t: T) => t.run((ctx) => ctx.db.query('scoreReports').collect());
+
+  test('has player@ captaining Sand Crabs, which plays Sun Chasers in the first semifinal with no result and no report', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { teams, games } = await laborDay(t);
+    const crabs = teams.find((team) => team.name === 'Sand Crabs')!;
+    const sunChasers = teams.find((team) => team.name === 'Sun Chasers')!;
+    const player = await t.run(async (ctx) =>
+      (await ctx.db.query('users').collect()).find(
+        (user) => user.authUserId === PEOPLE.find((p) => p.email.startsWith('player@'))!.authUserId,
+      ),
+    );
+    expect(crabs.captainUserId).toBe(player?._id);
+    const semifinal = games.find((game) => game.round === 2 && game.slot === 1)!;
+    expect(semifinal.teamIds).toEqual([sunChasers._id, crabs._id]);
+    expect(semifinal.winnerTeamId).toBeUndefined();
+    expect((await reportRows(t)).filter((row) => row.gameId === semifinal._id)).toEqual([]);
+  });
+
+  test('has Shoreline Smash’s report of 21–17 on the second semifinal, which has no winner', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { teams, games } = await laborDay(t);
+    const semifinal = games.find((game) => game.round === 2 && game.slot === 2)!;
+    const smash = teams.find((team) => team.name === 'Shoreline Smash')!;
+    expect(await reportRows(t)).toEqual([
+      expect.objectContaining({
+        gameId: semifinal._id,
+        teamId: smash._id,
+        reportedByUserId: smash.captainUserId,
+        score: { kind: 'sets', sets: [{ a: 21, b: 17 }] },
+      }),
+    ]);
+    expect(semifinal.winnerTeamId).toBeUndefined();
+  });
+
+  test('is inserted once, so a second run adds no report', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const first = await reportRows(t);
+    await t.mutation(internal.seed.insertDemoTeams, { captains: WITH_ADMIN });
+    expect(await reportRows(t)).toEqual(first);
+  });
+
+  test('is left out while the semifinal waits on a first-round result, which needs the admin account', async () => {
+    const t = setup();
+    await seedDemo(t);
+    expect(await reportRows(t)).toEqual([]);
+  });
+
+  test('is left out of a semifinal that has a result', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { games } = await laborDay(t);
+    const semifinal = games.find((game) => game.round === 2 && game.slot === 2)!;
+    await t.run(async (ctx) => {
+      for (const report of await ctx.db.query('scoreReports').collect()) {
+        await ctx.db.delete('scoreReports', report._id);
+      }
+      await ctx.db.patch('tournamentGames', semifinal._id, {
+        winnerTeamId: semifinal.teamIds[0]!,
+        score: { kind: 'sets', sets: [{ a: 21, b: 5 }] },
+      });
+    });
+    await t.mutation(internal.seed.insertDemoTeams, { captains: WITH_ADMIN });
+    expect(await reportRows(t)).toEqual([]);
+  });
+});

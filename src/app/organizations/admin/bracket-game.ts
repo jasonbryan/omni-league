@@ -12,17 +12,15 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideEraser, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
+import { lucideEraser, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
-import { BRACKET_MESSAGES, type BracketSide } from '../../../../convex/lib/bracket';
-import { scoreKindOf, type ScoreField } from '../../../../convex/lib/sports';
+import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
+import { scoresEqual } from '../../../../convex/lib/sports';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
-import { focusLeftGroup } from '../../core/forms/shown-errors';
+import { HlmBadge } from '../../ui/badge';
 import { Checkbox } from '../../ui/checkbox';
 import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
-import { HlmInputImports } from '../../ui/input';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
@@ -33,9 +31,12 @@ import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import {
   clearFailedText,
   CLEARED_TEXT,
+  CONFIRM_OFFLINE,
+  confirmedText,
+  confirmFailedText,
   forfeitNote,
   playedText,
-  pointsLabel,
+  reportedText,
   restoredText,
   restoreFailedText,
   RESTORE_OFFLINE,
@@ -46,13 +47,11 @@ import {
   undoneText,
   UNDO_OFFLINE,
 } from './game-result-text';
-import {
-  GameResultDraft,
-  type FocusTarget,
-  type ResultBody,
-  type ScoreBox,
-} from './game-result-state';
+import { GameResultDraft, type FocusTarget, type ResultBody } from './game-result-state';
+import { GameScoreFields } from './game-score-fields';
 import type { BracketGameView, ManagedTournament } from './tournament-context';
+
+type ReportView = BracketGameView['reports'][number];
 
 type Saved = FunctionReturnType<typeof api.tournamentGames.enterResult>;
 
@@ -82,20 +81,6 @@ interface Change {
   run: () => Promise<Status>;
 }
 
-interface SetRow {
-  field: ScoreField;
-  number: number;
-  a: ScoreBox;
-  b: ScoreBox;
-  optional: boolean;
-}
-
-const SET_ROWS: readonly SetRow[] = [
-  { field: 'set1', number: 1, a: 'a1', b: 'b1', optional: false },
-  { field: 'set2', number: 2, a: 'a2', b: 'b2', optional: false },
-  { field: 'set3', number: 3, a: 'a3', b: 'b3', optional: true },
-];
-
 const sameIds = (a: readonly unknown[], b: readonly unknown[]) =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
@@ -109,14 +94,14 @@ const TEXT_BUTTON =
     AdminOfflineAlert,
     Checkbox,
     ChipRadioGroup,
-    FormField,
+    GameScoreFields,
+    HlmBadge,
     HlmFieldImports,
     HlmFieldSetImports,
-    HlmInputImports,
     HlmSpinner,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucideEraser, lucidePencil, lucideUndo2 })],
+  providers: [provideIcons({ lucideEraser, lucidePencil, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     role: 'listitem',
@@ -170,7 +155,51 @@ const TEXT_BUTTON =
       </div>
     }
     @if (!formMode()) {
-      @if (canEnter()) {
+      @if (canEnter() && reportedLines().length > 0) {
+        <div data-slot="reports" class="mt-2 flex flex-col gap-2">
+          <p class="flex flex-wrap items-center gap-x-2">
+            <span hlmBadge variant="secondary">Reported</span>
+            @if (reportedLines().length > 1) {
+              <span class="text-muted-foreground">The two teams reported different scores.</span>
+            }
+          </p>
+          <ul role="list" class="flex flex-col gap-2">
+            @for (line of reportedLines(); track line.report.reportId) {
+              <li data-slot="report" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span class="text-muted-foreground">{{ line.text }}</span>
+                <button
+                  type="button"
+                  data-slot="button"
+                  [class]="primaryButton"
+                  [class.opacity-50]="!online() && !confirming()"
+                  [attr.aria-disabled]="confirming() || !online() ? 'true' : null"
+                  (click)="confirm(line.report)"
+                >
+                  @if (confirming()) {
+                    <hlm-spinner data-icon="inline-start" />Confirming…
+                  } @else {
+                    Confirm<span class="sr-only">
+                      the score reported by {{ line.report.teamName }}</span
+                    >
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+          <div>
+            <button
+              #openButton
+              type="button"
+              data-slot="button"
+              [class]="outlineButton"
+              (click)="openForm(false, true)"
+            >
+              <ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Correct
+              score<span class="sr-only"> {{ label() }}</span>
+            </button>
+          </div>
+        </div>
+      } @else if (canEnter()) {
         <button
           #openButton
           type="button"
@@ -240,94 +269,14 @@ const TEXT_BUTTON =
               [error]="draft.forfeitError()"
               (chosen)="chooseForfeit($event)"
             />
-          } @else if (isSets()) {
-            @for (row of setRows(); track row.field) {
-              <fieldset hlmFieldSet (focusout)="left($event, row.field)">
-                <legend hlmFieldLegend variant="label">Set {{ row.number }}</legend>
-                <div class="grid grid-cols-2 gap-3">
-                  @for (side of sides; track side) {
-                    <div
-                      hlmField
-                      [attr.data-invalid]="draft.errors[row.field]() ? 'true' : null"
-                      [attr.data-matches-spartan-invalid]="
-                        draft.errors[row.field]() ? 'true' : null
-                      "
-                    >
-                      <label hlmFieldLabel [for]="gid() + '-' + box(row, side)">{{
-                        teamNames()[side]
-                      }}</label>
-                      <input
-                        hlmInput
-                        type="text"
-                        inputmode="numeric"
-                        autocomplete="off"
-                        [id]="gid() + '-' + box(row, side)"
-                        [formField]="draft.fields[box(row, side)]"
-                        [attr.aria-describedby]="describedBy(row)"
-                        [attr.aria-invalid]="draft.errors[row.field]() ? 'true' : null"
-                        [attr.data-invalid]="draft.errors[row.field]() ? 'true' : null"
-                        [attr.data-matches-spartan-invalid]="
-                          draft.errors[row.field]() ? 'true' : null
-                        "
-                      />
-                    </div>
-                  }
-                </div>
-                @if (row.optional) {
-                  <p hlmFieldDescription [id]="gid() + '-set3-note'">
-                    Only if each team won a set.
-                  </p>
-                }
-                @if (draft.errors[row.field](); as error) {
-                  <div hlmFieldError [id]="gid() + '-' + row.field + '-error'">
-                    <ng-icon
-                      name="lucideCircleAlert"
-                      class="mt-0.5 shrink-0 text-base"
-                      aria-hidden="true"
-                    />
-                    <span>{{ error }}</span>
-                  </div>
-                }
-              </fieldset>
-            }
           } @else {
-            <div class="flex flex-col gap-4" (focusout)="leftScore($event)">
-              <div class="grid grid-cols-2 gap-3">
-                @for (side of sides; track side) {
-                  <div
-                    hlmField
-                    [attr.data-invalid]="scoreError() ? 'true' : null"
-                    [attr.data-matches-spartan-invalid]="scoreError() ? 'true' : null"
-                  >
-                    <label hlmFieldLabel [for]="gid() + '-' + scoreBox(side)">{{
-                      pointsLabels()[side]
-                    }}</label>
-                    <input
-                      hlmInput
-                      type="text"
-                      inputmode="numeric"
-                      autocomplete="off"
-                      [id]="gid() + '-' + scoreBox(side)"
-                      [formField]="draft.fields[scoreBox(side)]"
-                      [attr.aria-describedby]="scoreError() ? gid() + '-score-error' : null"
-                      [attr.aria-invalid]="scoreError() ? 'true' : null"
-                      [attr.data-invalid]="scoreError() ? 'true' : null"
-                      [attr.data-matches-spartan-invalid]="scoreError() ? 'true' : null"
-                    />
-                  </div>
-                }
-              </div>
-              @if (scoreError(); as error) {
-                <div hlmFieldError [id]="gid() + '-score-error'">
-                  <ng-icon
-                    name="lucideCircleAlert"
-                    class="mt-0.5 shrink-0 text-base"
-                    aria-hidden="true"
-                  />
-                  <span>{{ error }}</span>
-                </div>
-              }
-            </div>
+            <app-game-score-fields
+              [draft]="draft"
+              [idPrefix]="gid()"
+              [sport]="tournament().sport"
+              [setsPerGame]="tournament().setsPerGame"
+              [teamNames]="teamNames()"
+            />
           }
           <div hlmField orientation="horizontal">
             <app-checkbox
@@ -380,6 +329,7 @@ export class BracketGame {
   private readonly enterCall = injectMutation(api.tournamentGames.enterResult);
   private readonly correctCall = injectMutation(api.tournamentGames.correctResult);
   private readonly undoCall = injectMutation(api.tournamentGames.undoResult);
+  private readonly confirmCall = injectMutation(api.scoreReports.confirm);
 
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
@@ -387,13 +337,13 @@ export class BracketGame {
   protected readonly textButton = TEXT_BUTTON;
   protected readonly saveOffline = SAVE_OFFLINE;
   protected readonly lockedText = BRACKET_MESSAGES.nextGamePlayed;
-  protected readonly sides: readonly BracketSide[] = [0, 1];
 
   protected readonly formMode = signal<'enter' | 'correct' | null>(null);
   protected readonly status = signal<Status | null>(null);
   protected readonly undoNote = signal<UndoNote | null>(null);
   protected readonly undoing = signal(false);
   protected readonly clearing = signal(false);
+  protected readonly confirming = signal(false);
 
   protected readonly draft = new GameResultDraft(
     () => this.tournament().sport,
@@ -408,10 +358,6 @@ export class BracketGame {
 
   protected readonly gid = computed(() => this.game().gameId);
   protected readonly correcting = computed(() => this.formMode() === 'correct');
-  protected readonly isSets = computed(() => scoreKindOf(this.tournament().sport) === 'sets');
-  protected readonly setRows = computed(() =>
-    SET_ROWS.slice(0, this.tournament().setsPerGame === 3 ? 3 : 1),
-  );
 
   private readonly teamIds = computed(() => this.game().teams.map((team) => team?.teamId ?? null));
   private readonly bothTeams = computed(() => {
@@ -421,11 +367,6 @@ export class BracketGame {
   protected readonly teamNames = computed(() => {
     const [a, b] = this.bothTeams() ?? [];
     return [a?.name ?? '', b?.name ?? ''] as const;
-  });
-  protected readonly pointsLabels = computed(() => {
-    const sport = this.tournament().sport;
-    const [a, b] = this.teamNames();
-    return [pointsLabel(sport, a), pointsLabel(sport, b)] as const;
   });
   protected readonly teamOptions = computed<readonly ChipOption[]>(() => [
     { key: '0', label: this.teamNames()[0] },
@@ -452,6 +393,22 @@ export class BracketGame {
     () => this.bothTeams() !== null && this.game().result === null,
   );
 
+  protected readonly reportedLines = computed(() => {
+    const teams = this.bothTeams();
+    const { reports } = this.game();
+    const [first] = reports;
+    if (!teams || !first || !this.canEnter()) return [];
+    const names = [teams[0].name, teams[1].name] as const;
+    if (reports.every((reported) => scoresEqual(reported.score, first.score))) {
+      const reporter = reports.length > 1 ? 'Both teams' : first.teamName;
+      return [{ report: first, text: reportedText(reporter, names, first.score) }];
+    }
+    return reports.map((reported) => ({
+      report: reported,
+      text: reportedText(reported.teamName, names, reported.score),
+    }));
+  });
+
   protected readonly played = computed(() => {
     const { result, winnerTeamId } = this.game();
     const teams = this.bothTeams();
@@ -474,40 +431,9 @@ export class BracketGame {
     return status.kind === 'cleared' && !sameIds(status.teamIds, this.teamIds()) ? null : status;
   });
 
-  protected readonly scoreError = computed(
-    () => this.draft.errors.a() ?? this.draft.errors.b() ?? this.draft.errors.score(),
-  );
-
   protected readonly failure = computed(() =>
     saveFailedText(this.correcting(), this.draft.refusal()),
   );
-
-  protected box(row: SetRow, side: BracketSide): ScoreBox {
-    return side === 0 ? row.a : row.b;
-  }
-
-  protected scoreBox(side: BracketSide): ScoreBox {
-    return side === 0 ? 'a1' : 'b1';
-  }
-
-  protected describedBy(row: SetRow): string | null {
-    const ids = [
-      row.optional ? `${this.gid()}-set3-note` : null,
-      this.draft.errors[row.field]() ? `${this.gid()}-${row.field}-error` : null,
-    ].filter((id): id is string => id !== null);
-    return ids.length > 0 ? ids.join(' ') : null;
-  }
-
-  protected left(event: FocusEvent, field: ScoreField): void {
-    if (focusLeftGroup(event)) this.draft.left(field);
-  }
-
-  protected leftScore(event: FocusEvent): void {
-    if (!focusLeftGroup(event)) return;
-    this.draft.left('a');
-    this.draft.left('b');
-    this.draft.left('score');
-  }
 
   protected setForfeit(forfeit: boolean): void {
     this.draft.forfeit.set(forfeit);
@@ -517,11 +443,16 @@ export class BracketGame {
     this.draft.chooseForfeit(key === '1' ? 1 : 0);
   }
 
-  protected openForm(correcting: boolean): void {
+  protected openForm(correcting: boolean, fromReport = false): void {
     const { result } = this.game();
+    const [lone, ...rest] = this.reportedLines();
+    const reported = fromReport && lone && rest.length === 0 ? lone.report.score : null;
     this.status.set(null);
     this.undoNote.set(null);
-    this.draft.load(correcting ? result : null, this.teamIds());
+    this.draft.load(
+      correcting ? result : reported && { score: reported, forfeitTeamId: null },
+      this.teamIds(),
+    );
     this.formMode.set(correcting ? 'correct' : 'enter');
     this.focusAfterRender(() => this.focusTarget(this.draft.forfeit() ? 'forfeit' : 'a1'));
   }
@@ -583,6 +514,23 @@ export class BracketGame {
     });
   }
 
+  protected confirm({ reportId, reportedAt }: ReportView): Promise<void> {
+    return this.change({
+      pending: this.confirming,
+      offline: CONFIRM_OFFLINE,
+      failed: confirmFailedText,
+      run: async () => {
+        const saved = await this.confirmCall.run({ reportId, expected: reportedAt });
+        return {
+          kind: 'saved',
+          text: confirmedText(saved.winnerName, saved.advancesTo),
+          previous: saved.previous,
+          resultEnteredAt: saved.resultEnteredAt,
+        };
+      },
+    });
+  }
+
   protected undo(status: SavedStatus | ClearedStatus): Promise<void> {
     const gameId = this.game().gameId;
     if (status.kind === 'cleared') {
@@ -614,7 +562,7 @@ export class BracketGame {
 
   /** A worded refusal means the status acted on a result that changed; a connection failure keeps it so the press can be retried. */
   private async change({ pending, offline, failed, run }: Change): Promise<void> {
-    if (this.clearing() || this.undoing()) return;
+    if (this.clearing() || this.undoing() || this.confirming()) return;
     this.undoNote.set(null);
     if (!this.online()) {
       this.showUndoNote({ kind: 'offline', description: offline });
