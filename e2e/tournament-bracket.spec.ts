@@ -373,6 +373,14 @@ async function enterSet(game: Locator, a: string, b: string) {
   await saveButton(game).click();
 }
 
+async function expectNoSidewaysScroll(page: Page) {
+  const { clientWidth, scrollWidth } = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+}
+
 test.describe('Tournaments: bracket results', () => {
   test('a result moves the winner on, locks the seeds, and can be undone, corrected, and played to a winner', async ({
     page,
@@ -625,6 +633,32 @@ test.describe('Tournaments: bracket results', () => {
     await expect(clearButton(game)).not.toHaveAttribute('aria-disabled', /.*/, { timeout: 20_000 });
     await clearButton(game).click();
     await expect(savedStatus(game, 'Result cleared')).toBeVisible();
+  });
+
+  test('with a stored result, its Clear result and Undo states do not scroll sideways at 320px', async ({
+    page,
+  }) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterSet(game, '21', '15');
+    await expect(savedStatus(game, 'Result saved')).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await page.reload();
+    await expect(clearButton(game)).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await clearButton(game).click();
+    const cleared = savedStatus(game, 'Result cleared');
+    await expect(undoButton(cleared)).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await undoButton(cleared).click();
+    await expect(savedStatus(game, 'Result restored')).toBeVisible();
+    await expectNoSidewaysScroll(page);
   });
 
   test('offline, Save looks disabled, a press shows the offline alert, and the scores stay', async ({

@@ -681,6 +681,36 @@ describe('BracketGame', () => {
       );
     });
 
+    it('drops the stale status when the Undo is refused because the next game has a result, and shows the locked line', async () => {
+      await saveFirst();
+      await press(button('g_2', 'Undo'));
+      o.convex.calls[1].reject(
+        new ConvexError({
+          code: 'nextGamePlayed',
+          message: 'The next game has a result, so this result cannot change.',
+        }),
+      );
+      o.subscription(SETUP)!.emit(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored(),
+            locked: true,
+          }),
+        }),
+      );
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The result could not be undone. The next game has a result, so this result cannot change.',
+      );
+      expect(statusOf('g_2')).toBeNull();
+      expect(button('g_2', 'Undo')).toBeUndefined();
+      expect(text(row('g_2').querySelector('[data-slot="locked"]'))).toBe(
+        'The next game has a result, so this result cannot change.',
+      );
+      expect(button('g_2', 'Clear result')).toBeUndefined();
+    });
+
     it('shows the refusal of an Undo for a result someone else changed since, drops the stale status, and offers no second Undo', async () => {
       await saveFirst();
       await press(button('g_2', 'Undo'));
