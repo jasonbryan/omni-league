@@ -4,7 +4,7 @@ import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { seedPoolsStructure } from './support/pools';
+import { seedPoolsStructure, seedTeamPool } from './support/pools';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
@@ -85,6 +85,10 @@ const gamesIn = (page: Page, pool: string) =>
   panel(page).locator(`[data-pool="${pool}"] [data-slot="pool-game"]`);
 const moveTo = (page: Page, team: string, pool: string) =>
   panel(page).getByRole('button', { name: `Move to Pool ${pool} ${team}` });
+const seedNames = (page: Page) => panel(page).locator('#pool-seed-list > li h4');
+const moveSeed = (page: Page, team: string, direction: 'up' | 'down') =>
+  panel(page).getByRole('button', { name: `Move ${direction} ${team}` });
+const seedStatus = (page: Page) => panel(page).locator('[data-slot="seed-status"]');
 const poolStatus = (page: Page) => panel(page).locator('[data-slot="pool-status"]');
 const splitButton = (page: Page) => panel(page).locator('#split-pools');
 const createButton = (page: Page) => panel(page).locator('#create-pool-games');
@@ -138,6 +142,86 @@ test.describe('Tournaments: pools', () => {
 
     await page.reload();
     await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Bay', 'Eddy', 'Haze', 'Kite']);
+  });
+
+  test('moves a seed from the keyboard, and the split follows the new order', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(TWELVE) });
+    await page.goto(managePath);
+    await expect(seedNames(page)).toHaveText(TWELVE);
+    await expect(moveSeed(page, 'Ace', 'up')).toHaveAttribute('aria-disabled', 'true');
+
+    await moveSeed(page, 'Bay', 'up').focus();
+    await page.keyboard.press('Enter');
+    await expect(seedStatus(page)).toHaveText('Bay moved up to seed 1 of 12.');
+    await expect(seedNames(page).first()).toHaveText('Bay');
+    await expect(moveSeed(page, 'Bay', 'up')).toBeFocused();
+    await screenshot(page, testInfo, 'pools-seed-moved');
+    await expectAccessible(page);
+
+    await split(page, 3);
+    await expect(teamsIn(page, 'A')).toHaveText(['Bay', 'Flow', 'Gulf', 'Lull']);
+    await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Eddy', 'Haze', 'Kite']);
+
+    await moveSeed(page, 'Ace', 'down').click();
+    await expect(seedStatus(page)).toHaveText('Ace moved down to seed 3 of 12.');
+    await expect(panel(page).locator('[data-slot="seeds"] p').first()).toHaveText(
+      'The pools keep the seeds they were split with. Split again to use this order.',
+    );
+    await page.reload();
+    await expect(seedNames(page).nth(2)).toHaveText('Ace');
+  });
+
+  test('Undo on the split brings the earlier pools back, and is gone after the next change', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(TWELVE) });
+    await page.goto(managePath);
+    await split(page, 3);
+    await moveTo(page, 'Ace', 'B').click();
+    await expect(poolStatus(page)).toHaveText('Ace moved to Pool B. Pool B has 5 teams.');
+
+    await chooseChip(chipLabel(panel(page), '2 pools'));
+    await splitButton(page).click();
+    const done = panel(page).getByRole('status').filter({ hasText: 'Teams split into pools' });
+    await expect(done).toBeVisible();
+    await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy', 'Gulf', 'Jade', 'Lull']);
+    await screenshot(page, testInfo, 'pools-split-undo');
+    await expectAccessible(page);
+
+    await done.getByRole('button', { name: 'Undo' }).click();
+    const restored = panel(page).getByRole('status').filter({ hasText: 'Earlier pools restored' });
+    await expect(restored).toBeVisible();
+    await expect(restored).toBeFocused();
+    await expect(teamsIn(page, 'A')).toHaveText(['Flow', 'Gulf', 'Lull']);
+    await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Bay', 'Eddy', 'Haze', 'Kite']);
+    await expect(teamsIn(page, 'C')).toHaveText(['Cove', 'Dune', 'Isle', 'Jade']);
+
+    await page.reload();
+    await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Bay', 'Eddy', 'Haze', 'Kite']);
+  });
+
+  test.describe('an Undo the server refuses', () => {
+    test.use({ expectedConvexErrors: ['tournamentGames:undoSplitPools'] });
+
+    test('after a team moved, Undo says the pools changed and keeps them', async ({ page }) => {
+      const { tenant, managePath } = await adminOf(page, { teams: full(TWELVE) });
+      await page.goto(managePath);
+      await split(page, 3);
+      const done = panel(page).getByRole('status').filter({ hasText: 'Teams split into pools' });
+      const undo = done.getByRole('button', { name: 'Undo' });
+      await expect(undo).toBeVisible();
+      // A second organizer's move, made while this status is still on the page.
+      await seedTeamPool(tenant, SLUG, 'Ace', 'B');
+      await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Bay', 'Eddy', 'Haze', 'Kite']);
+      await undo.click();
+      const alert = panel(page).getByRole('alert');
+      await expect(alert).toContainText('The split could not be undone.');
+      await expect(alert).toContainText('The pools changed since, so the split cannot be undone.');
+      await expect(alert).toBeFocused();
+      await expect(teamsIn(page, 'B')).toHaveText(['Ace', 'Bay', 'Eddy', 'Haze', 'Kite']);
+    });
   });
 
   test.describe('a move the limits refuse', () => {

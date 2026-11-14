@@ -3,7 +3,7 @@ import type { AlertText } from './alert-text';
 
 const CHECK_CONNECTION = 'Check your connection and try again.';
 
-const teamsText = (count: number) => `${count} ${count === 1 ? 'team' : 'teams'}`;
+export const teamsText = (count: number) => `${count} ${count === 1 ? 'team' : 'teams'}`;
 
 export function movedToPoolText(teamName: string, pool: Pool, poolTeamCount: number): string {
   return `${teamName} moved to Pool ${pool}. Pool ${pool} has ${teamsText(poolTeamCount)}.`;
@@ -72,3 +72,19 @@ export function unconfirmedPoolNote(count: number, minimumRosterSize: number): s
 
 export const STALE_GAMES_NOTE =
   'The pools changed after the games were created. Recreate the games to use the pools as they are.';
+
+export function undoSplitFailedText(refusal: string | null): AlertText {
+  return {
+    title: 'The split could not be undone.',
+    description: refusal ?? CHECK_CONNECTION,
+  };
+}
+
+export function undoSplitOfflineText(): string {
+  return 'The pools stay as they are. Try again when you’re connected.';
+}
+
+export const SPLIT_RESTORED_TEXT: AlertText = {
+  title: 'Earlier pools restored',
+  description: 'The teams are back in the pools they were in before the split.',
+};

@@ -33,7 +33,6 @@ export function poolIndexOf(pool: Pool): number {
   return POOL_NAMES.indexOf(pool);
 }
 
-/** The most games one pool plays, and so the most a tournament's pools play in all. */
 export const MAX_POOL_GAMES = MAX_POOLS * ((MAX_POOL_SIZE * (MAX_POOL_SIZE - 1)) / 2);
 
 export const POOL_REFUSAL_CODES = [
@@ -51,6 +50,7 @@ export const POOL_REFUSAL_CODES = [
   'noPoolGames',
   'poolsFirst',
   'structureLocked',
+  'poolsChanged',
 ] as const;
 
 export type PoolRefusalCode = (typeof POOL_REFUSAL_CODES)[number];
@@ -76,6 +76,7 @@ export const POOL_MESSAGES = {
   poolResultEntered: 'A pool result is entered, so the pools cannot change.',
   notInPools: (teamName: string) => `${teamName} is not in a pool.`,
   samePool: (teamName: string, pool: Pool) => `${teamName} is in Pool ${pool} already.`,
+  poolsChanged: 'The pools changed since, so the split cannot be undone.',
   noPoolGames: 'This tournament has no pool games.',
   poolsFirst: 'This tournament plays pools first. Its bracket is created after pool play.',
   structureLocked: 'Games are created, so the structure cannot change.',

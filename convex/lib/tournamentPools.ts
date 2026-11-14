@@ -63,22 +63,38 @@ export async function poolSetup(ctx: ReadCtx, tournament: Doc<'tournaments'>): P
   return { seeds, unconfirmed, pools: ordered, unassigned };
 }
 
+export interface PoolChange {
+  teamId: Id<'teams'>;
+  pool: Pool | null;
+}
+
 // Also clears the pool of a team that is no longer confirmed, so it does not return to a pool when it is confirmed again.
 export async function assignPools(
   ctx: MutationCtx,
   setup: Pick<PoolSetup, 'seeds' | 'unconfirmed'>,
   poolCount: number,
-): Promise<void> {
-  const split = snakeSplit(setup.seeds.length, poolCount);
-  for (const [index, seeds] of split.entries()) {
-    for (const seed of seeds) {
-      const team = setup.seeds[seed - 1];
-      const pool = poolNameAt(index);
-      if (team.pool !== pool) await ctx.db.patch('teams', team._id, { pool });
-    }
+): Promise<{ earlier: PoolChange[]; written: PoolChange[] }> {
+  const earlier: PoolChange[] = [];
+  const written: PoolChange[] = [];
+  const assign = async (team: Doc<'teams'>, pool: Pool | null) => {
+    if ((team.pool ?? null) === pool) return;
+    earlier.push({ teamId: team._id, pool: team.pool ?? null });
+    written.push({ teamId: team._id, pool });
+    await ctx.db.patch('teams', team._id, { pool: pool ?? undefined });
+  };
+  for (const [index, seeds] of snakeSplit(setup.seeds.length, poolCount).entries()) {
+    for (const seed of seeds) await assign(setup.seeds[seed - 1], poolNameAt(index));
   }
-  for (const team of setup.unconfirmed) {
-    if (team.pool !== undefined) await ctx.db.patch('teams', team._id, { pool: undefined });
+  for (const team of setup.unconfirmed) await assign(team, null);
+  return { earlier, written };
+}
+
+export async function restorePools(
+  ctx: MutationCtx,
+  changes: readonly PoolChange[],
+): Promise<void> {
+  for (const { teamId, pool } of changes) {
+    await ctx.db.patch('teams', teamId, { pool: pool ?? undefined });
   }
 }
 

@@ -117,6 +117,7 @@ export const create = mutation({
     endDate: v.optional(v.string()),
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
+    structure: v.optional(structureValidator),
   },
   returns: v.object({ tournamentId: v.id('tournaments') }),
   handler: async (ctx, args) => {
@@ -177,6 +178,7 @@ export const create = mutation({
       endDate: endDate === '' ? args.startDate : endDate,
       registrationDeadline: args.registrationDeadline,
       maximumTeams: args.maximumTeams,
+      ...(args.structure && { structure: args.structure }),
     });
     return { tournamentId };
   },
@@ -473,7 +475,7 @@ export const getForCopy = query({
       customLevelId: v.optional(v.id('customLevels')),
       ageGroup: ageGroupValidator,
       maximumTeams: v.number(),
-      structure: structureValidator,
+      structure: v.union(v.literal('bracket'), v.literal('pools')),
       bracketType: v.literal('single'),
     }),
   ),

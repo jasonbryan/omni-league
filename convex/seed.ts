@@ -1315,7 +1315,6 @@ export const DEMO_POOL_TOURNAMENT = {
   tournamentSlug: 'fall-pool-play-open',
 } as const;
 
-/** The pools the demo teams are split into. */
 const DEMO_POOL_COUNT = 2;
 
 /** Each team is inserted by name in `DEMO_POOL_TOURNAMENT`, in seed order, once both players' accounts exist. */

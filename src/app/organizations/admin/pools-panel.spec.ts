@@ -18,6 +18,8 @@ const POOLS = 'tournamentGames:getPools';
 const SETUP = 'tournamentGames:getSetup';
 const SPLIT = 'tournamentGames:splitPools';
 const MOVE = 'tournamentGames:movePoolTeam';
+const UNDO_SPLIT = 'tournamentGames:undoSplitPools';
+const MOVE_SEED = 'tournamentGames:moveSeed';
 const CREATE = 'tournamentGames:createPoolGames';
 const ARGS = { orgSlug: COASTAL.slug, tournamentSlug: 'winter-doubles-classic' };
 
@@ -88,6 +90,10 @@ function poolsOf(
         winnerTeamId: null,
       })),
     })),
+    seeds: poolSeeds
+      .flatMap(([, seeds]) => seeds)
+      .sort((a, b) => a - b)
+      .map(team),
     unassigned: [],
     gamesCreated: Object.keys(games).length > 0,
     gamesCurrent: Object.keys(games).length > 0,
@@ -100,11 +106,18 @@ const unsplit = (count: number) => ({
   confirmedCount: count,
   unconfirmedCount: 0,
   pools: [],
+  seeds: Array.from({ length: count }, (_, index) => team(index + 1)),
   unassigned: Array.from({ length: count }, (_, index) => team(index + 1)),
   gamesCreated: false,
   gamesCurrent: false,
   hasResult: false,
 });
+
+const UNDO = {
+  earlier: [{ teamId: 'tm_1', pool: null }],
+  written: [{ teamId: 'tm_1', pool: 'A' }],
+  gameIds: [],
+};
 
 const GAMES = { A: [[1, 1, 12]], B: [[1, 2, 11]], C: [[1, 3, 10]] } as const;
 
@@ -139,6 +152,7 @@ describe('PoolsPanel', () => {
       .find((row) => text(row.querySelector('h4')) === name)!
       .querySelector<HTMLButtonElement>(`[data-move-to="${pool}"]`)!;
   const status = () => text(panel().querySelector('[data-slot="pool-status"]'));
+  const undoButton = () => panel().querySelector<HTMLButtonElement>('[data-slot="undo-split"]');
   const splitButton = () => panel().querySelector<HTMLButtonElement>('#split-pools');
   const createButton = () => panel().querySelector<HTMLButtonElement>('#create-pool-games');
   const count = (n: number) => panel().querySelector<HTMLInputElement>(`#pool-count-${n}`);
@@ -263,13 +277,77 @@ describe('PoolsPanel', () => {
       expect(calls()).toEqual([[SPLIT, { tournamentId: 'tn_winter', poolCount: 3 }]]);
       expectPendingSpinner(button);
       expect(text(button)).toBe('Splitting…');
-      o.convex.calls[0].resolve({ poolCount: 3, teamCount: 12 });
+      o.convex.calls[0].resolve({ poolCount: 3, teamCount: 12, undo: UNDO });
       o.subscription(POOLS)!.emit(poolsOf(SNAKE));
       await o.flush();
       const [alert] = alerts();
       expect(alert.getAttribute('role')).toBe('status');
       expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe('Teams split into pools');
       expect(text(splitButton())).toBe('Split again');
+    });
+
+    describe('Undo', () => {
+      beforeEach(async () => {
+        splitButton()!.click();
+        await o.flush();
+        o.convex.calls[0].resolve({ poolCount: 2, teamCount: 12, undo: UNDO });
+        o.subscription(POOLS)!.emit(poolsOf(SNAKE));
+        await o.flush();
+      });
+
+      it('is offered in the status, and sends what the split returned', async () => {
+        expect(text(undoButton())).toBe('Undo');
+        undoButton()!.click();
+        await o.flush();
+        expect(calls()[1]).toEqual([UNDO_SPLIT, { tournamentId: 'tn_winter', ...UNDO }]);
+        expect(text(undoButton())).toBe('Undoing…');
+        expect(undoButton()!.getAttribute('aria-disabled')).toBe('true');
+      });
+
+      it('says the earlier pools are back, and the status takes focus because Undo is gone', async () => {
+        undoButton()!.click();
+        await o.flush();
+        o.convex.calls[1].resolve(null);
+        await o.flush();
+        const [alert] = alerts();
+        expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+          'Earlier pools restored',
+        );
+        expect(undoButton()).toBeNull();
+        expect(document.activeElement).toBe(alert);
+      });
+
+      it('shows the refusal when the pools changed since, in an alert that takes focus', async () => {
+        undoButton()!.click();
+        await o.flush();
+        o.convex.calls[1].reject(
+          new ConvexError({
+            code: 'poolsChanged',
+            message: 'The pools changed since, so the split cannot be undone.',
+          }),
+        );
+        await o.flush();
+        expect(text(alerts()[0])).toBe(
+          'The split could not be undone. The pools changed since, so the split cannot be undone.',
+        );
+        expect(document.activeElement).toBe(alerts()[0]);
+      });
+
+      it('while offline answers a press with the offline alert, sending nothing more', async () => {
+        await goOffline();
+        undoButton()!.click();
+        await o.flush();
+        expect(calls()).toHaveLength(1);
+        expect(text(alerts()[0])).toContain(
+          'The pools stay as they are. Try again when you’re connected.',
+        );
+      });
+
+      it('goes away when the next change starts', async () => {
+        moveButton('Team 01', 'B').click();
+        await o.flush();
+        expect(undoButton()).toBeNull();
+      });
     });
 
     it('shows a refusal in an alert that takes focus, and keeps the choice', async () => {
@@ -306,7 +384,7 @@ describe('PoolsPanel', () => {
   describe('the pools', () => {
     it('lists each pool with its teams in seed order, their seeds, and their players', async () => {
       await open(CLOSED, poolsOf(SNAKE));
-      expect(headings()).toEqual(['Pool A', 'Pool B', 'Pool C']);
+      expect(headings()).toEqual(['Seeds', 'Pool A', 'Pool B', 'Pool C']);
       expect(teamsIn('A')).toEqual(['Team 01', 'Team 06', 'Team 07', 'Team 12']);
       expect(teamsIn('C')).toEqual(['Team 03', 'Team 04', 'Team 09', 'Team 10']);
       const seeds = [...poolSection('A').querySelectorAll('li > span')].map((span) => text(span));
@@ -577,6 +655,121 @@ describe('PoolsPanel', () => {
       expect(splitReason()).toBe('A pool result is entered, so the pools cannot change.');
       expect(gamesReason()).toBe('A pool result is entered, so the pools cannot change.');
       expect(panel().querySelectorAll('[data-move-to]')).toHaveLength(0);
+    });
+  });
+
+  describe('the seeds', () => {
+    const seedRows = () => [...panel().querySelectorAll<HTMLElement>('#pool-seed-list > li')];
+    const seedNames = () => seedRows().map((row) => text(row.querySelector('h4')));
+    const seedMove = (name: string, direction: 'up' | 'down') =>
+      seedRows()
+        .find((row) => text(row.querySelector('h4')) === name)!
+        .querySelector<HTMLButtonElement>(`[data-move="${direction}"]`)!;
+    const seedStatus = () => text(panel().querySelector('[data-slot="seed-status"]'));
+
+    it('lists the confirmed teams in seed order before the split, with Move up and Move down', async () => {
+      await open(CLOSED, unsplit(6));
+      expect(seedNames()).toEqual([1, 2, 3, 4, 5, 6].map(teamName));
+      expect(text(seedMove('Team 02', 'up'))).toBe('Move up Team 02');
+      expect(seedMove('Team 01', 'up').getAttribute('aria-disabled')).toBe('true');
+      expect(seedMove('Team 06', 'down').getAttribute('aria-disabled')).toBe('true');
+      expect(text(panel().querySelector('[data-slot="seeds"] p'))).toBe(
+        'Seed 1 goes in Pool A first. Move a team up or down to set the order, then split.',
+      );
+    });
+
+    it('moves a seed from the keyboard: a status announces the place, and focus stays on the button', async () => {
+      await open(CLOSED, unsplit(6));
+      const button = seedMove('Team 03', 'up');
+      button.focus();
+      button.click();
+      await o.flush();
+      expect(calls()).toEqual([
+        [MOVE_SEED, { tournamentId: 'tn_winter', teamId: 'tm_3', direction: 'up' }],
+      ]);
+      expectPendingSpinner(button);
+      o.convex.calls[0].resolve({ seed: 2, seedCount: 6 });
+      o.subscription(POOLS)!.emit({
+        ...unsplit(6),
+        seeds: [1, 3, 2, 4, 5, 6].map(team),
+      });
+      await o.flush();
+      expect(seedNames().slice(0, 3)).toEqual(['Team 01', 'Team 03', 'Team 02']);
+      expect(seedStatus()).toBe('Team 03 moved up to seed 2 of 6.');
+      expect(document.activeElement).toBe(seedMove('Team 03', 'up'));
+    });
+
+    it('says the pools keep their seeds once the teams are split', async () => {
+      await open(CLOSED, poolsOf(SNAKE));
+      expect(text(panel().querySelector('[data-slot="seeds"] p'))).toBe(
+        'The pools keep the seeds they were split with. Split again to use this order.',
+      );
+    });
+
+    it('shows a refusal in an alert that takes focus, and keeps the order', async () => {
+      await open(CLOSED, unsplit(6));
+      seedMove('Team 02', 'up').click();
+      await o.flush();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          code: 'seedsLocked',
+          message: 'A result is entered, so the seeds cannot change.',
+        }),
+      );
+      await o.flush();
+      expect(text(alerts()[0])).toBe(
+        'Team 02 could not be moved. A result is entered, so the seeds cannot change.',
+      );
+      expect(document.activeElement).toBe(alerts()[0]);
+    });
+
+    it('while offline answers a press with the offline alert, sending nothing', async () => {
+      await open(CLOSED, unsplit(6));
+      await goOffline();
+      seedMove('Team 02', 'up').click();
+      await o.flush();
+      expect(calls()).toEqual([]);
+      expect(text(alerts()[0])).toContain(
+        'Team 02 keeps its seed. Try again when you’re connected.',
+      );
+    });
+
+    it('with a pool result entered lists the seeds without Move buttons', async () => {
+      await open(CLOSED, poolsOf(SNAKE, { hasResult: true }, GAMES));
+      expect(seedRows()).toHaveLength(12);
+      expect(panel().querySelectorAll('[data-move]')).toHaveLength(0);
+    });
+
+    it('with one confirmed team lists no seeds', async () => {
+      await open(CLOSED, unsplit(1));
+      expect(panel().querySelector('[data-slot="seeds"]')).toBeNull();
+    });
+  });
+
+  describe('moves the limits always refuse', () => {
+    it('offers no move out of a pool of 3, nor into a pool of 8', async () => {
+      await open(
+        CLOSED,
+        poolsOf([
+          ['A', [1, 4, 5]],
+          ['B', [2, 3, 6, 7, 8, 9, 10, 11]],
+          ['C', [12, 13, 14, 15]],
+        ]),
+      );
+      const targets = (name: string) =>
+        [
+          ...[...panel().querySelectorAll('li[data-team-id]')]
+            .find((row) => text(row.querySelector('h4')) === name)!
+            .querySelectorAll('[data-move-to]'),
+        ].map((button) => button.getAttribute('data-move-to'));
+      expect(targets('Team 01')).toEqual([]);
+      expect(targets('Team 02')).toEqual(['A', 'C']);
+      expect(targets('Team 12')).toEqual(['A']);
+    });
+
+    it('reads 1 team for a pool of one', async () => {
+      await open(CLOSED, poolsOf([['A', [1]]]));
+      expect(text(poolSection('A').querySelector('p'))).toBe('1 team');
     });
   });
 });

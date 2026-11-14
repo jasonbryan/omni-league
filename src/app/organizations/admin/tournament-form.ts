@@ -7,6 +7,7 @@ import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/div
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
+import type { Structure } from '../../../../convex/lib/tournamentEdit';
 import {
   checkTournamentFields,
   TOURNAMENT_FIELDS,
@@ -45,6 +46,8 @@ export interface TournamentCreateValues {
   endDate?: string;
   registrationDeadline: string;
   maximumTeams: number;
+  /** Sent by a copy of a Pools, then bracket tournament; left out otherwise. */
+  structure?: Structure;
 }
 
 export type TournamentCopy = NonNullable<FunctionReturnType<typeof api.tournaments.getForCopy>>;
@@ -114,6 +117,7 @@ export class TournamentForm {
   private readonly locationsChanged = signal(false);
   // The source's name, whose division the copy already holds.
   private copiedName: string | null = null;
+  private copiedStructure: Structure | null = null;
   private readonly serverErrors: Record<TournamentField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<TournamentField, Signal<string | null>>;
@@ -247,6 +251,7 @@ export class TournamentForm {
     // Unedited, so renaming the copy still derives the address.
     this.slugEdited.set(false);
     this.copiedName = copy.name;
+    this.copiedStructure = copy.structure;
     this.chosenSport.set(copy.sport);
     this.division.load({
       gender: copy.gender,
@@ -278,6 +283,7 @@ export class TournamentForm {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
     this.copiedName = null;
+    this.copiedStructure = null;
     this.chosenSport.set(null);
     this.division.clear();
     this.selected.set(this.defaultSelected());
@@ -329,6 +335,7 @@ export class TournamentForm {
       ...(m.endDate !== '' && { endDate: m.endDate }),
       registrationDeadline: m.registrationDeadline,
       maximumTeams: limitFromText(m.maximumTeams)!,
+      ...(this.copiedStructure === 'pools' && { structure: this.copiedStructure }),
     };
     this.submitting.set(true);
     try {

@@ -153,6 +153,20 @@ async function refusal(call: Promise<unknown>) {
 }
 
 describe('tournaments.create', () => {
+  test.each(['bracket', 'pools'] as const)(
+    'keeps the structure %s that a copy sends',
+    async (structure) => {
+      const s = await setup();
+      const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+        ...valid(s),
+        structure,
+      });
+      expect((await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId)))!.structure).toBe(
+        structure,
+      );
+    },
+  );
+
   test('writes a draft tournament and its program of type tournament, in the right organization', async () => {
     const s = await setup();
     const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {

@@ -37,6 +37,7 @@ import {
   poolSetup,
   refusePool,
   replacePoolGames,
+  restorePools,
 } from './lib/tournamentPools';
 import {
   bracketGames,
@@ -203,7 +204,10 @@ export const moveSeed = mutation({
     const { tournament } = await requireTournamentOrganizer(ctx, tournamentId);
     const team = await ctx.db.get('teams', teamId);
     if (team?.tournamentId !== tournament._id) throw new Error('Not allowed');
-    if (bracketHasResult(await bracketGames(ctx, tournament._id))) {
+    if (
+      bracketHasResult(await bracketGames(ctx, tournament._id)) ||
+      poolHasResult(await poolGames(ctx, tournament._id))
+    ) {
       refuseBracket({ code: 'seedsLocked', message: BRACKET_MESSAGES.seedsLocked });
     }
     const { seeds } = await tournamentTeams(ctx, tournament);
@@ -334,6 +338,8 @@ const poolsValidator = v.object({
       ),
     }),
   ),
+  /** Every confirmed team in seed order, which the split follows. */
+  seeds: v.array(poolTeamValidator),
   /** The confirmed teams that no pool holds. */
   unassigned: v.array(poolTeamValidator),
   gamesCreated: v.boolean(),
@@ -387,6 +393,7 @@ export const getPools = query({
             winnerTeamId: game.winnerTeamId ?? null,
           })),
       })),
+      seeds: setup.seeds.map(teamView),
       unassigned: setup.unassigned.map(teamView),
       gamesCreated: games.length > 0,
       gamesCurrent:
@@ -422,10 +429,26 @@ function refuseWhileRegistrationIsOpen(tournament: Doc<'tournaments'>): void {
   }
 }
 
+const poolChangeValidator = v.object({
+  teamId: v.id('teams'),
+  pool: v.union(poolValidator, v.null()),
+});
+
+/** What `undoSplitPools` takes back: the pools the split replaced, the ones it wrote, and the games it left in place. */
+const splitUndoValidator = v.object({
+  earlier: v.array(poolChangeValidator),
+  written: v.array(poolChangeValidator),
+  gameIds: v.array(v.id('tournamentGames')),
+});
+
 /** Replaces any earlier split; the games already created stay until they are recreated. */
 export const splitPools = mutation({
   args: { tournamentId: v.id('tournaments'), poolCount: v.number() },
-  returns: v.object({ poolCount: v.number(), teamCount: v.number() }),
+  returns: v.object({
+    poolCount: v.number(),
+    teamCount: v.number(),
+    undo: splitUndoValidator,
+  }),
   handler: async (ctx, { tournamentId, poolCount }) => {
     const { tournament } = await requireTournamentOrganizer(ctx, tournamentId);
     await refuseUnlessPoolsOpenToChange(ctx, tournament);
@@ -433,8 +456,38 @@ export const splitPools = mutation({
     const setup = await poolSetup(ctx, tournament);
     const issue = checkSplit(setup.seeds.length, poolCount);
     if (issue) refusePool(issue);
-    await assignPools(ctx, setup, poolCount);
-    return { poolCount, teamCount: setup.seeds.length };
+    const { earlier, written } = await assignPools(ctx, setup, poolCount);
+    const games = await poolGames(ctx, tournament._id);
+    return {
+      poolCount,
+      teamCount: setup.seeds.length,
+      undo: { earlier, written, gameIds: games.map((game) => game._id) },
+    };
+  },
+});
+
+/** Restores the pools a split replaced, only while the teams and the pool games are as the split left them. */
+export const undoSplitPools = mutation({
+  args: { tournamentId: v.id('tournaments'), ...splitUndoValidator.fields },
+  returns: v.null(),
+  handler: async (ctx, { tournamentId, earlier, written, gameIds }) => {
+    const { tournament } = await requireTournamentOrganizer(ctx, tournamentId);
+    await refuseUnlessPoolsOpenToChange(ctx, tournament);
+    const games = await poolGames(ctx, tournament._id);
+    const sameGames =
+      games.length === gameIds.length && games.every((game) => gameIds.includes(game._id));
+    let sameTeams = earlier.length === written.length;
+    for (const change of written) {
+      const team = await ctx.db.get('teams', change.teamId);
+      if (team?.tournamentId !== tournament._id) throw new Error('Not allowed');
+      if (!earlier.some((was) => was.teamId === change.teamId)) throw new Error('Not allowed');
+      sameTeams &&= (team.pool ?? null) === change.pool;
+    }
+    if (!sameGames || !sameTeams) {
+      refusePool({ code: 'poolsChanged', message: POOL_MESSAGES.poolsChanged });
+    }
+    await restorePools(ctx, earlier);
+    return null;
   },
 });
 

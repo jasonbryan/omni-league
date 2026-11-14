@@ -12,11 +12,26 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideRefreshCw, lucideShuffle, lucideUsersRound } from '@ng-icons/lucide';
-import { POOL_MESSAGES, poolCountsFor, type Pool } from '../../../../convex/lib/pools';
+import {
+  lucideArrowDown,
+  lucideArrowUp,
+  lucideRefreshCw,
+  lucideShuffle,
+  lucideUndo2,
+  lucideUsersRound,
+} from '@ng-icons/lucide';
+import type { FunctionReturnType } from 'convex/server';
+import {
+  POOL_MESSAGES,
+  checkPoolSizes,
+  poolCountsFor,
+  poolSizesAfterMove,
+  type Pool,
+} from '../../../../convex/lib/pools';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { injectNow } from '../../core/now';
 import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
@@ -24,7 +39,15 @@ import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertText } from './alert-text';
-import { bracketRefusalMessage, emptySeedsText, playersText } from './bracket-text';
+import {
+  bracketRefusalMessage,
+  emptySeedsText,
+  movedText,
+  moveFailedText,
+  moveOfflineText,
+  playersText,
+  type SeedDirection,
+} from './bracket-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { ConfirmDialog, type ConfirmAlertView } from './confirm-dialog';
@@ -38,9 +61,13 @@ import {
   splitDoneText,
   splitFailedText,
   splitOfflineText,
+  SPLIT_RESTORED_TEXT,
   STALE_GAMES_NOTE,
+  teamsText,
   unassignedNote,
   unconfirmedPoolNote,
+  undoSplitFailedText,
+  undoSplitOfflineText,
 } from './pool-text';
 import type { ManagedTournament, PoolsView } from './tournament-context';
 
@@ -51,10 +78,20 @@ const PANEL_NOTE = 'border-b border-border px-4 py-3 md:px-5';
 const SECTION = 'border-t border-border px-4 py-4 md:px-5';
 const HINT = 'text-sm text-muted-foreground';
 
+type SplitUndo = FunctionReturnType<typeof api.tournamentGames.splitPools>['undo'];
+
 type Notice =
-  | { kind: 'done'; text: AlertText }
+  | { kind: 'done'; text: AlertText; undo?: SplitUndo }
   | { kind: 'failed'; text: AlertText }
   | { kind: 'offline'; description: string };
+
+interface SeedRow {
+  teamId: Id<'teams'>;
+  name: string;
+  seed: number;
+  first: boolean;
+  last: boolean;
+}
 
 interface MoveTarget {
   pool: Pool;
@@ -72,9 +109,19 @@ interface MoveTarget {
     HlmCard,
     HlmSkeleton,
     HlmSpinner,
+    MousePressKeepsFocus,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideRefreshCw, lucideShuffle, lucideUsersRound })],
+  providers: [
+    provideIcons({
+      lucideArrowDown,
+      lucideArrowUp,
+      lucideRefreshCw,
+      lucideShuffle,
+      lucideUndo2,
+      lucideUsersRound,
+    }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -97,7 +144,23 @@ interface MoveTarget {
               [kind]="notice.kind === 'done' ? 'success' : 'error'"
               [title]="notice.text.title"
               [description]="notice.text.description"
-            />
+            >
+              @if (undoOf(notice); as undo) {
+                <button
+                  type="button"
+                  appMousePressKeepsFocus
+                  data-slot="undo-split"
+                  class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  [class.opacity-50]="!online() && !undoing()"
+                  [attr.aria-disabled]="busy() || !online() ? 'true' : null"
+                  (click)="undoSplit(undo)"
+                >
+                  <ng-icon name="lucideUndo2" class="text-base" aria-hidden="true" />{{
+                    undoing() ? 'Undoing…' : 'Undo'
+                  }}
+                </button>
+              }
+            </app-admin-alert>
           }
         </div>
       }
@@ -145,7 +208,7 @@ interface MoveTarget {
             @if (splitReason(); as reason) {
               <p [class]="hint + ' px-4 py-4 md:px-5'" data-slot="split-reason">{{ reason }}</p>
             } @else {
-              <form [class]="section + ' border-t-0'" (submit)="split($event)">
+              <form class="px-4 py-4 md:px-5" (submit)="split($event)">
                 <app-chip-radio-group
                   name="pool-count"
                   legend="Number of pools"
@@ -180,6 +243,69 @@ interface MoveTarget {
                 {{ note }}
               </p>
             }
+            @if (seedRows().length > 1) {
+              <section aria-labelledby="pool-seeds-heading" [class]="section" data-slot="seeds">
+                <h3 id="pool-seeds-heading" class="font-semibold">Seeds</h3>
+                @if (canMove()) {
+                  <p [class]="hint + ' mt-1'">
+                    {{ hasPools() ? staleSeedsHint : seedsHint }}
+                  </p>
+                }
+                <p role="status" data-slot="seed-status" class="min-h-5 pt-2 text-sm font-medium">
+                  {{ seedAnnouncement() }}
+                </p>
+                <ol
+                  id="pool-seed-list"
+                  role="list"
+                  class="mt-2 divide-y divide-border border-t border-b border-border"
+                >
+                  @for (row of seedRows(); track row.teamId) {
+                    <li class="flex items-start gap-3 py-3" [attr.data-seed-team]="row.teamId">
+                      <span
+                        class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold tabular-nums"
+                        ><span class="sr-only">Seed </span>{{ row.seed }}</span
+                      >
+                      <div class="min-w-0 flex-1">
+                        <h4 class="font-medium">{{ row.name }}</h4>
+                        @if (canMove()) {
+                          <div class="mt-3 flex flex-wrap gap-2">
+                            @for (direction of directions; track direction) {
+                              <button
+                                type="button"
+                                data-slot="button"
+                                [attr.data-move]="direction"
+                                [class]="outlineButton"
+                                [class.opacity-50]="!online() && !busy()"
+                                [attr.aria-disabled]="
+                                  seedMoveDisabled(row, direction) ? 'true' : null
+                                "
+                                (click)="moveSeed(row, direction, $event)"
+                              >
+                                @if (isSeedMoving(row, direction)) {
+                                  <hlm-spinner data-icon="inline-start" />Moving…<span
+                                    class="sr-only"
+                                  >
+                                    {{ row.name }}</span
+                                  >
+                                } @else {
+                                  <ng-icon
+                                    [name]="
+                                      direction === 'up' ? 'lucideArrowUp' : 'lucideArrowDown'
+                                    "
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                  />Move {{ direction }}<span class="sr-only"> {{ row.name }}</span>
+                                }
+                              </button>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </li>
+                  }
+                </ol>
+              </section>
+            }
             <p
               role="status"
               data-slot="pool-status"
@@ -195,7 +321,7 @@ interface MoveTarget {
               >
                 <div class="flex items-baseline justify-between gap-3">
                   <h3 [id]="'pool-' + pool.pool" class="font-semibold">Pool {{ pool.pool }}</h3>
-                  <p [class]="hint + ' tabular-nums'">{{ pool.teams.length }} teams</p>
+                  <p [class]="hint + ' tabular-nums'">{{ teamsOf(pool.teams.length) }}</p>
                 </div>
                 <ol role="list" class="mt-3 divide-y divide-border border-t border-b border-border">
                   @for (team of pool.teams; track team.teamId) {
@@ -329,6 +455,8 @@ export class PoolsPanel {
   private readonly splitCall = injectMutation(api.tournamentGames.splitPools);
   private readonly moveCall = injectMutation(api.tournamentGames.movePoolTeam);
   private readonly createCall = injectMutation(api.tournamentGames.createPoolGames);
+  private readonly undoSplitCall = injectMutation(api.tournamentGames.undoSplitPools);
+  private readonly moveSeedCall = injectMutation(api.tournamentGames.moveSeed);
   private readonly now = injectNow();
   protected readonly online = injectOnline();
 
@@ -345,7 +473,18 @@ export class PoolsPanel {
   protected readonly staleNote = STALE_GAMES_NOTE;
   protected readonly skeletonRows = [1, 2, 3];
 
+  protected readonly directions: readonly SeedDirection[] = ['up', 'down'];
+  protected readonly seedsHint =
+    'Seed 1 goes in Pool A first. Move a team up or down to set the order, then split.';
+  protected readonly staleSeedsHint =
+    'The pools keep the seeds they were split with. Split again to use this order.';
+
   protected readonly moving = signal<MoveTarget | null>(null);
+  protected readonly seedMoving = signal<{ teamId: Id<'teams'>; direction: SeedDirection } | null>(
+    null,
+  );
+  protected readonly seedAnnouncement = signal('');
+  protected readonly undoing = signal(false);
   protected readonly splitting = signal(false);
   protected readonly creating = signal(false);
   protected readonly announcement = signal('');
@@ -373,8 +512,23 @@ export class PoolsPanel {
   private readonly hasResult = computed(() => this.setup()?.hasResult ?? false);
   protected readonly canMove = computed(() => !this.hasResult());
   protected readonly busy = computed(
-    () => this.moving() !== null || this.splitting() || this.creating(),
+    () =>
+      this.moving() !== null ||
+      this.seedMoving() !== null ||
+      this.splitting() ||
+      this.creating() ||
+      this.undoing(),
   );
+  protected readonly seedRows = computed<SeedRow[]>(() => {
+    const seeds = this.setup()?.seeds ?? [];
+    return seeds.map((team, index) => ({
+      teamId: team.teamId,
+      name: team.name,
+      seed: index + 1,
+      first: index === 0,
+      last: index === seeds.length - 1,
+    }));
+  });
 
   private readonly poolCounts = computed(() => poolCountsFor(this.confirmedCount()));
   protected readonly poolCountOptions = computed<ChipOption[]>(() =>
@@ -398,7 +552,6 @@ export class PoolsPanel {
   });
   protected readonly unassignedText = computed(() => unassignedNote(this.unassignedCount()));
 
-  /** Why the teams cannot be split, in the order the server checks. */
   protected readonly splitReason = computed(() => {
     if (this.poolCounts().length === 0) return POOL_MESSAGES.teamLimits;
     const tournament = this.tournament();
@@ -409,7 +562,6 @@ export class PoolsPanel {
     return null;
   });
 
-  /** Why there is no Create action, in the order the server checks. */
   protected readonly gamesReason = computed(() => {
     if (this.splitReason()) return this.splitReason();
     if (!this.hasPools() || this.unassignedCount() > 0) return POOL_MESSAGES.notSplit;
@@ -420,10 +572,34 @@ export class PoolsPanel {
     return playersText(rosterCount);
   }
 
+  protected teamsOf(count: number): string {
+    return teamsText(count);
+  }
+
+  protected undoOf(notice: Notice): SplitUndo | null {
+    return notice.kind === 'done' ? (notice.undo ?? null) : null;
+  }
+
   protected targetsFor(own: Pool, team: { teamId: Id<'teams'>; name: string }): MoveTarget[] {
-    return this.pools()
-      .filter((pool) => pool.pool !== own)
-      .map((pool) => ({ pool: pool.pool, teamId: team.teamId, name: team.name }));
+    const pools = this.pools();
+    const sizes = pools.map((pool) => pool.teams.length);
+    const from = pools.findIndex((pool) => pool.pool === own);
+    return pools
+      .map((pool, to) => ({ pool: pool.pool, to }))
+      .filter(
+        ({ to }) => to !== from && checkPoolSizes(poolSizesAfterMove(sizes, from, to)) === null,
+      )
+      .map(({ pool }) => ({ pool, teamId: team.teamId, name: team.name }));
+  }
+
+  protected seedMoveDisabled(row: SeedRow, direction: SeedDirection): boolean {
+    const atEnd = direction === 'up' ? row.first : row.last;
+    return atEnd || this.busy() || !this.online();
+  }
+
+  protected isSeedMoving(row: SeedRow, direction: SeedDirection): boolean {
+    const moving = this.seedMoving();
+    return moving?.teamId === row.teamId && moving.direction === direction;
   }
 
   protected isMoving(target: MoveTarget): boolean {
@@ -446,11 +622,11 @@ export class PoolsPanel {
     }
     this.splitting.set(true);
     try {
-      const { poolCount, teamCount } = await this.splitCall.run({
+      const { poolCount, teamCount, undo } = await this.splitCall.run({
         tournamentId: this.tournament().tournamentId,
         poolCount: this.poolCount(),
       });
-      this.notice.set({ kind: 'done', text: splitDoneText(poolCount, teamCount) });
+      this.notice.set({ kind: 'done', text: splitDoneText(poolCount, teamCount), undo });
     } catch (error) {
       this.show(
         error instanceof ConvexOfflineError
@@ -462,10 +638,67 @@ export class PoolsPanel {
     }
   }
 
+  protected async undoSplit(undo: SplitUndo): Promise<void> {
+    if (this.busy()) return;
+    if (!this.online()) {
+      this.show({ kind: 'offline', description: undoSplitOfflineText() });
+      return;
+    }
+    this.undoing.set(true);
+    try {
+      await this.undoSplitCall.run({ tournamentId: this.tournament().tournamentId, ...undo });
+      this.notice.set({ kind: 'done', text: SPLIT_RESTORED_TEXT });
+      // The Undo button that had focus is gone.
+      afterNextRender(() => this.noticeAlert()?.focus(), { injector: this.injector });
+    } catch (error) {
+      this.show(
+        error instanceof ConvexOfflineError
+          ? { kind: 'offline', description: undoSplitOfflineText() }
+          : { kind: 'failed', text: undoSplitFailedText(bracketRefusalMessage(error)) },
+      );
+    } finally {
+      this.undoing.set(false);
+    }
+  }
+
+  protected async moveSeed(row: SeedRow, direction: SeedDirection, event: Event): Promise<void> {
+    if (this.busy() || (direction === 'up' ? row.first : row.last)) return;
+    const button = event.currentTarget as HTMLElement;
+    this.announcement.set('');
+    this.seedAnnouncement.set('');
+    this.notice.set(null);
+    if (!this.online()) {
+      this.show({ kind: 'offline', description: moveOfflineText(row.name) });
+      return;
+    }
+    this.seedMoving.set({ teamId: row.teamId, direction });
+    try {
+      const { seed, seedCount } = await this.moveSeedCall.run({
+        tournamentId: this.tournament().tournamentId,
+        teamId: row.teamId,
+        direction,
+      });
+      this.seedAnnouncement.set(movedText(row.name, direction, seed, seedCount));
+      this.refocusUnlessMoved(
+        button,
+        `[data-seed-team="${row.teamId}"] [data-move="${direction}"]`,
+      );
+    } catch (error) {
+      this.show(
+        error instanceof ConvexOfflineError
+          ? { kind: 'offline', description: moveOfflineText(row.name) }
+          : { kind: 'failed', text: moveFailedText(row.name, bracketRefusalMessage(error)) },
+      );
+    } finally {
+      this.seedMoving.set(null);
+    }
+  }
+
   protected async move(target: MoveTarget, event: Event): Promise<void> {
     if (this.busy()) return;
     const button = event.currentTarget as HTMLElement;
     this.announcement.set('');
+    this.seedAnnouncement.set('');
     this.notice.set(null);
     if (!this.online()) {
       this.show({ kind: 'offline', description: moveToPoolOfflineText(target.name) });
@@ -479,7 +712,7 @@ export class PoolsPanel {
         pool: target.pool,
       });
       this.announcement.set(movedToPoolText(target.name, pool, poolTeamCount));
-      this.refocusUnlessMoved(button, target.teamId);
+      this.refocusUnlessMoved(button, `[data-team-id="${target.teamId}"] [data-move-to]`);
     } catch (error) {
       this.show(
         error instanceof ConvexOfflineError
@@ -566,15 +799,13 @@ export class PoolsPanel {
     afterNextRender(() => this.noticeAlert()?.focus(), { injector: this.injector });
   }
 
-  /** A moved team's row is a new element in the other pool, so focus goes to its first move button; a reply that arrives after the user went elsewhere leaves focus there. */
-  private refocusUnlessMoved(button: HTMLElement, teamId: Id<'teams'>): void {
+  /** A moved team's row can be a new element, so focus goes to its button again; a reply that arrives after the user went elsewhere leaves focus there. */
+  private refocusUnlessMoved(button: HTMLElement, selector: string): void {
     afterNextRender(
       () => {
         const active = this.document.activeElement;
         if (active !== null && active !== this.document.body && active !== button) return;
-        this.host.nativeElement
-          .querySelector<HTMLElement>(`[data-team-id="${teamId}"] [data-move-to]`)
-          ?.focus();
+        this.host.nativeElement.querySelector<HTMLElement>(selector)?.focus();
       },
       { injector: this.injector },
     );
