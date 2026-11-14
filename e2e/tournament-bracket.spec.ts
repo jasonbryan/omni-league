@@ -1385,10 +1385,7 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
             );
             expect(before).not.toBeNull();
             const shift = Math.abs((after?.height ?? Infinity) - (before?.height ?? -1));
-            expect(
-              shift,
-              `skeleton: ${skeletonParts} || loaded: ${loadedParts}`,
-            ).toBeLessThanOrEqual(2);
+            expect(shift, `skeleton: ${skeletonParts} || loaded: ${loadedParts}`).toBeLessThan(0.5);
             const rosterShift = Math.abs(
               ((await rosterTop(crabs)) ?? Infinity) - (rosterBefore ?? -1),
             );
