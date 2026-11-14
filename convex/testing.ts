@@ -41,6 +41,7 @@ import {
 } from './lib/sports';
 import {
   divisionSeedValidator,
+  insertCampSession,
   insertDraftCamp,
   insertDraftTournament,
   insertLeague,
@@ -63,6 +64,7 @@ import {
   saveResult,
   tournamentTeams,
 } from './lib/tournamentBracket';
+import { findCampBySlugs } from './lib/campLookup';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
@@ -280,9 +282,13 @@ export const addLeagueOrganizer = internalMutation({
     email: v.string(),
     leagueSlugs: v.array(v.string()),
     tournamentSlugs: v.optional(v.array(v.string())),
+    campSlugs: v.optional(v.array(v.string())),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, email, leagueSlugs, tournamentSlugs = [] }) => {
+  handler: async (
+    ctx,
+    { organizationSlug, email, leagueSlugs, tournamentSlugs = [], campSlugs = [] },
+  ) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
     const user = await userByEmail(ctx, email);
@@ -299,17 +305,22 @@ export const addLeagueOrganizer = internalMutation({
       leagueIds.push(league._id);
     }
     const programIds = [];
-    for (const slug of tournamentSlugs) {
-      const program = await ctx.db
-        .query('programs')
-        .withIndex('by_organizationId_and_slug', (q) =>
-          q.eq('organizationId', organization._id).eq('slug', slug),
-        )
-        .unique();
-      if (program?.type !== 'tournament') {
-        throw new Error(`No tournament has the slug ${JSON.stringify(slug)}`);
+    for (const [type, slugs] of [
+      ['tournament', tournamentSlugs],
+      ['camp', campSlugs],
+    ] as const) {
+      for (const slug of slugs) {
+        const program = await ctx.db
+          .query('programs')
+          .withIndex('by_organizationId_and_slug', (q) =>
+            q.eq('organizationId', organization._id).eq('slug', slug),
+          )
+          .unique();
+        if (program?.type !== type) {
+          throw new Error(`No ${type} has the slug ${JSON.stringify(slug)}`);
+        }
+        programIds.push(program._id);
       }
-      programIds.push(program._id);
     }
     await insertMembership(
       ctx,
@@ -469,6 +480,31 @@ export const seedCamp = internalMutation({
     }
     await insertDraftCamp(ctx, organization._id, { ...camp, locationIds });
     return { slug: camp.slug };
+  },
+});
+
+export const seedCampSession = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    campSlug: v.string(),
+    name: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    dailyStartTime: v.optional(v.string()),
+    dailyEndTime: v.optional(v.string()),
+    places: v.number(),
+    registrationDeadline: v.string(),
+    registeredCount: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, campSlug, registeredCount, ...session }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
+    const id = await insertCampSession(ctx, found.camp, session);
+    if (registeredCount !== undefined) await ctx.db.patch('campSessions', id, { registeredCount });
+    return null;
   },
 });
 

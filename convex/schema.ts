@@ -233,9 +233,28 @@ export default defineSchema({
     /** Whole years, `MIN_CAMP_AGE` to `MAX_CAMP_AGE`, with `minimumAge` no higher than `maximumAge`. */
     minimumAge: v.number(),
     maximumAge: v.number(),
+    /** Kept by `insertCampSession` and `deleteCampSession`; absent on a camp that has had no session written since it was created, which readers recount. */
+    sessionCount: v.optional(v.number()),
   })
     .index('by_programId', ['programId'])
     .index('by_organizationId', ['organizationId']),
+
+  campSessions: defineTable({
+    campId: v.id('camps'),
+    organizationId: v.id('organizations'),
+    name: v.string(),
+    /** Calendar dates (`YYYY-MM-DD`), with `endDate` on or after `startDate` and `registrationDeadline` on or before it. */
+    startDate: v.string(),
+    endDate: v.string(),
+    /** `HH:MM` as stored, in 24-hour time with no time zone; both are set or neither. */
+    dailyStartTime: v.optional(v.string()),
+    dailyEndTime: v.optional(v.string()),
+    /** Whole places, `MIN_CAMP_SESSION_PLACES` to `MAX_CAMP_SESSION_PLACES`. */
+    places: v.number(),
+    registrationDeadline: v.string(),
+    /** The registrations in the session; a session with any cannot be deleted. */
+    registeredCount: v.number(),
+  }).index('by_campId_and_startDate', ['campId', 'startDate']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

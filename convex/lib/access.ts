@@ -248,6 +248,38 @@ export async function requireProgramOrganizer(
   return { user, membership, program };
 }
 
+/** Signed in first, so a camp that does not exist and another organization's look alike. */
+export async function requireCampOrganizer(
+  ctx: Ctx,
+  campId: Id<'camps'>,
+): Promise<Authorized & { program: Doc<'programs'>; camp: Doc<'camps'> }> {
+  await requireUser(ctx);
+  const camp = await ctx.db.get('camps', campId);
+  if (!camp) throw new Error('Not allowed');
+  const access = await requireProgramOrganizer(ctx, camp.programId);
+  if (access.program.type !== 'camp' || access.program.organizationId !== camp.organizationId) {
+    throw new Error('Not allowed');
+  }
+  return { ...access, camp };
+}
+
+export async function requireCampSessionOrganizer(
+  ctx: Ctx,
+  campSessionId: Id<'campSessions'>,
+): Promise<
+  Authorized & {
+    program: Doc<'programs'>;
+    camp: Doc<'camps'>;
+    campSession: Doc<'campSessions'>;
+  }
+> {
+  await requireUser(ctx);
+  const campSession = await ctx.db.get('campSessions', campSessionId);
+  if (!campSession) throw new Error('Not allowed');
+  const access = await requireCampOrganizer(ctx, campSession.campId);
+  return { ...access, campSession };
+}
+
 /** Signed in first, so a tournament that does not exist and another organization's look alike. */
 export async function requireTournamentOrganizer(
   ctx: Ctx,

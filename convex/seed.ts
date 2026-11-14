@@ -12,6 +12,7 @@ import {
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
+import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { backfillPendingInviteCounts, insertPendingInvite } from './lib/inviteWrites';
@@ -66,6 +67,7 @@ import {
   insertCustomLevel,
   insertLeague,
   insertLocation,
+  insertCampSession,
   insertDraftCamp,
   insertDraftTournament,
   publishTournament,
@@ -716,7 +718,26 @@ interface DemoCamp {
   locations: readonly string[];
   minimumAge: number;
   maximumAge: number;
+  sessions: readonly DemoCampSession[];
 }
+
+interface DemoCampSession {
+  name: string;
+  startDaysFromRun: number;
+  lengthDays: number;
+  deadlineDaysBeforeStart: number;
+  dailyStartTime: string;
+  dailyEndTime: string;
+  places: number;
+}
+
+const WEEK_OF_MORNINGS = {
+  lengthDays: 5,
+  deadlineDaysBeforeStart: 3,
+  dailyStartTime: '09:00',
+  dailyEndTime: '12:00',
+  places: 20,
+} as const;
 
 const DEMO_CAMPS: readonly DemoCamp[] = [
   {
@@ -727,6 +748,11 @@ const DEMO_CAMPS: readonly DemoCamp[] = [
     locations: ['North Beach Sand Courts'],
     minimumAge: 9,
     maximumAge: 14,
+    sessions: [
+      { name: 'Week 1', startDaysFromRun: 14, ...WEEK_OF_MORNINGS },
+      { name: 'Week 2', startDaysFromRun: 21, ...WEEK_OF_MORNINGS },
+      { name: 'Week 3', startDaysFromRun: 28, ...WEEK_OF_MORNINGS },
+    ],
   },
   {
     organizationSlug: 'gulf-coast-sport-social',
@@ -736,6 +762,7 @@ const DEMO_CAMPS: readonly DemoCamp[] = [
     locations: ['North Beach Sand Courts'],
     minimumAge: 10,
     maximumAge: 16,
+    sessions: [],
   },
 ];
 
@@ -774,6 +801,38 @@ async function ensureCamp(ctx: MutationCtx, demo: DemoCamp): Promise<boolean> {
   return true;
 }
 
+/** Adds the sessions the camp lacks by name, so a camp an earlier run made without them gets them. */
+async function ensureCampSessions(
+  ctx: MutationCtx,
+  demo: DemoCamp,
+  today: string,
+): Promise<number> {
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization) return 0;
+  const found = await findCampBySlugs(ctx, organization, demo.slug);
+  if (!found) return 0;
+  const existing = await ctx.db
+    .query('campSessions')
+    .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+    .take(CAMP_SESSIONS_LIMIT);
+  let inserted = 0;
+  for (const session of demo.sessions) {
+    if (existing.some((row) => row.name === session.name)) continue;
+    const startDate = addCalendarDays(today, session.startDaysFromRun);
+    await insertCampSession(ctx, found.camp, {
+      name: session.name,
+      startDate,
+      endDate: addCalendarDays(startDate, session.lengthDays - 1),
+      dailyStartTime: session.dailyStartTime,
+      dailyEndTime: session.dailyEndTime,
+      places: session.places,
+      registrationDeadline: addCalendarDays(startDate, -session.deadlineDaysBeforeStart),
+    });
+    inserted++;
+  }
+  return inserted;
+}
+
 async function ensureTournament(
   ctx: MutationCtx,
   demo: DemoTournament,
@@ -808,6 +867,7 @@ const resultValidator = v.object({
   seasons: v.number(),
   tournaments: v.number(),
   camps: v.number(),
+  campSessions: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
     teamCounts: v.number(),
@@ -887,6 +947,7 @@ export const insertDemoData = internalMutation({
       seasons: 0,
       tournaments: 0,
       camps: 0,
+      campSessions: 0,
     };
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
@@ -951,6 +1012,7 @@ export const insertDemoData = internalMutation({
     }
     for (const demo of DEMO_CAMPS) {
       if (await ensureCamp(ctx, demo)) inserted.camps++;
+      inserted.campSessions += await ensureCampSessions(ctx, demo, today);
     }
     return { ...inserted, backfilled };
   },
