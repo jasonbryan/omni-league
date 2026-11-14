@@ -49,8 +49,16 @@ export interface InviteTournamentChoice {
   name: string;
 }
 
+export interface InviteCampChoice {
+  programId: Id<'programs'>;
+  name: string;
+}
+
+const AND = new Intl.ListFormat('en-US', { type: 'conjunction' });
+const OR = new Intl.ListFormat('en-US', { type: 'disjunction' });
+
 interface PickerGroup {
-  id: 'leagues' | 'tournaments';
+  id: 'leagues' | 'tournaments' | 'camps';
   legend: string;
   items: {
     controlId: string;
@@ -333,7 +341,7 @@ type CopyOutcome = 'copied' | 'blocked' | null;
                         <p hlmFieldDescription id="leagues-description" class="-mt-1.5">
                           {{
                             groups().length > 1
-                              ? 'Choose one or more leagues or tournaments.'
+                              ? 'Choose one or more ' + chosenFromEither() + '.'
                               : 'Choose one or more.'
                           }}
                         </p>
@@ -396,16 +404,12 @@ type CopyOutcome = 'copied' | 'blocked' | null;
               {{ form.submitting() ? 'Creating the invite link.' : '' }}
             </p>
           </form>
-        } @else if (leaguesFailed() || tournamentsFailed()) {
+        } @else if (leaguesFailed() || tournamentsFailed() || campsFailed()) {
           <div class="px-4 py-4 md:px-5">
             <app-admin-alert
               #leaguesAlert
               kind="error"
-              [title]="
-                leaguesFailed()
-                  ? 'The leagues could not be loaded.'
-                  : 'The tournaments could not be loaded.'
-              "
+              [title]="loadFailure()"
               description="Check your connection and try again."
             />
           </div>
@@ -427,11 +431,14 @@ export class StaffInvitePanel {
   readonly tournaments = input<readonly InviteTournamentChoice[] | undefined>();
   readonly leaguesFailed = input(false);
   readonly tournamentsFailed = input(false);
+  readonly camps = input<readonly InviteCampChoice[] | undefined>();
+  readonly campsFailed = input(false);
 
   protected readonly online = injectOnline();
   protected readonly form = new InviteForm(
     () => (this.leagues() ?? []).map((l) => l.leagueId),
     () => (this.tournaments() ?? []).map((t) => t.programId),
+    () => (this.camps() ?? []).map((c) => c.programId),
   );
   protected readonly alerts = INVITE_FORM_ALERTS;
 
@@ -440,7 +447,10 @@ export class StaffInvitePanel {
   protected readonly day = formatDay;
 
   protected readonly ready = computed(
-    () => this.leagues() !== undefined && this.tournaments() !== undefined,
+    () =>
+      this.leagues() !== undefined &&
+      this.tournaments() !== undefined &&
+      this.camps() !== undefined,
   );
 
   protected readonly groups = computed<PickerGroup[]>(() => {
@@ -448,6 +458,8 @@ export class StaffInvitePanel {
     const tournaments = this.tournaments() ?? [];
     const selected = this.form.selected();
     const selectedTournaments = this.form.selectedTournaments();
+    const camps = this.camps() ?? [];
+    const selectedCamps = this.form.selectedCamps();
     const groups: PickerGroup[] = [];
     if (leagues.length > 0) {
       groups.push({
@@ -473,12 +485,30 @@ export class StaffInvitePanel {
         })),
       });
     }
+    if (camps.length > 0) {
+      groups.push({
+        id: 'camps',
+        legend: 'Camps',
+        items: camps.map(({ programId, name }, index) => ({
+          controlId: `camp-${index + 1}`,
+          name,
+          checked: selectedCamps.has(programId),
+          toggle: (checked) => this.form.toggleCamp(programId, checked),
+        })),
+      });
+    }
     return groups;
   });
 
-  protected readonly chosenFrom = computed(() => {
-    const ids = this.groups().map((group) => group.id);
-    return ids.length > 1 ? 'leagues and tournaments' : (ids[0] ?? 'leagues');
+  private readonly groupIds = computed(() => this.groups().map((group) => group.id));
+  protected readonly chosenFrom = computed(() => AND.format(this.groupIds()) || 'leagues');
+  protected readonly chosenFromEither = computed(() => OR.format(this.groupIds()));
+
+  protected readonly loadFailure = computed(() => {
+    if (this.leaguesFailed()) return 'The leagues could not be loaded.';
+    return this.tournamentsFailed()
+      ? 'The tournaments could not be loaded.'
+      : 'The camps could not be loaded.';
   });
 
   protected readonly created = signal<CreatedInvite | null>(null);

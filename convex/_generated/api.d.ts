@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as camps from "../camps.js";
 import type * as crons from "../crons.js";
 import type * as customLevels from "../customLevels.js";
 import type * as freeAgents from "../freeAgents.js";
@@ -23,6 +24,7 @@ import type * as lib_assignedPrograms from "../lib/assignedPrograms.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_bracket from "../lib/bracket.js";
+import type * as lib_campInput from "../lib/campInput.js";
 import type * as lib_customLevelInput from "../lib/customLevelInput.js";
 import type * as lib_divisions from "../lib/divisions.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
@@ -110,6 +112,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  camps: typeof camps;
   crons: typeof crons;
   customLevels: typeof customLevels;
   freeAgents: typeof freeAgents;
@@ -124,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authOrigins": typeof lib_authOrigins;
   "lib/authUsers": typeof lib_authUsers;
   "lib/bracket": typeof lib_bracket;
+  "lib/campInput": typeof lib_campInput;
   "lib/customLevelInput": typeof lib_customLevelInput;
   "lib/divisions": typeof lib_divisions;
   "lib/forbidden": typeof lib_forbidden;

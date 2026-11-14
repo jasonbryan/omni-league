@@ -34,6 +34,7 @@ const ROWS = {
   leagues: 46,
   seasons: 8,
   tournaments: 4,
+  camps: 2,
 };
 const NONE = {
   organizations: 0,
@@ -53,6 +54,7 @@ const NO_ROWS = {
   leagues: 0,
   seasons: 0,
   tournaments: 0,
+  camps: 0,
 };
 const FULL = { ...ROWS, backfilled: NONE };
 
@@ -64,6 +66,7 @@ async function counts(t: T) {
     leagues: (await ctx.db.query('leagues').collect()).length,
     seasons: (await ctx.db.query('seasons').collect()).length,
     tournaments: (await ctx.db.query('tournaments').collect()).length,
+    camps: (await ctx.db.query('camps').collect()).length,
   }));
 }
 
@@ -674,6 +677,7 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
+      camps: ROWS.camps,
       backfilled: NONE,
     });
 
@@ -807,6 +811,7 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues + 1,
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
+      camps: ROWS.camps,
     });
   });
 
@@ -833,6 +838,7 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues,
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
+      camps: ROWS.camps,
       backfilled: {
         organizations: 2,
         locations: 3,
@@ -1300,6 +1306,73 @@ describe('seed:demo tournaments', () => {
     const held = await winterDoublesClassic(t);
     expect(held.tournaments).toHaveLength(3);
     expect(held.program?.type).toBe('league');
+  });
+});
+
+describe('seed:demo camps', () => {
+  async function campRows(t: T) {
+    return t.run(async (ctx) => {
+      const organization = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'gulf-coast-sport-social'))
+        .unique();
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization!._id).eq('name', 'North Beach Sand Courts'),
+        )
+        .unique();
+      const camps = await ctx.db.query('camps').collect();
+      const programs = [];
+      for (const camp of camps) programs.push((await ctx.db.get('programs', camp.programId))!);
+      return { organizationId: organization!._id, location: location!._id, camps, programs };
+    });
+  }
+
+  test('adds the draft Junior Beach Volleyball Camp, ages 9 to 14, and the draft Fall Break Camp to Gulf Coast Sport & Social, and a second run adds none', async () => {
+    const t = setup();
+    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(2);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(0);
+    const { organizationId, location, camps, programs } = await campRows(t);
+    expect(camps).toHaveLength(2);
+    const byName = (name: string) => {
+      const program = programs.find((row) => row.name === name)!;
+      return { program, camp: camps.find((row) => row.programId === program._id)! };
+    };
+    const junior = byName('Junior Beach Volleyball Camp');
+    expect(junior.program).toMatchObject({
+      organizationId,
+      type: 'camp',
+      slug: 'junior-beach-volleyball-camp',
+      sport: 'beachVolleyball',
+      status: 'draft',
+      locationIds: [location],
+    });
+    expect(junior.camp).toMatchObject({ organizationId, minimumAge: 9, maximumAge: 14 });
+    const fall = byName('Fall Break Camp');
+    expect(fall.program).toMatchObject({ type: 'camp', status: 'draft', slug: 'fall-break-camp' });
+    expect(fall.camp.minimumAge).toBeLessThanOrEqual(fall.camp.maximumAge);
+  });
+
+  test('adds only the camp whose web address is free where a program holds the other', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
+        locations: [{ name: 'North Beach Sand Courts', address: '1 Sand Ln' }],
+        leagues: [
+          {
+            name: 'Fall Break Camp',
+            sport: 'beachVolleyball',
+            locations: ['North Beach Sand Courts'],
+            division: defaultDivision('beachVolleyball'),
+          },
+        ],
+      });
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(1);
+    const { camps } = await campRows(t);
+    expect(camps).toHaveLength(1);
   });
 });
 

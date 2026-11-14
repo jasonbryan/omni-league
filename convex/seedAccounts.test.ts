@@ -280,6 +280,7 @@ const DATA = {
   leagues: 46,
   seasons: 8,
   tournaments: 4,
+  camps: 2,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -434,6 +435,14 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(staff.find((s) => s.email === EMAILS.organizer)?.tournamentNames).toEqual([
         'Gulf Coast Beach Open',
       ]);
+      expect(
+        (await admin.query(api.camps.listForOrganization, { organizationId: gulfCoast._id }))
+          .map(({ name, status, minimumAge, maximumAge }) => [name, status, minimumAge, maximumAge])
+          .sort(),
+      ).toEqual([
+        ['Fall Break Camp', 'draft', 10, 16],
+        ['Junior Beach Volleyball Camp', 'draft', 9, 14],
+      ]);
       const pending = await admin.query(api.invites.listPending, {
         organizationId: gulfCoast._id,
       });
@@ -442,6 +451,11 @@ describe('seed:demo accounts: a new deployment', () => {
       ]);
 
       const organizer = await as(t, EMAILS.organizer);
+      expect(
+        await refused(() =>
+          organizer.query(api.camps.listForOrganization, { organizationId: gulfCoast._id }),
+        ),
+      ).toBe(true);
       expect(await organizer.query(api.organizations.listMine, {})).toEqual([
         {
           name: 'Gulf Coast Sport & Social',
@@ -978,6 +992,7 @@ describe('seed:demo accounts: a second run', () => {
         leagues: 0,
         seasons: 0,
         tournaments: 0,
+        camps: 0,
         logos: 0,
         backfilled: NO_BACKFILL,
         memberships: 0,

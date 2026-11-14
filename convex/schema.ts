@@ -226,6 +226,17 @@ export default defineSchema({
     'slot',
   ]),
 
+  // The camp part of a program of type `camp`; `programs` holds its name, slug, sport, status, and locations. Written only by `convex/lib/tenantWrites.ts`.
+  camps: defineTable({
+    programId: v.id('programs'),
+    organizationId: v.id('organizations'),
+    /** Whole years, `MIN_CAMP_AGE` to `MAX_CAMP_AGE`, with `minimumAge` no higher than `maximumAge`. */
+    minimumAge: v.number(),
+    maximumAge: v.number(),
+  })
+    .index('by_programId', ['programId'])
+    .index('by_organizationId', ['organizationId']),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.

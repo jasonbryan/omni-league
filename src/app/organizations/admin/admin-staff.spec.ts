@@ -32,6 +32,7 @@ const LIST_MEMBERS = 'memberships:listForOrganization';
 const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const LIST_TOURNAMENTS = 'tournaments:listForOrganization';
+const LIST_CAMPS = 'camps:listForOrganization';
 const STAFF_COUNT = 'memberships:staffCount';
 const PENDING_COUNT = 'invites:pendingCount';
 const CREATE = 'invites:create';
@@ -142,6 +143,27 @@ const TOURNAMENTS = [
   },
 ];
 
+const CAMPS = [
+  {
+    campId: 'cp_junior',
+    programId: 'pg_junior',
+    name: 'Junior Beach Volleyball Camp',
+    slug: 'junior-beach-volleyball-camp',
+    minimumAge: 9,
+    maximumAge: 14,
+    status: 'draft',
+  },
+  {
+    campId: 'cp_fall',
+    programId: 'pg_fall',
+    name: 'Fall Break Camp',
+    slug: 'fall-break-camp',
+    minimumAge: 10,
+    maximumAge: 16,
+    status: 'draft',
+  },
+];
+
 const TOKEN = 'vT3kq9Xo-PwGYsFI6eyKfmW2cGdPZEabYr7_hN1uLcA';
 
 describe('AdminStaff', () => {
@@ -167,6 +189,7 @@ describe('AdminStaff', () => {
       pending?: unknown[];
       leagues?: unknown[];
       tournaments?: unknown[] | 'pending';
+      camps?: unknown[] | 'pending';
     } = {},
   ) {
     o = await openAdmin(ROUTES, URL);
@@ -188,6 +211,7 @@ describe('AdminStaff', () => {
     if (lists.tournaments !== 'pending') {
       o.subscription(LIST_TOURNAMENTS)!.emit(lists.tournaments ?? []);
     }
+    if (lists.camps !== 'pending') o.subscription(LIST_CAMPS)!.emit(lists.camps ?? []);
     await o.flush();
   }
   const main = () => document.querySelector<HTMLElement>('main#main')!;
@@ -262,6 +286,7 @@ describe('AdminStaff', () => {
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
         [LIST_TOURNAMENTS, { organizationId: COASTAL.organizationId }],
+        [LIST_CAMPS, { organizationId: COASTAL.organizationId }],
         [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
         [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
       ]);
@@ -274,7 +299,7 @@ describe('AdminStaff', () => {
       expect(page.querySelectorAll('h1')).toHaveLength(1);
       expect(text(main.querySelector('h1'))).toBe('Staff');
       expect(text(main.querySelector('h1 + p'))).toBe(
-        'Org admins manage everything here. League organizers run the leagues and tournaments you assign them.',
+        'Org admins manage everything here. League organizers run the leagues, tournaments, and camps you assign them.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe('Staff | Coastal Bend Rec Club | Omni League');
     });
@@ -1449,6 +1474,192 @@ describe('AdminStaff', () => {
       );
       expect(text(pending()[1].querySelectorAll('p')[0])).toBe(
         'League organizer for Gulf Coast Beach Open',
+      );
+    });
+  });
+
+  describe('camps', () => {
+    const camp = (n: number) => page.querySelector<HTMLButtonElement>(`#camp-${n}`)!;
+    const openWithCamps = (camps: unknown[] = CAMPS, tournaments: unknown[] = []) =>
+      open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, tournaments, camps });
+    const labels = (group: Element) => [...group.querySelectorAll('label')].map((l) => text(l));
+
+    it('lists the camps under their own heading in name order, after the leagues and the tournaments', async () => {
+      await openWithCamps(CAMPS, TOURNAMENTS);
+      const camps = page.querySelector('fieldset#camps')!;
+      expect(text(camps.querySelector('legend'))).toBe('Camps');
+      expect(labels(camps)).toEqual(['Fall Break Camp', 'Junior Beach Volleyball Camp']);
+      expect(
+        page.querySelector('fieldset#tournaments')!.compareDocumentPosition(camps) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues, tournaments, and camps you choose.',
+      );
+      expect(text(page.querySelector('#leagues-description'))).toBe(
+        'Choose one or more leagues, tournaments, or camps.',
+      );
+      expect(camps.querySelector('#leagues-description')).toBeNull();
+      expect(camp(1).getAttribute('role')).toBe('checkbox');
+      expect(camp(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('draws no Camps group, and keeps the earlier wording, when the organization has none', async () => {
+      await openWithCamps([], TOURNAMENTS);
+      expect(page.querySelector('fieldset#camps')).toBeNull();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues and tournaments you choose.',
+      );
+    });
+
+    it('draws the Camps group alone, with the League organizer role available, when there is no league', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [], camps: CAMPS });
+      expect(page.querySelector('fieldset#leagues')).toBeNull();
+      expect(input('role-organizer').disabled).toBe(false);
+      expect(input('role-organizer').checked).toBe(true);
+      expect(page.querySelector('#role-unavailable')).toBeNull();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the camps you choose.',
+      );
+    });
+
+    it('waits for the camps before it draws the form, so nothing moves when they arrive', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, camps: 'pending' });
+      expect(page.querySelector('#invite form')).toBeNull();
+      expect(text(page.querySelector('#invite [role="status"]'))).toBe('Loading the leagues.');
+      o.subscription(LIST_CAMPS)!.emit(CAMPS);
+      await o.flush();
+      expect(page.querySelector('#invite form')).not.toBeNull();
+    });
+
+    it('a failed camp list shows its own alert in place of the form', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, camps: 'pending' });
+      o.subscription(LIST_CAMPS)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+        'The camps could not be loaded. Check your connection and try again.',
+      );
+      expect(page.querySelector('#email')).toBeNull();
+    });
+
+    it('sends the chosen tournaments and camps together as programIds, tournaments first, each in list order', async () => {
+      await openWithCamps(CAMPS, TOURNAMENTS);
+      await type('email', 'jordan@example.com');
+      camp(2).click();
+      camp(1).click();
+      page.querySelector<HTMLButtonElement>('#tournament-1')!.click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()).toEqual([
+        [
+          CREATE,
+          {
+            organizationId: COASTAL.organizationId,
+            email: 'jordan@example.com',
+            role: 'leagueOrganizer',
+            leagueIds: [],
+            programIds: ['pg_gulf', 'pg_fall', 'pg_junior'],
+          },
+        ],
+      ]);
+    });
+
+    it('a camp alone is a valid choice, and sends no league', async () => {
+      await openWithCamps();
+      await type('email', 'jordan@example.com');
+      camp(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()[0][1]).toMatchObject({ leagueIds: [], programIds: ['pg_fall'] });
+    });
+
+    it('sends programIds only when the organization has tournaments or camps', async () => {
+      await openWithCamps([]);
+      await type('email', 'jordan@example.com');
+      await toggleLeague(1);
+      await submit();
+      expect('programIds' in (calls()[0][1] as object)).toBe(false);
+    });
+
+    it('an org admin invite sends no camps, whatever was checked before', async () => {
+      await openWithCamps();
+      camp(1).click();
+      await chooseRole('role-admin');
+      await type('email', 'boss@example.com');
+      await submit();
+      expect(calls()[0][1]).toEqual({
+        organizationId: COASTAL.organizationId,
+        email: 'boss@example.com',
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+    });
+
+    it('with nothing chosen, names the leagues and camps on offer, under the last group', async () => {
+      await openWithCamps();
+      await type('email', 'dana@example.com');
+      await submit();
+      expect(error('leagues')).toBe('Choose at least one league or camp.');
+      expect(page.querySelector('fieldset#camps #leagues-error')).not.toBeNull();
+      expect(document.activeElement).toBe(league(1));
+      expect(calls()).toEqual([]);
+    });
+
+    it('with nothing chosen and every kind on offer, names all three', async () => {
+      await openWithCamps(CAMPS, TOURNAMENTS);
+      await type('email', 'dana@example.com');
+      await submit();
+      expect(error('leagues')).toBe('Choose at least one league, tournament, or camp.');
+    });
+
+    it('"Invite someone else" returns the form with no camp chosen', async () => {
+      await openWithCamps();
+      await type('email', 'jordan@example.com');
+      camp(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      o.convex.calls[0].resolve({ inviteId: 'inv_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
+      await o.flush();
+      [...page.querySelectorAll<HTMLButtonElement>('#invite button')]
+        .find((b) => b.textContent?.includes('Invite someone else'))!
+        .click();
+      await o.flush();
+      expect(camp(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('names a member’s and a pending invite’s camps after their leagues and tournaments', async () => {
+      await open({
+        members: [
+          ...MEMBERS,
+          {
+            membershipId: 'mem_4',
+            name: 'Tomas Rivera',
+            email: 'tomas@example.com',
+            role: 'leagueOrganizer',
+            leagueNames: [],
+            tournamentNames: ['Gulf Coast Beach Open'],
+            campNames: ['Fall Break Camp'],
+            isYou: false,
+          },
+        ],
+        pending: [
+          {
+            ...PENDING[0],
+            leagueNames: ['Wednesday Coed Slow-Pitch'],
+            campNames: ['Junior Beach Volleyball Camp'],
+          },
+          { ...PENDING[1], leagueNames: [], campNames: ['Fall Break Camp'] },
+        ],
+        leagues: LEAGUES,
+      });
+      expect(text(members()[3].querySelectorAll('p')[1])).toBe(
+        'League organizer for Gulf Coast Beach Open, Fall Break Camp',
+      );
+      expect(text(pending()[0].querySelectorAll('p')[0])).toBe(
+        'League organizer for Wednesday Coed Slow-Pitch, Junior Beach Volleyball Camp',
+      );
+      expect(text(pending()[1].querySelectorAll('p')[0])).toBe(
+        'League organizer for Fall Break Camp',
       );
     });
   });

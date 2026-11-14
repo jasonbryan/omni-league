@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { requireOrgAdmin } from './lib/access';
-import { assignablePrograms } from './lib/assignedPrograms';
+import { assignablePrograms, programsOfType } from './lib/assignedPrograms';
 import { authEmailsOf } from './lib/authUsers';
 import { recountMemberships } from './lib/memberships';
 import { roleValidator } from './lib/roles';
@@ -29,6 +29,7 @@ export const listForOrganization = query({
       role: roleValidator,
       leagueNames: v.array(v.string()),
       tournamentNames: v.optional(v.array(v.string())),
+      campNames: v.optional(v.array(v.string())),
       isYou: v.boolean(),
     }),
   ),
@@ -62,9 +63,9 @@ export const listForOrganization = query({
         const name = await nameOf(id);
         if (name !== null) leagueNames.push(name);
       }
-      const tournamentNames = (
-        await assignablePrograms(ctx, organizationId, membership.programIds)
-      ).map((program) => program.name);
+      const programs = await assignablePrograms(ctx, organizationId, membership.programIds);
+      const tournamentNames = programsOfType(programs, 'tournament').map(({ name }) => name);
+      const campNames = programsOfType(programs, 'camp').map(({ name }) => name);
       rows.push({
         membershipId: membership._id,
         name: user.name,
@@ -72,6 +73,7 @@ export const listForOrganization = query({
         role: membership.role,
         leagueNames,
         ...(tournamentNames.length > 0 && { tournamentNames }),
+        ...(campNames.length > 0 && { campNames }),
         isYou: user._id === caller._id,
       });
     }

@@ -358,7 +358,7 @@ describe('invites.create', () => {
         data: {
           field: 'leagues',
           code: 'leaguesEmpty',
-          message: INVITE_MESSAGES.assignmentEmpty,
+          message: 'Choose at least one league or tournament.',
         },
       });
     });

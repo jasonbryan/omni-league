@@ -89,7 +89,7 @@ describe('AdminSidebar', () => {
     expect(text(head.querySelector('.truncate'))).toBe('Coastal Bend Rec Club');
   });
 
-  it('lists Overview, a Programs group of Leagues and Tournaments, then Locations, Staff, and Details, then View public page', async () => {
+  it('lists Overview, a Programs group of Leagues, Tournaments, and Camps, then Locations, Staff, and Details, then View public page', async () => {
     const { host } = await render(BASE);
     const lists = [...host.querySelectorAll('nav ul')];
     expect(lists).toHaveLength(4);
@@ -98,6 +98,7 @@ describe('AdminSidebar', () => {
     expect(links(lists[1])).toEqual([
       ['Leagues', `${BASE}/leagues`],
       ['Tournaments', `${BASE}/tournaments`],
+      ['Camps', `${BASE}/camps`],
     ]);
     expect(links(lists[2])).toEqual([
       ['Locations', `${BASE}/locations`],
@@ -156,6 +157,7 @@ describe('AdminSidebar', () => {
         ['Overview', null],
         ['Leagues', '5'],
         ['Tournaments', null],
+        ['Camps', null],
         ['Locations', '3'],
         ['Staff', '4'],
         ['Details', null],
@@ -258,6 +260,22 @@ describe('AdminSidebar', () => {
     expect(text(current[0])).toBe('Tournaments');
     expect(current[0].getAttribute('href')).toBe(`${BASE}/tournaments`);
     expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+  });
+
+  it('marks Camps current on the camps path, and ignores a query string and a fragment', async () => {
+    const { host } = await render(`${BASE}/camps?x=1#create-camp`);
+    const current = host.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Camps');
+    expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+  });
+
+  it('marks Camps as the section of a camp page: aria-current="true"', async () => {
+    const { host } = await render(`${BASE}/camps/junior-beach-volleyball-camp`);
+    expect(host.querySelector('[aria-current="page"]')).toBeNull();
+    const current = host.querySelectorAll('[aria-current="true"]');
+    expect(current).toHaveLength(1);
+    expect(current[0].getAttribute('href')).toBe(`${BASE}/camps`);
   });
 
   it('marks Staff current on the staff path, and ignores a query string and a fragment', async () => {

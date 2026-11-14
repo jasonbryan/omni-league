@@ -627,6 +627,97 @@ describe('AcceptInvitePage', () => {
     });
   });
 
+  describe('camps', () => {
+    const JUNIOR = { name: 'Junior Beach Volleyball Camp', slug: 'junior-beach-volleyball-camp' };
+    const rowsOf = (page: HTMLElement) =>
+      [...page.querySelectorAll('dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+
+    it('a camp-only invite names the camp under "Camp", and leads with a camp', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({ ...ORGANIZER, leagueNames: [], campNames: [JUNIOR.name] });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run a camp as a league organizer.',
+      );
+      expect(rowsOf(page)).toEqual([
+        ['Organization', 'Coastal Bend Rec Club'],
+        ['Role', 'League organizer'],
+        ['Camp', JUNIOR.name],
+        ['Expires', 'Oct 23, 2026'],
+      ]);
+    });
+
+    it('several camps read "Camps", after the leagues and the tournaments', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({
+        ...ORGANIZER,
+        tournamentNames: ['Gulf Coast Beach Open'],
+        campNames: [JUNIOR.name, 'Fall Break Camp'],
+      });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run leagues, tournaments, and camps as a league organizer.',
+      );
+      expect(rowsOf(page).map(([label]) => label)).toEqual([
+        'Organization',
+        'Role',
+        'League',
+        'Tournament',
+        'Camps',
+        'Expires',
+      ]);
+      expect(rowsOf(page)[4][1]).toBe('Junior Beach Volleyball Camp and Fall Break Camp');
+    });
+
+    describe('after accepting', () => {
+      async function acceptWith(result: unknown) {
+        const ctx = await open({ signedIn: true });
+        await ctx.emitInvite({ ...ORGANIZER, leagueNames: [], campNames: [JUNIOR.name] });
+        await ctx.signIn();
+        ctx.accept()?.click();
+        await ctx.flush();
+        ctx.call()?.resolve(result);
+        await ctx.flush();
+        return ctx.page;
+      }
+      const ANSWER = {
+        organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
+        role: 'leagueOrganizer',
+        leagueNames: [],
+        leagues: [],
+      };
+      const links = (page: HTMLElement) =>
+        [...page.querySelectorAll('main a')].map((a) => ({
+          label: text(a),
+          href: a.getAttribute('href'),
+        }));
+
+      it('a camp alone: the line names it, and the button goes to /app', async () => {
+        const page = await acceptWith({ ...ANSWER, campNames: [JUNIOR.name], camps: [JUNIOR] });
+        expect(text(page.querySelector('main p'))).toBe(
+          'You’re a league organizer for Junior Beach Volleyball Camp.',
+        );
+        expect(links(page)).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('one league and a camp: the line names both, and the button goes to /app', async () => {
+        const page = await acceptWith({
+          ...ANSWER,
+          leagueNames: ['Coed 7v7 Rec'],
+          leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+          campNames: [JUNIOR.name],
+          camps: [JUNIOR],
+        });
+        expect(text(page.querySelector('main p'))).toBe(
+          'You’re a league organizer for Coed 7v7 Rec and Junior Beach Volleyball Camp.',
+        );
+        expect(links(page)).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+    });
+  });
+
   describe('refusals', () => {
     async function refuse(failure: Error) {
       const ctx = await open({ signedIn: true });

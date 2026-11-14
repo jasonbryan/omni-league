@@ -11,7 +11,7 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { attentionValidator, getAttention as readAttention } from './lib/adminAttention';
-import { assignablePrograms } from './lib/assignedPrograms';
+import { assignablePrograms, programsOfType } from './lib/assignedPrograms';
 import {
   hasOrgAdminRole,
   requireOrgAdmin,
@@ -351,19 +351,23 @@ async function assignedLeagues(
   return { leagues: leagues.map(({ name, slug }) => ({ name, slug })), reads: ids.length };
 }
 
-async function assignedTournaments(
+interface NamedProgram {
+  name: string;
+  slug: string;
+}
+
+async function assignedPrograms(
   ctx: QueryCtx,
   membership: Doc<'memberships'>,
   budget: number,
-): Promise<{ tournaments: { name: string; slug: string }[]; reads: number }> {
-  if (membership.role !== 'leagueOrganizer') return { tournaments: [], reads: 0 };
+): Promise<{ tournaments: NamedProgram[]; camps: NamedProgram[]; reads: number }> {
+  if (membership.role !== 'leagueOrganizer') return { tournaments: [], camps: [], reads: 0 };
   const ids = [...new Set(membership.programIds ?? [])].slice(0, budget);
   const programs = await assignablePrograms(ctx, membership.organizationId, ids);
   programs.sort((x, y) => (x.sortName < y.sortName ? -1 : x.sortName > y.sortName ? 1 : 0));
-  return {
-    tournaments: programs.map(({ name, slug }) => ({ name, slug })),
-    reads: ids.length,
-  };
+  const named = (type: Doc<'programs'>['type']): NamedProgram[] =>
+    programsOfType(programs, type).map(({ name, slug }) => ({ name, slug }));
+  return { tournaments: named('tournament'), camps: named('camp'), reads: ids.length };
 }
 
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
@@ -376,6 +380,7 @@ export const listMine = query({
       role: roleValidator,
       leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
       tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
+      camps: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
     }),
   ),
   handler: async (ctx) => {
@@ -401,18 +406,19 @@ export const listMine = query({
     for (const { membership, organization } of organizations) {
       const { leagues, reads } = await assignedLeagues(ctx, membership, budget);
       budget -= reads;
-      const { tournaments, reads: tournamentReads } = await assignedTournaments(
-        ctx,
-        membership,
-        budget,
-      );
-      budget -= tournamentReads;
+      const {
+        tournaments,
+        camps,
+        reads: programReads,
+      } = await assignedPrograms(ctx, membership, budget);
+      budget -= programReads;
       rows.push({
         name: organization.name,
         slug: organization.slug,
         role: membership.role,
         leagues,
         ...(tournaments.length > 0 && { tournaments }),
+        ...(camps.length > 0 && { camps }),
       });
     }
     return rows;

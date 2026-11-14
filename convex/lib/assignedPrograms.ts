@@ -16,3 +16,10 @@ export async function assignablePrograms(
   }
   return programs;
 }
+
+export function programsOfType(
+  programs: readonly Doc<'programs'>[],
+  type: Doc<'programs'>['type'],
+): Doc<'programs'>[] {
+  return programs.filter((program) => program.type === type);
+}

@@ -66,6 +66,7 @@ import {
   insertCustomLevel,
   insertLeague,
   insertLocation,
+  insertDraftCamp,
   insertDraftTournament,
   publishTournament,
   insertSeason,
@@ -707,6 +708,72 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
   },
 ];
 
+interface DemoCamp {
+  organizationSlug: string;
+  name: string;
+  slug: string;
+  sport: Sport;
+  locations: readonly string[];
+  minimumAge: number;
+  maximumAge: number;
+}
+
+const DEMO_CAMPS: readonly DemoCamp[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Junior Beach Volleyball Camp',
+    slug: 'junior-beach-volleyball-camp',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    minimumAge: 9,
+    maximumAge: 14,
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Fall Break Camp',
+    slug: 'fall-break-camp',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    minimumAge: 10,
+    maximumAge: 16,
+  },
+];
+
+async function locationIdsNamed(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  names: readonly string[],
+): Promise<Id<'locations'>[] | null> {
+  const ids: Id<'locations'>[] = [];
+  for (const name of names) {
+    const location = await ctx.db
+      .query('locations')
+      .withIndex('by_organizationId_and_name', (q) =>
+        q.eq('organizationId', organizationId).eq('name', name),
+      )
+      .first();
+    if (!location) return null;
+    ids.push(location._id);
+  }
+  return ids;
+}
+
+async function ensureCamp(ctx: MutationCtx, demo: DemoCamp): Promise<boolean> {
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization || (await programSlugTaken(ctx, organization._id, demo.slug))) return false;
+  const locationIds = await locationIdsNamed(ctx, organization._id, demo.locations);
+  if (!locationIds) return false;
+  await insertDraftCamp(ctx, organization._id, {
+    name: demo.name,
+    slug: demo.slug,
+    sport: demo.sport,
+    locationIds,
+    minimumAge: demo.minimumAge,
+    maximumAge: demo.maximumAge,
+  });
+  return true;
+}
+
 async function ensureTournament(
   ctx: MutationCtx,
   demo: DemoTournament,
@@ -714,17 +781,8 @@ async function ensureTournament(
 ): Promise<boolean> {
   const organization = await organizationBySlug(ctx, demo.organizationSlug);
   if (!organization || (await programSlugTaken(ctx, organization._id, demo.slug))) return false;
-  const locationIds: Id<'locations'>[] = [];
-  for (const name of demo.locations) {
-    const location = await ctx.db
-      .query('locations')
-      .withIndex('by_organizationId_and_name', (q) =>
-        q.eq('organizationId', organization._id).eq('name', name),
-      )
-      .first();
-    if (!location) return false;
-    locationIds.push(location._id);
-  }
+  const locationIds = await locationIdsNamed(ctx, organization._id, demo.locations);
+  if (!locationIds) return false;
   const tournamentId = await insertDraftTournament(ctx, organization._id, {
     name: demo.name,
     slug: demo.slug,
@@ -749,6 +807,7 @@ const resultValidator = v.object({
   leagues: v.number(),
   seasons: v.number(),
   tournaments: v.number(),
+  camps: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
     teamCounts: v.number(),
@@ -827,6 +886,7 @@ export const insertDemoData = internalMutation({
       leagues: 0,
       seasons: 0,
       tournaments: 0,
+      camps: 0,
     };
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
@@ -888,6 +948,9 @@ export const insertDemoData = internalMutation({
     }
     for (const demo of DEMO_TOURNAMENTS) {
       if (await ensureTournament(ctx, demo, today)) inserted.tournaments++;
+    }
+    for (const demo of DEMO_CAMPS) {
+      if (await ensureCamp(ctx, demo)) inserted.camps++;
     }
     return { ...inserted, backfilled };
   },

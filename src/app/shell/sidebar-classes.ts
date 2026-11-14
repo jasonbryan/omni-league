@@ -1,6 +1,7 @@
 const ROW = 'flex min-h-9 pointer-coarse:min-h-11 items-center gap-3 rounded-lg px-3 text-sm';
 
 export const SIDEBAR_ROW = `${ROW} text-sidebar-foreground hover:bg-muted`;
+export const SIDEBAR_ROW_TEXT = `${ROW} text-sidebar-foreground`;
 export const SIDEBAR_ROW_CURRENT = `${ROW} bg-sidebar-accent font-medium text-sidebar-accent-foreground`;
 export const SIDEBAR_ICON = 'shrink-0 text-lg text-muted-foreground';
 export const SIDEBAR_ICON_CURRENT = 'shrink-0 text-lg';
