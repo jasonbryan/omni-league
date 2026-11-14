@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   CAMP_SESSION_FIELDS,
   CAMP_SESSION_MESSAGES,
+  MAX_CAMP_SESSIONS,
   MAX_CAMP_SESSION_NAME_LENGTH,
   MAX_CAMP_SESSION_PLACES,
   campSessionTimes,
@@ -187,5 +188,14 @@ describe('campSessionTimes', () => {
     expect(campSessionTimes('09:00', '12:00')).toBe('9 AM to 12 PM');
     expect(campSessionTimes('08:30', '15:15')).toBe('8:30 AM to 3:15 PM');
     expect(campSessionTimes(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('the limit of sessions in a camp', () => {
+  test('is 200, and the message says what to do', () => {
+    expect(MAX_CAMP_SESSIONS).toBe(200);
+    expect(CAMP_SESSION_MESSAGES.sessionLimit).toBe(
+      'A camp takes up to 200 sessions. Delete one before adding another.',
+    );
   });
 });

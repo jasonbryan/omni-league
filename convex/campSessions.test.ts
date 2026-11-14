@@ -4,7 +4,7 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { CAMP_SESSION_MESSAGES } from './lib/campSessionInput';
+import { CAMP_SESSION_MESSAGES, MAX_CAMP_SESSIONS } from './lib/campSessionInput';
 import { insertCampSession, insertDraftCamp, insertTenant } from './lib/tenantWrites';
 import { isForbidden } from './lib/forbidden';
 import schema from './schema';
@@ -539,6 +539,72 @@ describe('the camp’s sessionCount counter', () => {
     await uncount(s);
     await s.adminA.mutation(api.campSessions.remove, { campSessionId });
     expect((await camp(s))?.sessionCount).toBe(1);
+  });
+});
+
+describe('the limit of sessions in a camp', () => {
+  const limit = MAX_CAMP_SESSIONS;
+  const sessionsInJunior = async (s: Setup) =>
+    (await sessionsOf(s)).filter((row) => row.campId === s.junior.campId);
+
+  test('refuses an add once the counter says the camp is full, under Name, and writes nothing', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('camps', s.junior.campId, { sessionCount: limit }));
+    expect(await refusal(s.adminA.mutation(api.campSessions.add, valid(s)))).toEqual({
+      field: 'name',
+      code: 'sessionLimit',
+      message: CAMP_SESSION_MESSAGES.sessionLimit,
+    });
+    expect(await sessionsOf(s)).toEqual([]);
+    expect((await s.t.run((ctx) => ctx.db.get('camps', s.junior.campId)))?.sessionCount).toBe(
+      limit,
+    );
+  });
+
+  test('takes the last session below the limit, then refuses the next, and takes one again after a delete', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('camps', s.junior.campId, { sessionCount: limit - 1 }));
+    const { campSessionId } = await s.adminA.mutation(api.campSessions.add, valid(s));
+    await expect(s.adminA.mutation(api.campSessions.add, valid(s))).rejects.toBeInstanceOf(
+      ConvexError,
+    );
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId });
+    await s.adminA.mutation(api.campSessions.add, valid(s));
+    expect(await sessionsInJunior(s)).toHaveLength(1);
+  });
+
+  test('counts the rows of a camp with no counter, and refuses at the limit', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const camp = (await ctx.db.get('camps', s.junior.campId))!;
+      for (let n = 0; n < limit; n++) {
+        await insertCampSession(ctx, camp, {
+          name: `Week ${n + 1}`,
+          startDate: '2027-07-05',
+          endDate: '2027-07-09',
+          places: 20,
+          registrationDeadline: '2027-07-01',
+        });
+      }
+      await ctx.db.patch('camps', camp._id, { sessionCount: undefined });
+    });
+    expect(await refusal(s.adminA.mutation(api.campSessions.add, valid(s)))).toMatchObject({
+      code: 'sessionLimit',
+    });
+    expect(await sessionsInJunior(s)).toHaveLength(limit);
+  });
+
+  test('does not limit another camp', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('camps', s.junior.campId, { sessionCount: limit }));
+    await s.adminA.mutation(api.campSessions.add, { ...valid(s), campId: s.fall.campId });
+    expect(await sessionsOf(s)).toHaveLength(1);
+  });
+
+  test('is checked after access, so a caller who may not organize the camp learns nothing of it', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('camps', s.junior.campId, { sessionCount: limit }));
+    await expect(s.adminB.mutation(api.campSessions.add, valid(s))).rejects.toThrow('Not allowed');
   });
 });
 

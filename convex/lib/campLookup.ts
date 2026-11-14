@@ -1,9 +1,10 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
+import { MAX_CAMP_SESSIONS } from './campSessionInput';
 import { leagueLocations } from './publicLeague';
 import { sportName } from './sports';
 
-export const CAMP_SESSIONS_LIMIT = 200;
+export const CAMP_SESSIONS_LIMIT = MAX_CAMP_SESSIONS;
 
 export async function recountCampSessions(
   ctx: Pick<QueryCtx, 'db'>,

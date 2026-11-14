@@ -8,6 +8,8 @@ import { formatCalendarDate, isCalendarDate } from './seasonInput';
 
 export const MAX_CAMP_SESSION_NAME_LENGTH = 100;
 
+export const MAX_CAMP_SESSIONS = 200;
+
 export const MIN_CAMP_SESSION_PLACES = 1;
 export const MAX_CAMP_SESSION_PLACES = 500;
 
@@ -43,7 +45,8 @@ export type CampSessionInputCode =
   | 'timeMissing'
   | 'endTimeNotAfterStart'
   | 'placesEmpty'
-  | 'placesInvalid';
+  | 'placesInvalid'
+  | 'sessionLimit';
 
 export interface CampSessionInputError {
   field: CampSessionField;
@@ -76,6 +79,7 @@ export const CAMP_SESSION_MESSAGES = {
     `The end time must be after the start time, ${formatDailyTime(startTime)}.`,
   placesEmpty: `Enter the number of places, ${PLACES_RANGE}.`,
   placesInvalid: `Enter a whole number of places ${PLACES_RANGE}.`,
+  sessionLimit: `A camp takes up to ${MAX_CAMP_SESSIONS} sessions. Delete one before adding another.`,
   hasRegistrations: (registeredCount: number) =>
     `${registeredCount} ${registeredCount === 1 ? 'registration is' : 'registrations are'} in this session, so it cannot be deleted.`,
 } as const;

@@ -3,11 +3,12 @@ import { mutation, query } from './_generated/server';
 import { requireCampOrganizer, requireCampSessionOrganizer } from './lib/access';
 import {
   CAMP_SESSION_MESSAGES,
+  MAX_CAMP_SESSIONS,
   checkCampSessionFields,
   firstCampSessionError,
   type CampSessionInputError,
 } from './lib/campSessionInput';
-import { CAMP_SESSIONS_LIMIT } from './lib/campLookup';
+import { CAMP_SESSIONS_LIMIT, recountCampSessions } from './lib/campLookup';
 import { deleteCampSession, insertCampSession } from './lib/tenantWrites';
 
 function refuse(error: CampSessionInputError): never {
@@ -31,6 +32,13 @@ export const add = mutation({
     const { camp } = await requireCampOrganizer(ctx, campId);
     const refusal = firstCampSessionError(checkCampSessionFields(values));
     if (refusal) refuse(refusal);
+    if ((camp.sessionCount ?? (await recountCampSessions(ctx, campId))) >= MAX_CAMP_SESSIONS) {
+      refuse({
+        field: 'name',
+        code: 'sessionLimit',
+        message: CAMP_SESSION_MESSAGES.sessionLimit,
+      });
+    }
     const campSessionId = await insertCampSession(ctx, camp, {
       ...values,
       name: values.name.trim(),

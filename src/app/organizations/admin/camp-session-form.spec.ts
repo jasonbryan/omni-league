@@ -303,6 +303,23 @@ describe('CampSessionForm', () => {
       expect(error('end-date')).toBeNull();
     });
 
+    it('shows the refusal of a camp with its sessions at the limit under Name, and keeps every value', async () => {
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'sessionLimit',
+          message: CAMP_SESSION_MESSAGES.sessionLimit,
+        }),
+      );
+      await o.flush();
+      expect(error('name')).toBe(CAMP_SESSION_MESSAGES.sessionLimit);
+      expect(document.activeElement).toBe(input('name'));
+      expect(input('places').value).toBe('20');
+      expect(input('registration-deadline').value).toBe('2027-07-01');
+    });
+
     it('any other failure shows the form alert, titled and with what to do, focuses it, and keeps every value', async () => {
       await fill();
       await submit();
