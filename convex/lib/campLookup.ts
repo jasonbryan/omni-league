@@ -17,6 +17,13 @@ export async function recountCampSessions(
   return sessions.length;
 }
 
+export async function campSessionTotal(
+  ctx: Pick<QueryCtx, 'db'>,
+  camp: Doc<'camps'>,
+): Promise<number> {
+  return camp.sessionCount ?? (await recountCampSessions(ctx, camp._id));
+}
+
 export async function findCampBySlugs(
   ctx: Pick<QueryCtx, 'db'>,
   organization: Doc<'organizations'>,
@@ -51,4 +58,20 @@ export async function campDetails(
     maximumAge: camp.maximumAge,
     locations: await leagueLocations(ctx, organization, program),
   };
+}
+
+export async function publicCampSessions(ctx: Pick<QueryCtx, 'db'>, camp: Doc<'camps'>) {
+  const sessions = await ctx.db
+    .query('campSessions')
+    .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
+    .take(CAMP_SESSIONS_LIMIT);
+  return sessions.map((session) => ({
+    name: session.name,
+    startDate: session.startDate,
+    endDate: session.endDate,
+    ...(session.dailyStartTime !== undefined && { dailyStartTime: session.dailyStartTime }),
+    ...(session.dailyEndTime !== undefined && { dailyEndTime: session.dailyEndTime }),
+    placesLeft: Math.max(0, session.places - session.registeredCount),
+    registrationDeadline: session.registrationDeadline,
+  }));
 }

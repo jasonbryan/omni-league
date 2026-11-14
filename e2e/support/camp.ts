@@ -49,3 +49,22 @@ export async function seedCampSession(
     registrationDeadline: session.registrationDeadline ?? session.startDate,
   });
 }
+
+export interface CampPageSeed extends CampSeed {
+  sessions: (CampSessionSeed & { name: string })[];
+  status?: 'draft' | 'published';
+}
+
+/** Skips the rules of `camps.publish`. Local runs only. */
+export async function seedPublishedCamp(tenant: Tenant, camp: CampPageSeed): Promise<string> {
+  const { sessions, status = 'published', ...fields } = camp;
+  const slug = await seedCamp(tenant, fields);
+  for (const session of sessions) await seedCampSession(tenant, slug, session);
+  if (status === 'published') {
+    await convexRun('testing:publishSeededCamp', {
+      organizationSlug: tenant.slug,
+      campSlug: slug,
+    });
+  }
+  return `${tenant.path}/camps/${slug}`;
+}

@@ -142,6 +142,7 @@ describe('convex/testing.ts exports', () => {
       'addToTeam',
       'assignForeignLeague',
       'ping',
+      'publishSeededCamp',
       'removeFromTeam',
       'reset',
       'resetAuthBatch',

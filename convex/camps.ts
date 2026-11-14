@@ -1,23 +1,32 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import {
+  requireCampOrganizer,
   requireOrgAdmin,
   requireProgramOrganizerOrForbidden,
   requireStaffOrForbidden,
 } from './lib/access';
 import {
   CAMP_MESSAGES,
+  CAMP_PUBLISH_MESSAGES,
   checkCampFields,
   firstCampError,
   type CampInputError,
 } from './lib/campInput';
-import { campDetails, findCampBySlugs, recountCampSessions } from './lib/campLookup';
+import {
+  campDetails,
+  campSessionTotal,
+  findCampBySlugs,
+  publicCampSessions,
+  recountCampSessions,
+} from './lib/campLookup';
+import { getCampPublicPageReturns, type PublicCampPage } from './lib/publicPage';
 import { programStatusValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
-import { insertDraftCamp, leagueSlugTaken } from './lib/tenantWrites';
+import { insertDraftCamp, leagueSlugTaken, publishCamp } from './lib/tenantWrites';
 
 export const ADMIN_CAMPS_LIMIT = 200;
 
@@ -160,6 +169,47 @@ export const getForManagement = query({
       organizationId: organization._id,
       role: membership.role,
       ...(await campDetails(ctx, organization, found)),
+    };
+  },
+});
+
+export const publish = mutation({
+  args: { campId: v.id('camps') },
+  returns: v.null(),
+  handler: async (ctx, { campId }) => {
+    const { camp, program } = await requireCampOrganizer(ctx, campId);
+    if (program.status === 'published') return null;
+    if ((await campSessionTotal(ctx, camp)) === 0) {
+      throw new ConvexError({
+        code: 'noSessions',
+        message: CAMP_PUBLISH_MESSAGES.noSessions,
+      });
+    }
+    await publishCamp(ctx, camp);
+    return null;
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const getPublicPage = query({
+  args: { orgSlug: v.string(), campSlug: v.string() },
+  returns: getCampPublicPageReturns,
+  handler: async (ctx, { orgSlug, campSlug }): Promise<PublicCampPage | null> => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    if (!organization) return null;
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    // A draft answers like an unknown camp, so nothing public says whether its slug exists.
+    if (found?.program.status !== 'published') return null;
+    const details = await campDetails(ctx, organization, found);
+    return {
+      organization: details.organization,
+      name: details.name,
+      slug: details.slug,
+      sportName: details.sportName,
+      minimumAge: details.minimumAge,
+      maximumAge: details.maximumAge,
+      locations: details.locations,
+      sessions: await publicCampSessions(ctx, found.camp),
     };
   },
 });

@@ -34,4 +34,9 @@ export const organizationRoutes: Routes = [
         (m) => m.PublicTournamentPage,
       ),
   },
+  {
+    path: ':orgSlug/camps/:campSlug',
+    loadComponent: () =>
+      import('./organizations/public-camp/public-camp-page').then((m) => m.PublicCampPage),
+  },
 ];
