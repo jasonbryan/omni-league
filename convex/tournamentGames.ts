@@ -15,6 +15,7 @@ import {
   gamesMatchPools,
   poolSizesAfterMove,
   poolValidator,
+  restoredPoolsIssue,
 } from './lib/pools';
 import {
   checkedResult,
@@ -473,20 +474,43 @@ export const undoSplitPools = mutation({
   handler: async (ctx, { tournamentId, earlier, written, gameIds }) => {
     const { tournament } = await requireTournamentOrganizer(ctx, tournamentId);
     await refuseUnlessPoolsOpenToChange(ctx, tournament);
+    const teamIds = new Set(written.map((change) => change.teamId));
+    const sameTeamIds =
+      teamIds.size === written.length &&
+      new Set(earlier.map((change) => change.teamId)).size === teamIds.size &&
+      earlier.every((change) => teamIds.has(change.teamId));
+    if (!sameTeamIds) throw new Error('Not allowed');
+    const current = new Map<Id<'teams'>, Doc<'teams'>>();
+    for (const teamId of teamIds) {
+      const team = await ctx.db.get('teams', teamId);
+      if (team?.tournamentId !== tournament._id) throw new Error('Not allowed');
+      current.set(teamId, team);
+    }
     const games = await poolGames(ctx, tournament._id);
     const sameGames =
       games.length === gameIds.length && games.every((game) => gameIds.includes(game._id));
-    let sameTeams = earlier.length === written.length;
-    for (const change of written) {
-      const team = await ctx.db.get('teams', change.teamId);
-      if (team?.tournamentId !== tournament._id) throw new Error('Not allowed');
-      if (!earlier.some((was) => was.teamId === change.teamId)) throw new Error('Not allowed');
-      sameTeams &&= (team.pool ?? null) === change.pool;
-    }
+    const sameTeams = written.every(
+      (change) => (current.get(change.teamId)!.pool ?? null) === change.pool,
+    );
     if (!sameGames || !sameTeams) {
       refusePool({ code: 'poolsChanged', message: POOL_MESSAGES.poolsChanged });
     }
-    await restorePools(ctx, earlier);
+    const { seeds } = await poolSetup(ctx, tournament);
+    const confirmed = new Set(seeds.map((team) => team._id));
+    // A team below the minimum roster size stays out of every pool, as a split leaves it.
+    const restored = earlier.filter(
+      (change) => change.pool === null || confirmed.has(change.teamId),
+    );
+    const poolOf = new Map(restored.map((change) => [change.teamId, change.pool]));
+    const pools = seeds.flatMap((team) => {
+      const pool = poolOf.has(team._id) ? poolOf.get(team._id) : team.pool;
+      return pool ? [pool] : [];
+    });
+    if (pools.length > 0) {
+      const issue = restoredPoolsIssue(pools);
+      if (issue) refusePool(issue);
+    }
+    await restorePools(ctx, restored);
     return null;
   },
 });

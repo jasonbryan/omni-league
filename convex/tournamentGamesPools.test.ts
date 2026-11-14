@@ -564,15 +564,15 @@ describe('tournamentGames.undoSplitPools', () => {
     expect(undo.written).toEqual([]);
   });
 
-  test('restores the pool of a team that was left out of the new split', async () => {
+  test('leaves a team below the minimum roster size out of every pool, as the split did', async () => {
     const { s } = await world(6);
     const short = await addTeam(s, 'Short Handed');
     await split(s, 2);
     await s.t.run((ctx) => ctx.db.patch('teams', short, { rosterCount: 1 }));
     const { undo } = await split(s, 2);
-    expect((await s.t.run((ctx) => ctx.db.get('teams', short)))!.pool).toBeUndefined();
     await undoSplit(s, undo);
-    expect((await s.t.run((ctx) => ctx.db.get('teams', short)))!.pool).toBeDefined();
+    expect((await s.t.run((ctx) => ctx.db.get('teams', short)))!.pool).toBeUndefined();
+    expect(await namesIn(s, 'A')).toHaveLength(3);
   });
 
   test('is refused once a team moved since, and the pools stay', async () => {
@@ -610,16 +610,127 @@ describe('tournamentGames.undoSplitPools', () => {
     });
   });
 
-  test('is refused for a team of another tournament', async () => {
-    const { s } = await world(6);
-    const { undo } = await split(s, 2);
-    const elsewhere = await addTeam(s, 'Elsewhere', { tournamentId: s.second });
-    const forged = {
-      ...undo,
-      earlier: [{ teamId: elsewhere, pool: null }],
-      written: [{ teamId: elsewhere, pool: 'A' as const }],
-    };
-    await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+  describe('a forged payload', () => {
+    async function splitWorld(teamCount = 6) {
+      const { s, teamIds } = await world(teamCount);
+      const { undo } = await split(s, 2);
+      const elsewhere = await addTeam(s, 'Elsewhere', { tournamentId: s.second });
+      return { s, teamIds, undo, elsewhere };
+    }
+
+    const poolOfTeam = (s: TournamentWorld, teamId: Id<'teams'>) =>
+      s.t.run(async (ctx) => (await ctx.db.get('teams', teamId))!.pool ?? null);
+
+    const currentPools = async (s: TournamentWorld, teamIds: readonly Id<'teams'>[]) =>
+      Promise.all(teamIds.map(async (teamId) => ({ teamId, pool: await poolOfTeam(s, teamId) })));
+
+    test('is refused for a team of another tournament in both lists', async () => {
+      const { s, undo, elsewhere } = await splitWorld();
+      const forged = {
+        ...undo,
+        earlier: [{ teamId: elsewhere, pool: null }],
+        written: [{ teamId: elsewhere, pool: null }],
+      };
+      await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+    });
+
+    test('is refused when a team of another tournament hides behind a repeated id of the caller’s own', async () => {
+      const { s, teamIds, elsewhere } = await splitWorld();
+      const own = { teamId: teamIds[0], pool: 'A' as const };
+      const forged = {
+        earlier: [own, { teamId: elsewhere, pool: 'H' as const }],
+        written: [own, own],
+        gameIds: [],
+      };
+      await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+      expect(await poolOfTeam(s, elsewhere)).toBeNull();
+    });
+
+    test('is refused when the earlier list repeats an id', async () => {
+      const { s, teamIds } = await splitWorld();
+      const [first, second] = await currentPools(s, teamIds);
+      const forged = {
+        earlier: [first, first],
+        written: [first, second],
+        gameIds: [],
+      };
+      await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+    });
+
+    test('is refused when the lists hold different teams of this tournament', async () => {
+      const { s, teamIds } = await splitWorld();
+      const [first, second, third] = await currentPools(s, teamIds);
+      const forged = {
+        earlier: [
+          { ...first, pool: null },
+          { ...third, pool: null },
+        ],
+        written: [first, second],
+        gameIds: [],
+      };
+      await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+      expect(await poolOfTeam(s, teamIds[2])).not.toBeNull();
+    });
+
+    test('is refused when the lists differ in length', async () => {
+      const { s, teamIds } = await splitWorld();
+      const [first, second] = await currentPools(s, teamIds);
+      const forged = {
+        earlier: [{ ...first, pool: null }],
+        written: [first, second],
+        gameIds: [],
+      };
+      await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+    });
+
+    test('is refused when the pools it would restore leave a pool of 1', async () => {
+      const { s, teamIds } = await splitWorld();
+      const written = await currentPools(s, teamIds);
+      const earlier = written.map((change, index) => ({
+        ...change,
+        pool: index === 0 ? ('B' as const) : ('A' as const),
+      }));
+      expect(await undoSplit(s, { earlier, written, gameIds: [] }).catch(refusalOf)).toEqual({
+        code: 'poolSize',
+        message: 'Pool B would have 1 team. Each pool needs 3 to 8 teams.',
+      });
+      expect(await currentPools(s, teamIds)).toEqual(written);
+    });
+
+    test('is refused when the pools it would restore hold 9 teams', async () => {
+      const { s, teamIds } = await splitWorld(12);
+      const written = await currentPools(s, teamIds);
+      const earlier = written.map((change, index) => ({
+        ...change,
+        pool: index < 9 ? ('A' as const) : ('B' as const),
+      }));
+      expect(await undoSplit(s, { earlier, written, gameIds: [] }).catch(refusalOf)).toMatchObject({
+        code: 'poolSize',
+        message: 'Pool A would have 9 teams. Each pool needs 3 to 8 teams.',
+      });
+      expect(await currentPools(s, teamIds)).toEqual(written);
+    });
+
+    test('is refused when the pools it would restore skip a letter', async () => {
+      const { s, teamIds } = await splitWorld();
+      const written = await currentPools(s, teamIds);
+      const earlier = written.map((change) => ({
+        ...change,
+        pool: change.pool === 'B' ? ('H' as const) : change.pool,
+      }));
+      expect(await undoSplit(s, { earlier, written, gameIds: [] }).catch(refusalOf)).toMatchObject({
+        code: 'poolsChanged',
+      });
+      expect(await currentPools(s, teamIds)).toEqual(written);
+    });
+
+    test('still restores a state with no pools at all', async () => {
+      const { s, teamIds } = await splitWorld();
+      const written = await currentPools(s, teamIds);
+      const earlier = written.map((change) => ({ ...change, pool: null }));
+      await undoSplit(s, { earlier, written, gameIds: [] });
+      expect(await currentPools(s, teamIds)).toEqual(earlier);
+    });
   });
 
   test.each(['stranger', 'foreignAdmin', 'otherOrganizer', 'leagueOrganizer'] as const)(

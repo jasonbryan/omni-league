@@ -10,6 +10,7 @@ import {
   poolCountsFor,
   poolNameAt,
   poolSizesAfterMove,
+  restoredPoolsIssue,
   snakeSplit,
 } from './pools';
 
@@ -199,5 +200,25 @@ describe('gamesMatchPools', () => {
 
   test('is false when a game is missing', () => {
     expect(gamesMatchPools(pools, ALL.slice(1))).toBe(false);
+  });
+});
+
+describe('restoredPoolsIssue', () => {
+  test('accepts pools that are the first letters, each of 3 to 8 teams', () => {
+    expect(restoredPoolsIssue(['A', 'A', 'A', 'B', 'B', 'B'])).toBeNull();
+  });
+
+  test('refuses a pool outside the limits, naming it', () => {
+    expect(restoredPoolsIssue(['A', 'A', 'A', 'B'])?.message).toBe(
+      'Pool B would have 1 team. Each pool needs 3 to 8 teams.',
+    );
+  });
+
+  test('refuses pools that skip a letter', () => {
+    expect(restoredPoolsIssue(['A', 'A', 'A', 'C', 'C', 'C'])?.code).toBe('poolsChanged');
+  });
+
+  test('refuses a single pool', () => {
+    expect(restoredPoolsIssue(['A', 'A', 'A'])?.code).toBe('poolCount');
   });
 });

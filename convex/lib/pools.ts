@@ -175,3 +175,13 @@ export function gamesMatchPools(
   }
   return true;
 }
+
+/** The pools a restore would leave the confirmed teams in: the first letters in a row, each within the limits. */
+export function restoredPoolsIssue(pools: readonly Pool[]): PoolIssue | null {
+  const sizes = POOL_NAMES.map((name) => pools.filter((pool) => pool === name).length);
+  const used = sizes.filter((size) => size > 0).length;
+  if (sizes.slice(used).some((size) => size > 0)) {
+    return { code: 'poolsChanged', message: POOL_MESSAGES.poolsChanged };
+  }
+  return checkPoolSizes(sizes.slice(0, used));
+}
