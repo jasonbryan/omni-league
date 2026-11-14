@@ -8,6 +8,7 @@ import { leagueDivisionLabel } from './lib/leagueDivision';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { registrationIsOpen, seasonPhase } from './lib/registration';
 import { searchWords } from './lib/searchQuery';
+import { checkCampSessionFields } from './lib/campSessionInput';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { sportName } from './lib/sports';
@@ -35,6 +36,7 @@ const ROWS = {
   seasons: 8,
   tournaments: 4,
   camps: 2,
+  campSessions: 3,
 };
 const NONE = {
   organizations: 0,
@@ -55,6 +57,7 @@ const NO_ROWS = {
   seasons: 0,
   tournaments: 0,
   camps: 0,
+  campSessions: 0,
 };
 const FULL = { ...ROWS, backfilled: NONE };
 
@@ -67,6 +70,7 @@ async function counts(t: T) {
     seasons: (await ctx.db.query('seasons').collect()).length,
     tournaments: (await ctx.db.query('tournaments').collect()).length,
     camps: (await ctx.db.query('camps').collect()).length,
+    campSessions: (await ctx.db.query('campSessions').collect()).length,
   }));
 }
 
@@ -678,6 +682,7 @@ describe('seed:demo', () => {
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
+      campSessions: ROWS.campSessions,
       backfilled: NONE,
     });
 
@@ -812,6 +817,7 @@ describe('seed:demo', () => {
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
+      campSessions: ROWS.campSessions,
     });
   });
 
@@ -839,6 +845,7 @@ describe('seed:demo', () => {
       seasons: ROWS.seasons,
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
+      campSessions: ROWS.campSessions,
       backfilled: {
         organizations: 2,
         locations: 3,
@@ -1373,6 +1380,77 @@ describe('seed:demo camps', () => {
     expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(1);
     const { camps } = await campRows(t);
     expect(camps).toHaveLength(1);
+  });
+});
+
+describe('seed:demo camp sessions', () => {
+  const sessionsOfJunior = (t: T) =>
+    t.run(async (ctx) => {
+      const junior = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'junior-beach-volleyball-camp',
+      )!;
+      const camp = (await ctx.db
+        .query('camps')
+        .withIndex('by_programId', (q) => q.eq('programId', junior._id))
+        .unique())!;
+      const rows = await ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
+        .collect();
+      return { camp, rows };
+    });
+
+  test('gives the Junior Beach Volleyball Camp 3 sessions, Week 1 to Week 3, 9 AM to 12 PM, 20 places each, dated from the run', async () => {
+    const t = setup();
+    expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(3);
+    const { camp, rows } = await sessionsOfJunior(t);
+    expect(rows.map((row) => row.name)).toEqual(['Week 1', 'Week 2', 'Week 3']);
+    expect(rows.map((row) => row.startDate)).toEqual(['2026-11-10', '2026-11-17', '2026-11-24']);
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        campId: camp._id,
+        organizationId: camp.organizationId,
+        dailyStartTime: '09:00',
+        dailyEndTime: '12:00',
+        places: 20,
+        registeredCount: 0,
+      });
+      expect(
+        checkCampSessionFields({
+          name: row.name,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          dailyStartTime: row.dailyStartTime,
+          dailyEndTime: row.dailyEndTime,
+          places: row.places,
+          registrationDeadline: row.registrationDeadline,
+        }),
+      ).toEqual({});
+      expect(row.registrationDeadline < row.startDate).toBe(true);
+    }
+  });
+
+  test('puts no session on the Fall Break Camp, and a second run adds none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(0);
+    expect(await t.run((ctx) => ctx.db.query('campSessions').collect())).toHaveLength(3);
+  });
+
+  test('adds the sessions to a camp an earlier run made without them, and only the ones it lacks', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { rows } = await sessionsOfJunior(t);
+    await t.run(async (ctx) => {
+      await ctx.db.delete('campSessions', rows[0]._id);
+      await ctx.db.delete('campSessions', rows[2]._id);
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(2);
+    expect((await sessionsOfJunior(t)).rows.map((row) => row.name)).toEqual([
+      'Week 1',
+      'Week 2',
+      'Week 3',
+    ]);
   });
 });
 

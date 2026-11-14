@@ -1,13 +1,20 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireOrgAdmin } from './lib/access';
+import {
+  requireOrgAdmin,
+  requireProgramOrganizerOrForbidden,
+  requireStaffOrForbidden,
+} from './lib/access';
 import {
   CAMP_MESSAGES,
   checkCampFields,
   firstCampError,
   type CampInputError,
 } from './lib/campInput';
+import { CAMP_SESSIONS_LIMIT, campDetails, findCampBySlugs } from './lib/campLookup';
 import { programStatusValidator } from './lib/programs';
+import { roleValidator } from './lib/roles';
+import { findOrganizationBySlug } from './lib/seasonLookup';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
 import { insertDraftCamp, leagueSlugTaken } from './lib/tenantWrites';
@@ -90,6 +97,7 @@ export const listForOrganization = query({
       minimumAge: v.number(),
       maximumAge: v.number(),
       status: programStatusValidator,
+      sessionCount: v.number(),
     }),
   ),
   handler: async (ctx, { organizationId }) => {
@@ -111,8 +119,52 @@ export const listForOrganization = query({
         minimumAge: camp.minimumAge,
         maximumAge: camp.maximumAge,
         status: program.status,
+        sessionCount: (
+          await ctx.db
+            .query('campSessions')
+            .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
+            .take(CAMP_SESSIONS_LIMIT)
+        ).length,
       });
     }
     return rows;
+  },
+});
+
+export const getForManagement = query({
+  args: { orgSlug: v.string(), campSlug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      campId: v.id('camps'),
+      organizationId: v.id('organizations'),
+      organization: v.object({ name: v.string(), slug: v.string() }),
+      role: roleValidator,
+      name: v.string(),
+      slug: v.string(),
+      status: programStatusValidator,
+      sportName: v.string(),
+      minimumAge: v.number(),
+      maximumAge: v.number(),
+      locations: v.array(v.object({ name: v.string(), address: v.string() })),
+    }),
+  ),
+  handler: async (ctx, { orgSlug, campSlug }) => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    // Null for any caller: the public page already shows whether the organization exists.
+    if (!organization) return null;
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (!found) {
+      // Only staff learn that a web address is unused.
+      await requireStaffOrForbidden(ctx, organization._id);
+      return null;
+    }
+    const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
+    return {
+      campId: found.camp._id,
+      organizationId: organization._id,
+      role: membership.role,
+      ...(await campDetails(ctx, organization, found)),
+    };
   },
 });

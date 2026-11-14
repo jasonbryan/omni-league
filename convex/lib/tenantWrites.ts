@@ -509,6 +509,33 @@ export async function insertDraftCamp(
   });
 }
 
+export interface NewCampSession {
+  name: string;
+  startDate: string;
+  endDate: string;
+  dailyStartTime?: string | undefined;
+  dailyEndTime?: string | undefined;
+  places: number;
+  registrationDeadline: string;
+}
+
+// The caller has checked access and the input.
+export function insertCampSession(
+  ctx: MutationCtx,
+  camp: Doc<'camps'>,
+  session: NewCampSession,
+): Promise<Id<'campSessions'>> {
+  const { dailyStartTime, dailyEndTime, ...fixed } = session;
+  return ctx.db.insert('campSessions', {
+    ...fixed,
+    ...(dailyStartTime !== undefined && { dailyStartTime }),
+    ...(dailyEndTime !== undefined && { dailyEndTime }),
+    campId: camp._id,
+    organizationId: camp.organizationId,
+    registeredCount: 0,
+  });
+}
+
 export async function publishTournament(
   ctx: MutationCtx,
   tournament: Doc<'tournaments'>,
