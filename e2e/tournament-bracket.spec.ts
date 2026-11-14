@@ -1248,6 +1248,7 @@ test.describe('Tournaments: a confirmed report, then Clear and Undo', () => {
 
       await page.goto(managePath);
       await confirmButtons(gameOf(page, FIRST_SEMIFINAL)).click();
+      await expect(savedStatus(gameOf(page, FIRST_SEMIFINAL), 'Report confirmed')).toBeVisible();
       await page.reload();
       const game = gameOf(page, FIRST_SEMIFINAL);
       await expect(game.locator('[data-slot="game-result"]')).toHaveText(
