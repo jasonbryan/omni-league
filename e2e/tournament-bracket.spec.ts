@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -558,5 +558,113 @@ test.describe('Tournaments: bracket results', () => {
     await expect(saveButton(game)).not.toHaveAttribute('aria-disabled', /.*/, { timeout: 20_000 });
     await saveButton(game).click();
     await expect(savedStatus(game, 'Result saved')).toBeVisible();
+  });
+});
+
+test.describe('Tournaments: bracket results shared between organizers and the public', () => {
+  test('a set of 21–20 is saved, because a set needs only a winner', async ({ page }) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterSet(game, '21', '20');
+    await expect(savedStatus(game, 'Result saved')).toContainText('Delta advances');
+    await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–20 Echo. Delta won.',
+    );
+  });
+
+  test('the public bracket marks each winner and names the tournament winner as results are entered', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(NAMES),
+      registration: 'closed',
+    });
+    const publicContext = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+    try {
+      const visitor = await publicContext.newPage();
+      const publicPath = `${tenant.path}/tournaments/${SLUG}`;
+      const publicGames = visitor.getByTestId('bracket-game');
+      await page.goto(managePath);
+      await createBracket(page);
+      await visitor.goto(publicPath);
+      await expect(publicGames).toHaveCount(7);
+      await expect(visitor.getByTestId('bracket-winner')).toHaveCount(0);
+
+      await enterSet(gameOf(page, 'Game 2: Delta v Echo'), '21', '15');
+      await expect(savedStatus(gameOf(page, 'Game 2: Delta v Echo'), 'Result saved')).toBeVisible();
+      await visitor.reload();
+      await expect(publicGames.nth(1)).toContainText('Delta');
+      await expect(publicGames.nth(1).getByText('Won', { exact: true })).toHaveCount(1);
+      await expect(publicGames.nth(1).getByTestId('bracket-team').first()).toContainText('Won');
+      await expect(publicGames.nth(4)).toContainText('Alpha');
+      await expect(publicGames.nth(4)).toContainText('Delta');
+
+      await enterSet(gameOf(page, 'Game 1: Alpha v Delta'), '21', '10');
+      await enterSet(gameOf(page, 'Game 2: Bravo v Charlie'), '21', '19');
+      await enterSet(gameOf(page, 'Game 1: Alpha v Bravo'), '21', '20');
+      await expect(page.locator('[data-slot="winner"]')).toHaveText('Winner: Alpha');
+      await visitor.reload();
+      await expect(visitor.getByTestId('bracket-winner')).toHaveText('Winner: Alpha');
+      await screenshot(visitor, testInfo, 'public-bracket-winner');
+      await expectAccessible(visitor);
+    } finally {
+      await publicContext.close();
+    }
+  });
+});
+
+test.describe('Tournaments: an Undo the server refuses after another organizer changed the result', () => {
+  test.use({ expectedConvexErrors: ['tournamentGames:undoResult'] });
+
+  test('Undo is refused after another organizer corrected the result, and the correction stays', async ({
+    page,
+    browser,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(NAMES),
+      registration: 'closed',
+    });
+    const second = newUser('Second');
+    const other = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+    try {
+      const otherPage = await other.newPage();
+      await signUp(otherPage, second);
+      await convexRun('testing:addMembership', {
+        organizationSlug: tenant.slug,
+        email: second.email,
+        role: 'orgAdmin',
+      });
+      await page.goto(managePath);
+      await createBracket(page);
+      const game = gameOf(page, 'Game 2: Delta v Echo');
+      await enterSet(game, '21', '15');
+      const saved = savedStatus(game, 'Result saved');
+      await expect(saved).toBeVisible();
+
+      await otherPage.goto(managePath);
+      const theirs = gameOf(otherPage, 'Game 2: Delta v Echo');
+      await correctButton(theirs).click();
+      await fillSet(theirs, '12', '21');
+      await saveButton(theirs).click();
+      await expect(savedStatus(theirs, 'Result corrected')).toBeVisible();
+
+      await saved.getByRole('button', { name: 'Undo' }).click();
+      await expect(game.locator('[data-slot="undo-note"]')).toContainText(
+        'Someone else changed this result, so it was not undone.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Delta 12–21 Echo. Echo won.',
+      );
+      await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Echo');
+      await otherPage.reload();
+      await expect(
+        gameOf(otherPage, 'Game 2: Delta v Echo').locator('[data-slot="game-result"]'),
+      ).toHaveText('Delta 12–21 Echo. Echo won.');
+    } finally {
+      await other.close();
+    }
   });
 });
