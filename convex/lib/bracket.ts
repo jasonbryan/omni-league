@@ -35,7 +35,7 @@ export const BRACKET_MESSAGES = {
   resultExists: 'This game has a result already. Correct it instead.',
   noResult: 'This game has no result.',
   nextGamePlayed: 'The next game has a result, so this result cannot change.',
-  resultChanged: 'Someone else changed this result, so it was not undone.',
+  resultChanged: 'Someone else changed this result first. The game shows their result now.',
 } as const;
 
 export const BRACKET_REFUSAL_CODES = [

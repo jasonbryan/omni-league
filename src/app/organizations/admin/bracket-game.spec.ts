@@ -52,7 +52,7 @@ interface GameFixture {
   slot: number;
   teams: ({ teamId: string; name: string } | null)[];
   winnerTeamId: string | null;
-  result: { score: unknown; forfeitTeamId: string | null } | null;
+  result: { score: unknown; forfeitTeamId: string | null; resultEnteredAt: number } | null;
   locked: boolean;
 }
 
@@ -72,6 +72,12 @@ const game = (
 });
 
 const ONE_SET = { kind: 'sets', sets: [{ a: 21, b: 15 }] };
+
+const stored = (score: object = ONE_SET, forfeitTeamId: string | null = null, at = 1_000) => ({
+  score,
+  forfeitTeamId,
+  resultEnteredAt: at,
+});
 
 /** Semifinals: Alpha has a bye and Bravo plays Charlie; then the Final. */
 function setupOf(
@@ -132,6 +138,10 @@ describe('BracketGame', () => {
   const error = (gameId: string, name: string) =>
     text(row(gameId).querySelector(`#${gameId}-${name}-error`)) ?? null;
   const alertOf = (gameId: string) => row(gameId).querySelector<HTMLElement>('[data-slot="alert"]');
+  const statusOf = (gameId: string) =>
+    row(gameId).querySelector<HTMLElement>('[data-slot="alert"][role="status"]');
+  const titleOf = (gameId: string) =>
+    text(alertOf(gameId)?.querySelector('[data-slot="alert-title"]'));
   const form = (gameId: string) => row(gameId).querySelector<HTMLFormElement>('form');
   const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
 
@@ -331,12 +341,13 @@ describe('BracketGame', () => {
         winnerName: 'Bravo',
         advancesTo: 'Final',
         previous: null,
+        resultEnteredAt: 1_000,
       });
       o.subscription(SETUP)!.emit(
         setupOf({
           semi: game('g_2', 2, ['Bravo', 'Charlie'], {
             winnerTeamId: 'tm_bravo',
-            result: { score: ONE_SET, forfeitTeamId: null },
+            result: stored(),
           }),
           final: game('g_3', 1, ['Alpha', 'Bravo']),
         }),
@@ -420,7 +431,7 @@ describe('BracketGame', () => {
         setupOf({
           semi: game('g_2', 2, ['Bravo', 'Charlie'], {
             winnerTeamId: 'tm_bravo',
-            result: { score: ONE_SET, forfeitTeamId: null },
+            result: stored(),
           }),
           final: game('g_3', 1, ['Alpha', 'Bravo']),
         }),
@@ -505,7 +516,7 @@ describe('BracketGame', () => {
     const PLAYED = setupOf({
       semi: game('g_2', 2, ['Bravo', 'Charlie'], {
         winnerTeamId: 'tm_bravo',
-        result: { score: ONE_SET, forfeitTeamId: null },
+        result: stored(),
       }),
       final: game('g_3', 1, ['Alpha', 'Bravo']),
     });
@@ -524,10 +535,7 @@ describe('BracketGame', () => {
         setupOf({
           semi: game('g_2', 2, ['Bravo', 'Charlie'], {
             winnerTeamId: 'tm_bravo',
-            result: {
-              score: { kind: 'sets', sets: [{ a: 21, b: 0 }] },
-              forfeitTeamId: 'tm_charlie',
-            },
+            result: stored({ kind: 'sets', sets: [{ a: 21, b: 0 }] }, 'tm_charlie'),
           }),
         }),
       );
@@ -541,7 +549,7 @@ describe('BracketGame', () => {
         setupOf({
           semi: game('g_2', 2, ['Bravo', 'Charlie'], {
             winnerTeamId: 'tm_bravo',
-            result: { score: ONE_SET, forfeitTeamId: null },
+            result: stored(),
             locked: true,
           }),
         }),
@@ -588,7 +596,15 @@ describe('BracketGame', () => {
       setupOf({
         semi: game('g_2', 2, ['Bravo', 'Charlie'], {
           winnerTeamId: 'tm_bravo',
-          result: { score: ONE_SET, forfeitTeamId: null },
+          result: stored(),
+        }),
+      });
+
+    const CORRECTED = () =>
+      setupOf({
+        semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+          winnerTeamId: 'tm_charlie',
+          result: stored({ kind: 'sets', sets: [{ a: 12, b: 21 }] }, null, 2_000),
         }),
       });
 
@@ -629,6 +645,14 @@ describe('BracketGame', () => {
         previous: { score: ONE_SET },
         resultEnteredAt: 2_000,
       });
+      o.subscription(SETUP)!.emit(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_charlie',
+            result: stored({ kind: 'sets', sets: [{ a: 12, b: 21 }] }, null, 2_000),
+          }),
+        }),
+      );
       await o.flush();
       await press(button('g_2', 'Undo'));
       expect(calls().at(-1)).toEqual([
@@ -657,22 +681,55 @@ describe('BracketGame', () => {
       );
     });
 
-    it('shows the refusal of an Undo for a result someone else changed since, and sends nothing more', async () => {
+    it('shows the refusal of an Undo for a result someone else changed since, drops the stale status, and offers no second Undo', async () => {
       await saveFirst();
       await press(button('g_2', 'Undo'));
       o.convex.calls[1].reject(
         new ConvexError({
           code: 'resultChanged',
-          message: 'Someone else changed this result, so it was not undone.',
+          message: 'Someone else changed this result first. The game shows their result now.',
         }),
       );
+      o.subscription(SETUP)!.emit(CORRECTED());
       await o.flush();
       const note = row('g_2').querySelector<HTMLElement>('[data-slot="undo-note"]');
       expect(text(note)).toBe(
-        'The result could not be undone. Someone else changed this result, so it was not undone.',
+        'The result could not be undone. Someone else changed this result first. The game shows their result now.',
       );
       expect(document.activeElement).toBe(note!.querySelector('[data-slot="alert"]'));
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 12–21 Charlie. Charlie won.',
+      );
+      expect(statusOf('g_2')).toBeNull();
+      expect(button('g_2', 'Undo')).toBeUndefined();
       expect(calls()).toHaveLength(2);
+      await press(button('g_2', 'Clear result'));
+      expect(calls().at(-1)).toEqual([UNDO, { gameId: 'g_2', expected: 2_000 }]);
+    });
+
+    it('keeps the status and its Undo when the Undo fails on the connection, so it can be tried again', async () => {
+      await saveFirst();
+      await press(button('g_2', 'Undo'));
+      o.convex.calls[1].reject(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The result could not be undone. Check your connection and try again.',
+      );
+      expect(statusOf('g_2')).not.toBeNull();
+      await press(button('g_2', 'Undo'));
+      expect(calls()).toHaveLength(3);
+    });
+
+    it('is gone with no press once another organizer corrects the result, and the game shows the correction', async () => {
+      await saveFirst();
+      expect(button('g_2', 'Undo')).toBeDefined();
+      o.subscription(SETUP)!.emit(CORRECTED());
+      await o.flush();
+      expect(button('g_2', 'Undo')).toBeUndefined();
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 12–21 Charlie. Charlie won.',
+      );
+      expect(calls()).toHaveLength(1);
     });
 
     it('is gone once the next game has a result', async () => {
@@ -681,7 +738,7 @@ describe('BracketGame', () => {
         setupOf({
           semi: game('g_2', 2, ['Bravo', 'Charlie'], {
             winnerTeamId: 'tm_bravo',
-            result: { score: ONE_SET, forfeitTeamId: null },
+            result: stored(),
             locked: true,
           }),
         }),
@@ -699,6 +756,322 @@ describe('BracketGame', () => {
       expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toContain(
         'Try again when you’re connected.',
       );
+    });
+  });
+
+  describe('Clear result', () => {
+    const PLAYED = (more: object = {}, final?: GameFixture) =>
+      setupOf({
+        semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+          winnerTeamId: 'tm_bravo',
+          result: stored(),
+          ...more,
+        }),
+        final,
+      });
+    const CLEARED = () => setupOf();
+    const RESTORED = (at = 3_000) => PLAYED({ result: stored(ONE_SET, null, at) });
+    const FORFEITED = setupOf({
+      semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+        winnerTeamId: 'tm_bravo',
+        result: stored({ kind: 'sets', sets: [{ a: 21, b: 0 }] }, 'tm_charlie'),
+      }),
+    });
+    const refusal = (code: string, message: string) => new ConvexError({ code, message });
+    const finalOf = (names: (string | null)[]) => game('g_3', 1, names);
+
+    async function clear(setup: unknown = PLAYED()) {
+      await open(setup);
+      await press(button('g_2', 'Clear result'));
+    }
+
+    it('after a load shows Clear result next to Correct result on a played game, named for the game', async () => {
+      await open(PLAYED());
+      expect(text(button('g_2', 'Clear result'))).toBe('Clear result Bravo v Charlie');
+      expect(button('g_2', 'Correct result')).toBeDefined();
+      expect(button('g_2', 'Clear result')!.querySelector('ng-icon')).not.toBeNull();
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 21–15 Charlie. Bravo won.',
+      );
+      expect(statusOf('g_2')).toBeNull();
+    });
+
+    it('is not offered on a locked game, which gives the reason', async () => {
+      await open(PLAYED({ locked: true }));
+      expect(button('g_2', 'Clear result')).toBeUndefined();
+      expect(button('g_2', 'Correct result')).toBeUndefined();
+      expect(text(row('g_2').querySelector('[data-slot="locked"]'))).toBe(
+        'The next game has a result, so this result cannot change.',
+      );
+    });
+
+    it('is not offered on a bye, a game waiting on a result, or a game with no result', async () => {
+      await open();
+      for (const id of ['g_1', 'g_2', 'g_3']) {
+        expect(button(id, 'Clear result')).toBeUndefined();
+        expect(button(id, 'Correct result')).toBeUndefined();
+      }
+    });
+
+    it('sends the time the result was entered and no restore, and shows Clearing… until the answer', async () => {
+      await clear();
+      expect(calls()).toEqual([[UNDO, { gameId: 'g_2', expected: 1_000 }]]);
+      expect(Object.keys(o.convex.calls[0].args as object)).not.toContain('restore');
+      const pending = button('g_2', 'Clearing');
+      expectPendingSpinner(pending);
+      expect(text(pending)).toBe('Clearing…');
+      expect(pending!.getAttribute('aria-disabled')).toBe('true');
+      await press(pending);
+      expect(calls()).toHaveLength(1);
+    });
+
+    it('says Result cleared with an Undo and takes focus, and the game waits for a result again', async () => {
+      await clear(PLAYED({}, finalOf(['Alpha', 'Bravo'])));
+      o.convex.calls[0].resolve(null);
+      o.subscription(SETUP)!.emit(setupOf({ final: finalOf(['Alpha', null]) }));
+      await o.flush();
+      expect(titleOf('g_2')).toBe('Result cleared');
+      expect(text(alertOf('g_2')!.querySelector('[data-slot="alert-description"]'))).toContain(
+        'The game is waiting for a result again.',
+      );
+      expect(alertOf('g_2')!.getAttribute('role')).toBe('status');
+      expect(document.activeElement).toBe(alertOf('g_2'));
+      expect(button('g_2', 'Undo')).toBeDefined();
+      expect(button('g_2', 'Enter result')).toBeDefined();
+      expect(button('g_2', 'Clear result')).toBeUndefined();
+      expect(text(row('g_3').querySelector('[data-slot="game-label"]'))).toBe(
+        'Game 1: Alpha v To be decided',
+      );
+    });
+
+    it('Undo after a clear enters the cleared score again, says where the winner goes, and takes focus', async () => {
+      await clear(PLAYED({}, finalOf(['Alpha', 'Bravo'])));
+      o.convex.calls[0].resolve(null);
+      o.subscription(SETUP)!.emit(CLEARED());
+      await o.flush();
+      await press(button('g_2', 'Undo'));
+      expect(calls().at(-1)).toEqual([ENTER, { gameId: 'g_2', score: ONE_SET }]);
+      const pending = button('g_2', 'Undoing');
+      expectPendingSpinner(pending);
+      expect(pending!.getAttribute('aria-disabled')).toBe('true');
+      o.convex.calls[1].resolve({
+        winnerTeamId: 'tm_bravo',
+        winnerName: 'Bravo',
+        advancesTo: 'Final',
+        previous: null,
+        resultEnteredAt: 3_000,
+      });
+      o.subscription(SETUP)!.emit(
+        PLAYED({ result: stored(ONE_SET, null, 3_000) }, finalOf(['Alpha', 'Bravo'])),
+      );
+      await o.flush();
+      expect(titleOf('g_2')).toBe('Result restored');
+      expect(text(alertOf('g_2')!.querySelector('[data-slot="alert-description"]'))).toContain(
+        'Bravo advances to the Final.',
+      );
+      expect(document.activeElement).toBe(alertOf('g_2'));
+      expect(button('g_2', 'Undo')).toBeUndefined();
+      expect(button('g_2', 'Clear result')).toBeDefined();
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 21–15 Charlie. Bravo won.',
+      );
+      expect(text(row('g_3').querySelector('[data-slot="game-label"]'))).toBe(
+        'Game 1: Alpha v Bravo',
+      );
+    });
+
+    it('Undo after clearing a forfeit sends the team that forfeited and no score', async () => {
+      await clear(FORFEITED);
+      o.convex.calls[0].resolve(null);
+      o.subscription(SETUP)!.emit(CLEARED());
+      await o.flush();
+      await press(button('g_2', 'Undo'));
+      expect(calls().at(-1)).toEqual([ENTER, { gameId: 'g_2', forfeitTeamId: 'tm_charlie' }]);
+      o.convex.calls[1].resolve({
+        winnerTeamId: 'tm_bravo',
+        winnerName: 'Bravo',
+        advancesTo: 'Final',
+        previous: null,
+        resultEnteredAt: 3_000,
+      });
+      o.subscription(SETUP)!.emit(
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored({ kind: 'sets', sets: [{ a: 21, b: 0 }] }, 'tm_charlie', 3_000),
+          }),
+        }),
+      );
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="game-result"]'))).toBe(
+        'Bravo 21–0 Charlie. Charlie forfeited. Bravo won.',
+      );
+    });
+
+    it('Undo after clearing the Final says its winner wins the tournament', async () => {
+      const final = (result: object | null) =>
+        setupOf({
+          semi: game('g_2', 2, ['Bravo', 'Charlie'], {
+            winnerTeamId: 'tm_bravo',
+            result: stored(),
+            locked: true,
+          }),
+          final: game(
+            'g_3',
+            1,
+            ['Alpha', 'Bravo'],
+            result ? { winnerTeamId: 'tm_alpha', result } : {},
+          ),
+        });
+      await open(final(stored({ kind: 'sets', sets: [{ a: 21, b: 10 }] }, null, 1_500)));
+      await press(button('g_3', 'Clear result'));
+      o.convex.calls[0].resolve(null);
+      o.subscription(SETUP)!.emit(final(null));
+      await o.flush();
+      await press(button('g_3', 'Undo'));
+      o.convex.calls[1].resolve({
+        winnerTeamId: 'tm_alpha',
+        winnerName: 'Alpha',
+        advancesTo: null,
+        previous: null,
+        resultEnteredAt: 3_000,
+      });
+      await o.flush();
+      expect(text(alertOf('g_3')!.querySelector('[data-slot="alert-description"]'))).toContain(
+        'Alpha wins the tournament.',
+      );
+    });
+
+    it('shows no Undo on Result cleared once another organizer enters a result', async () => {
+      await clear();
+      o.convex.calls[0].resolve(null);
+      o.subscription(SETUP)!.emit(CLEARED());
+      await o.flush();
+      expect(button('g_2', 'Undo')).toBeDefined();
+      o.subscription(SETUP)!.emit(RESTORED(4_000));
+      await o.flush();
+      expect(button('g_2', 'Undo')).toBeUndefined();
+      expect(button('g_2', 'Clear result')).toBeDefined();
+    });
+
+    it('while offline marks Clear result, and a press sends nothing and shows the offline alert, which takes focus', async () => {
+      await open(PLAYED());
+      await goOffline();
+      const clearButton = button('g_2', 'Clear result')!;
+      expect(clearButton.getAttribute('aria-disabled')).toBe('true');
+      expect(clearButton.classList).toContain('opacity-50');
+      await press(clearButton);
+      expect(calls()).toEqual([]);
+      const note = row('g_2').querySelector<HTMLElement>('[data-slot="undo-note"]');
+      expect(text(note)).toContain('The result is unchanged. Try again when you’re connected.');
+      expect(document.activeElement).toBe(note!.querySelector('[data-slot="alert"]'));
+    });
+
+    it('a Clear that fails as offline shows the same alert and keeps the result', async () => {
+      await clear();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toContain(
+        'The result is unchanged.',
+      );
+      expect(button('g_2', 'Clear result')).toBeDefined();
+    });
+
+    it('refused because someone else changed the result shows the reason, keeps focus on it, and acts on the current result', async () => {
+      await clear();
+      o.convex.calls[0].reject(
+        refusal(
+          'resultChanged',
+          'Someone else changed this result first. The game shows their result now.',
+        ),
+      );
+      o.subscription(SETUP)!.emit(RESTORED(2_000));
+      await o.flush();
+      const note = row('g_2').querySelector<HTMLElement>('[data-slot="undo-note"]');
+      expect(text(note)).toBe(
+        'The result could not be cleared. Someone else changed this result first. The game shows their result now.',
+      );
+      expect(document.activeElement).toBe(note!.querySelector('[data-slot="alert"]'));
+      expect(button('g_2', 'Correct result')).toBeDefined();
+      await press(button('g_2', 'Clear result'));
+      expect(calls().at(-1)).toEqual([UNDO, { gameId: 'g_2', expected: 2_000 }]);
+    });
+
+    it('refused because the next game has a result shows the reason and the locked line', async () => {
+      await clear();
+      o.convex.calls[0].reject(
+        refusal('nextGamePlayed', 'The next game has a result, so this result cannot change.'),
+      );
+      o.subscription(SETUP)!.emit(PLAYED({ locked: true }));
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The result could not be cleared. The next game has a result, so this result cannot change.',
+      );
+      expect(text(row('g_2').querySelector('[data-slot="locked"]'))).toBe(
+        'The next game has a result, so this result cannot change.',
+      );
+      expect(button('g_2', 'Clear result')).toBeUndefined();
+    });
+
+    it('names a failure it cannot word, without the server detail, and leaves Clear to try again', async () => {
+      await clear();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+        'The result could not be cleared. Check your connection and try again.',
+      );
+      expect(row('g_2').textContent).not.toContain('secret');
+      await press(button('g_2', 'Clear result'));
+      expect(calls()).toHaveLength(2);
+    });
+
+    describe('Undo on Result cleared', () => {
+      async function cleared() {
+        await clear();
+        o.convex.calls[0].resolve(null);
+        o.subscription(SETUP)!.emit(CLEARED());
+        await o.flush();
+      }
+
+      it('refused because the game has a result already drops the status and shows the reason', async () => {
+        await cleared();
+        await press(button('g_2', 'Undo'));
+        o.convex.calls[1].reject(
+          refusal('resultExists', 'This game has a result already. Correct it instead.'),
+        );
+        o.subscription(SETUP)!.emit(RESTORED(4_000));
+        await o.flush();
+        const note = row('g_2').querySelector<HTMLElement>('[data-slot="undo-note"]');
+        expect(text(note)).toBe(
+          'The result could not be restored. This game has a result already. Correct it instead.',
+        );
+        expect(document.activeElement).toBe(note!.querySelector('[data-slot="alert"]'));
+        expect(statusOf('g_2')).toBeNull();
+        expect(button('g_2', 'Undo')).toBeUndefined();
+      });
+
+      it('that fails on the connection keeps the status and its Undo', async () => {
+        await cleared();
+        await press(button('g_2', 'Undo'));
+        o.convex.calls[1].reject(new Error('Server Error: secret'));
+        await o.flush();
+        expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toBe(
+          'The result could not be restored. Check your connection and try again.',
+        );
+        expect(titleOf('g_2')).toBe('Result cleared');
+        expect(button('g_2', 'Undo')).toBeDefined();
+      });
+
+      it('while offline answers a press with a note, sending nothing', async () => {
+        await cleared();
+        await goOffline();
+        expect(button('g_2', 'Undo')!.getAttribute('aria-disabled')).toBe('true');
+        await press(button('g_2', 'Undo'));
+        expect(calls()).toHaveLength(1);
+        expect(text(row('g_2').querySelector('[data-slot="undo-note"]'))).toContain(
+          'The game still has no result. Try again when you’re connected.',
+        );
+      });
     });
   });
 
