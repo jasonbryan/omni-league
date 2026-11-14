@@ -443,7 +443,7 @@ export const getForCopy = query({
       customLevelId: v.optional(v.id('customLevels')),
       ageGroup: ageGroupValidator,
       maximumTeams: v.number(),
-      structure: v.literal('bracket'),
+      structure: v.union(v.literal('bracket'), v.literal('pools')),
       bracketType: v.literal('single'),
     }),
   ),

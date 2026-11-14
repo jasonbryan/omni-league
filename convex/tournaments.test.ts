@@ -24,7 +24,7 @@ import {
 import schema from './schema';
 import { modules, tournamentProgramFields } from './test.setup';
 import { isForbidden } from './lib/forbidden';
-import { ADMIN_TOURNAMENTS_LIMIT } from './tournaments';
+import { ADMIN_TOURNAMENTS_LIMIT, getForCopy } from './tournaments';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -1017,6 +1017,21 @@ describe('tournaments.getForCopy', () => {
       structure: 'bracket',
       bracketType: 'single',
     });
+  });
+
+  test('returns either structure, so a tournament that plays pools can be copied', () => {
+    interface Exported {
+      type: string;
+      value?: unknown;
+      fieldType?: Exported;
+    }
+    const exported = JSON.parse(
+      (getForCopy as unknown as { exportReturns(): string }).exportReturns(),
+    ) as Exported;
+    const object = (exported.value as Exported[]).find((member) => member.type === 'object');
+    const fields = object?.value as Record<string, { fieldType: Exported }>;
+    const members = fields['structure'].fieldType.value as Exported[];
+    expect(members.map((member) => member.value)).toEqual(['bracket', 'pools']);
   });
 
   test('carries a custom level, and copies a published tournament too', async () => {
