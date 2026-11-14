@@ -698,6 +698,78 @@ describe('the bracket in tournamentGames.getSetup after a result', () => {
   });
 });
 
+describe('Clear result after a reload, with the time getSetup gives', () => {
+  const stampOf = async (s: TournamentWorld, round: number, slot: number) =>
+    (await setup(s))!.bracket!.rounds[round - 1].games[slot - 1].result?.resultEnteredAt;
+
+  test('getSetup gives the time the result was entered, and none for a game without a result', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    expect(await stampOf(s, 1, 2)).toBeUndefined();
+    const saved = await enter(s, game, { score: ONE_SET });
+    expect(await stampOf(s, 1, 2)).toBe((await gameAt(s, 1, 2)).resultEnteredAt);
+    expect(await stampOf(s, 1, 2)).toBe(saved.resultEnteredAt);
+  });
+
+  test('gives the time of a correction, so an Undo shown the first result is refused', async () => {
+    const { s } = await world();
+    const game = await gameAt(s, 1, 2);
+    const first = await enter(s, game, { score: ONE_SET });
+    const corrected = await correct(s, game, { score: { kind: 'sets', sets: [{ a: 12, b: 21 }] } });
+    expect(await stampOf(s, 1, 2)).toBe(corrected.resultEnteredAt);
+    expect(await stampOf(s, 1, 2)).not.toBe(first.resultEnteredAt);
+    expect(await undoExpecting(s, game, first.resultEnteredAt).catch(refusalOf)).toEqual({
+      code: 'resultChanged',
+      message: BRACKET_MESSAGES.resultChanged,
+    });
+  });
+
+  test('that time as expected, with no restore, clears the game and its place in the next game', async () => {
+    const { s, teamIds } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([teamIds[0], teamIds[3]]);
+    expect(await undoExpecting(s, game, (await stampOf(s, 1, 2))!)).toBeNull();
+    const cleared = await gameAt(s, 1, 2);
+    expect(cleared.winnerTeamId).toBeUndefined();
+    expect(cleared.score).toBeUndefined();
+    expect((await gameAt(s, 2, 1)).teamIds).toEqual([teamIds[0], null]);
+    expect(await stampOf(s, 1, 2)).toBeUndefined();
+  });
+
+  test('clearing the last result of the bracket leaves it with no result, so the seeds move again', async () => {
+    const { s, teamIds } = await world();
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: ONE_SET });
+    expect((await setup(s))!.bracket!.hasResult).toBe(true);
+    await undoExpecting(s, game, (await stampOf(s, 1, 2))!);
+    expect((await setup(s))!.bracket!.hasResult).toBe(false);
+    expect(
+      await s.as(s.admin).mutation(api.tournamentGames.moveSeed, {
+        tournamentId: s.gulf,
+        teamId: teamIds[2],
+        direction: 'up',
+      }),
+    ).toEqual({ seed: 2, seedCount: 5 });
+  });
+
+  test('clearing is refused with the next game played, and entering the result again puts it back', async () => {
+    const { s } = await world();
+    await useSport(s, 'soccer');
+    const game = await gameAt(s, 1, 2);
+    await enter(s, game, { score: goals(2, 1) });
+    const stamp = (await stampOf(s, 1, 2))!;
+    await undoExpecting(s, game, stamp);
+    expect(await enter(s, game, { score: goals(2, 1) })).toMatchObject({
+      advancesTo: 'Semifinals',
+    });
+    await enter(s, await gameAt(s, 2, 1), { score: goals(2, 1) });
+    expect(await undoExpecting(s, game, (await stampOf(s, 1, 2))!).catch(refusalOf)).toMatchObject({
+      code: 'nextGamePlayed',
+    });
+  });
+});
+
 describe('an existing game without result fields', () => {
   test('reads as having no result, so rows from before the fields stay valid', async () => {
     const { s } = await world();

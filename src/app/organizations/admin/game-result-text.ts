@@ -45,6 +45,12 @@ export function playedText({ teams, score, winnerName, forfeitName }: PlayedGame
   return `${teams[0]} ${scoreText(score)} ${teams[1]}.${forfeited} ${winnerName} won.`;
 }
 
+function advancesText(winnerName: string, advancesTo: string | null): string {
+  return advancesTo === null
+    ? `${winnerName} wins the tournament.`
+    : `${winnerName} advances to the ${advancesTo}.`;
+}
+
 export function savedText(
   winnerName: string,
   advancesTo: string | null,
@@ -52,12 +58,18 @@ export function savedText(
 ): AlertText {
   return {
     title: corrected ? 'Result corrected' : 'Result saved',
-    description:
-      advancesTo === null
-        ? `${winnerName} wins the tournament.`
-        : `${winnerName} advances to the ${advancesTo}.`,
+    description: advancesText(winnerName, advancesTo),
   };
 }
+
+export function restoredText(winnerName: string, advancesTo: string | null): AlertText {
+  return { title: 'Result restored', description: advancesText(winnerName, advancesTo) };
+}
+
+export const CLEARED_TEXT: AlertText = {
+  title: 'Result cleared',
+  description: 'The game is waiting for a result again.',
+};
 
 export function undoneText(restored: boolean): AlertText {
   return restored
@@ -76,8 +88,18 @@ export function undoFailedText(refusal: string | null): AlertText {
   return { title: 'The result could not be undone.', description: refusal ?? CHECK_CONNECTION };
 }
 
+export function clearFailedText(refusal: string | null): AlertText {
+  return { title: 'The result could not be cleared.', description: refusal ?? CHECK_CONNECTION };
+}
+
+export function restoreFailedText(refusal: string | null): AlertText {
+  return { title: 'The result could not be restored.', description: refusal ?? CHECK_CONNECTION };
+}
+
 export const SAVE_OFFLINE = 'Your scores are still here. Try again when you’re connected.';
 
 export const UNDO_OFFLINE = 'The result is unchanged. Try again when you’re connected.';
+
+export const RESTORE_OFFLINE = 'The game still has no result. Try again when you’re connected.';
 
 export const FORFEIT_CHOICE_ERROR = 'Choose the team that forfeits.';

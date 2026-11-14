@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   Injector,
+  type WritableSignal,
   afterNextRender,
   computed,
   inject,
@@ -13,7 +14,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideEraser, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import { BRACKET_MESSAGES, type BracketSide } from '../../../../convex/lib/bracket';
 import { scoreKindOf, type ScoreField } from '../../../../convex/lib/sports';
@@ -30,9 +31,14 @@ import { bracketRefusalMessage } from './bracket-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import {
+  clearFailedText,
+  CLEARED_TEXT,
   forfeitNote,
   playedText,
   pointsLabel,
+  restoredText,
+  restoreFailedText,
+  RESTORE_OFFLINE,
   saveFailedText,
   savedText,
   SAVE_OFFLINE,
@@ -50,11 +56,31 @@ import type { BracketGameView, ManagedTournament } from './tournament-context';
 
 type Saved = FunctionReturnType<typeof api.tournamentGames.enterResult>;
 
-type Status =
-  | { kind: 'saved'; text: AlertText; previous: Saved['previous']; resultEnteredAt: number }
-  | { kind: 'undone'; text: AlertText };
+interface SavedStatus {
+  kind: 'saved';
+  text: AlertText;
+  previous: Saved['previous'];
+  resultEnteredAt: number;
+}
 
-type UndoNote = { kind: 'failed'; text: AlertText } | { kind: 'offline' };
+interface ClearedStatus {
+  kind: 'cleared';
+  text: AlertText;
+  cleared: ResultBody;
+  teamIds: readonly (string | null)[];
+  resultEnteredAt: null;
+}
+
+type Status = SavedStatus | ClearedStatus | { kind: 'ended'; text: AlertText };
+
+type UndoNote = { kind: 'failed'; text: AlertText } | { kind: 'offline'; description: string };
+
+interface Change {
+  pending: WritableSignal<boolean>;
+  offline: string;
+  failed: (refusal: string | null) => AlertText;
+  run: () => Promise<Status>;
+}
 
 interface SetRow {
   field: ScoreField;
@@ -69,6 +95,9 @@ const SET_ROWS: readonly SetRow[] = [
   { field: 'set2', number: 2, a: 'a2', b: 'b2', optional: false },
   { field: 'set3', number: 3, a: 'a3', b: 'b3', optional: true },
 ];
+
+const sameIds = (a: readonly unknown[], b: readonly unknown[]) =>
+  a.length === b.length && a.every((id, index) => id === b[index]);
 
 const TEXT_BUTTON =
   'inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11';
@@ -87,7 +116,7 @@ const TEXT_BUTTON =
     HlmSpinner,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucidePencil, lucideUndo2 })],
+  providers: [provideIcons({ lucideCircleAlert, lucideEraser, lucidePencil, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     role: 'listitem',
@@ -109,13 +138,13 @@ const TEXT_BUTTON =
         [title]="status.text.title"
         [description]="status.text.description"
       >
-        @if (status.kind === 'saved' && undoOffered()) {
+        @if (undoable(); as undoable) {
           <button
             type="button"
             [class]="textButton"
             [class.opacity-50]="!online() && !undoing()"
             [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
-            (click)="undo(status.previous, status.resultEnteredAt)"
+            (click)="undo(undoable)"
           >
             @if (undoing()) {
               <hlm-spinner data-icon="inline-start" />Undoing…
@@ -129,7 +158,7 @@ const TEXT_BUTTON =
     @if (undoNote(); as note) {
       <div data-slot="undo-note" class="mt-2">
         @if (note.kind === 'offline') {
-          <app-admin-offline-alert #undoAlert [description]="undoOffline" />
+          <app-admin-offline-alert #undoAlert [description]="note.description" />
         } @else {
           <app-admin-alert
             #undoAlert
@@ -155,16 +184,33 @@ const TEXT_BUTTON =
         @if (game().locked) {
           <p data-slot="locked" class="mt-2 text-muted-foreground">{{ lockedText }}</p>
         } @else {
-          <button
-            #openButton
-            type="button"
-            data-slot="button"
-            [class]="outlineButton + ' mt-2'"
-            (click)="openForm(true)"
-          >
-            <ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Correct
-            result<span class="sr-only"> {{ label() }}</span>
-          </button>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button
+              #openButton
+              type="button"
+              data-slot="button"
+              [class]="outlineButton"
+              (click)="openForm(true)"
+            >
+              <ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Correct
+              result<span class="sr-only"> {{ label() }}</span>
+            </button>
+            <button
+              type="button"
+              data-slot="button"
+              [class]="outlineButton"
+              [class.opacity-50]="!online() && !clearing()"
+              [attr.aria-disabled]="clearing() || !online() ? 'true' : null"
+              (click)="clear()"
+            >
+              @if (clearing()) {
+                <hlm-spinner data-icon="inline-start" />Clearing…
+              } @else {
+                <ng-icon name="lucideEraser" data-icon="inline-start" aria-hidden="true" />Clear
+                result<span class="sr-only"> {{ label() }}</span>
+              }
+            </button>
+          </div>
         }
       }
     } @else {
@@ -341,13 +387,13 @@ export class BracketGame {
   protected readonly textButton = TEXT_BUTTON;
   protected readonly saveOffline = SAVE_OFFLINE;
   protected readonly lockedText = BRACKET_MESSAGES.nextGamePlayed;
-  protected readonly undoOffline = UNDO_OFFLINE;
   protected readonly sides: readonly BracketSide[] = [0, 1];
 
   protected readonly formMode = signal<'enter' | 'correct' | null>(null);
   protected readonly status = signal<Status | null>(null);
   protected readonly undoNote = signal<UndoNote | null>(null);
   protected readonly undoing = signal(false);
+  protected readonly clearing = signal(false);
 
   protected readonly draft = new GameResultDraft(
     () => this.tournament().sport,
@@ -419,9 +465,14 @@ export class BracketGame {
     });
   });
 
-  protected readonly undoOffered = computed(
-    () => this.game().result !== null && !this.game().locked,
-  );
+  protected readonly undoable = computed(() => {
+    const status = this.status();
+    if (status === null || status.kind === 'ended') return null;
+    const stored = this.game().result?.resultEnteredAt ?? null;
+    if (status.resultEnteredAt !== stored || this.game().locked) return null;
+    // A correction of a feeding game can put another team here, and the cleared result is not theirs.
+    return status.kind === 'cleared' && !sameIds(status.teamIds, this.teamIds()) ? null : status;
+  });
 
   protected readonly scoreError = computed(
     () => this.draft.errors.a() ?? this.draft.errors.b() ?? this.draft.errors.score(),
@@ -513,30 +564,76 @@ export class BracketGame {
     }
   }
 
-  protected async undo(previous: Saved['previous'], resultEnteredAt: number): Promise<void> {
-    if (this.undoing()) return;
+  protected clear(): Promise<void> {
+    const { gameId, result } = this.game();
+    if (!result) return Promise.resolve();
+    const cleared: ResultBody =
+      result.forfeitTeamId === null
+        ? { score: result.score }
+        : { forfeitTeamId: result.forfeitTeamId };
+    const teamIds = this.teamIds();
+    return this.change({
+      pending: this.clearing,
+      offline: UNDO_OFFLINE,
+      failed: clearFailedText,
+      run: async () => {
+        await this.undoCall.run({ gameId, expected: result.resultEnteredAt });
+        return { kind: 'cleared', text: CLEARED_TEXT, cleared, teamIds, resultEnteredAt: null };
+      },
+    });
+  }
+
+  protected undo(status: SavedStatus | ClearedStatus): Promise<void> {
+    const gameId = this.game().gameId;
+    if (status.kind === 'cleared') {
+      return this.change({
+        pending: this.undoing,
+        offline: RESTORE_OFFLINE,
+        failed: restoreFailedText,
+        run: async () => {
+          const saved = await this.enterCall.run({ gameId, ...status.cleared });
+          return { kind: 'ended', text: restoredText(saved.winnerName, saved.advancesTo) };
+        },
+      });
+    }
+    const { previous, resultEnteredAt } = status;
+    return this.change({
+      pending: this.undoing,
+      offline: UNDO_OFFLINE,
+      failed: undoFailedText,
+      run: async () => {
+        await this.undoCall.run({
+          gameId,
+          expected: resultEnteredAt,
+          ...(previous && { restore: previous }),
+        });
+        return { kind: 'ended', text: undoneText(previous !== null) };
+      },
+    });
+  }
+
+  /** A worded refusal means the status acted on a result that changed; a connection failure keeps it so the press can be retried. */
+  private async change({ pending, offline, failed, run }: Change): Promise<void> {
+    if (this.clearing() || this.undoing()) return;
     this.undoNote.set(null);
     if (!this.online()) {
-      this.showUndoNote({ kind: 'offline' });
+      this.showUndoNote({ kind: 'offline', description: offline });
       return;
     }
-    this.undoing.set(true);
+    pending.set(true);
     try {
-      await this.undoCall.run({
-        gameId: this.game().gameId,
-        expected: resultEnteredAt,
-        ...(previous && { restore: previous }),
-      });
-      this.status.set({ kind: 'undone', text: undoneText(previous !== null) });
+      this.status.set(await run());
       this.focusStatusUnlessMoved(() => this.statusAlert()?.focus());
     } catch (failure) {
-      this.showUndoNote(
-        failure instanceof ConvexOfflineError
-          ? { kind: 'offline' }
-          : { kind: 'failed', text: undoFailedText(bracketRefusalMessage(failure)) },
-      );
+      if (failure instanceof ConvexOfflineError) {
+        this.showUndoNote({ kind: 'offline', description: offline });
+      } else {
+        const refusal = bracketRefusalMessage(failure);
+        if (refusal !== null) this.status.set(null);
+        this.showUndoNote({ kind: 'failed', text: failed(refusal) });
+      }
     } finally {
-      this.undoing.set(false);
+      pending.set(false);
     }
   }
 
