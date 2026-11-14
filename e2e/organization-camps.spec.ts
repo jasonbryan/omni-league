@@ -716,6 +716,41 @@ test.describe('Camp sessions: Delete and Undo', () => {
     expect(await sessionRows(page).first().innerText()).toBe(before);
   });
 
+  test('the Camps list follows each delete, and Undo brings the count back', async ({ page }) => {
+    const { tenant, base } = await adminWithCamp(page);
+    for (const week of [WEEK_1, WEEK_2]) {
+      await seedCampSession(tenant, JUNIOR.slug, {
+        name: week.name,
+        startDate: week.start,
+        endDate: week.end,
+      });
+    }
+    const count = () => rows(page).first().locator('[data-slot="session-count"]');
+    const status = sessionsCard(page).locator('[data-slot="session-status"]');
+    await page.goto(`${base}/camps`);
+    await expect(count()).toHaveText('2 sessions');
+
+    await page.goto(campPage(tenant));
+    await sessionRows(page).first().getByRole('button', { name: 'Delete Week 1' }).click();
+    await expect(status).toContainText('Week 1 deleted.');
+    await status.getByRole('button', { name: 'Undo' }).click();
+    await expect(status).toContainText('Week 1 restored.');
+    await page.goto(`${base}/camps`);
+    await expect(count()).toHaveText('2 sessions');
+
+    await page.goto(campPage(tenant));
+    await sessionRows(page).first().getByRole('button', { name: 'Delete Week 1' }).click();
+    await expect(status).toContainText('Week 1 deleted.');
+    await page.goto(`${base}/camps`);
+    await expect(count()).toHaveText('1 session');
+
+    await page.goto(campPage(tenant));
+    await sessionRows(page).first().getByRole('button', { name: 'Delete Week 2' }).click();
+    await expect(sessionsCard(page)).toContainText('No sessions yet');
+    await page.goto(`${base}/camps`);
+    await expect(count()).toHaveText('No sessions yet');
+  });
+
   test('a session with registrations shows its count and has no Delete', async ({
     page,
   }, testInfo) => {
