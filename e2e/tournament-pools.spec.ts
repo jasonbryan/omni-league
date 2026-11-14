@@ -186,7 +186,7 @@ test.describe('Tournaments: pools', () => {
     await splitButton(page).click();
     const done = panel(page).getByRole('status').filter({ hasText: 'Teams split into pools' });
     await expect(done).toBeVisible();
-    await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy', 'Gulf', 'Jade', 'Lull']);
+    await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy', 'Haze', 'Isle', 'Lull']);
     await screenshot(page, testInfo, 'pools-split-undo');
     await expectAccessible(page);
 
@@ -224,27 +224,15 @@ test.describe('Tournaments: pools', () => {
     });
   });
 
-  test.describe('a move the limits refuse', () => {
-    test.use({ expectedConvexErrors: ['tournamentGames:movePoolTeam'] });
-
-    test('a team cannot leave a pool of 3, and the message names the limits under the panel heading', async ({
-      page,
-    }, testInfo) => {
-      const { managePath } = await adminOf(page, { teams: full(SIX) });
-      await page.goto(managePath);
-      await split(page, 2);
-      await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy']);
-
-      await moveTo(page, 'Ace', 'B').focus();
-      await page.keyboard.press('Space');
-      const alert = panel(page).getByRole('alert');
-      await expect(alert).toContainText('Ace could not be moved.');
-      await expect(alert).toContainText('Pool A would have 2 teams. Each pool needs 3 to 8 teams.');
-      await expect(alert).toBeFocused();
-      await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy']);
-      await screenshot(page, testInfo, 'pools-move-refused');
-      await expectAccessible(page);
-    });
+  test('offers no move that the 3 to 8 limit always refuses', async ({ page }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(SIX) });
+    await page.goto(managePath);
+    await split(page, 2);
+    await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy']);
+    await expect(teamsIn(page, 'B')).toHaveText(['Bay', 'Cove', 'Flow']);
+    await expect(panel(page).locator('[data-move-to]')).toHaveCount(0);
+    await screenshot(page, testInfo, 'pools-no-moves');
+    await expectAccessible(page);
   });
 
   test('creates the pool games, 6 for each pool of 4, then recreates them after a confirmation that Cancel leaves alone', async ({
@@ -350,7 +338,7 @@ test.describe('Tournaments: pools', () => {
     page,
     context,
   }, testInfo) => {
-    const { managePath } = await adminOf(page, { teams: full(SIX) });
+    const { managePath } = await adminOf(page, { teams: full(TWELVE.slice(0, 8)) });
     await page.goto(managePath);
     await split(page, 2);
     await expect(createButton(page)).not.toHaveAttribute('aria-disabled', /.*/);
@@ -365,7 +353,7 @@ test.describe('Tournaments: pools', () => {
       const alert = panel(page).getByRole('alert');
       await expect(alert).toContainText('Ace keeps its pool. Try again when you’re connected.');
       await expect(alert).toBeFocused();
-      await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy']);
+      await expect(teamsIn(page, 'A')).toHaveText(['Ace', 'Dune', 'Eddy', 'Haze']);
       await screenshot(page, testInfo, 'pools-offline-move');
       await expectAccessible(page);
 
