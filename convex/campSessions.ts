@@ -8,7 +8,7 @@ import {
   firstCampSessionError,
   type CampSessionInputError,
 } from './lib/campSessionInput';
-import { CAMP_SESSIONS_LIMIT, recountCampSessions } from './lib/campLookup';
+import { CAMP_SESSIONS_LIMIT, campSessionTotal, recountCampSessions } from './lib/campLookup';
 import { deleteCampSession, insertCampSession } from './lib/tenantWrites';
 
 function refuse(error: CampSessionInputError): never {
@@ -86,11 +86,21 @@ export const remove = mutation({
   args: { campSessionId: v.id('campSessions') },
   returns: v.null(),
   handler: async (ctx, { campSessionId }) => {
-    const { campSession: session } = await requireCampSessionOrganizer(ctx, campSessionId);
+    const {
+      campSession: session,
+      camp,
+      program,
+    } = await requireCampSessionOrganizer(ctx, campSessionId);
     if (session.registeredCount > 0) {
       throw new ConvexError({
         code: 'hasRegistrations',
         message: CAMP_SESSION_MESSAGES.hasRegistrations(session.registeredCount),
+      });
+    }
+    if (program.status === 'published' && (await campSessionTotal(ctx, camp)) <= 1) {
+      throw new ConvexError({
+        code: 'lastSession',
+        message: CAMP_SESSION_MESSAGES.lastSession,
       });
     }
     await deleteCampSession(ctx, session);

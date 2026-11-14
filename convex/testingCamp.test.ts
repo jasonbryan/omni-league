@@ -124,3 +124,44 @@ describe('testing:seedCampSession', () => {
     ).rejects.toThrow(/No camp/);
   });
 });
+
+describe('testing:publishSeededCamp', () => {
+  const PUBLISH = { organizationSlug: 'e2e-org-c4m9', campSlug: 'junior-beach-volleyball-camp' };
+
+  async function withCamp() {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedCamp, CAMP);
+    return t;
+  }
+
+  const statuses = (t: Awaited<ReturnType<typeof seeded>>) =>
+    t.run(async (ctx) => (await ctx.db.query('programs').collect()).map((row) => row.status));
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and publishes nothing', async (_, value) => {
+    const t = await withCamp();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.publishSeededCamp, PUBLISH)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await statuses(t)).toEqual(['draft']);
+  });
+
+  test('publishes the camp even when it has no session', async () => {
+    const t = await withCamp();
+    await t.mutation(internal.testing.publishSeededCamp, PUBLISH);
+    expect(await statuses(t)).toEqual(['published']);
+  });
+
+  test('refuses an unknown organization and a camp it does not have', async () => {
+    const t = await withCamp();
+    await expect(
+      t.mutation(internal.testing.publishSeededCamp, { ...PUBLISH, organizationSlug: 'nowhere' }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.publishSeededCamp, { ...PUBLISH, campSlug: 'nowhere' }),
+    ).rejects.toThrow(/No camp/);
+  });
+});

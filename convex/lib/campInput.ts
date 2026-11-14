@@ -63,6 +63,10 @@ export const CAMP_MESSAGES = {
     `The oldest age must be no lower than the youngest age, ${minimumAge}.`,
 } as const;
 
+export const CAMP_PUBLISH_MESSAGES = {
+  noSessions: 'Add a session first.',
+} as const;
+
 export interface CampValues {
   name: string;
   slug: string;
