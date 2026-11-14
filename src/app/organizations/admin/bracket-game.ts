@@ -67,6 +67,7 @@ interface ClearedStatus {
   kind: 'cleared';
   text: AlertText;
   cleared: ResultBody;
+  teamIds: readonly (string | null)[];
   resultEnteredAt: null;
 }
 
@@ -94,6 +95,9 @@ const SET_ROWS: readonly SetRow[] = [
   { field: 'set2', number: 2, a: 'a2', b: 'b2', optional: false },
   { field: 'set3', number: 3, a: 'a3', b: 'b3', optional: true },
 ];
+
+const sameIds = (a: readonly unknown[], b: readonly unknown[]) =>
+  a.length === b.length && a.every((id, index) => id === b[index]);
 
 const TEXT_BUTTON =
   'inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11';
@@ -465,7 +469,9 @@ export class BracketGame {
     const status = this.status();
     if (status === null || status.kind === 'ended') return null;
     const stored = this.game().result?.resultEnteredAt ?? null;
-    return status.resultEnteredAt === stored && !this.game().locked ? status : null;
+    if (status.resultEnteredAt !== stored || this.game().locked) return null;
+    // A correction of a feeding game can put another team here, and the cleared result is not theirs.
+    return status.kind === 'cleared' && !sameIds(status.teamIds, this.teamIds()) ? null : status;
   });
 
   protected readonly scoreError = computed(
@@ -565,13 +571,14 @@ export class BracketGame {
       result.forfeitTeamId === null
         ? { score: result.score }
         : { forfeitTeamId: result.forfeitTeamId };
+    const teamIds = this.teamIds();
     return this.change({
       pending: this.clearing,
       offline: UNDO_OFFLINE,
       failed: clearFailedText,
       run: async () => {
         await this.undoCall.run({ gameId, expected: result.resultEnteredAt });
-        return { kind: 'cleared', text: CLEARED_TEXT, cleared, resultEnteredAt: null };
+        return { kind: 'cleared', text: CLEARED_TEXT, cleared, teamIds, resultEnteredAt: null };
       },
     });
   }

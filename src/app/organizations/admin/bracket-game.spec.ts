@@ -1080,6 +1080,16 @@ describe('BracketGame', () => {
         expect(button('g_2', 'Undo')).toBeUndefined();
       });
 
+      it('is gone with no press once a team in the game changes, so the old result is not written between teams that never played', async () => {
+        await cleared();
+        expect(button('g_2', 'Undo')).toBeDefined();
+        o.subscription(SETUP)!.emit(setupOf({ semi: game('g_2', 2, ['Bravo', 'Delta']) }));
+        await o.flush();
+        expect(button('g_2', 'Undo')).toBeUndefined();
+        expect(button('g_2', 'Enter result')).toBeDefined();
+        expect(calls()).toHaveLength(1);
+      });
+
       it('that fails on the connection keeps the status and its Undo', async () => {
         await cleared();
         await press(button('g_2', 'Undo'));
