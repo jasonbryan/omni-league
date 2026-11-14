@@ -18,10 +18,10 @@ import {
   SIDEBAR_MARK,
   SIDEBAR_ROW,
   SIDEBAR_ROW_CURRENT,
+  SIDEBAR_ROW_TEXT,
 } from '../../shell/sidebar-classes';
 import { compareNames } from '../compare-names';
 import { initials } from '../initials';
-import { campPath } from '../admin/camp-path';
 import { tournamentPath } from '../admin/tournament-path';
 import { leaguePath } from './league-path';
 
@@ -108,12 +108,12 @@ function withPage(assigned: readonly Named[], page: Named | null): Named[] {
           <ul role="list" aria-label="Your camps" class="mt-1 flex flex-col gap-0.5">
             @for (item of camps(); track item.slug) {
               <li>
-                <a [routerLink]="item.path" [class]="row"
-                  ><ng-icon name="lucideTent" [class]="icon" aria-hidden="true" /><span
+                <div [class]="textRow">
+                  <ng-icon name="lucideTent" [class]="icon" aria-hidden="true" /><span
                     class="min-w-0 flex-1"
                     >{{ item.name }}</span
-                  ></a
-                >
+                  >
+                </div>
               </li>
             }
           </ul>
@@ -145,6 +145,7 @@ export class LeagueSidebar {
   protected readonly head = SIDEBAR_HEAD_LINK;
   protected readonly mark = SIDEBAR_MARK;
   protected readonly row = SIDEBAR_ROW;
+  protected readonly textRow = SIDEBAR_ROW_TEXT;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;
   protected readonly icon = SIDEBAR_ICON;
   protected readonly currentIcon = SIDEBAR_ICON_CURRENT;
@@ -186,12 +187,7 @@ export class LeagueSidebar {
     );
   });
   protected readonly camps = computed(() => {
-    const org = this.organization().slug;
-    return (this.mineHere()?.camps ?? []).map((item) => ({
-      name: item.name,
-      slug: item.slug,
-      path: campPath(org, item.slug),
-    }));
+    return (this.mineHere()?.camps ?? []).map(({ name, slug }) => ({ name, slug }));
   });
   protected readonly navTopic = computed(() => {
     const topics = [

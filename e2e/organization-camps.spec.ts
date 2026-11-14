@@ -417,9 +417,7 @@ test.describe('Camps: an invited league organizer', () => {
       includeHidden: true,
     });
     const camps = nav.getByRole('list', { name: 'Your camps', includeHidden: true });
-    await expect(camps.getByRole('link', { includeHidden: true })).toHaveCount(1);
-    await expect(
-      camps.getByRole('link', { name: JUNIOR.name, includeHidden: true }),
-    ).toHaveAttribute('href', `/app/organizations/${tenant.slug}/camps/${JUNIOR.slug}`);
+    await expect(camps.getByRole('listitem', { includeHidden: true })).toHaveText([JUNIOR.name]);
+    await expect(camps.getByRole('link', { includeHidden: true })).toHaveCount(0);
   });
 });
