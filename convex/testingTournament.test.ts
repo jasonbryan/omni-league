@@ -91,18 +91,6 @@ describe('testing:seedTournament', () => {
     });
   });
 
-  test('keeps the default of one set per game, or takes the sets it is given', async () => {
-    const t = await seeded();
-    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
-    await t.mutation(internal.testing.seedTournament, {
-      ...TOURNAMENT,
-      slug: 'best-of-three',
-      setsPerGame: 3,
-    });
-    const tournaments = await t.run((ctx) => ctx.db.query('tournaments').collect());
-    expect(tournaments.map((tournament) => tournament.setsPerGame)).toEqual([undefined, 3]);
-  });
-
   test('refuses an unknown organization, a location it does not have, and a taken web address', async () => {
     const t = await seeded();
     await expect(
@@ -255,18 +243,63 @@ describe('testing:seedTournamentBracket', () => {
   });
 });
 
+describe('testing:setTournamentSetsPerGame', () => {
+  const ARGS = { organizationSlug: 'e2e-org-t1u2', tournamentSlug: 'gulf-coast-beach-open' };
+  const setsPerGameOf = async (t: Awaited<ReturnType<typeof seeded>>) =>
+    (await t.run((ctx) => ctx.db.query('tournaments').first()))?.setsPerGame;
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    vi.stubEnv('IS_TEST', value);
+    await expect(
+      t.mutation(internal.testing.setTournamentSetsPerGame, { ...ARGS, setsPerGame: 3 }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await setsPerGameOf(t)).toBeUndefined();
+  });
+
+  test('sets the sets per game the tournament plays', async () => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    expect(await setsPerGameOf(t)).toBeUndefined();
+    await t.mutation(internal.testing.setTournamentSetsPerGame, { ...ARGS, setsPerGame: 3 });
+    expect(await setsPerGameOf(t)).toBe(3);
+  });
+
+  test('refuses an unknown organization and an unknown tournament', async () => {
+    const t = await seeded();
+    await expect(
+      t.mutation(internal.testing.setTournamentSetsPerGame, {
+        ...ARGS,
+        organizationSlug: 'nowhere',
+        setsPerGame: 3,
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.setTournamentSetsPerGame, { ...ARGS, setsPerGame: 3 }),
+    ).rejects.toThrow(/No tournament/);
+  });
+});
+
 describe('testing:seedTournamentResult', () => {
   const ARGS = { organizationSlug: 'e2e-org-t1u2', tournamentSlug: 'gulf-coast-beach-open' };
   const GAME = { ...ARGS, round: 1, slot: 2 };
   const ONE_SET = { kind: 'sets' as const, sets: [{ a: 21, b: 15 }] };
 
   async function withBracket(options: { setsPerGame?: 1 | 3; sport?: 'soccer' } = {}) {
+    const { setsPerGame, ...tournament } = options;
     const t = await seeded();
     await t.mutation(internal.testing.seedTournament, {
       ...TOURNAMENT,
       status: 'published',
-      ...options,
+      ...tournament,
     });
+    if (setsPerGame) {
+      await t.mutation(internal.testing.setTournamentSetsPerGame, { ...ARGS, setsPerGame });
+    }
     await t.mutation(internal.testing.seedTournamentRosters, {
       ...ARGS,
       teams: ['Alpha', 'Bravo', 'Charlie'].map((name) => ({ name })),

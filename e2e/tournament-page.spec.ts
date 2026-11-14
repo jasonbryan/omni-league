@@ -1,6 +1,6 @@
 import type { Locator } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
-import { seedBracket, seedResult, type SeededResult } from './support/bracket';
+import { seedBestOfThree, seedBracket, seedResult, type SeededResult } from './support/bracket';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
@@ -106,8 +106,8 @@ async function seedBracketTournament(
     startDate: dateFromToday(30),
     endDate: dateFromToday(31),
     maximumTeams: 32,
-    setsPerGame: 3,
   });
+  await seedBestOfThree(tenant, 'labor-day-sand-slam');
   await seedBracket(tenant, 'labor-day-sand-slam', teamNames);
   for (const { game, result } of results) {
     await seedResult(tenant, 'labor-day-sand-slam', game, result);

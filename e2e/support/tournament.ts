@@ -13,8 +13,6 @@ export interface TournamentSeed {
   registrationDeadline?: string;
   maximumTeams?: number;
   status?: 'draft' | 'published';
-  /** Defaults to one set per game. */
-  setsPerGame?: 1 | 3;
 }
 
 /** Skips the rules of `tournaments.create`. Local runs only. */
@@ -31,7 +29,6 @@ export async function seedTournament(tenant: Tenant, tournament: TournamentSeed)
     registrationDeadline: tournament.registrationDeadline ?? '2025-12-01',
     maximumTeams: tournament.maximumTeams ?? 16,
     status: tournament.status ?? 'published',
-    ...(tournament.setsPerGame && { setsPerGame: tournament.setsPerGame }),
   })) as { slug: string };
   return `${tenant.path}/tournaments/${slug}`;
 }

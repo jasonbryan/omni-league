@@ -405,13 +405,9 @@ export const seedTournament = internalMutation({
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
     status: v.optional(programStatusValidator),
-    setsPerGame: v.optional(setsPerGameValidator),
   },
   returns: v.object({ slug: v.string() }),
-  handler: async (
-    ctx,
-    { organizationSlug, locationNames, division, status, setsPerGame, ...tournament },
-  ) => {
+  handler: async (ctx, { organizationSlug, locationNames, division, status, ...tournament }) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
     if (await programSlugTaken(ctx, organization._id, tournament.slug)) {
@@ -435,7 +431,6 @@ export const seedTournament = internalMutation({
       locationIds,
       division: { gender, playersPerSide, level, ageGroup },
     });
-    if (setsPerGame !== undefined) await ctx.db.patch('tournaments', tournamentId, { setsPerGame });
     if (status === 'published') {
       await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
     }
@@ -453,6 +448,24 @@ export const setTournamentMaximumTeams = internalMutation({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
     await ctx.db.patch('tournaments', found.tournament._id, { maximumTeams });
+    return null;
+  },
+});
+
+/** The sets per game an organizer would choose on the tournament's details, so a test can play a best-of-3 game. */
+export const setTournamentSetsPerGame = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    setsPerGame: setsPerGameValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, setsPerGame }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    await ctx.db.patch('tournaments', found.tournament._id, { setsPerGame });
     return null;
   },
 });

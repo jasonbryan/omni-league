@@ -168,6 +168,7 @@ describe('convex/testing.ts exports', () => {
       'seedWaitingFreeAgents',
       'seedWaitlistEntry',
       'setTournamentMaximumTeams',
+      'setTournamentSetsPerGame',
     ]);
     for (const [name, fn] of exports) {
       const markers = fn as FunctionRegistrationMarkers;
