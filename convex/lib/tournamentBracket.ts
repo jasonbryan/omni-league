@@ -3,6 +3,7 @@ import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { inSeedOrder, isConfirmedTeam, planBracket, type BracketRefusal } from './bracket';
+import type { Score } from './sports';
 import { MAX_MAXIMUM_TEAMS } from './tournamentInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
@@ -49,6 +50,64 @@ export function gameHasResult(game: Doc<'tournamentGames'>): boolean {
 
 export function bracketHasResult(games: readonly Doc<'tournamentGames'>[]): boolean {
   return games.some(gameHasResult);
+}
+
+export interface StoredResult {
+  score: Score;
+  forfeitTeamId?: Id<'teams'>;
+}
+
+export function storedResultOf(game: Doc<'tournamentGames'>): StoredResult | null {
+  if (game.score === undefined) return null;
+  return { score: game.score, ...(game.forfeitTeamId && { forfeitTeamId: game.forfeitTeamId }) };
+}
+
+export async function nextGameOf(
+  ctx: ReadCtx,
+  game: Doc<'tournamentGames'>,
+): Promise<Doc<'tournamentGames'> | null> {
+  return game.nextGameId ? ctx.db.get('tournamentGames', game.nextGameId) : null;
+}
+
+async function placeInNextGame(
+  ctx: MutationCtx,
+  game: Doc<'tournamentGames'>,
+  teamId: Id<'teams'> | null,
+): Promise<void> {
+  const next = await nextGameOf(ctx, game);
+  if (!next) return;
+  await ctx.db.patch('tournamentGames', next._id, {
+    teamIds: next.teamIds.map((placed, side) => (side === game.nextSide ? teamId : placed)),
+  });
+}
+
+export async function saveResult(
+  ctx: MutationCtx,
+  game: Doc<'tournamentGames'>,
+  result: StoredResult & { winnerTeamId: Id<'teams'>; enteredBy: Id<'users'> },
+): Promise<number> {
+  // Later than the result it replaces, even within one millisecond, so an Undo shown the earlier one is refused.
+  const resultEnteredAt = Math.max(Date.now(), (game.resultEnteredAt ?? 0) + 1);
+  await ctx.db.patch('tournamentGames', game._id, {
+    winnerTeamId: result.winnerTeamId,
+    score: result.score,
+    forfeitTeamId: result.forfeitTeamId,
+    resultEnteredAt,
+    resultEnteredBy: result.enteredBy,
+  });
+  await placeInNextGame(ctx, game, result.winnerTeamId);
+  return resultEnteredAt;
+}
+
+export async function clearResult(ctx: MutationCtx, game: Doc<'tournamentGames'>): Promise<void> {
+  await ctx.db.patch('tournamentGames', game._id, {
+    winnerTeamId: undefined,
+    score: undefined,
+    forfeitTeamId: undefined,
+    resultEnteredAt: undefined,
+    resultEnteredBy: undefined,
+  });
+  await placeInNextGame(ctx, game, null);
 }
 
 export interface TournamentTeams {

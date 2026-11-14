@@ -1,7 +1,7 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -63,6 +63,7 @@ const seedStatus = (page: Page) => panel(page).locator('[data-slot="seed-status"
 const createButton = (page: Page) => panel(page).locator('#create-bracket');
 const reason = (page: Page) => panel(page).locator('[data-slot="create-reason"]');
 const rounds = (page: Page) => panel(page).locator('#bracket-rounds');
+const gameLabels = (page: Page) => rounds(page).locator('[data-slot="game-label"]');
 
 const full = (names: readonly string[]) => names.map((name) => ({ name }));
 
@@ -117,7 +118,7 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await expect(createButton(page)).toHaveText('Recreate bracket');
     await expect(createButton(page)).toBeFocused();
     await expect(rounds(page).locator('h4')).toHaveText(['Quarterfinals', 'Semifinals', 'Final']);
-    await expect(rounds(page).locator('li')).toHaveText([
+    await expect(gameLabels(page)).toHaveText([
       'Game 1: Alpha v Bye',
       'Game 2: Delta v Echo',
       'Game 3: Bravo v Bye',
@@ -144,14 +145,14 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(createButton(page)).toBeFocused();
-    await expect(rounds(page).locator('li').nth(1)).toHaveText('Game 2: Delta v Echo');
+    await expect(gameLabels(page).nth(1)).toHaveText('Game 2: Delta v Echo');
 
     await createButton(page).click();
     await dialog.getByRole('button', { name: 'Recreate bracket' }).click();
     await expect(
       panel(page).getByRole('status').filter({ hasText: 'Bracket recreated' }),
     ).toBeVisible();
-    await expect(rounds(page).locator('li').nth(1)).toHaveText('Game 2: Echo v Delta');
+    await expect(gameLabels(page).nth(1)).toHaveText('Game 2: Echo v Delta');
     await expect(createButton(page)).toBeFocused();
   });
 
@@ -335,5 +336,335 @@ test.describe('Tournaments: seeds and the bracket', () => {
         await expectRegistrationClosed(page, tenant);
       });
     });
+  });
+});
+
+const gameOf = (page: Page, label: string) =>
+  rounds(page)
+    .locator('[data-game]')
+    .filter({ has: page.locator('[data-slot="game-label"]', { hasText: label }) });
+const enterButton = (game: Locator) => game.getByRole('button', { name: /^Enter result/ });
+const correctButton = (game: Locator) => game.getByRole('button', { name: /^Correct result/ });
+const saveButton = (game: Locator) =>
+  game.getByRole('button', { name: /^Save (result|correction)/ });
+const savedStatus = (game: Locator, title: string) =>
+  game.getByRole('status').filter({ hasText: title });
+const scoreInput = (game: Locator, box: string) => game.locator(`input[id$="-${box}"]`);
+
+async function createBracket(page: Page) {
+  await createButton(page).click();
+  await expect(
+    panel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+  ).toBeVisible();
+}
+
+async function fillSet(game: Locator, a: string, b: string, set = 1) {
+  await scoreInput(game, `a${set}`).fill(a);
+  await scoreInput(game, `b${set}`).fill(b);
+}
+
+async function enterSet(game: Locator, a: string, b: string) {
+  await enterButton(game).click();
+  await fillSet(game, a, b);
+  await saveButton(game).click();
+}
+
+test.describe('Tournaments: bracket results', () => {
+  test('a result moves the winner on, locks the seeds, and can be undone, corrected, and played to a winner', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const first = gameOf(page, 'Game 2: Delta v Echo');
+    await expect(enterButton(gameOf(page, 'Game 1: Alpha v Bye'))).toHaveCount(0);
+    await expect(enterButton(gameOf(page, 'Game 1: Alpha v To be decided'))).toHaveCount(0);
+
+    await enterButton(first).click();
+    await expect(scoreInput(first, 'a1')).toBeFocused();
+    await screenshot(page, testInfo, 'bracket-result-form');
+    await expectAccessible(page);
+
+    await fillSet(first, '21', '15');
+    await saveButton(first).click();
+    const saved = savedStatus(first, 'Result saved');
+    await expect(saved).toContainText('Delta advances to the Semifinals.');
+    await expect(saved).toBeFocused();
+    await expect(first.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–15 Echo. Delta won.',
+    );
+    await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Delta');
+    await expect(panel(page).locator('[data-move]')).toHaveCount(0);
+    await expect(reason(page)).toHaveText(
+      'A result is entered, so the bracket cannot be recreated.',
+    );
+    await screenshot(page, testInfo, 'bracket-result-saved');
+    await expectAccessible(page);
+
+    await saved.getByRole('button', { name: 'Undo' }).click();
+    await expect(savedStatus(first, 'Result undone')).toBeFocused();
+    await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v To be decided');
+    await expect(panel(page).locator('[data-move]').first()).toBeVisible();
+    await expect(createButton(page)).toBeVisible();
+
+    await enterSet(first, '21', '15');
+    await expect(savedStatus(first, 'Result saved')).toBeVisible();
+
+    await correctButton(first).click();
+    await expect(scoreInput(first, 'a1')).toHaveValue('21');
+    await fillSet(first, '12', '21');
+    await saveButton(first).click();
+    await expect(savedStatus(first, 'Result corrected')).toContainText(
+      'Echo advances to the Semifinals.',
+    );
+    await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Echo');
+    await screenshot(page, testInfo, 'bracket-result-corrected');
+
+    const semifinal = gameOf(page, 'Game 1: Alpha v Echo');
+    await enterSet(semifinal, '21', '10');
+    await expect(savedStatus(semifinal, 'Result saved')).toContainText(
+      'Alpha advances to the Final.',
+    );
+    await expect(first.locator('[data-slot="locked"]')).toHaveText(
+      'The next game has a result, so this result cannot change.',
+    );
+    await expect(correctButton(first)).toHaveCount(0);
+    await screenshot(page, testInfo, 'bracket-result-locked');
+    await expectAccessible(page);
+
+    await enterSet(gameOf(page, 'Game 2: Bravo v Charlie'), '21', '19');
+    await expect(gameLabels(page).nth(6)).toHaveText('Game 1: Alpha v Bravo');
+    const final = gameOf(page, 'Game 1: Alpha v Bravo');
+    await enterSet(final, '21', '15');
+    await expect(savedStatus(final, 'Result saved')).toContainText('Alpha wins the tournament.');
+    await expect(rounds(page).locator('[data-slot="winner"]')).toHaveText('Winner: Alpha');
+    await screenshot(page, testInfo, 'bracket-winner');
+    await expectAccessible(page);
+
+    await page.reload();
+    await expect(rounds(page).locator('[data-slot="winner"]')).toHaveText('Winner: Alpha');
+    await expect(first.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 12–21 Echo. Echo won.',
+    );
+  });
+
+  test('a tied set shows its error under the set once the pair is left, keeps the scores, and clears while typing the fix', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterButton(game).click();
+    await scoreInput(game, 'a1').fill('21');
+    await scoreInput(game, 'b1').fill('21');
+    await expect(game.locator('[data-slot="field-error"]')).toHaveCount(0);
+    await saveButton(game).focus();
+    const error = game.locator('[data-slot="field-error"]');
+    await expect(error).toHaveText('Set 1 is tied. A set needs a winner.');
+    await expect(scoreInput(game, 'a1')).toHaveAttribute('aria-invalid', 'true');
+    await screenshot(page, testInfo, 'bracket-result-tied');
+    await expectAccessible(page);
+
+    await saveButton(game).click();
+    await expect(scoreInput(game, 'a1')).toBeFocused();
+    await expect(scoreInput(game, 'b1')).toHaveValue('21');
+
+    await scoreInput(game, 'b1').fill('15');
+    await expect(error).toHaveCount(0);
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toBeVisible();
+  });
+
+  test('a forfeit records the sport’s forfeit score and the other team wins', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterButton(game).click();
+    await game.getByRole('checkbox', { name: 'A team forfeits' }).click();
+    await expect(scoreInput(game, 'a1')).toHaveCount(0);
+    await expect(game.getByText('The other team wins 21–0.')).toBeVisible();
+    await saveButton(game).click();
+    await expect(game.getByText('Choose the team that forfeits.')).toBeVisible();
+    await screenshot(page, testInfo, 'bracket-result-forfeit');
+    await expectAccessible(page);
+
+    await game.locator('label', { hasText: 'Echo' }).click();
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toContainText('Delta advances');
+    await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–0 Echo. Echo forfeited. Delta won.',
+    );
+  });
+
+  test('a best of 3 needs the third set when the teams split the first two', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await page.locator('label', { has: page.locator('#sets-per-game-3') }).click();
+    await page
+      .locator('#edit-details form')
+      .getByRole('button', { name: /^Save changes/ })
+      .click();
+    await expect(page.locator('#edit-details form')).toContainText('Details saved.');
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterButton(game).click();
+    await expect(game.locator('legend')).toHaveText(['Set 1', 'Set 2', 'Set 3']);
+    await fillSet(game, '21', '15');
+    await fillSet(game, '18', '21', 2);
+    await saveButton(game).click();
+    await expect(game.locator('[data-slot="field-error"]')).toHaveText('Enter the score of set 3.');
+    await expect(scoreInput(game, 'a3')).toBeFocused();
+    await screenshot(page, testInfo, 'bracket-result-best-of-3');
+    await expectAccessible(page);
+
+    await fillSet(game, '9', '15', 3);
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toContainText('Echo advances');
+    await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–15, 18–21, 9–15 Echo. Echo won.',
+    );
+  });
+
+  test('offline, Save looks disabled, a press shows the offline alert, and the scores stay', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterButton(game).click();
+    await fillSet(game, '21', '15');
+    await context.setOffline(true);
+    try {
+      await expect(saveButton(game)).toHaveAttribute('aria-disabled', 'true', { timeout: 5_000 });
+      // `force`: Playwright treats aria-disabled as not actionable, and the page must still answer.
+      await saveButton(game).click({ force: true });
+      const alert = game.getByRole('alert');
+      await expect(alert).toContainText('Your scores are still here.');
+      await expect(alert).toBeFocused();
+      await expect(scoreInput(game, 'a1')).toHaveValue('21');
+      await screenshot(page, testInfo, 'bracket-result-offline');
+      await expectAccessible(page);
+    } finally {
+      await context.setOffline(false);
+    }
+    await expect(saveButton(game)).not.toHaveAttribute('aria-disabled', /.*/, { timeout: 20_000 });
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toBeVisible();
+  });
+});
+
+test.describe('Tournaments: bracket results shared between organizers and the public', () => {
+  test('a set of 21–20 is saved, because a set needs only a winner', async ({ page }) => {
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    const game = gameOf(page, 'Game 2: Delta v Echo');
+    await enterSet(game, '21', '20');
+    await expect(savedStatus(game, 'Result saved')).toContainText('Delta advances');
+    await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+      'Delta 21–20 Echo. Delta won.',
+    );
+  });
+
+  test('the public bracket marks each winner and names the tournament winner as results are entered', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(NAMES),
+      registration: 'closed',
+    });
+    const publicContext = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+    try {
+      const visitor = await publicContext.newPage();
+      const publicPath = `${tenant.path}/tournaments/${SLUG}`;
+      const publicGames = visitor.getByTestId('bracket-game');
+      await page.goto(managePath);
+      await createBracket(page);
+      await visitor.goto(publicPath);
+      await expect(publicGames).toHaveCount(7);
+      await expect(visitor.getByTestId('bracket-winner')).toHaveCount(0);
+
+      await enterSet(gameOf(page, 'Game 2: Delta v Echo'), '21', '15');
+      await expect(savedStatus(gameOf(page, 'Game 2: Delta v Echo'), 'Result saved')).toBeVisible();
+      await visitor.reload();
+      await expect(publicGames.nth(1)).toContainText('Delta');
+      await expect(publicGames.nth(1).getByText('Won', { exact: true })).toHaveCount(1);
+      await expect(publicGames.nth(1).getByTestId('bracket-team').first()).toContainText('Won');
+      await expect(publicGames.nth(4)).toContainText('Alpha');
+      await expect(publicGames.nth(4)).toContainText('Delta');
+
+      await enterSet(gameOf(page, 'Game 1: Alpha v Delta'), '21', '10');
+      await enterSet(gameOf(page, 'Game 2: Bravo v Charlie'), '21', '19');
+      await enterSet(gameOf(page, 'Game 1: Alpha v Bravo'), '21', '20');
+      await expect(page.locator('[data-slot="winner"]')).toHaveText('Winner: Alpha');
+      await visitor.reload();
+      await expect(visitor.getByTestId('bracket-winner')).toHaveText('Winner: Alpha');
+      await screenshot(visitor, testInfo, 'public-bracket-winner');
+      await expectAccessible(visitor);
+    } finally {
+      await publicContext.close();
+    }
+  });
+});
+
+test.describe('Tournaments: an Undo the server refuses after another organizer changed the result', () => {
+  test.use({ expectedConvexErrors: ['tournamentGames:undoResult'] });
+
+  test('Undo is refused after another organizer corrected the result, and the correction stays', async ({
+    page,
+    browser,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(NAMES),
+      registration: 'closed',
+    });
+    const second = newUser('Second');
+    const other = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+    try {
+      const otherPage = await other.newPage();
+      await signUp(otherPage, second);
+      await convexRun('testing:addMembership', {
+        organizationSlug: tenant.slug,
+        email: second.email,
+        role: 'orgAdmin',
+      });
+      await page.goto(managePath);
+      await createBracket(page);
+      const game = gameOf(page, 'Game 2: Delta v Echo');
+      await enterSet(game, '21', '15');
+      const saved = savedStatus(game, 'Result saved');
+      await expect(saved).toBeVisible();
+
+      await otherPage.goto(managePath);
+      const theirs = gameOf(otherPage, 'Game 2: Delta v Echo');
+      await correctButton(theirs).click();
+      await fillSet(theirs, '12', '21');
+      await saveButton(theirs).click();
+      await expect(savedStatus(theirs, 'Result corrected')).toBeVisible();
+
+      await saved.getByRole('button', { name: 'Undo' }).click();
+      await expect(game.locator('[data-slot="undo-note"]')).toContainText(
+        'Someone else changed this result, so it was not undone.',
+      );
+      await expect(game.locator('[data-slot="game-result"]')).toHaveText(
+        'Delta 12–21 Echo. Echo won.',
+      );
+      await expect(gameLabels(page).nth(4)).toHaveText('Game 1: Alpha v Echo');
+      await otherPage.reload();
+      await expect(
+        gameOf(otherPage, 'Game 2: Delta v Echo').locator('[data-slot="game-result"]'),
+      ).toHaveText('Delta 12–21 Echo. Echo won.');
+    } finally {
+      await other.close();
+    }
   });
 });

@@ -17,6 +17,10 @@ export type TournamentWaitlist = NonNullable<
 
 export type BracketSetup = NonNullable<FunctionReturnType<typeof api.tournamentGames.getSetup>>;
 
+export type BracketGameView = NonNullable<
+  BracketSetup['bracket']
+>['rounds'][number]['games'][number];
+
 export type BracketView =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: BracketSetup };
 

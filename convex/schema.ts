@@ -8,7 +8,7 @@ import { programStatusValidator, programTypeValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { sportCountsValidator, sportValidator } from './lib/sports';
+import { scoreValidator, sportCountsValidator, sportValidator } from './lib/sports';
 import { setsPerGameValidator } from './lib/tournamentEdit';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
@@ -213,6 +213,12 @@ export default defineSchema({
     /** The game the winner joins, on `nextSide`; both are absent on the Final. */
     nextGameId: v.optional(v.id('tournamentGames')),
     nextSide: v.optional(v.union(v.literal(0), v.literal(1))),
+    /** The result fields are set and cleared together with `winnerTeamId` of a played game; a bye has none. */
+    score: v.optional(scoreValidator),
+    /** The team that did not play; `score` then holds the sport's forfeit score. */
+    forfeitTeamId: v.optional(v.id('teams')),
+    resultEnteredAt: v.optional(v.number()),
+    resultEnteredBy: v.optional(v.id('users')),
   }).index('by_tournamentId_and_stage_and_round_and_slot', [
     'tournamentId',
     'stage',

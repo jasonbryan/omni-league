@@ -1,7 +1,8 @@
 import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
-import { mutation, query, type QueryCtx } from './_generated/server';
+import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import {
+  requireGameOrganizer,
   requireProgramOrganizerOrForbidden,
   requireStaffOrForbidden,
   requireTournamentOrganizer,
@@ -9,17 +10,37 @@ import {
 import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, roundName } from './lib/bracket';
 import { registrationIsOpen } from './lib/registration';
 import { findOrganizationBySlug } from './lib/seasonLookup';
+import {
+  checkScore,
+  forfeitScore,
+  scoreValidator,
+  scoreWinnerSide,
+  type Score,
+  type Sport,
+} from './lib/sports';
+import { DEFAULT_SETS_PER_GAME } from './lib/tournamentEdit';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import {
   bracketGames,
   bracketHasResult,
+  clearResult,
+  gameHasResult,
+  nextGameOf,
   refuseBracket,
   replaceBracket,
+  saveResult,
   saveSeeds,
+  storedResultOf,
   tournamentTeams,
+  type StoredResult,
 } from './lib/tournamentBracket';
 
 const gameTeamValidator = v.union(v.null(), v.object({ teamId: v.id('teams'), name: v.string() }));
+
+const storedResultValidator = v.object({
+  score: scoreValidator,
+  forfeitTeamId: v.optional(v.id('teams')),
+});
 
 const setupValidator = v.object({
   seeds: v.array(v.object({ teamId: v.id('teams'), name: v.string(), rosterCount: v.number() })),
@@ -28,6 +49,7 @@ const setupValidator = v.object({
     v.null(),
     v.object({
       hasResult: v.boolean(),
+      winner: v.union(v.null(), gameTeamValidator),
       rounds: v.array(
         v.object({
           round: v.number(),
@@ -38,6 +60,15 @@ const setupValidator = v.object({
               slot: v.number(),
               teams: v.array(gameTeamValidator),
               winnerTeamId: v.union(v.null(), v.id('teams')),
+              result: v.union(
+                v.null(),
+                v.object({
+                  score: scoreValidator,
+                  forfeitTeamId: v.union(v.null(), v.id('teams')),
+                }),
+              ),
+              /** The next game has a result, so Undo and Correct are refused. */
+              locked: v.boolean(),
             }),
           ),
         }),
@@ -45,6 +76,19 @@ const setupValidator = v.object({
     }),
   ),
 });
+
+function resultViewOf(game: Doc<'tournamentGames'>) {
+  const stored = storedResultOf(game);
+  return stored && { score: stored.score, forfeitTeamId: stored.forfeitTeamId ?? null };
+}
+
+function nextHasResult(
+  game: Doc<'tournamentGames'>,
+  byId: ReadonlyMap<Id<'tournamentGames'>, Doc<'tournamentGames'>>,
+): boolean {
+  const next = game.nextGameId && byId.get(game.nextGameId);
+  return next ? gameHasResult(next) : false;
+}
 
 async function bracketView(
   ctx: QueryCtx,
@@ -57,8 +101,12 @@ async function bracketView(
     names.set(teamId, (await ctx.db.get('teams', teamId))?.name ?? '');
   }
   const rounds = games.reduce((most, game) => Math.max(most, game.round), 0);
+  const byId = new Map(games.map((game) => [game._id, game]));
+  const final = games.find((game) => game.round === rounds);
+  const winnerTeamId = final && gameHasResult(final) ? final.winnerTeamId : undefined;
   return {
     hasResult: bracketHasResult(games),
+    winner: winnerTeamId ? { teamId: winnerTeamId, name: names.get(winnerTeamId) ?? '' } : null,
     rounds: Array.from({ length: rounds }, (_, index) => ({
       round: index + 1,
       name: roundName(index + 1, rounds),
@@ -71,6 +119,8 @@ async function bracketView(
             teamId === null ? null : { teamId, name: names.get(teamId) ?? '' },
           ),
           winnerTeamId: game.winnerTeamId ?? null,
+          result: gameHasResult(game) ? resultViewOf(game) : null,
+          locked: nextHasResult(game, byId),
         })),
     })),
   };
@@ -167,5 +217,155 @@ export const createBracket = mutation({
     }
     const gameCount = await replaceBracket(ctx, tournament._id, seeds, existing);
     return { gameCount, replaced: existing.length > 0 };
+  },
+});
+
+const resultArgs = {
+  gameId: v.id('tournamentGames'),
+  score: v.optional(scoreValidator),
+  forfeitTeamId: v.optional(v.id('teams')),
+};
+
+const savedValidator = v.object({
+  winnerTeamId: v.id('teams'),
+  winnerName: v.string(),
+  /** What Undo sends back, so it acts only on this result. */
+  resultEnteredAt: v.number(),
+  /** The round the winner joins; `null` for the Final, whose winner wins the tournament. */
+  advancesTo: v.union(v.null(), v.string()),
+  /** What the game held before, so the page can offer to restore it; `null` for a first result. */
+  previous: v.union(v.null(), storedResultValidator),
+});
+
+interface ResultInput {
+  score?: Score | undefined;
+  forfeitTeamId?: Id<'teams'> | undefined;
+}
+
+const setsPerGameOf = (tournament: Doc<'tournaments'>) =>
+  tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
+
+function checkedResult(
+  game: Doc<'tournamentGames'>,
+  tournament: Doc<'tournaments'>,
+  sport: Sport,
+  result: StoredResult,
+): StoredResult & { winnerTeamId: Id<'teams'> } {
+  const issue = checkScore(sport, setsPerGameOf(tournament), result.score);
+  if (issue)
+    refuseBracket({ code: 'invalidScore', message: issue.message }, { field: issue.field });
+  const winnerTeamId = game.teamIds[scoreWinnerSide(result.score)!]!;
+  const { forfeitTeamId } = result;
+  if (
+    forfeitTeamId !== undefined &&
+    (forfeitTeamId === winnerTeamId || !game.teamIds.includes(forfeitTeamId))
+  ) {
+    throw new Error('Not allowed');
+  }
+  return { ...result, winnerTeamId };
+}
+
+function resultFrom(
+  game: Doc<'tournamentGames'>,
+  tournament: Doc<'tournaments'>,
+  sport: Sport,
+  { score, forfeitTeamId }: ResultInput,
+): StoredResult & { winnerTeamId: Id<'teams'> } {
+  // The page sends one or the other, so both or neither is a caller sending its own arguments.
+  if ((score === undefined) === (forfeitTeamId === undefined)) throw new Error('Not allowed');
+  if (forfeitTeamId === undefined) return checkedResult(game, tournament, sport, { score: score! });
+  const side = game.teamIds.indexOf(forfeitTeamId);
+  if (side !== 0 && side !== 1) throw new Error('Not allowed');
+  return checkedResult(game, tournament, sport, {
+    score: forfeitScore(sport, setsPerGameOf(tournament), side),
+    forfeitTeamId,
+  });
+}
+
+async function refuseUnlessReady(
+  ctx: QueryCtx,
+  game: Doc<'tournamentGames'>,
+  expectResult: boolean,
+): Promise<void> {
+  if (game.teamIds.some((teamId) => teamId === null)) {
+    refuseBracket({ code: 'gameNotReady', message: BRACKET_MESSAGES.gameNotReady });
+  }
+  if (gameHasResult(game) !== expectResult) {
+    refuseBracket(
+      expectResult
+        ? { code: 'noResult', message: BRACKET_MESSAGES.noResult }
+        : { code: 'resultExists', message: BRACKET_MESSAGES.resultExists },
+    );
+  }
+  const next = await nextGameOf(ctx, game);
+  if (next && gameHasResult(next)) {
+    refuseBracket({ code: 'nextGamePlayed', message: BRACKET_MESSAGES.nextGamePlayed });
+  }
+}
+
+async function saveFor(
+  ctx: MutationCtx,
+  { game, tournament, program, user }: Awaited<ReturnType<typeof requireGameOrganizer>>,
+  input: ResultInput,
+  hadResult: boolean,
+) {
+  await refuseUnlessReady(ctx, game, hadResult);
+  const result = resultFrom(game, tournament, program.sport, input);
+  const previous = storedResultOf(game);
+  const resultEnteredAt = await saveResult(ctx, game, { ...result, enteredBy: user._id });
+  const games = await bracketGames(ctx, tournament._id);
+  const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
+  return {
+    winnerTeamId: result.winnerTeamId,
+    winnerName: (await ctx.db.get('teams', result.winnerTeamId))?.name ?? '',
+    resultEnteredAt,
+    advancesTo: game.nextGameId ? roundName(game.round + 1, rounds) : null,
+    previous: hadResult ? previous : null,
+  };
+}
+
+export const enterResult = mutation({
+  args: resultArgs,
+  returns: savedValidator,
+  handler: async (ctx, { gameId, score, forfeitTeamId }) => {
+    const access = await requireGameOrganizer(ctx, gameId);
+    return saveFor(ctx, access, { score, forfeitTeamId }, false);
+  },
+});
+
+export const correctResult = mutation({
+  args: resultArgs,
+  returns: savedValidator,
+  handler: async (ctx, { gameId, score, forfeitTeamId }) => {
+    const access = await requireGameOrganizer(ctx, gameId);
+    return saveFor(ctx, access, { score, forfeitTeamId }, true);
+  },
+});
+
+export const undoResult = mutation({
+  args: {
+    gameId: v.id('tournamentGames'),
+    restore: v.optional(storedResultValidator),
+    // The `resultEnteredAt` the page was shown. Absent from the previous release's frontend, which acts on whatever the game holds.
+    expected: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { gameId, restore, expected }) => {
+    const { game, tournament, program, user } = await requireGameOrganizer(ctx, gameId);
+    await refuseUnlessReady(ctx, game, true);
+    if (expected !== undefined && game.resultEnteredAt !== expected) {
+      refuseBracket({ code: 'resultChanged', message: BRACKET_MESSAGES.resultChanged });
+    }
+    if (restore) {
+      // The score of a forfeit is rebuilt, so a restore cannot store a forfeit with a score the sport does not give.
+      const result =
+        restore.forfeitTeamId === undefined
+          ? checkedResult(game, tournament, program.sport, restore)
+          : resultFrom(game, tournament, program.sport, { forfeitTeamId: restore.forfeitTeamId });
+      await saveResult(ctx, game, { ...result, enteredBy: user._id });
+    } else {
+      await clearResult(ctx, game);
+    }
+    return null;
   },
 });
