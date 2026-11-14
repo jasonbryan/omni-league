@@ -11,6 +11,7 @@ import {
 } from './support/saved-copies';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedBracket } from './support/bracket';
+import { seedPublishedCamp } from './support/camp';
 import { seedTournament } from './support/tournament';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
@@ -431,6 +432,71 @@ test.describe('a tournament page offline', () => {
     await expect(page.locator('section#bracket h3')).toHaveText(['Semifinals', 'Final']);
     await expect(games).toHaveCount(3);
     await expect(games.first()).toContainText('(1) Alpha');
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('a camp page offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('a page viewed online opens from its saved copy with the note, and one never viewed shows the not-saved view', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Camp',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    });
+    const seed = (name: string, slug: string) =>
+      seedPublishedCamp(tenant, {
+        name,
+        slug,
+        locations: ['Alpha Field'],
+        minimumAge: 9,
+        maximumAge: 14,
+        sessions: [
+          {
+            name: 'Week 1',
+            startDate: dateFromToday(30),
+            endDate: dateFromToday(34),
+            places: 20,
+            registrationDeadline: dateFromToday(20),
+          },
+        ],
+      });
+    const viewed = await seed('Viewed Camp', 'viewed-camp');
+    const never = await seed('Never Viewed Camp', 'never-viewed-camp');
+    const note = page.locator('app-saved-copy-note');
+
+    await page.goto(viewed);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Camp' })).toBeVisible();
+    await expect(note).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(viewed);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Camp' })).toBeVisible();
+    await expect(note).toBeVisible();
+    await expect(page.locator('#sessions')).toContainText('20 places left');
+
+    // The router follows a history entry the way it follows Back, so the page opens without a request.
+    await page.evaluate((path) => {
+      history.pushState({}, '', path);
+      dispatchEvent(new PopStateEvent('popstate'));
+    }, never);
+    await expect(
+      page.getByRole('heading', { level: 1, name: "This page isn't saved on this device" }),
+    ).toBeVisible();
+    await expect(note).toHaveCount(0);
     const results = await axeScan(page);
     expect(describeViolations(results.violations)).toEqual([]);
 
