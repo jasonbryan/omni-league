@@ -1,6 +1,7 @@
 import type { FunctionReference, FunctionReturnType } from 'convex/server';
 import type { GenericValidator, Validator } from 'convex/values';
 import {
+  getCampPublicPageReturns,
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
@@ -17,7 +18,6 @@ import {
   searchLeaguesValidator,
   searchOrganizationsValidator,
 } from '../../../../../convex/lib/publicPage';
-import { getCampPublicPageReturns } from '../../../../../convex/lib/publicCamp';
 import { api } from './api';
 
 export interface OfflineSavedQuery {

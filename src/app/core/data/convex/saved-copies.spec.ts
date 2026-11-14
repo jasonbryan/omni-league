@@ -2,8 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { getFunctionName, makeFunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
-import { getCampPublicPageReturns } from '../../../../../convex/lib/publicCamp';
 import {
+  getCampPublicPageReturns,
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,

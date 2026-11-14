@@ -54,7 +54,6 @@ import type * as lib_password from "../lib/password.js";
 import type * as lib_previewOrigin from "../lib/previewOrigin.js";
 import type * as lib_programs from "../lib/programs.js";
 import type * as lib_publicBracket from "../lib/publicBracket.js";
-import type * as lib_publicCamp from "../lib/publicCamp.js";
 import type * as lib_publicLeague from "../lib/publicLeague.js";
 import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
@@ -164,7 +163,6 @@ declare const fullApi: ApiFromModules<{
   "lib/previewOrigin": typeof lib_previewOrigin;
   "lib/programs": typeof lib_programs;
   "lib/publicBracket": typeof lib_publicBracket;
-  "lib/publicCamp": typeof lib_publicCamp;
   "lib/publicLeague": typeof lib_publicLeague;
   "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;

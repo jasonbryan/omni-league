@@ -131,7 +131,7 @@ type PublicCampSession = PublicCampData['sessions'][number];
         </section>
         <section
           aria-labelledby="details-heading"
-          class="pb-8 md:pb-10 lg:col-start-3 lg:row-start-1 lg:py-10"
+          class="pb-6 md:pb-10 lg:col-start-3 lg:row-start-1 lg:pt-10"
         >
           <h2 id="details-heading" class="sr-only">Camp details</h2>
           <dl class="grid divide-y divide-border">

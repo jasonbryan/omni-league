@@ -67,7 +67,7 @@ const BAR = 'block rounded-md';
             </div>
           </div>
         </div>
-        <div class="pb-8 md:pb-10 lg:col-start-3 lg:row-start-1 lg:py-10">
+        <div class="pb-6 md:pb-10 lg:col-start-3 lg:row-start-1 lg:pt-10">
           @for (fact of facts; track fact) {
             <div class="flex gap-4 py-4">
               <span hlmSkeleton aria-hidden="true" class="block size-10 shrink-0 rounded-lg"></span>

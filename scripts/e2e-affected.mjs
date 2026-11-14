@@ -1094,13 +1094,7 @@ export const AREAS = [
     // Specs read what these helpers return through the public pages and queries, so the specs
     // found in the repo run with the page groups.
     name: 'convex public read helpers',
-    test: named('convex/lib/', [
-      'publicPage',
-      'publicLeague',
-      'publicSeason',
-      'publicList',
-      'publicCamp',
-    ]),
+    test: named('convex/lib/', ['publicPage', 'publicLeague', 'publicSeason', 'publicList']),
     specs: [
       ...PUBLIC_PAGE,
       ...LEAGUE_PAGE,

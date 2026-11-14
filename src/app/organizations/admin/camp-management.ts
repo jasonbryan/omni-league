@@ -136,7 +136,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                   <span hlmBadge variant="secondary">{{ camp.sportName }}</span>
                 </div>
               </div>
-              <div class="flex flex-col items-start gap-1.5 sm:items-end">
+              <div class="flex flex-col items-start gap-1.5 md:items-end">
                 @if (camp.status === 'published') {
                   <a
                     [routerLink]="publicPath()"

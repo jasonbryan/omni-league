@@ -20,7 +20,7 @@ import {
   publicCampSessions,
   recountCampSessions,
 } from './lib/campLookup';
-import { getCampPublicPageReturns, type PublicCampPage } from './lib/publicCamp';
+import { getCampPublicPageReturns, type PublicCampPage } from './lib/publicPage';
 import { programStatusValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
