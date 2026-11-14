@@ -246,4 +246,64 @@ describe('LeagueSidebar', () => {
       expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Classic');
     });
   });
+  describe('camps', () => {
+    const WITH_CAMPS = [
+      {
+        ...MINE_AS_ORGANIZER[0],
+        tournaments: [{ name: 'Gulf Coast Beach Open', slug: 'gulf-coast-beach-open' }],
+        camps: [
+          { name: 'Fall Break Camp', slug: 'fall-break-camp' },
+          { name: 'Junior Beach Volleyball Camp', slug: 'junior-beach-volleyball-camp' },
+        ],
+      },
+    ];
+    const campLinks = () => [
+      ...page.querySelectorAll<HTMLAnchorElement>('nav ul[aria-label="Your camps"] a'),
+    ];
+
+    it('lists the assigned camps of this organization after the tournaments, with the camp icon', async () => {
+      await open(COED_AS_ORGANIZER);
+      await answer(WITH_CAMPS);
+      const base = `/app/organizations/${GULF.slug}/camps`;
+      expect(campLinks().map(row)).toEqual([
+        ['Fall Break Camp', `${base}/fall-break-camp`, null],
+        ['Junior Beach Volleyball Camp', `${base}/junior-beach-volleyball-camp`, null],
+      ]);
+      const lists = [...page.querySelectorAll('nav ul[aria-label]')].map((ul) =>
+        ul.getAttribute('aria-label'),
+      );
+      expect(lists).toEqual(['Your leagues', 'Your tournaments', 'Your camps']);
+      for (const link of campLinks()) {
+        expect(tokens(link.className)).toEqual(tokens(OTHER_CLASS));
+        expect(link.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideTent');
+      }
+    });
+
+    it('names every kind in the navigation label, and draws no camps group without camps', async () => {
+      await open(COED_AS_ORGANIZER);
+      await answer(MINE_AS_ORGANIZER);
+      expect(page.querySelector('nav ul[aria-label="Your camps"]')).toBeNull();
+      expect(page.querySelector('nav')!.getAttribute('aria-label')).toBe(`${GULF.name} leagues`);
+      await answer(WITH_CAMPS);
+      expect(page.querySelector('nav')!.getAttribute('aria-label')).toBe(
+        `${GULF.name} leagues, tournaments, and camps`,
+      );
+    });
+
+    it('lists no camp of another organization', async () => {
+      await open(COED_AS_ORGANIZER);
+      await answer([
+        ...MINE_AS_ORGANIZER,
+        {
+          name: 'Lakeside Softball',
+          slug: 'lakeside-softball',
+          role: 'leagueOrganizer',
+          leagues: [],
+          camps: [{ name: 'Lakeside Camp', slug: 'lakeside-camp' }],
+        },
+      ]);
+      expect(campLinks()).toEqual([]);
+      expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Camp');
+    });
+  });
 });

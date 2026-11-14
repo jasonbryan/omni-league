@@ -1,7 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronsUpDown, lucideGlobe, lucideSwords, lucideTrophy } from '@ng-icons/lucide';
+import {
+  lucideChevronsUpDown,
+  lucideGlobe,
+  lucideSwords,
+  lucideTent,
+  lucideTrophy,
+} from '@ng-icons/lucide';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 import {
@@ -15,6 +21,7 @@ import {
 } from '../../shell/sidebar-classes';
 import { compareNames } from '../compare-names';
 import { initials } from '../initials';
+import { campPath } from '../admin/camp-path';
 import { tournamentPath } from '../admin/tournament-path';
 import { leaguePath } from './league-path';
 
@@ -24,6 +31,8 @@ interface Named {
 }
 
 export type SidebarKind = 'league' | 'tournament';
+
+const TOPICS = new Intl.ListFormat('en-US', { type: 'conjunction' });
 
 function withPage(assigned: readonly Named[], page: Named | null): Named[] {
   return page === null || assigned.some((item) => item.slug === page.slug)
@@ -35,7 +44,9 @@ function withPage(assigned: readonly Named[], page: Named | null): Named[] {
 @Component({
   selector: 'app-league-sidebar',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideChevronsUpDown, lucideGlobe, lucideSwords, lucideTrophy })],
+  providers: [
+    provideIcons({ lucideChevronsUpDown, lucideGlobe, lucideSwords, lucideTent, lucideTrophy }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <nav [attr.aria-label]="organization().name + ' ' + navTopic()" class="flex flex-col gap-4">
@@ -85,6 +96,23 @@ function withPage(assigned: readonly Named[], page: Named | null): Named[] {
                     [class]="item.isCurrent ? currentIcon : icon"
                     aria-hidden="true"
                   /><span class="min-w-0 flex-1">{{ item.name }}</span></a
+                >
+              </li>
+            }
+          </ul>
+        </div>
+      }
+      @if (camps().length > 0) {
+        <div>
+          <p [class]="groupLabel">Your camps</p>
+          <ul role="list" aria-label="Your camps" class="mt-1 flex flex-col gap-0.5">
+            @for (item of camps(); track item.slug) {
+              <li>
+                <a [routerLink]="item.path" [class]="row"
+                  ><ng-icon name="lucideTent" [class]="icon" aria-hidden="true" /><span
+                    class="min-w-0 flex-1"
+                    >{{ item.name }}</span
+                  ></a
                 >
               </li>
             }
@@ -157,13 +185,22 @@ export class LeagueSidebar {
       }),
     );
   });
-  protected readonly navTopic = computed(() =>
-    this.tournaments().length === 0
-      ? 'leagues'
-      : this.leagues().length === 0
-        ? 'tournaments'
-        : 'leagues and tournaments',
-  );
+  protected readonly camps = computed(() => {
+    const org = this.organization().slug;
+    return (this.mineHere()?.camps ?? []).map((item) => ({
+      name: item.name,
+      slug: item.slug,
+      path: campPath(org, item.slug),
+    }));
+  });
+  protected readonly navTopic = computed(() => {
+    const topics = [
+      this.leagues().length > 0 ? 'leagues' : null,
+      this.tournaments().length > 0 ? 'tournaments' : null,
+      this.camps().length > 0 ? 'camps' : null,
+    ].filter((topic) => topic !== null);
+    return TOPICS.format(topics) || 'leagues';
+  });
   protected readonly publicPath = computed(
     () => `/organizations/${encodeURIComponent(this.organization().slug)}`,
   );

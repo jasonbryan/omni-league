@@ -6,6 +6,7 @@ import {
   checkInviteEmail,
   checkInviteAssignments,
   type InviteField,
+  type ProgramOffers,
   type InviteInputError,
 } from '../../../../convex/lib/inviteInput';
 import type { Role } from '../../../../convex/lib/roles';
@@ -24,7 +25,7 @@ export interface InviteValues {
   email: string;
   role: Role;
   leagueIds: Id<'leagues'>[];
-  /** Sent only with tournaments to choose from, so the server words its refusal to match. */
+  /** Sent only with tournaments or camps to choose from, so the server words its refusal to match. */
   programIds?: Id<'programs'>[];
 }
 
@@ -57,13 +58,14 @@ function inputErrorOf(failure: unknown): InviteInputError | null {
   return { field: field as InviteField, code: code as InviteInputError['code'], message };
 }
 
-/** Role defaults to League organizer, the least access; with no league or tournament in the organization it is Org admin and League organizer is unavailable. */
+/** Role defaults to League organizer, the least access; with no league, tournament, or camp in the organization it is Org admin and League organizer is unavailable. */
 export class InviteForm {
   readonly model: WritableSignal<InviteTextModel> = signal({ email: '' });
   readonly fields: FieldTree<InviteTextModel>;
   readonly chosenRole = signal<Role>('leagueOrganizer');
   readonly selected = signal<ReadonlySet<Id<'leagues'>>>(new Set());
   readonly selectedTournaments = signal<ReadonlySet<Id<'programs'>>>(new Set());
+  readonly selectedCamps = signal<ReadonlySet<Id<'programs'>>>(new Set());
   readonly submitting = signal(false);
   readonly alert = signal<InviteFormAlertKind | null>(null);
 
@@ -71,13 +73,15 @@ export class InviteForm {
   readonly role: Signal<Role>;
   readonly chosen: Signal<Id<'leagues'>[]>;
   readonly chosenTournaments: Signal<Id<'programs'>[]>;
-  readonly tournamentsOffered: Signal<boolean>;
+  readonly chosenCamps: Signal<Id<'programs'>[]>;
+  readonly offers: Signal<ProgramOffers>;
 
   private readonly clientErrors: Record<InviteField, Signal<string | null>>;
   private readonly shown: Record<InviteField, ShownUntilValid>;
   private readonly leaguesChanged = changedSince(() => [
     this.selected(),
     this.selectedTournaments(),
+    this.selectedCamps(),
   ]);
   private readonly serverErrors: Record<InviteField, WritableSignal<string | null>>;
 
@@ -86,18 +90,27 @@ export class InviteForm {
   constructor(
     available: () => readonly Id<'leagues'>[],
     availableTournaments: () => readonly Id<'programs'>[],
+    availableCamps: () => readonly Id<'programs'>[],
   ) {
     // `required` puts the attribute on the input; the messages are ours (`inviteInput.ts`), so the
     // form and `invites.create` agree.
     this.fields = form(this.model, (path) => {
       required(path.email);
     });
-    this.tournamentsOffered = computed(() => availableTournaments().length > 0);
-    this.canChooseOrganizer = computed(() => available().length > 0 || this.tournamentsOffered());
+    this.offers = computed(() => ({
+      tournaments: availableTournaments().length > 0,
+      camps: availableCamps().length > 0,
+    }));
+    this.canChooseOrganizer = computed(
+      () => available().length > 0 || this.offers().tournaments || this.offers().camps,
+    );
     this.role = computed(() => (this.canChooseOrganizer() ? this.chosenRole() : 'orgAdmin'));
     this.chosen = computed(() => available().filter((id) => this.selected().has(id)));
     this.chosenTournaments = computed(() =>
       availableTournaments().filter((id) => this.selectedTournaments().has(id)),
+    );
+    this.chosenCamps = computed(() =>
+      availableCamps().filter((id) => this.selectedCamps().has(id)),
     );
     this.clientErrors = {
       email: computed(() => {
@@ -108,8 +121,8 @@ export class InviteForm {
         this.role() === 'leagueOrganizer'
           ? (checkInviteAssignments(
               this.chosen().length,
-              this.chosenTournaments().length,
-              this.tournamentsOffered(),
+              this.chosenTournaments().length + this.chosenCamps().length,
+              this.offers(),
             )?.message ?? null)
           : null,
       ),
@@ -126,7 +139,12 @@ export class InviteForm {
     };
     this.serverErrors = {
       email: this.untilChanged(() => this.model().email),
-      leagues: this.untilChanged(() => [this.role(), this.chosen(), this.chosenTournaments()]),
+      leagues: this.untilChanged(() => [
+        this.role(),
+        this.chosen(),
+        this.chosenTournaments(),
+        this.chosenCamps(),
+      ]),
     };
     this.errors = {
       email: this.shownError('email'),
@@ -152,11 +170,21 @@ export class InviteForm {
     });
   }
 
+  toggleCamp(id: Id<'programs'>, checked: boolean): void {
+    this.selectedCamps.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   clear(): void {
     this.model.set({ email: '' });
     this.chosenRole.set('leagueOrganizer');
     this.selected.set(new Set());
     this.selectedTournaments.set(new Set());
+    this.selectedCamps.set(new Set());
     this.fields().reset();
     this.leaguesChanged.set(false);
     this.alert.set(null);
@@ -193,7 +221,10 @@ export class InviteForm {
       email: checked.email,
       role,
       leagueIds: assigns ? this.chosen() : [],
-      ...(assigns && this.tournamentsOffered() && { programIds: this.chosenTournaments() }),
+      ...(assigns &&
+        (this.offers().tournaments || this.offers().camps) && {
+          programIds: [...this.chosenTournaments(), ...this.chosenCamps()],
+        }),
     };
     this.submitting.set(true);
     try {

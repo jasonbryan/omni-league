@@ -132,8 +132,8 @@ const ROLE_LABEL: Record<Role, string> = {
           <p class="text-sm font-medium text-muted-foreground">{{ organization.name }}</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">Staff</h1>
           <p class="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Org admins manage everything here. League organizers run the leagues and tournaments you
-            assign them.
+            Org admins manage everything here. League organizers run the leagues, tournaments, and
+            camps you assign them.
           </p>
         </div>
         <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
@@ -397,6 +397,8 @@ const ROLE_LABEL: Record<Role, string> = {
           [leaguesFailed]="leaguesFailed()"
           [tournaments]="tournamentChoices()"
           [tournamentsFailed]="tournamentsFailed()"
+          [camps]="campChoices()"
+          [campsFailed]="campsFailed()"
         />
       </div>
     }
@@ -481,11 +483,17 @@ export class AdminStaff {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
+  private readonly campList = injectQuery(api.camps.listForOrganization, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
   protected readonly memberRows = computed(() => this.memberList.value());
   protected readonly membersFailed = computed(() => this.memberList.error() !== undefined);
   protected readonly pendingFailed = computed(() => this.pendingList.error() !== undefined);
   protected readonly leaguesFailed = computed(() => this.leagueList.error() !== undefined);
   protected readonly tournamentsFailed = computed(() => this.tournamentList.error() !== undefined);
+  protected readonly campsFailed = computed(() => this.campList.error() !== undefined);
 
   private readonly now = injectNowAtDeadlines(
     () => this.pendingList.value()?.map((row) => row.expiresAt) ?? [],
@@ -521,6 +529,13 @@ export class AdminStaff {
 
   protected readonly tournamentChoices = computed(() =>
     this.tournamentList
+      .value()
+      ?.map(({ programId, name }) => ({ programId, name }))
+      .sort((x, y) => compareNames(x.name, y.name)),
+  );
+
+  protected readonly campChoices = computed(() =>
+    this.campList
       .value()
       ?.map(({ programId, name }) => ({ programId, name }))
       .sort((x, y) => compareNames(x.name, y.name)),
@@ -568,8 +583,11 @@ export class AdminStaff {
   protected assigned(row: {
     leagueNames: string[];
     tournamentNames?: string[] | undefined;
+    campNames?: string[] | undefined;
   }): string {
-    return [...row.leagueNames, ...(row.tournamentNames ?? [])].join(', ');
+    return [...row.leagueNames, ...(row.tournamentNames ?? []), ...(row.campNames ?? [])].join(
+      ', ',
+    );
   }
 
   protected jumpToPanel(event: MouseEvent): void {
