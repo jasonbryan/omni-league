@@ -221,6 +221,9 @@ describe('camps.create', () => {
     ['an age to of 100', { maximumAge: 100 }, 'maximumAge'],
     ['an age from of 9.5', { minimumAge: 9.5 }, 'minimumAge'],
     ['an age to of 3', { minimumAge: 4, maximumAge: 3 }, 'maximumAge'],
+    ['an age from that is not a number', { minimumAge: NaN }, 'minimumAge'],
+    ['an infinite age to', { maximumAge: Infinity }, 'maximumAge'],
+    ['a negative age from', { minimumAge: -5 }, 'minimumAge'],
   ])('refuses %s with the field’s error', async (_label, change, field) => {
     const s = await setup();
     expect(
