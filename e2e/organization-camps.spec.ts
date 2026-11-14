@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp } from './support/camp';
 import { chipLabel, chooseChip } from './support/chip';
@@ -419,5 +419,44 @@ test.describe('Camps: an invited league organizer', () => {
     const camps = nav.getByRole('list', { name: 'Your camps', includeHidden: true });
     await expect(camps.getByRole('listitem', { includeHidden: true })).toHaveText([JUNIOR.name]);
     await expect(camps.getByRole('link', { includeHidden: true })).toHaveCount(0);
+  });
+
+  test('the assigned camps are text rows with the tent icon and no link, and the sidebar passes the axe helper', async ({
+    page,
+    isMobile,
+  }, testInfo) => {
+    const tenant = await seedTenant({
+      name: 'E2E Camp Rows',
+      locations: LOCATIONS,
+      leagues: LEAGUES,
+    });
+    await seedCamps(tenant);
+    const user = await seedUser(newUser('Invitee'));
+    const token = randomBytes(32).toString('base64url');
+    await convexRun('testing:addInvite', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      role: 'leagueOrganizer',
+      leagueNames: ['Sand 4s'],
+      campNames: [JUNIOR.name, FALL.name],
+      expiresAt: Date.now() + 12 * DAY,
+      token,
+    });
+    await page.goto(`/invites/accept#${token}`);
+    await main(page).getByRole('link', { name: 'Sign in' }).click();
+    await signInWith(page, user);
+    await main(page).getByRole('button', { name: 'Accept invite' }).click();
+    await expect(main(page)).toContainText('You’re a league organizer for');
+
+    await page.goto(`/app/organizations/${tenant.slug}/leagues/sand-4s`);
+    if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
+    const nav = page.getByRole('navigation', { name: `${tenant.name} leagues and camps` });
+    const camps = nav.getByRole('list', { name: 'Your camps' });
+    await expect(camps).toBeVisible();
+    await expect(camps.getByRole('listitem')).toHaveText([FALL.name, JUNIOR.name]);
+    await expect(camps.getByRole('link')).toHaveCount(0);
+    await expect(camps.locator('ng-icon[name="lucideTent"]')).toHaveCount(2);
+    await screenshot(page, testInfo, 'camp-sidebar-rows');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
   });
 });
