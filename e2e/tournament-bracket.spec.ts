@@ -1358,6 +1358,13 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
             await expect.poll(() => held.isHolding()).toBe(true);
             const before = await reportPanel(crabs).boundingBox();
             const rosterBefore = await rosterTop(crabs);
+            const parts = (selector: string) =>
+              reportPanel(crabs)
+                .locator(selector)
+                .evaluateAll((els) =>
+                  els.map((el) => `${el.tagName}:${el.getBoundingClientRect().height}`).join(' '),
+                );
+            const skeletonParts = await parts('[data-slot="skeleton"]');
 
             held.release();
             await expect(
@@ -1370,11 +1377,21 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
             }
             const after = await reportPanel(crabs).boundingBox();
             testInfo.annotations.push({
+              type: 'parts',
+              description: `${skeletonParts} || ${await parts('[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"]')}`,
+            });
+            testInfo.annotations.push({
               type: 'panel height',
               description: `skeleton ${before?.height}, loaded ${after?.height}`,
             });
             expect(before).not.toBeNull();
-            expect(after?.height).toBeCloseTo(before?.height ?? -1, 0);
+            const loadedParts = await parts(
+              '[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"]',
+            );
+            expect(
+              after?.height,
+              `skeleton: ${skeletonParts} || loaded: ${loadedParts}`,
+            ).toBeCloseTo(before?.height ?? -1, 0);
             expect(await rosterTop(crabs)).toBeCloseTo(rosterBefore ?? -1, 0);
           });
         });

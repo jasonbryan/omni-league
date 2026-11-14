@@ -270,7 +270,11 @@ export interface TeamPageNavigationState {
               <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
                 <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
                   @if (team.tournament && team.viewerIsCaptain && teamIdOf(); as id) {
-                    <app-score-report-panel [teamId]="id" />
+                    <app-score-report-panel
+                      [teamId]="id"
+                      [sport]="team.tournament.sport ?? 'beachVolleyball'"
+                      [setsPerGame]="team.tournament.setsPerGame ?? 1"
+                    />
                   }
                   <section aria-labelledby="roster-heading" hlmCard size="bare" class="${PANEL}">
                     <div

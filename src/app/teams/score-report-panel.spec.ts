@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../convex/_generated/dataModel';
+import type { Sport } from '../../../convex/lib/sports';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { expectPendingSpinner } from '../ui/testing/spinner';
@@ -10,12 +11,20 @@ import { ScoreReportPanel } from './score-report-panel';
 const FOR_TEAM = 'scoreReports:forTeam';
 const REPORT = 'scoreReports:report';
 
+/** What the team page knows of its tournament before the game answers. */
+const TOURNAMENT: { sport: Sport; setsPerGame: number } = {
+  sport: 'beachVolleyball',
+  setsPerGame: 1,
+};
+
 @Component({
   imports: [ScoreReportPanel],
-  template: '<app-score-report-panel [teamId]="teamId" />',
+  template:
+    '<app-score-report-panel [teamId]="teamId" [sport]="tournament.sport" [setsPerGame]="tournament.setsPerGame" />',
 })
 class Host {
   protected readonly teamId = 'tm_crabs' as Id<'teams'>;
+  protected readonly tournament = TOURNAMENT;
 }
 
 const ROUTES = [{ path: 'host', component: Host }];
@@ -86,6 +95,49 @@ describe('ScoreReportPanel', () => {
     expect(text(page.querySelector('[role="status"]'))).toBe('Loading the game.');
     expect(page.querySelector('[data-slot="skeleton"]')).not.toBeNull();
     expect(form()).toBeNull();
+  });
+
+  describe('the skeleton before the game answers', () => {
+    const setRows = () => page.querySelectorAll('[data-slot="skeleton-set"]');
+
+    afterEach(() => {
+      Object.assign(TOURNAMENT, { sport: 'beachVolleyball', setsPerGame: 1 });
+    });
+
+    it.each([1, 3])(
+      'draws a row of boxes for each of the %s sets of a beach volleyball game',
+      async (sets) => {
+        TOURNAMENT.setsPerGame = sets;
+        await open();
+        expect(setRows()).toHaveLength(sets);
+        expect(page.querySelectorAll('[data-slot="skeleton-set-name"]')).toHaveLength(sets);
+        expect(page.querySelectorAll('[data-slot="skeleton-note"]')).toHaveLength(
+          sets === 3 ? 1 : 0,
+        );
+      },
+    );
+
+    it.each(['soccer', 'softball'] as const)(
+      'draws one pair of boxes with no set name for %s',
+      async (sport) => {
+        TOURNAMENT.sport = sport;
+        TOURNAMENT.setsPerGame = 3;
+        await open();
+        expect(setRows()).toHaveLength(1);
+        expect(page.querySelectorAll('[data-slot="skeleton-set-name"]')).toHaveLength(0);
+        expect(page.querySelectorAll('[data-slot="skeleton-note"]')).toHaveLength(0);
+      },
+    );
+
+    it('is also stacked, hidden from everyone, under the empty state, so the empty state is as tall as the form', async () => {
+      TOURNAMENT.setsPerGame = 3;
+      await open(answer(null, { setsPerGame: 3 }));
+      const stacked = page.querySelector('[data-slot="empty"]')!.previousElementSibling!;
+      expect(stacked.getAttribute('aria-hidden')).toBe('true');
+      expect(stacked.classList.contains('invisible')).toBe(true);
+      expect(stacked.querySelectorAll('[data-slot="skeleton-set"]')).toHaveLength(3);
+      expect(stacked.querySelector('[role="status"]')).toBeNull();
+    });
   });
 
   it('names the game and opens the form on the first score, with a Report score button', async () => {
