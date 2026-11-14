@@ -133,6 +133,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:orgSlug/tournaments/:tournamentSlug': [
     'organization-tournaments',
     'tournament-bracket',
+    'tournament-pools',
     'after-sign-in',
   ],
   'app/organizations/:orgSlug/camps/:campSlug': ['organization-camps', 'after-sign-in'],
@@ -818,9 +819,14 @@ export const AREAS = [
     specs: ['waitlist', 'season-management', 'tournament-registration'],
   },
   {
-    name: 'admin bracket panel',
-    test: named('src/app/organizations/admin/', ['bracket-panel', 'bracket-text']),
-    specs: ['tournament-bracket', 'organization-tournaments'],
+    name: 'admin bracket and pools panels',
+    test: named('src/app/organizations/admin/', [
+      'bracket-panel',
+      'bracket-text',
+      'pools-panel',
+      'pool-text',
+    ]),
+    specs: ['tournament-bracket', 'tournament-pools', 'organization-tournaments'],
   },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
@@ -1142,8 +1148,20 @@ export const AREAS = [
     name: 'convex tournament bracket',
     test: (file) =>
       named('convex/', ['tournamentGames', 'scoreReports'])(file) ||
-      named('convex/lib/', ['bracket', 'gameResults', 'scoreReports', 'tournamentBracket'])(file),
-    specs: ['tournament-bracket', 'organization-tournaments', 'tournament-registration'],
+      named('convex/lib/', [
+        'bracket',
+        'gameResults',
+        'pools',
+        'scoreReports',
+        'tournamentBracket',
+        'tournamentPools',
+      ])(file),
+    specs: [
+      'tournament-bracket',
+      'tournament-pools',
+      'organization-tournaments',
+      'tournament-registration',
+    ],
   },
   {
     name: 'convex search',

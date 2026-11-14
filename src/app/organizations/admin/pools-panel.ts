@@ -197,7 +197,7 @@ interface MoveTarget {
                   <h3 [id]="'pool-' + pool.pool" class="font-semibold">Pool {{ pool.pool }}</h3>
                   <p [class]="hint + ' tabular-nums'">{{ pool.teams.length }} teams</p>
                 </div>
-                <ol role="list" class="mt-3 divide-y divide-border border-y border-border">
+                <ol role="list" class="mt-3 divide-y divide-border border-t border-b border-border">
                   @for (team of pool.teams; track team.teamId) {
                     <li class="flex items-start gap-3 py-3" [attr.data-team-id]="team.teamId">
                       <span
