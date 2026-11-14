@@ -540,7 +540,7 @@ test.describe('Camp sessions: opening the camp page', () => {
     await rows(page).first().getByRole('link', { name: JUNIOR.name }).click();
     await expect(page).toHaveURL(`${baseURL}${campPage(tenant)}`);
     const crumbs = main(page).getByRole('navigation', { name: 'Breadcrumb' });
-    await expect(crumbs.getByRole('link', { name: 'Camps' })).toHaveAttribute(
+    await expect(crumbs.getByRole('link', { name: 'Camps', exact: true })).toHaveAttribute(
       'href',
       `${base}/camps`,
     );
@@ -548,7 +548,7 @@ test.describe('Camp sessions: opening the camp page', () => {
       'aria-current',
       'page',
     );
-    await crumbs.getByRole('link', { name: 'Camps' }).click();
+    await crumbs.getByRole('link', { name: 'Camps', exact: true }).click();
     await expect(page).toHaveURL(`${baseURL}${base}/camps`);
   });
 });
