@@ -608,7 +608,7 @@ describe('the route tables', () => {
     const pages = routes.filter(
       (route) => route.component && route.path.startsWith('organizations/:orgSlug'),
     );
-    assert.equal(pages.length, 5);
+    assert.equal(pages.length, 6);
     for (const route of pages) {
       assert.ok(ROUTE_SPECS[route.path].includes('organization-route-preload'), route.path);
     }

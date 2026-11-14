@@ -1,6 +1,7 @@
 import type { FunctionReference, FunctionReturnType } from 'convex/server';
 import type { GenericValidator, Validator } from 'convex/values';
 import {
+  getCampPublicPageReturns,
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
@@ -61,6 +62,10 @@ const TOURNAMENT_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.tournaments.getPublicPage, getTournamentPublicPageReturns, 1),
 ];
 
+const CAMP_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.camps.getPublicPage, getCampPublicPageReturns, 1),
+];
+
 const FIND_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.search.leagues, searchLeaguesValidator, 1),
   savedQuery(api.search.leaguesBySport, searchLeaguesBySportValidator, 1),
@@ -76,5 +81,6 @@ export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   ...LEAGUE_PAGE_QUERIES,
   ...SEASON_PAGE_QUERIES,
   ...TOURNAMENT_PAGE_QUERIES,
+  ...CAMP_PAGE_QUERIES,
   ...FIND_PAGE_QUERIES,
 ];

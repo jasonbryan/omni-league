@@ -11,6 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Title } from '@angular/platform-browser';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
@@ -19,6 +20,7 @@ import {
   lucideCircleCheck,
   lucideCircleDashed,
   lucideClock,
+  lucideGlobe,
   lucideMapPin,
   lucidePlus,
   lucideTrash2,
@@ -44,14 +46,17 @@ import { HlmBadge } from '../../ui/badge';
 import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { seasonDates } from '../league/season-dates';
+import { publicCampNames } from '../public-camp/public-camp-names';
+import { publicCampPath } from '../public-camp/public-camp-path';
 import { AdminAlert } from './admin-alert';
-import { OUTLINE_BUTTON } from './button-classes';
+import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { ADD_SESSION_FRAGMENT, CampAddSessionLanding } from './camp-add-session-landing';
 import { CampBreadcrumb } from './camp-breadcrumb';
 import { CampContext, type CampSessionRow } from './camp-context';
 import { CampNoAccess } from './camp-no-access';
 import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
+import { PublishCampDialog, type PublishCampOutcome } from './publish-camp-dialog';
 import { injectSectionJump } from './section-jump';
 
 const DELETE_FAILED = 'Check your connection and try again.';
@@ -71,6 +76,8 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
     HlmSkeleton,
     NgIcon,
     NotFoundView,
+    PublishCampDialog,
+    RouterLink,
     ServerErrorView,
   ],
   providers: [
@@ -81,6 +88,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
       lucideCircleCheck,
       lucideCircleDashed,
       lucideClock,
+      lucideGlobe,
       lucideMapPin,
       lucidePlus,
       lucideTrash2,
@@ -89,7 +97,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block' },
+  host: { class: 'block', '[attr.inert]': 'publishOpen() ? "" : null' },
   template: `
     @switch (state()) {
       @case ('ready') {
@@ -102,29 +110,87 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
               [name]="camp.name"
               [slug]="camp.slug"
             />
-            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-              {{ camp.name }}
-            </h1>
-            <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-              @if (camp.status === 'published') {
-                <span hlmBadge variant="default"
-                  ><ng-icon
-                    name="lucideCircleCheck"
-                    data-icon="inline-start"
-                    aria-hidden="true"
-                  />Published</span
-                >
-              } @else {
-                <span hlmBadge variant="outline"
-                  ><ng-icon
-                    name="lucideCircleDashed"
-                    data-icon="inline-start"
-                    aria-hidden="true"
-                  />Draft</span
-                >
-              }
-              <span hlmBadge variant="secondary">{{ camp.sportName }}</span>
+            <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+              <div class="min-w-0">
+                <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                  {{ camp.name }}
+                </h1>
+                <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                  @if (camp.status === 'published') {
+                    <span hlmBadge variant="default"
+                      ><ng-icon
+                        name="lucideCircleCheck"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />Published</span
+                    >
+                  } @else {
+                    <span hlmBadge variant="outline"
+                      ><ng-icon
+                        name="lucideCircleDashed"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />Draft</span
+                    >
+                  }
+                  <span hlmBadge variant="secondary">{{ camp.sportName }}</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-start gap-1.5 md:items-end">
+                @if (camp.status === 'published') {
+                  <a
+                    [routerLink]="publicPath()"
+                    [state]="names()"
+                    data-slot="button"
+                    [class]="outlineButton"
+                    ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
+                    public page</a
+                  >
+                } @else {
+                  <button
+                    #publishButton
+                    type="button"
+                    data-slot="button"
+                    aria-haspopup="dialog"
+                    [class]="primaryButton"
+                    [class.opacity-50]="noSessions()"
+                    [attr.aria-disabled]="noSessions() ? 'true' : null"
+                    [attr.aria-describedby]="noSessions() ? 'publish-hint' : null"
+                    (click)="publish()"
+                  >
+                    <ng-icon
+                      name="lucideGlobe"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Publish
+                  </button>
+                  @if (noSessions()) {
+                    <p id="publish-hint" class="text-sm text-muted-foreground">
+                      Add a session first.
+                    </p>
+                  }
+                }
+              </div>
             </div>
+            @if (published()) {
+              <app-admin-alert
+                #publishedNotice
+                class="mt-6"
+                kind="success"
+                [title]="camp.name + ' is published.'"
+                description="Its page is public now."
+                ><a [routerLink]="publicPath()" [state]="names()"
+                  >View public page</a
+                ></app-admin-alert
+              >
+            } @else if (camp.status === 'draft') {
+              <app-admin-alert
+                class="mt-6"
+                kind="info"
+                title="This camp is a draft"
+                description="Only your staff can see it. Publish it to put its page online."
+              />
+            }
             <section
               id="details"
               aria-labelledby="details-heading"
@@ -272,7 +338,11 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                               /><span>Registration closes {{ closes(row) }}</span>
                             </p>
                           </div>
-                          @if (row.registeredCount === 0) {
+                          @if (row.registeredCount === 0 && keepsCampPublished(rows().length)) {
+                            <span data-slot="session-required" class="text-sm text-muted-foreground"
+                              >Required while published</span
+                            >
+                          } @else if (row.registeredCount === 0) {
                             <button
                               type="button"
                               data-slot="button"
@@ -359,6 +429,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
               <app-camp-session-form [campId]="camp.campId" />
             </section>
           </div>
+          <app-publish-camp-dialog (dismissed)="publishDismissed($event)" />
         }
       }
       @case ('loading') {
@@ -409,6 +480,7 @@ export class CampManagement {
 
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
+  protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly statusClass =
     'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground';
   protected readonly placeholders = [1, 2];
@@ -428,6 +500,18 @@ export class CampManagement {
   protected readonly addPath = computed(
     () => `${campPath(this.context.orgSlug(), this.context.campSlug())}#${ADD_SESSION_FRAGMENT}`,
   );
+  protected readonly noSessions = computed(() => {
+    const view = this.sessions();
+    return view.status === 'ready' && view.sessions.length === 0;
+  });
+  protected readonly publicPath = computed(() => {
+    const camp = this.camp();
+    return camp ? publicCampPath(camp.organization.slug, camp.slug) : '';
+  });
+  protected readonly names = computed(() => {
+    const camp = this.camp();
+    return camp ? publicCampNames({ organization: camp.organization, camp }) : undefined;
+  });
   protected readonly retryHref = computed(() =>
     campPath(this.context.orgSlug(), this.context.campSlug()),
   );
@@ -438,6 +522,9 @@ export class CampManagement {
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly failure = signal<{ title: string; description: string } | null>(null);
 
+  private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
+  private readonly publishDialog = viewChild(PublishCampDialog);
+  private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly addSection = viewChild<ElementRef<HTMLElement>>('addSection');
@@ -445,12 +532,38 @@ export class CampManagement {
     section.querySelector<HTMLElement>('#name'),
   );
 
+  protected readonly published = signal(false);
+  protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
+
   constructor() {
     effect(() => this.landOnceTheFormRenders());
     // The no-access and not-found views set their own title.
     effect(() => {
       const camp = this.camp();
       if (camp) this.title.setTitle(`${camp.name} | ${camp.organization.name} | Omni League`);
+    });
+  }
+
+  protected keepsCampPublished(sessionCount: number): boolean {
+    return this.camp()?.status === 'published' && sessionCount === 1;
+  }
+
+  protected publish(): void {
+    const camp = this.camp();
+    if (!camp || this.noSessions()) return;
+    this.published.set(false);
+    this.publishDialog()?.open({ campId: camp.campId, name: camp.name });
+  }
+
+  /** A published camp moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on Publish. */
+  protected publishDismissed(outcome: PublishCampOutcome): void {
+    if (outcome.published) {
+      this.published.set(true);
+      afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(() => this.publishButton()?.nativeElement.focus(), {
+      injector: this.injector,
     });
   }
 

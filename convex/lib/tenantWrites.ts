@@ -563,6 +563,15 @@ async function changeCampSessionCount(
   await ctx.db.patch('camps', campId, { sessionCount });
 }
 
+export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise<void> {
+  const program = await ctx.db.get('programs', camp.programId);
+  if (program?.organizationId !== camp.organizationId) {
+    throw new Error(`Camp ${camp._id} has no program of its organization`);
+  }
+  if (program.status === 'published') return;
+  await ctx.db.patch('programs', program._id, { status: 'published' });
+}
+
 export async function publishTournament(
   ctx: MutationCtx,
   tournament: Doc<'tournaments'>,

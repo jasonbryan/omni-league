@@ -43,6 +43,7 @@ import {
   divisionSeedValidator,
   insertCampSession,
   insertDraftCamp,
+  publishCamp,
   insertDraftTournament,
   insertLeague,
   insertSeason,
@@ -504,6 +505,20 @@ export const seedCampSession = internalMutation({
     if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
     const id = await insertCampSession(ctx, found.camp, session);
     if (registeredCount !== undefined) await ctx.db.patch('campSessions', id, { registeredCount });
+    return null;
+  },
+});
+
+/** Skips the rule that a camp has a session. */
+export const publishSeededCamp = internalMutation({
+  args: { organizationSlug: v.string(), campSlug: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, campSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
+    await publishCamp(ctx, found.camp);
     return null;
   },
 });

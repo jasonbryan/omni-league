@@ -277,6 +277,32 @@ export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;
 
 export const getTournamentPublicPageReturns = v.union(v.null(), publicTournamentPageValidator);
 
+// Holds no ids and no registrant data: the page is cached and saved offline. `placesLeft` is a count, never the registrations behind it.
+const publicCampSessionValidator = v.object({
+  name: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  dailyStartTime: v.optional(v.string()),
+  dailyEndTime: v.optional(v.string()),
+  placesLeft: v.number(),
+  registrationDeadline: v.string(),
+});
+
+export const publicCampPageValidator = v.object({
+  organization: v.object({ name: v.string(), slug: v.string() }),
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  minimumAge: v.number(),
+  maximumAge: v.number(),
+  locations: v.array(v.object({ name: v.string(), address: v.string() })),
+  sessions: v.array(publicCampSessionValidator),
+});
+
+export type PublicCampPage = Infer<typeof publicCampPageValidator>;
+
+export const getCampPublicPageReturns = v.union(v.null(), publicCampPageValidator);
+
 // `isFull` is optional so a copy saved before it existed stays valid.
 const publicTournamentRowFields = {
   isFull: v.optional(v.boolean()),
