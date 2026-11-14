@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { getFunctionName, makeFunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
+import { getCampPublicPageReturns } from '../../../../../convex/lib/publicCamp';
 import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
@@ -74,7 +75,7 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists the organization, league, season, tournament, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+  it('lists the organization, league, season, tournament, camp, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
     ).toEqual([
@@ -90,6 +91,7 @@ describe('ConvexSavedCopies', () => {
       ['seasons:getPublicPage', getSeasonPublicPageReturns],
       ['teams:listPublic', publicTeamsValidator],
       ['tournaments:getPublicPage', getTournamentPublicPageReturns],
+      ['camps:getPublicPage', getCampPublicPageReturns],
       ['search:leagues', searchLeaguesValidator],
       ['search:leaguesBySport', searchLeaguesBySportValidator],
       ['search:organizations', searchOrganizationsValidator],
