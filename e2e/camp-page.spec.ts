@@ -45,7 +45,6 @@ const week = (name: string, startInDays: number, extra: Partial<CampSessionSeed>
   ...extra,
 });
 
-/** Week 1 has places left, Week 2 is at its places, and Week 3's deadline has passed. */
 const SESSIONS = [
   week('Week 1', 14, { registeredCount: 5 }),
   week('Week 2', 21, { registeredCount: 20 }),

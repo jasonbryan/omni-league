@@ -10,7 +10,7 @@ export interface CampSessionStatus {
   full: boolean;
 }
 
-/** The registration status follows the seasons' phases, so a deadline passes at the same moment on a season, a tournament, and a camp session. */
+/** Follows the seasons' phases, so a deadline passes at the same moment for a season, a tournament, and a camp session. */
 export function campSessionStatus(
   session: { startDate: string; endDate: string; registrationDeadline: string; placesLeft: number },
   nowMs: number,

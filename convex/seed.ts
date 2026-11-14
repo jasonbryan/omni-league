@@ -837,7 +837,6 @@ async function ensureCampSessions(
   return inserted;
 }
 
-/** Publishes a demo camp an earlier run left as a draft, once it has its sessions. */
 async function ensureCampPublished(ctx: MutationCtx, demo: DemoCamp): Promise<void> {
   if (!demo.published) return;
   const organization = await organizationBySlug(ctx, demo.organizationSlug);

@@ -106,7 +106,6 @@ export class PublishCampDialog {
   }
 }
 
-/** The server's own message is shown for a refusal such as a camp with no session; anything else gets the generic text. */
 function failureView(failure: unknown): ConfirmAlertView {
   if (failure instanceof ConvexOfflineError) return { kind: 'offline', ...OFFLINE };
   const refusal = failure instanceof ConvexError ? (failure.data as { message?: unknown }) : null;

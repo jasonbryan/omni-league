@@ -509,7 +509,7 @@ export const seedCampSession = internalMutation({
   },
 });
 
-/** Skips the rule that a camp has a session, as `seedCampSession` skips those of `campSessions.add`. */
+/** Skips the rule that a camp has a session. */
 export const publishSeededCamp = internalMutation({
   args: { organizationSlug: v.string(), campSlug: v.string() },
   returns: v.null(),
