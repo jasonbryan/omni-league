@@ -75,7 +75,7 @@ test.describe('Camps: creating a draft', () => {
     await expect(status).toContainText('Junior Beach Volleyball Camp created.');
     await expect(status.getByRole('link', { name: 'Add sessions' })).toHaveAttribute(
       'href',
-      `${base}/camps/junior-beach-volleyball-camp`,
+      `${base}/camps/junior-beach-volleyball-camp#add-session`,
     );
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#minimum-age')).toHaveValue('');
