@@ -1384,7 +1384,6 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
               '[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"]',
             );
             expect(before).not.toBeNull();
-            // Text lines are 19.25px in the form and 20px in the skeleton, so each line may differ by a fraction of a pixel.
             const shift = Math.abs((after?.height ?? Infinity) - (before?.height ?? -1));
             expect(
               shift,
@@ -1393,7 +1392,7 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
             const rosterShift = Math.abs(
               ((await rosterTop(crabs)) ?? Infinity) - (rosterBefore ?? -1),
             );
-            expect(rosterShift).toBeLessThanOrEqual(2);
+            expect(rosterShift).toBeLessThan(0.5);
           });
         });
       }

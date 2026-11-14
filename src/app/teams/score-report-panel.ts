@@ -88,7 +88,9 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
             <div class="grid grid-cols-2 gap-3">
               @for (box of boxes; track box) {
                 <div>
-                  <div hlmSkeleton class="rounded-md h-5 w-20 max-w-full"></div>
+                  <div hlmSkeleton class="rounded-md w-20 max-w-full text-sm leading-snug">
+                    <span class="invisible">Name</span>
+                  </div>
                   <div hlmSkeleton class="rounded-md mt-2 h-9 pointer-coarse:h-11"></div>
                 </div>
               }
@@ -96,9 +98,11 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
             @if (row === 2) {
               <div
                 hlmSkeleton
-                class="rounded-md mt-4 h-5 w-48 max-w-full"
+                class="rounded-md mt-4 w-48 max-w-full text-sm leading-normal"
                 data-slot="skeleton-note"
-              ></div>
+              >
+                <span class="invisible">Note</span>
+              </div>
             }
           </div>
         }
