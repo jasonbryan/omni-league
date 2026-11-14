@@ -495,3 +495,41 @@ describe('insertCampSession', () => {
     ]);
   });
 });
+
+describe('a league organizer with no camp assigned', () => {
+  async function organizerWithoutCamps(s: Setup) {
+    await s.t.run(async (ctx) => {
+      const userId = await ctx.db.insert('users', {
+        authUserId: 'no-camps-a',
+        name: 'no-camps-a',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId,
+        organizationId: s.organizationA,
+        role: 'leagueOrganizer',
+        leagueIds: [],
+      });
+    });
+    return s.t.withIdentity(identity('no-camps-a'));
+  }
+
+  test('is refused every camp session function, and is told the camp page is forbidden', async () => {
+    const s = await setup();
+    const caller = await organizerWithoutCamps(s);
+    const { campSessionId } = await s.adminA.mutation(api.campSessions.add, valid(s));
+    await expect(caller.mutation(api.campSessions.add, valid(s))).rejects.toThrow('Not allowed');
+    await expect(
+      caller.query(api.campSessions.listForCamp, { campId: s.junior.campId }),
+    ).rejects.toThrow('Not allowed');
+    await expect(caller.mutation(api.campSessions.remove, { campSessionId })).rejects.toThrow(
+      'Not allowed',
+    );
+    const page = caller.query(api.camps.getForManagement, {
+      orgSlug: 'org-a',
+      campSlug: 'junior-beach-volleyball-camp',
+    });
+    await expect(page).rejects.toSatisfy(isForbidden);
+    expect(await sessionsOf(s)).toHaveLength(1);
+  });
+});

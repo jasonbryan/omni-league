@@ -916,6 +916,18 @@ test.describe('who may open a camp’s page', () => {
     await expect(noAccess(page)).toBeVisible();
   });
 
+  test(
+    'a signed-out visitor is sent to sign in, with the camp page as returnTo',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedTenant({ name: 'E2E Camps Signed Out', locations: LOCATIONS });
+      await seedCamps(tenant);
+      await page.goto(campPage(tenant));
+      await expect(page).toHaveURL(/\/sign-in\?/);
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe(campPage(tenant));
+    },
+  );
+
   test('another organization’s camp slug under this organization is not found', async ({
     page,
   }, testInfo) => {
