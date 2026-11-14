@@ -14,6 +14,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
+  lucideCalendarDays,
   lucideCircleCheck,
   lucideCircleDashed,
   lucideMapPin,
@@ -33,6 +34,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
+import { campPath } from './camp-path';
 import { CampCreateForm } from './camp-create-form';
 import { CreateFormLanding } from './create-form-landing';
 import { injectSectionJump } from './section-jump';
@@ -44,6 +46,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
   imports: [AdminAlert, CampCreateForm, HlmBadge, HlmCard, HlmSkeleton, NgIcon, RouterLink],
   providers: [
     provideIcons({
+      lucideCalendarDays,
       lucideCircleCheck,
       lucideCircleDashed,
       lucideMapPin,
@@ -97,7 +100,13 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 @for (row of rows; track row.campId) {
                   <li class="px-4 py-3.5 md:px-5">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                      <h3 class="me-1 font-medium">{{ row.name }}</h3>
+                      <h3 class="me-1 font-medium">
+                        <a
+                          [routerLink]="campHref(row.slug)"
+                          class="rounded-sm underline-offset-4 hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                          >{{ row.name }}</a
+                        >
+                      </h3>
                       @if (row.status === 'published') {
                         <span hlmBadge variant="default"
                           ><ng-icon
@@ -122,6 +131,13 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                         class="mt-0.5 shrink-0 text-base"
                         aria-hidden="true"
                       /><span>{{ ages(row.minimumAge, row.maximumAge) }}</span>
+                    </p>
+                    <p class="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
+                      <ng-icon
+                        name="lucideCalendarDays"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span data-slot="session-count">{{ sessions(row.sessionCount) }}</span>
                     </p>
                   </li>
                 }
@@ -171,6 +187,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               <app-camp-create-form
                 [organizationId]="organization.organizationId"
                 [organizationName]="organization.name"
+                [organizationSlug]="organization.slug"
                 [locations]="locations"
               />
             } @else {
@@ -236,6 +253,9 @@ export class AdminCamps {
   protected readonly placeholders = [1, 2, 3];
   protected readonly skeletonFields = [1, 2, 3];
   protected readonly ages = campAgesLabel;
+  protected readonly campHref = (slug: string) => campPath(this.context.slug(), slug);
+  protected readonly sessions = (count: number) =>
+    count === 0 ? 'No sessions yet' : `${count} ${count === 1 ? 'session' : 'sessions'}`;
 
   private readonly list = injectQuery(api.camps.listForOrganization, () => {
     const organization = this.context.organization();

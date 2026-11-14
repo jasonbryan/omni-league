@@ -18,10 +18,10 @@ import {
   SIDEBAR_MARK,
   SIDEBAR_ROW,
   SIDEBAR_ROW_CURRENT,
-  SIDEBAR_ROW_TEXT,
 } from '../../shell/sidebar-classes';
 import { compareNames } from '../compare-names';
 import { initials } from '../initials';
+import { campPath } from '../admin/camp-path';
 import { tournamentPath } from '../admin/tournament-path';
 import { leaguePath } from './league-path';
 
@@ -30,7 +30,7 @@ interface Named {
   slug: string;
 }
 
-export type SidebarKind = 'league' | 'tournament';
+export type SidebarKind = 'league' | 'tournament' | 'camp';
 
 const TOPICS = new Intl.ListFormat('en-US', { type: 'conjunction' });
 
@@ -108,12 +108,16 @@ function withPage(assigned: readonly Named[], page: Named | null): Named[] {
           <ul role="list" aria-label="Your camps" class="mt-1 flex flex-col gap-0.5">
             @for (item of camps(); track item.slug) {
               <li>
-                <div [class]="textRow">
-                  <ng-icon name="lucideTent" [class]="icon" aria-hidden="true" /><span
-                    class="min-w-0 flex-1"
-                    >{{ item.name }}</span
-                  >
-                </div>
+                <a
+                  [routerLink]="item.path"
+                  [attr.aria-current]="item.isCurrent ? current() : null"
+                  [class]="item.isCurrent ? currentRow : row"
+                  ><ng-icon
+                    name="lucideTent"
+                    [class]="item.isCurrent ? currentIcon : icon"
+                    aria-hidden="true"
+                  /><span class="min-w-0 flex-1">{{ item.name }}</span></a
+                >
               </li>
             }
           </ul>
@@ -145,7 +149,6 @@ export class LeagueSidebar {
   protected readonly head = SIDEBAR_HEAD_LINK;
   protected readonly mark = SIDEBAR_MARK;
   protected readonly row = SIDEBAR_ROW;
-  protected readonly textRow = SIDEBAR_ROW_TEXT;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;
   protected readonly icon = SIDEBAR_ICON;
   protected readonly currentIcon = SIDEBAR_ICON_CURRENT;
@@ -187,7 +190,15 @@ export class LeagueSidebar {
     );
   });
   protected readonly camps = computed(() => {
-    return (this.mineHere()?.camps ?? []).map(({ name, slug }) => ({ name, slug }));
+    const here = this.here();
+    const kind = this.hereKind();
+    const org = this.organization().slug;
+    return withPage(this.mineHere()?.camps ?? [], kind === 'camp' ? here : null).map((item) => ({
+      name: item.name,
+      slug: item.slug,
+      path: campPath(org, item.slug),
+      isCurrent: kind === 'camp' && item.slug === here.slug,
+    }));
   });
   protected readonly navTopic = computed(() => {
     const topics = [

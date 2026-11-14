@@ -57,6 +57,12 @@ export const appRoutes: Routes = [
       import('./organizations/admin/tournament-page').then((m) => m.TournamentPage),
   },
   {
+    // Outside the admin area, which is for org admins only: an organizer assigned to the camp opens it too.
+    path: 'organizations/:orgSlug/camps/:campSlug',
+    canActivate: [requireSignedIn],
+    loadComponent: () => import('./organizations/admin/camp-page').then((m) => m.CampPage),
+  },
+  {
     path: 'organizations/:slug',
     canActivate: [requireSignedIn],
     loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),

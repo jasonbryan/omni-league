@@ -11,6 +11,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCircleAlert, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -25,6 +26,7 @@ import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
+import { campPath } from './camp-path';
 import { CAMP_FORM_ALERTS, CampForm, type CampField } from './camp-form';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
@@ -66,6 +68,7 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
     HlmFieldSetImports,
     HlmInputImports,
     NgIcon,
+    RouterLink,
     StickyFooter,
     StickyFooterFocus,
     WebAddressStatus,
@@ -295,6 +298,11 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
                   style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere"
                   >{{ created.name }} created.</span
                 >
+                <a
+                  [routerLink]="campHref(created.slug)"
+                  class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  >Add sessions</a
+                >
               </div>
             </div>
           }
@@ -327,6 +335,7 @@ export class CampCreateForm {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
+  readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly { locationId: Id<'locations'>; name: string }[]>();
 
   protected readonly online = injectOnline();
@@ -350,7 +359,8 @@ export class CampCreateForm {
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
-  protected readonly created = signal<{ name: string } | null>(null);
+  protected readonly created = signal<{ name: string; slug: string } | null>(null);
+  protected readonly campHref = (slug: string) => campPath(this.organizationSlug(), slug);
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
@@ -397,7 +407,7 @@ export class CampCreateForm {
       this.create.run({ organizationId, ...values }),
     );
     if (outcome.sent) {
-      this.created.set({ name: outcome.values.name });
+      this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {

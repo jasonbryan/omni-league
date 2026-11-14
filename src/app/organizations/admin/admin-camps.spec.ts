@@ -39,6 +39,7 @@ const CAMPS = [
     minimumAge: 10,
     maximumAge: 16,
     status: 'published',
+    sessionCount: 3,
   },
   {
     campId: 'cp_junior',
@@ -48,6 +49,7 @@ const CAMPS = [
     minimumAge: 9,
     maximumAge: 14,
     status: 'draft',
+    sessionCount: 1,
   },
   {
     campId: 'cp_twelve',
@@ -57,6 +59,7 @@ const CAMPS = [
     minimumAge: 12,
     maximumAge: 12,
     status: 'draft',
+    sessionCount: 0,
   },
 ];
 
@@ -205,6 +208,31 @@ describe('AdminCamps', () => {
         'Ages 9 to 14',
         'Age 12',
       ]);
+    });
+
+    it('links each camp’s name to its page and says how many sessions it has', async () => {
+      await open(CAMPS);
+      const base = `/app/organizations/${COASTAL.slug}/camps`;
+      expect(
+        items().map((li) => {
+          const link = li.querySelector<HTMLAnchorElement>('h3 a')!;
+          return [text(link), link.getAttribute('href')];
+        }),
+      ).toEqual([
+        ['Fall Break Camp', `${base}/fall-break-camp`],
+        ['Junior Beach Volleyball Camp', `${base}/junior-beach-volleyball-camp`],
+        ['Twelve Camp', `${base}/twelve-camp`],
+      ]);
+      expect(items().map((li) => text(li.querySelector('[data-slot="session-count"]')))).toEqual([
+        '3 sessions',
+        '1 session',
+        'No sessions yet',
+      ]);
+    });
+
+    it('gives the name link a 44px touch target on touch screens', async () => {
+      await open(CAMPS);
+      expect(items()[0].querySelector('h3 a')!.className).toContain('pointer-coarse:min-h-11');
     });
 
     it('a failed list shows the destructive alert, never the error message', async () => {
@@ -471,7 +499,12 @@ describe('AdminCamps', () => {
       await open([]);
       await created();
       const status = createdStatus()!;
-      expect(text(status)).toBe('Junior Beach Volleyball Camp created.');
+      expect(text(status)).toBe('Junior Beach Volleyball Camp created.Add sessions');
+      const next = status.querySelector<HTMLAnchorElement>('a')!;
+      expect([text(next), next.getAttribute('href')]).toEqual([
+        'Add sessions',
+        `/app/organizations/${COASTAL.slug}/camps/junior-beach-volleyball-camp`,
+      ]);
       expect(status.getAttribute('role')).toBe('status');
       expect(status.nextElementSibling).toBe(submitButton());
       for (const id of ['name', 'slug', 'minimum-age', 'maximum-age']) {
