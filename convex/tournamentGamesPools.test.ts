@@ -1170,3 +1170,97 @@ describe('a score report that sits on a pool game', () => {
     expect((await poolGames(s)).every((row) => row.winnerTeamId === undefined)).toBe(true);
   });
 });
+
+describe('Undo with lists the page never sent', () => {
+  async function splitState(teamCount = 8) {
+    const { s, teamIds } = await world(teamCount);
+    const { undo } = await split(s, 2);
+    const before = await poolOf(s);
+    const elsewhere = await addTeam(s, 'Elsewhere', { tournamentId: s.second });
+    return { s, teamIds, undo, before, elsewhere };
+  }
+
+  const changeOf = (
+    undo: { written: { teamId: Id<'teams'>; pool: Pool | null }[] },
+    index: number,
+  ) => undo.written[index];
+
+  test('an id repeated in the written list is refused and moves nothing', async () => {
+    const { s, undo, before } = await splitState();
+    const own = changeOf(undo, 0);
+    const forged = {
+      earlier: [
+        { ...own, pool: null },
+        { ...own, pool: null },
+      ],
+      written: [own, own],
+      gameIds: undo.gameIds,
+    };
+    await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+    expect(await poolOf(s)).toEqual(before);
+  });
+
+  test('a team of another tournament next to the caller’s own teams is refused and moves nothing', async () => {
+    const { s, undo, before, elsewhere } = await splitState();
+    const forged = {
+      earlier: [...undo.earlier, { teamId: elsewhere, pool: 'B' as const }],
+      written: [...undo.written, { teamId: elsewhere, pool: null }],
+      gameIds: undo.gameIds,
+    };
+    await expect(undoSplit(s, forged)).rejects.toThrow(/Not allowed/);
+    expect(await poolOf(s)).toEqual(before);
+    expect(await s.t.run((ctx) => ctx.db.get('teams', elsewhere))).toMatchObject({
+      name: 'Elsewhere',
+    });
+    expect((await s.t.run((ctx) => ctx.db.get('teams', elsewhere)))!.pool).toBeUndefined();
+  });
+
+  test('an oversized pool is refused with the limits and moves nothing', async () => {
+    const { s, undo, before } = await splitState(12);
+    const forged = {
+      earlier: undo.written.map((change, index) => ({
+        ...change,
+        pool: index < 9 ? ('A' as const) : ('B' as const),
+      })),
+      written: undo.written,
+      gameIds: undo.gameIds,
+    };
+    expect(await undoSplit(s, forged).catch(refusalOf)).toMatchObject({ code: 'poolSize' });
+    expect(await poolOf(s)).toEqual(before);
+  });
+
+  test('a pool of 2 is refused with the limits and moves nothing', async () => {
+    const { s, undo, before } = await splitState(8);
+    const forged = {
+      earlier: undo.written.map((change, index) => ({
+        ...change,
+        pool: index < 2 ? ('B' as const) : ('A' as const),
+      })),
+      written: undo.written,
+      gameIds: undo.gameIds,
+    };
+    expect(await undoSplit(s, forged).catch(refusalOf)).toMatchObject({ code: 'poolSize' });
+    expect(await poolOf(s)).toEqual(before);
+  });
+
+  test('a list of game ids that is not the tournament’s pool games is refused', async () => {
+    const { s, undo, before } = await splitState();
+    await createGames(s);
+    expect(await undoSplit(s, { ...undo, gameIds: [] }).catch(refusalOf)).toMatchObject({
+      code: 'poolsChanged',
+    });
+    expect(await poolOf(s)).toEqual(before);
+  });
+
+  test('a team below the minimum roster size cannot be put in a pool', async () => {
+    const { s, undo } = await splitState();
+    const short = await addTeam(s, 'Short Handed', { rosterCount: 1 });
+    const forged = {
+      earlier: [...undo.earlier, { teamId: short, pool: 'A' as const }],
+      written: [...undo.written, { teamId: short, pool: null }],
+      gameIds: undo.gameIds,
+    };
+    await undoSplit(s, forged).catch(() => undefined);
+    expect((await s.t.run((ctx) => ctx.db.get('teams', short)))!.pool).toBeUndefined();
+  });
+});
