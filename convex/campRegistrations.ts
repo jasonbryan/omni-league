@@ -1,17 +1,25 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireUser } from './lib/access';
+import { CAMP_SESSIONS_LIMIT, findCampBySlugs, publishedCampOfSession } from './lib/campLookup';
 import {
   CAMP_NOT_FOUND_CODE,
   CAMP_REGISTRATION_MESSAGES,
-  SELF_PARTICIPANT,
-  adultMayRegister,
-  participantKey,
-  selfParticipantValidator,
   type CampRegistrationRefusal,
 } from './lib/campRegistration';
+import { minorRegistrationsOf } from './lib/campRegistrationReads';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
-import { CAMP_SESSIONS_LIMIT, findCampBySlugs, publishedCampOfSession } from './lib/campLookup';
+import {
+  MAX_MINORS_PER_SESSION,
+  SELF_KEY,
+  adultMayRegister,
+  childNameError,
+  minorMayRegister,
+  participantKey,
+  participantValidator,
+  type Participant,
+} from './lib/individualRegistration';
+import { checkMinorName } from './lib/minorName';
 import { registrationIsOpen } from './lib/registration';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { getCurrentUser } from './lib/users';
@@ -21,16 +29,22 @@ function refuse(refusal: CampRegistrationRefusal): never {
   throw new ConvexError({ ...refusal });
 }
 
-const SELF_KEY = participantKey(SELF_PARTICIPANT);
+/** The team minors' name rule, so one name is one key however it was typed. */
+function checkedParticipant(participant: Participant): Participant {
+  if (participant.kind === 'self') return participant;
+  const checked = checkMinorName(participant.minorName);
+  if (!checked.ok) throw new ConvexError({ ...childNameError(checked.error) });
+  return { kind: 'minor', minorName: checked.name };
+}
 
 export const register = mutation({
   args: {
     sessionId: v.id('campSessions'),
-    participant: selfParticipantValidator,
+    participant: participantValidator,
     ageConfirmed: v.boolean(),
   },
   returns: v.object({ registrationId: v.id('campRegistrations') }),
-  handler: async (ctx, { sessionId, participant, ageConfirmed }) => {
+  handler: async (ctx, { sessionId, participant: asked, ageConfirmed }) => {
     const user = await requireUser(ctx);
     const found = await publishedCampOfSession(ctx, sessionId);
     if (!found) {
@@ -43,29 +57,50 @@ export const register = mutation({
         message: CAMP_REGISTRATION_MESSAGES.registrationClosed,
       });
     }
+    const participant = checkedParticipant(asked);
     const existing = await ctx.db
       .query('campRegistrations')
       .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
-        q.eq('sessionId', sessionId).eq('userId', user._id).eq('participantKey', SELF_KEY),
+        q
+          .eq('sessionId', sessionId)
+          .eq('userId', user._id)
+          .eq('participantKey', participantKey(participant)),
       )
       .first();
     if (existing) {
       refuse({
         code: 'alreadyRegistered',
-        message: CAMP_REGISTRATION_MESSAGES.alreadyRegistered,
+        ...(participant.kind === 'minor' && { field: 'minorName' as const }),
+        message: CAMP_REGISTRATION_MESSAGES.alreadyRegistered(existing.participant),
       });
     }
-    if (!adultMayRegister(camp.maximumAge)) {
+    if (participant.kind === 'self' && !adultMayRegister(camp.maximumAge)) {
       refuse({
         code: 'adultNotAllowed',
         message: CAMP_REGISTRATION_MESSAGES.adultNotAllowed(camp.maximumAge),
+      });
+    }
+    if (participant.kind === 'minor' && !minorMayRegister(camp.minimumAge)) {
+      refuse({
+        code: 'minorNotAllowed',
+        message: CAMP_REGISTRATION_MESSAGES.minorNotAllowed(camp.minimumAge),
       });
     }
     if (!ageConfirmed) {
       refuse({
         code: 'ageNotConfirmed',
         field: 'ageConfirmed',
-        message: CAMP_REGISTRATION_MESSAGES.ageNotConfirmed,
+        message: CAMP_REGISTRATION_MESSAGES.ageNotConfirmed(participant),
+      });
+    }
+    if (
+      participant.kind === 'minor' &&
+      (await minorRegistrationsOf(ctx, sessionId, user._id)).length >= MAX_MINORS_PER_SESSION
+    ) {
+      refuse({
+        code: 'minorLimit',
+        field: 'minorName',
+        message: CAMP_REGISTRATION_MESSAGES.minorLimit,
       });
     }
     if (session.registeredCount >= session.places) {
@@ -176,6 +211,36 @@ export const listMineForCamp = query({
         )
         .first();
       if (registration) held.push(session._id);
+    }
+    return held;
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- reads only the caller's own rows, and a signed-out caller gets an empty list.
+export const listMyMinorsForCamp = query({
+  args: { orgSlug: v.string(), campSlug: v.string() },
+  returns: v.array(v.object({ sessionId: v.id('campSessions'), minorName: v.string() })),
+  handler: async (ctx, { orgSlug, campSlug }) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    if (!organization) return [];
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (found?.program.status !== 'published') return [];
+    const sessions = await ctx.db
+      .query('campSessions')
+      .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+      .take(CAMP_SESSIONS_LIMIT);
+    const held = [];
+    for (const session of sessions) {
+      const registrations = await minorRegistrationsOf(ctx, session._id, user._id);
+      // The index orders by name; the guardian reads them in the order they were registered.
+      registrations.sort((a, b) => a._creationTime - b._creationTime);
+      for (const registration of registrations) {
+        if (registration.participant.kind === 'minor') {
+          held.push({ sessionId: session._id, minorName: registration.participant.minorName });
+        }
+      }
     }
     return held;
   },

@@ -61,3 +61,5 @@ export function campQueryResults(
 
 // 18:00 UTC is 06:00 on that date at UTC-12.
 export const at = (date: string): number => Date.parse(`${date}T18:00:00Z`);
+
+export const ADULT_CAMP: PublicCampData = { ...JUNIOR_CAMP, minimumAge: 18, maximumAge: 99 };
