@@ -9,6 +9,7 @@ import {
   PRODUCTION_RUNS,
   checkReports,
   checkRun,
+  listedTests,
   reportPath,
 } from './e2e-production-check.mjs';
 
@@ -57,7 +58,7 @@ describe('the expected production runs', () => {
     assert.deepEqual(
       PRODUCTION_RUNS.map(({ name, spec, project, tests }) => [name, spec, project, tests]),
       [
-        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 14],
+        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 26],
         ['production-desktop', 'e2e/harness/no-service-worker.spec.ts', 'chromium-desktop', 2],
         ['pwa-update', 'e2e/pwa-update.spec.ts', 'chromium-mobile', 1],
         ['kill-switch', 'e2e/pwa-kill-switch.spec.ts', 'chromium-mobile', 1],
@@ -73,6 +74,40 @@ describe('the expected production runs', () => {
   });
 });
 
+describe('the table against the specs', () => {
+  // The nightly run fails on a count the table has not followed, and no PR run lists the specs.
+  it('gives each run the number of tests Playwright lists for its spec on its project, so a test added to a spec changes the table in the same PR', () => {
+    const root = join(import.meta.dirname, '..');
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(root, 'node_modules', '@playwright', 'test', 'cli.js'),
+        'test',
+        ...new Set(PRODUCTION_RUNS.map((expected) => expected.spec)),
+        '--list',
+        '--reporter=json',
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, E2E_BASE_URL: 'http://localhost:4000', E2E_RUN_NAME: '' },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const listed = listedTests(JSON.parse(result.stdout));
+    const counts = PRODUCTION_RUNS.map((expected) => [
+      expected.name,
+      listed.filter((test) => test.spec === expected.spec && test.project === expected.project)
+        .length,
+    ]);
+    assert.deepEqual(
+      counts,
+      PRODUCTION_RUNS.map((expected) => [expected.name, expected.tests]),
+    );
+  });
+});
+
 describe('checkRun', () => {
   it('passes a report in which every expected test ran, passed, failed, or flaky', () => {
     const mobile = run('production-mobile');
@@ -80,7 +115,7 @@ describe('checkRun', () => {
     assert.deepEqual(checkRun(mobile, reportFor(mobile, { statuses })).problems, []);
     assert.match(
       checkRun(mobile, reportFor(mobile, { statuses })).summary,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 14 of 14 run \(12 passed, 1 failed, 1 flaky\)$/,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 26 of 26 run \(24 passed, 1 failed, 1 flaky\)$/,
     );
   });
 
@@ -130,12 +165,12 @@ describe('checkRun', () => {
 
   it('fails when the spec lists fewer or more tests than expected', () => {
     const mobile = run('production-mobile');
-    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 13 })).problems, [
-      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 13 tests, expected 14',
-    ]);
-    assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: 15 })).problems, [
-      'production-mobile: e2e/pwa.spec.ts on chromium-mobile: lists 15 tests, expected 14',
-    ]);
+    const label = 'production-mobile: e2e/pwa.spec.ts on chromium-mobile';
+    for (const listed of [mobile.tests - 1, mobile.tests + 1]) {
+      assert.deepEqual(checkRun(mobile, reportFor({ ...mobile, tests: listed })).problems, [
+        `${label}: lists ${listed} tests, expected ${mobile.tests}`,
+      ]);
+    }
   });
 
   it('fails when the run also lists a spec the table does not give it', () => {
@@ -177,7 +212,7 @@ describe('checkReports and the command line', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(
       result.stdout,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 14 of 14/m,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 26 of 26/m,
     );
     assert.match(result.stdout, /^kill-switch: e2e\/pwa-kill-switch\.spec\.ts on chromium-mobile/m);
   });
