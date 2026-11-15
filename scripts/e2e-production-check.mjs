@@ -8,7 +8,7 @@ import { join } from 'node:path';
 /** @type {readonly ProductionRun[]} */
 export const PRODUCTION_RUNS = Object.freeze(
   [
-    { name: 'production-mobile', spec: 'e2e/pwa.spec.ts', project: 'chromium-mobile', tests: 14 },
+    { name: 'production-mobile', spec: 'e2e/pwa.spec.ts', project: 'chromium-mobile', tests: 26 },
     {
       name: 'production-desktop',
       spec: 'e2e/harness/no-service-worker.spec.ts',
@@ -40,7 +40,7 @@ export function reportPath(root, run) {
  * @param {unknown} report
  * @returns {{ spec: string, project: string, status: string, title: string }[]}
  */
-function listedTests(report) {
+export function listedTests(report) {
   const tests = [];
   /** @param {any} suite @param {string[]} titles */
   const walk = (suite, titles) => {
