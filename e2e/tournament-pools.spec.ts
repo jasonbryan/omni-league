@@ -1113,7 +1113,7 @@ test.describe('Tournaments: bracket from pools', () => {
       '3 teams',
     ]);
     await chooseChip(chipLabel(bracketPanel(page), '3 teams'));
-    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove', 'Eddy', 'Flow']);
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove', 'Flow', 'Eddy']);
     await chooseChip(chipLabel(bracketPanel(page), '2 teams'));
     await screenshot(page, testInfo, 'pool-bracket-seeds');
     await expectAccessible(page);
@@ -1148,22 +1148,24 @@ test.describe('Tournaments: bracket from pools', () => {
     ).toHaveText('Game 1: Ace v Cove');
   });
 
-  test('once the bracket exists a pool result cannot be corrected, and the refusal says why', async ({
-    page,
-  }) => {
-    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
-    await seedPoolPlay(tenant, SLUG, 2);
-    await playPools(tenant);
-    await seedPoolBracket(tenant, SLUG, 2);
-    await page.goto(managePath);
-    const game = poolGame(page, ROUND_ONE_OF_A);
-    await correctButton(game).click();
-    await scoreInput(game, 'a1').fill('20');
-    await saveButton(game).click();
-    await expect(game.getByRole('alert')).toContainText(
-      'The bracket is created, so pool results cannot change.',
-    );
-    await expect(gameResult(game)).toHaveText('Dune 21–5 Eddy. Dune won.');
+  test.describe('a pool result after the bracket exists', () => {
+    test.use({ expectedConvexErrors: ['tournamentGames:correctResult'] });
+
+    test('cannot be corrected, and the refusal says why', async ({ page }) => {
+      const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+      await seedPoolPlay(tenant, SLUG, 2);
+      await playPools(tenant);
+      await seedPoolBracket(tenant, SLUG, 2);
+      await page.goto(managePath);
+      const game = poolGame(page, ROUND_ONE_OF_A);
+      await correctButton(game).click();
+      await scoreInput(game, 'a1').fill('20');
+      await saveButton(game).click();
+      await expect(game.getByRole('alert')).toContainText(
+        'The bracket is created, so pool results cannot change.',
+      );
+      await expect(gameResult(game)).toHaveText('Dune 21–5 Eddy. Dune won.');
+    });
   });
 
   test(
