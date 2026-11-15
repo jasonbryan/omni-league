@@ -6,7 +6,12 @@ import type { Doc } from './_generated/dataModel';
 import { formatLabel } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { dateAtUtcMinus12, registrationIsOpen, seasonPhase } from './lib/registration';
+import {
+  addCalendarDays,
+  dateAtUtcMinus12,
+  registrationIsOpen,
+  seasonPhase,
+} from './lib/registration';
 import { searchWords } from './lib/searchQuery';
 import { checkCampSessionFields } from './lib/campSessionInput';
 import { checkSeasonFields } from './lib/seasonInput';
@@ -35,8 +40,8 @@ const ROWS = {
   leagues: 46,
   seasons: 8,
   tournaments: 5,
-  camps: 2,
-  campSessions: 3,
+  camps: 3,
+  campSessions: 4,
 };
 const NONE = {
   organizations: 0,
@@ -1101,6 +1106,7 @@ describe('seed:demo', () => {
       'findDemoCredential',
       'findFictionalDemoUser',
       'grantDemoMemberships',
+      'insertDemoCampRegistration',
       'insertDemoData',
       'insertDemoFreeAgents',
       'insertDemoInvite',
@@ -1340,12 +1346,12 @@ describe('seed:demo camps', () => {
     });
   }
 
-  test('adds the published Junior Beach Volleyball Camp, ages 9 to 14, and the draft Fall Break Camp to Gulf Coast Sport & Social, and a second run adds none', async () => {
+  test('adds the published Junior Beach Volleyball Camp, ages 9 to 14, the published Adult Beach Skills Camp, ages 18 to 99, and the draft Fall Break Camp to Gulf Coast Sport & Social, and a second run adds none', async () => {
     const t = setup();
-    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(2);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(3);
     expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(0);
     const { organizationId, location, camps, programs } = await campRows(t);
-    expect(camps).toHaveLength(2);
+    expect(camps).toHaveLength(3);
     const byName = (name: string) => {
       const program = programs.find((row) => row.name === name)!;
       return { program, camp: camps.find((row) => row.programId === program._id)! };
@@ -1360,6 +1366,16 @@ describe('seed:demo camps', () => {
       locationIds: [location],
     });
     expect(junior.camp).toMatchObject({ organizationId, minimumAge: 9, maximumAge: 14 });
+    const adult = byName('Adult Beach Skills Camp');
+    expect(adult.program).toMatchObject({
+      organizationId,
+      type: 'camp',
+      slug: 'adult-beach-skills-camp',
+      sport: 'beachVolleyball',
+      status: 'published',
+      locationIds: [location],
+    });
+    expect(adult.camp).toMatchObject({ organizationId, minimumAge: 18, maximumAge: 99 });
     const fall = byName('Fall Break Camp');
     expect(fall.program).toMatchObject({ type: 'camp', status: 'draft', slug: 'fall-break-camp' });
     expect(fall.camp.minimumAge).toBeLessThanOrEqual(fall.camp.maximumAge);
@@ -1381,9 +1397,9 @@ describe('seed:demo camps', () => {
         ],
       });
     });
-    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(1);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(2);
     const { camps } = await campRows(t);
-    expect(camps).toHaveLength(1);
+    expect(camps).toHaveLength(2);
   });
 });
 
@@ -1406,7 +1422,7 @@ describe('seed:demo camp sessions', () => {
 
   test('gives the Junior Beach Volleyball Camp 3 sessions, Week 1 to Week 3, 9 AM to 12 PM, 20 places each, dated from the run', async () => {
     const t = setup();
-    expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(3);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(4);
     const { camp, rows } = await sessionsOfJunior(t);
     expect(rows.map((row) => row.name)).toEqual(['Week 1', 'Week 2', 'Week 3']);
     expect(camp.sessionCount).toBe(3);
@@ -1433,6 +1449,34 @@ describe('seed:demo camp sessions', () => {
       ).toEqual({});
       expect(row.registrationDeadline < row.startDate).toBe(true);
     }
+  });
+
+  test('gives the Adult Beach Skills Camp one session, Week 1, with 12 places, starting 30 days after the run and closing 23 days after it', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const week = await t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'adult-beach-skills-camp',
+      )!;
+      const camp = (await ctx.db
+        .query('camps')
+        .withIndex('by_programId', (q) => q.eq('programId', program._id))
+        .unique())!;
+      return ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
+        .collect();
+    });
+    const today = dateAtUtcMinus12(Date.now());
+    expect(week).toHaveLength(1);
+    expect(week[0]).toMatchObject({
+      name: 'Week 1',
+      places: 12,
+      registeredCount: 0,
+      startDate: addCalendarDays(today, 30),
+      registrationDeadline: addCalendarDays(today, 23),
+    });
+    expect(registrationIsOpen(week[0], Date.now())).toBe(true);
   });
 
   test('publishes the Junior Beach Volleyball Camp with registration open for all 3 sessions, and leaves the Fall Break Camp a draft', async () => {
@@ -1479,7 +1523,7 @@ describe('seed:demo camp sessions', () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     expect((await t.mutation(internal.seed.insertDemoData, {})).campSessions).toBe(0);
-    expect(await t.run((ctx) => ctx.db.query('campSessions').collect())).toHaveLength(3);
+    expect(await t.run((ctx) => ctx.db.query('campSessions').collect())).toHaveLength(4);
   });
 
   test('adds the sessions to a camp an earlier run made without them, and only the ones it lacks', async () => {

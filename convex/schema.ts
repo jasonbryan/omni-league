@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { campParticipantValidator } from './lib/campRegistration';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { inviteStatusValidator } from './lib/inviteStatus';
@@ -270,6 +271,20 @@ export default defineSchema({
     /** The registrations in the session; a session with any cannot be deleted. */
     registeredCount: v.number(),
   }).index('by_campId_and_startDate', ['campId', 'startDate']),
+
+  // One row per participant in a camp session, written only by `convex/lib/campRegistrationWrites.ts`, which keeps `campSessions.registeredCount`.
+  campRegistrations: defineTable({
+    sessionId: v.id('campSessions'),
+    campId: v.id('camps'),
+    organizationId: v.id('organizations'),
+    /** The account holder, who is the participant for `self` and the guardian for `minor`. */
+    userId: v.id('users'),
+    participant: campParticipantValidator,
+    /** `self`, or `minor:` and the lower-cased minor's name, so the one-per-participant check is an index read. */
+    participantKey: v.string(),
+    ageConfirmedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

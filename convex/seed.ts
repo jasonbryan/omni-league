@@ -13,6 +13,8 @@ import {
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
 import { CAMP_SESSIONS_LIMIT, campSessionTotal, findCampBySlugs } from './lib/campLookup';
+import { SELF_PARTICIPANT } from './lib/campRegistration';
+import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { backfillPendingInviteCounts, insertPendingInvite } from './lib/inviteWrites';
@@ -777,6 +779,25 @@ const DEMO_CAMPS: readonly DemoCamp[] = [
   },
   {
     organizationSlug: 'gulf-coast-sport-social',
+    name: 'Adult Beach Skills Camp',
+    slug: 'adult-beach-skills-camp',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    minimumAge: 18,
+    maximumAge: 99,
+    sessions: [
+      {
+        name: 'Week 1',
+        startDaysFromRun: 30,
+        ...WEEK_OF_MORNINGS,
+        deadlineDaysBeforeStart: 7,
+        places: 12,
+      },
+    ],
+    published: true,
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
     name: 'Fall Break Camp',
     slug: 'fall-break-camp',
     sport: 'beachVolleyball',
@@ -1432,6 +1453,14 @@ const DEMO_MINOR = {
   minorName: 'Ava Lane',
 } as const;
 
+/** player@ holds a place in this session, so the camp page reads "You're registered" for that account. Inserted once: any registration of player@ in the session means it was. */
+const DEMO_CAMP_REGISTRATION = {
+  organizationSlug: 'gulf-coast-sport-social',
+  campSlug: 'adult-beach-skills-camp',
+  sessionName: 'Week 1',
+  email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -1465,6 +1494,7 @@ const demoResultValidator = v.object({
   teams: v.number(),
   teamInvites: v.number(),
   freeAgents: v.number(),
+  campRegistrations: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -2156,6 +2186,43 @@ export const insertDemoMinor = internalMutation({
   },
 });
 
+export const insertDemoCampRegistration = internalMutation({
+  args: { authUserId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { authUserId }) => {
+    assertPreviewDeployment();
+    const organization = await organizationBySlug(ctx, DEMO_CAMP_REGISTRATION.organizationSlug);
+    const found =
+      organization && (await findCampBySlugs(ctx, organization, DEMO_CAMP_REGISTRATION.campSlug));
+    if (!found) return false;
+    const session = (
+      await ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+        .take(CAMP_SESSIONS_LIMIT)
+    ).find((row) => row.name === DEMO_CAMP_REGISTRATION.sessionName);
+    if (!session || session.registeredCount >= session.places) return false;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user) return false;
+    const held = await ctx.db
+      .query('campRegistrations')
+      .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
+        q.eq('sessionId', session._id).eq('userId', user._id),
+      )
+      .first();
+    if (held) return false;
+    await insertCampRegistration(ctx, session, {
+      userId: user._id,
+      participant: SELF_PARTICIPANT,
+      ageConfirmedAt: Date.now(),
+    });
+    return true;
+  },
+});
+
 /**
  * Inserts each demo free agent whose account is in `people` (auth user ids by address) and who has no
  * free-agent row and no roster entry in its season yet, through the roster writer. Returns the free
@@ -2352,6 +2419,7 @@ export const demo = internalAction({
     let teams = 0;
     let teamInvites = 0;
     let freeAgents = 0;
+    let campRegistrations = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
       const people: { email: string; authUserId: string }[] = [];
@@ -2388,8 +2456,25 @@ export const demo = internalAction({
             authUserId: guardian.authUserId,
           });
         }
+        const campPlayer = people.find((account) => account.email === DEMO_CAMP_REGISTRATION.email);
+        if (campPlayer) {
+          const inserted = await ctx.runMutation(internal.seed.insertDemoCampRegistration, {
+            authUserId: campPlayer.authUserId,
+          });
+          if (inserted) campRegistrations++;
+        }
       }
     }
-    return { ...data, logos, memberships, invites, teams, teamInvites, freeAgents, accounts };
+    return {
+      ...data,
+      logos,
+      memberships,
+      invites,
+      teams,
+      teamInvites,
+      freeAgents,
+      campRegistrations,
+      accounts,
+    };
   },
 });

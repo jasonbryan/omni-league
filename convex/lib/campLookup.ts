@@ -66,6 +66,7 @@ export async function publicCampSessions(ctx: Pick<QueryCtx, 'db'>, camp: Doc<'c
     .withIndex('by_campId_and_startDate', (q) => q.eq('campId', camp._id))
     .take(CAMP_SESSIONS_LIMIT);
   return sessions.map((session) => ({
+    sessionId: session._id,
     name: session.name,
     startDate: session.startDate,
     endDate: session.endDate,
@@ -74,4 +75,20 @@ export async function publicCampSessions(ctx: Pick<QueryCtx, 'db'>, camp: Doc<'c
     placesLeft: Math.max(0, session.places - session.registeredCount),
     registrationDeadline: session.registrationDeadline,
   }));
+}
+
+/** A session of a draft camp answers like an unknown one, so nothing says whether it exists. */
+export async function publishedCampOfSession(
+  ctx: Pick<QueryCtx, 'db'>,
+  sessionId: Id<'campSessions'>,
+): Promise<{ session: Doc<'campSessions'>; camp: Doc<'camps'> } | null> {
+  const session = await ctx.db.get('campSessions', sessionId);
+  if (!session) return null;
+  const camp = await ctx.db.get('camps', session.campId);
+  if (camp?.organizationId !== session.organizationId) return null;
+  const program = await ctx.db.get('programs', camp.programId);
+  if (program?.status !== 'published' || program.organizationId !== camp.organizationId) {
+    return null;
+  }
+  return { session, camp };
 }

@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as campRegistrations from "../campRegistrations.js";
 import type * as campSessions from "../campSessions.js";
 import type * as camps from "../camps.js";
 import type * as crons from "../crons.js";
@@ -27,6 +28,8 @@ import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_bracket from "../lib/bracket.js";
 import type * as lib_campInput from "../lib/campInput.js";
 import type * as lib_campLookup from "../lib/campLookup.js";
+import type * as lib_campRegistration from "../lib/campRegistration.js";
+import type * as lib_campRegistrationWrites from "../lib/campRegistrationWrites.js";
 import type * as lib_campSessionInput from "../lib/campSessionInput.js";
 import type * as lib_customLevelInput from "../lib/customLevelInput.js";
 import type * as lib_divisions from "../lib/divisions.js";
@@ -120,6 +123,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  campRegistrations: typeof campRegistrations;
   campSessions: typeof campSessions;
   camps: typeof camps;
   crons: typeof crons;
@@ -138,6 +142,8 @@ declare const fullApi: ApiFromModules<{
   "lib/bracket": typeof lib_bracket;
   "lib/campInput": typeof lib_campInput;
   "lib/campLookup": typeof lib_campLookup;
+  "lib/campRegistration": typeof lib_campRegistration;
+  "lib/campRegistrationWrites": typeof lib_campRegistrationWrites;
   "lib/campSessionInput": typeof lib_campSessionInput;
   "lib/customLevelInput": typeof lib_customLevelInput;
   "lib/divisions": typeof lib_divisions;
