@@ -1562,6 +1562,23 @@ describe('AdminLeagues', () => {
       expect(seen).toEqual([null]);
     });
 
+    it('shows the live answer again once the create is refused as offline', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(error('slug')).toBe(
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
+      );
+    });
+
     it('shows the live answer again once a refusal other than the address ends the hold', async () => {
       await open([]);
       await fill();

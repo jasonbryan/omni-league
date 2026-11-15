@@ -7,7 +7,7 @@ import { CITY_STATE_HINT, ORGANIZATION_MESSAGES } from '../../../convex/lib/orga
 import { slugify } from '../../../convex/lib/slugs';
 import { AVAILABILITY_PAUSE_MS } from '../core/forms/slug-availability';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
-import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
+import { CONVEX_CLIENT, ConvexConnection, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
@@ -873,6 +873,16 @@ describe('CreateOrganizationPage', () => {
       await expect(sent).rejects.toThrow('chunk');
       await stable();
       expect(submitButton().getAttribute('aria-disabled')).toBeNull();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+
+    it('shows the live answer again once the create is refused as offline', async () => {
+      await pressWith(true);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      convex.calls[0]?.reject(new ConvexOfflineError());
+      await flush();
       expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
     });
 
