@@ -589,24 +589,36 @@ describe('scoreReports.forTeam', () => {
     const w = await world();
     const { s, teamIds } = w;
     const game = await crabsSemifinal(w);
+    const entry = {
+      gameId: game._id,
+      stage: 'bracket',
+      roundName: 'Semifinals',
+      teams: [
+        { teamId: teamIds['Sand Crabs'], name: 'Sand Crabs' },
+        { teamId: teamIds['Spike Squad'], name: 'Spike Squad' },
+      ],
+      report: null,
+    };
     expect(await forTeam(s, s.captain, teamIds['Sand Crabs'])).toEqual({
       sport: 'beachVolleyball',
       setsPerGame: 1,
-      games: [
-        {
-          gameId: game._id,
-          stage: 'bracket',
-          roundName: 'Semifinals',
-          teams: [
-            { teamId: teamIds['Sand Crabs'], name: 'Sand Crabs' },
-            { teamId: teamIds['Spike Squad'], name: 'Spike Squad' },
-          ],
-          report: null,
-        },
-      ],
+      games: [entry],
+      game: entry,
     });
   });
 
+  test('keeps game, which the previous frontend reads, on the current bracket game, and null once none is open', async () => {
+    const w = await world();
+    const { s, teamIds } = w;
+    const game = await crabsSemifinal(w);
+    const before = await forTeam(s, s.captain, teamIds['Sand Crabs']);
+    expect(before?.game).toMatchObject({ gameId: game._id, roundName: 'Semifinals' });
+    await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+      gameId: game._id,
+      score: set(21, 10),
+    });
+    expect((await forTeam(s, s.captain, teamIds['Sand Crabs']))?.game).toBeNull();
+  });
   test('shows the team’s own report, and not the other team’s', async () => {
     const w = await world();
     const { s, teamIds } = w;

@@ -566,7 +566,7 @@ describe('ScoreReportPanel', () => {
     it('keeps two lines at the narrowest widths, in the skeleton and in the form', async () => {
       await open();
       const skeletonLabel = page.querySelector('[data-slot="skeleton-label"]')!;
-      expect(skeletonLabel.className).toContain('max-[359px]:h-12');
+      expect(skeletonLabel.className).toContain('max-[359px]:min-h-12');
       o.subscription(FOR_TEAM)!.emit(answer());
       await o.flush();
       expect(text(section()!.querySelector('[data-slot="game-label"]'))).toBeTruthy();

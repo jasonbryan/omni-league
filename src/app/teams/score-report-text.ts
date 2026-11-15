@@ -1,5 +1,6 @@
 import { scoreText, type Score } from '../../../convex/lib/sports';
 import type { AlertText } from '../organizations/admin/alert-text';
+import type { GameStage } from '../organizations/admin/game-result-text';
 
 const CHECK_CONNECTION = 'Check your connection and try again.';
 
@@ -20,17 +21,15 @@ export function reportedLine(names: readonly [string, string], score: Score): st
   return `${names[0]} ${scoreText(score)} ${names[1]}.`;
 }
 
-export type ReportedGameStage = 'bracket' | 'pool';
-
-const WHEN_IT_COUNTS: Record<ReportedGameStage, string> = {
+const WHEN_IT_COUNTS: Record<GameStage, string> = {
   bracket: 'before the winner advances',
   pool: 'before it counts in the standings',
 };
 
-export const reportedNote = (stage: ReportedGameStage) =>
+export const reportedNote = (stage: GameStage) =>
   `The organizer confirms it ${WHEN_IT_COUNTS[stage]}. Report again to change it until then.`;
 
-export const reportedStatus = (stage: ReportedGameStage): AlertText => ({
+export const reportedStatus = (stage: GameStage): AlertText => ({
   title: 'Score reported',
   description: `The organizer confirms it ${WHEN_IT_COUNTS[stage]}.`,
 });

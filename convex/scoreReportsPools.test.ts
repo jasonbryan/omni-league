@@ -331,12 +331,13 @@ describe('scoreReports.confirm for a pool game', () => {
       resultEnteredAt: saved.resultEnteredAt,
     });
     expect((await organizerPools(s)).hasResult).toBe(true);
-    await expect(
+    await expectRefused(
       s.as(s.admin).mutation(api.tournamentGames.splitPools, {
         tournamentId: s.gulf,
         poolCount: 2,
       }),
-    ).rejects.toThrow();
+      'poolResultEntered',
+    );
   });
 
   test('stops showing the report to the organizer once the game has a result', async () => {
@@ -397,7 +398,7 @@ describe('scoreReports.confirm for a pool game', () => {
     await expectRefused(confirm(w.s, w.s.admin, rows[1]), 'resultExists');
   });
 
-  test('Clear then Undo, and Correct, work on a confirmed pool report', async () => {
+  test('Correct, then Clear, work on a confirmed pool report', async () => {
     const w = await world();
     const { s } = w;
     const game = await gameBetween(w, 1, 8);
@@ -474,6 +475,13 @@ describe('scoreReports.forTeam for pool play', () => {
       { score: set(21, 18), reportedAt: saved.reportedAt },
       null,
     ]);
+  });
+
+  test('keeps game null, because the previous frontend refuses a tie and says the winner advances', async () => {
+    const w = await world('soccer');
+    const answer = await forTeam(w, captainOf(w, 1), 1);
+    expect(answer?.games).toHaveLength(3);
+    expect(answer?.game).toBeNull();
   });
 
   test('keeps the other team’s report out of the answer', async () => {

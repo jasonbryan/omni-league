@@ -85,7 +85,7 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
       <div aria-hidden="true">
         <div
           hlmSkeleton
-          class="rounded-md h-6 w-64 max-w-full max-[359px]:h-12"
+          class="rounded-md h-6 w-64 max-w-full max-[359px]:min-h-12"
           data-slot="skeleton-label"
         ></div>
         @for (row of rows(); track row) {

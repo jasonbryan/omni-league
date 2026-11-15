@@ -9,25 +9,28 @@ import {
   setsPerGameOf,
   tiesAllowedIn,
 } from './lib/gameResults';
-import { reportableGamesOfTeam } from './lib/scoreReports';
+import { reportableGamesOf } from './lib/scoreReports';
 import { scoreValidator, sportValidator } from './lib/sports';
 import { bracketGames, gameIsDecided, refuseBracket } from './lib/tournamentBracket';
+import { poolGames } from './lib/tournamentPools';
 
 const reportedValidator = v.object({ score: scoreValidator, reportedAt: v.number() });
+
+const reportableGameValidator = v.object({
+  gameId: v.id('tournamentGames'),
+  stage: v.union(v.literal('bracket'), v.literal('pool')),
+  roundName: v.string(),
+  teams: v.array(v.object({ teamId: v.id('teams'), name: v.string() })),
+  /** The team's own report; the other team's stays with the organizer. */
+  report: v.union(v.null(), reportedValidator),
+});
 
 const teamReportValidator = v.object({
   sport: sportValidator,
   setsPerGame: v.number(),
-  games: v.array(
-    v.object({
-      gameId: v.id('tournamentGames'),
-      stage: v.union(v.literal('bracket'), v.literal('pool')),
-      roundName: v.string(),
-      teams: v.array(v.object({ teamId: v.id('teams'), name: v.string() })),
-      /** The team's own report; the other team's stays with the organizer. */
-      report: v.union(v.null(), reportedValidator),
-    }),
-  ),
+  games: v.array(reportableGameValidator),
+  /** What the previous frontend reads: the current bracket game, never a pool game. */
+  game: v.union(v.null(), reportableGameValidator),
 });
 
 export const forTeam = query({
@@ -39,11 +42,12 @@ export const forTeam = query({
     if (team?.tournamentId === undefined || team.captainUserId !== user._id) return null;
     const tournament = await ctx.db.get('tournaments', team.tournamentId);
     if (!tournament) return null;
-    const open = await reportableGamesOfTeam(ctx, tournament._id, team._id);
-    const rounds = (await bracketGames(ctx, tournament._id)).reduce(
-      (most, row) => Math.max(most, row.round),
-      0,
+    const bracket = await bracketGames(ctx, tournament._id);
+    const open = reportableGamesOf(
+      [...(await poolGames(ctx, tournament._id)), ...bracket],
+      team._id,
     );
+    const rounds = bracket.reduce((most, row) => Math.max(most, row.round), 0);
     const games = [];
     for (const game of open) {
       const reported = await ctx.db
@@ -63,7 +67,8 @@ export const forTeam = query({
         report: reported && { score: reported.score, reportedAt: reported.reportedAt },
       });
     }
-    return { sport: tournament.sport, setsPerGame: setsPerGameOf(tournament), games };
+    const game = games.find((row) => row.stage === 'bracket') ?? null;
+    return { sport: tournament.sport, setsPerGame: setsPerGameOf(tournament), games, game };
   },
 });
 
