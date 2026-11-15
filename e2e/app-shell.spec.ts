@@ -815,7 +815,11 @@ const SUMMER_SLUG = 'summer-2027';
 const LONG_SEASON = 'Sunset '.repeat(15).slice(0, 100);
 const LONG_SEASON_SLUG = 'long-season';
 const LONG_TEAM = 'Sunset '.repeat(9).slice(0, 60);
+// A team name is taken once per season, and the 360px test already holds LONG_TEAM there.
+const LONG_TEAM_AT_320 = 'Harbor '.repeat(9).slice(0, 60);
 const LONG_SESSION = 'Sunset '.repeat(15).slice(0, 100);
+// The seeded name gains a space and eight characters, which stays within the 100-character limit.
+const LONG_ORGANIZATION = 'Sunset '.repeat(13).trim();
 const BEACH = 'Alpha Beach';
 const CAMP = 'Adult Beach Skills Camp';
 const CAMP_SLUG = 'adult-beach-skills-camp';
@@ -1269,6 +1273,149 @@ barTest.describe('the slim bar names the page', () => {
           expect(bar.clipped, path).toBe(true);
           expect((await slimBar(page).boundingBox())!.height, path).toBe(56);
           await expectAccessible(page);
+        }
+      },
+    );
+
+    barTest(
+      'follows each client-side navigation, and Back and Forward return the bar to each page',
+      async ({ page, world }) => {
+        const { base } = world;
+        const org = world.tenant.name;
+        await signUpAs(page, world, 'orgAdmin');
+        const expectPage = async (bar: string, tab: string) => {
+          await expect(page).toHaveTitle(tab);
+          await expect(barText(page)).toHaveText(bar);
+        };
+
+        await page.goto(base);
+        await expectPage(org, `Overview | ${org} | ${SITE}`);
+        await tap(page, menuButton(page));
+        await dialogOf(page).locator(`a[href="${base}/leagues"]`).click();
+        await expectPage('Leagues', `Leagues | ${org} | ${SITE}`);
+        await page.locator(`main a[href="${base}/leagues/${SUNDAY_SLUG}"]`).first().click();
+        await expectPage(SUNDAY, `${SUNDAY} | ${org} | ${SITE}`);
+
+        await page.goBack();
+        await expectPage('Leagues', `Leagues | ${org} | ${SITE}`);
+        await page.goBack();
+        await expectPage(org, `Overview | ${org} | ${SITE}`);
+        await page.goForward();
+        await expectPage('Leagues', `Leagues | ${org} | ${SITE}`);
+        await page.goForward();
+        await expectPage(SUNDAY, `${SUNDAY} | ${org} | ${SITE}`);
+        expect((await slimBar(page).boundingBox())!.height).toBe(56);
+      },
+    );
+
+    barTest(
+      'keeps the league name in the bar and the tab through a jump to a fragment, Back and Forward',
+      async ({ page, world }) => {
+        const { base } = world;
+        const title = `${SUNDAY} | ${world.tenant.name} | ${SITE}`;
+        await signUpAs(page, world, 'orgAdmin');
+        await page.goto(`${base}/leagues/${SUNDAY_SLUG}`);
+        await expect(page).toHaveTitle(title);
+        await expect(barText(page)).toHaveText(SUNDAY);
+
+        await page.evaluate(() => (location.hash = 'details'));
+        await expect.poll(() => page.url()).toContain('#details');
+        await expect(page).toHaveTitle(title);
+        await expect(barText(page)).toHaveText(SUNDAY);
+        await page.goBack();
+        await expect.poll(() => page.url()).not.toContain('#details');
+        await expect(page).toHaveTitle(title);
+        await expect(barText(page)).toHaveText(SUNDAY);
+        await page.goForward();
+        await expect.poll(() => page.url()).toContain('#details');
+        await expect(page).toHaveTitle(title);
+        await expect(barText(page)).toHaveText(SUNDAY);
+      },
+    );
+
+    barTest(
+      'names the other organization in the bar and the tab when the organization changes inside an admin section, and the first again on Back',
+      async ({ page, world }) => {
+        const user = await signUpAs(page, world, 'orgAdmin');
+        const harbor = await seedTenant({ name: 'Harbor Rec League', locations: LOCATIONS });
+        await convexRun('testing:addMembership', {
+          organizationSlug: harbor.slug,
+          email: user.email,
+          role: 'orgAdmin',
+        });
+        const first = world.tenant;
+        // The app links from no organization's section to another's, so the route change comes from a popstate.
+        const openInPage = (path: string) =>
+          page.evaluate((to) => {
+            history.pushState(null, '', to);
+            dispatchEvent(new PopStateEvent('popstate'));
+          }, path);
+
+        await page.goto(`/app/organizations/${first.slug}/locations`);
+        await expect(page).toHaveTitle(`Locations | ${first.name} | ${SITE}`);
+        await openInPage(`/app/organizations/${harbor.slug}/locations`);
+        await expect(page).toHaveTitle(`Locations | ${harbor.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText('Locations');
+        await page.goBack();
+        await expect(page).toHaveTitle(`Locations | ${first.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText('Locations');
+
+        await page.goto(`/app/organizations/${first.slug}`);
+        await expect(barText(page)).toHaveText(first.name);
+        await openInPage(`/app/organizations/${harbor.slug}`);
+        await expect(page).toHaveTitle(`Overview | ${harbor.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText(harbor.name);
+        await page.goBack();
+        await expect(page).toHaveTitle(`Overview | ${first.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText(first.name);
+        await page.goForward();
+        await expect(page).toHaveTitle(`Overview | ${harbor.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText(harbor.name);
+      },
+    );
+
+    barTest(
+      'long names stay on one line in a 56px bar at 320px, with no sideways scroll and the menu and account controls in reach',
+      async ({ page, world }) => {
+        const user = await signUpAs(page, world, 'orgAdmin');
+        const longTeam = await seedBarTeam(world, user, LONG_TEAM_AT_320, LONG_SEASON_SLUG);
+        const longOrg = await seedTenant({ name: LONG_ORGANIZATION, locations: LOCATIONS });
+        await convexRun('testing:addMembership', {
+          organizationSlug: longOrg.slug,
+          email: user.email,
+          role: 'orgAdmin',
+        });
+        await page.setViewportSize({ width: 320, height: 800 });
+        const longs: [string, string][] = [
+          [`${world.base}/leagues/${SUNDAY_SLUG}/seasons/${LONG_SEASON_SLUG}`, LONG_SEASON],
+          [`/app/teams/${longTeam.teamId}`, LONG_TEAM_AT_320],
+          [
+            `${world.base}/camps/${CAMP_SLUG}/register?session=${world.sessionIds[LONG_SESSION]}`,
+            `Register for ${LONG_SESSION}`,
+          ],
+          [`/app/organizations/${longOrg.slug}`, longOrg.name],
+        ];
+        for (const [path, text] of longs) {
+          await page.goto(path);
+          await expect(barText(page), path).toHaveText(text);
+          const bar = await barText(page).evaluate((element) => ({
+            height: element.getBoundingClientRect().height,
+            lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+            overflow: getComputedStyle(element).textOverflow,
+            clipped: element.scrollWidth > element.clientWidth,
+            pageScrollsSideways:
+              document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          }));
+          expect(bar.height, path).toBeLessThanOrEqual(bar.lineHeight);
+          expect(bar.overflow, path).toBe('ellipsis');
+          expect(bar.clipped, path).toBe(true);
+          expect(bar.pageScrollsSideways, path).toBe(false);
+          expect((await slimBar(page).boundingBox())!.height, path).toBe(56);
+          for (const control of [menuButton(page), slimBar(page).getByRole('link')]) {
+            const box = (await control.boundingBox())!;
+            expect(box.x, path).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.width, path).toBeLessThanOrEqual(320);
+          }
         }
       },
     );

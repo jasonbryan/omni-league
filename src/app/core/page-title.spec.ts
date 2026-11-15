@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
@@ -21,6 +22,14 @@ const routes = [
   { path: 'other', title: 'Other | Omni League', component: BlankPage },
   { path: 'bare', title: 'Omni League', component: BlankPage },
   { path: 'untitled', component: BlankPage },
+  {
+    path: 'orgs/:slug',
+    component: BlankPage,
+    children: [
+      { path: 'leagues', title: 'Leagues | Omni League', component: BlankPage },
+      { path: 'staff', title: 'Staff | Omni League', component: BlankPage },
+    ],
+  },
 ];
 
 function configure(): void {
@@ -153,5 +162,91 @@ describe('PageTitleStrategy', () => {
     TestBed.inject(PageTitle).set(['Public page']);
     await TestBed.inject(Router).navigateByUrl('/items/1');
     expect(TestBed.inject(Title).getTitle()).toBe('Item | Omni League');
+  });
+
+  it('applies the section title again when only the parent organization slug changes', async () => {
+    configure();
+    await RouterTestingHarness.create('/orgs/alpha/leagues');
+    TestBed.inject(PageTitle).set(['Leagues', 'Alpha Club']);
+    await TestBed.inject(Router).navigateByUrl('/orgs/beta/leagues');
+    expect(TestBed.inject(Title).getTitle()).toBe('Leagues | Omni League');
+    expect(TestBed.inject(PageTitle).barText()).toBe('Leagues');
+  });
+
+  it('keeps the data title of a section through a fragment or query change under the same organization', async () => {
+    configure();
+    await RouterTestingHarness.create('/orgs/alpha/leagues');
+    TestBed.inject(PageTitle).set(['Leagues', 'Alpha Club']);
+    await TestBed.inject(Router).navigateByUrl('/orgs/alpha/leagues?page=2#create-league');
+    expect(TestBed.inject(Title).getTitle()).toBe('Leagues | Alpha Club | Omni League');
+    expect(TestBed.inject(PageTitle).barText()).toBe('Leagues');
+  });
+
+  it('applies the new section title when the section changes under the same organization', async () => {
+    configure();
+    await RouterTestingHarness.create('/orgs/alpha/leagues');
+    TestBed.inject(PageTitle).set(['Leagues', 'Alpha Club']);
+    await TestBed.inject(Router).navigateByUrl('/orgs/alpha/staff');
+    expect(TestBed.inject(Title).getTitle()).toBe('Staff | Omni League');
+  });
+
+  describe('with Back and Forward', () => {
+    async function openWithHistory(
+      url: string,
+    ): Promise<{ back: () => Promise<void>; forward: () => Promise<void> }> {
+      configure();
+      await RouterTestingHarness.create(url);
+      const router = TestBed.inject(Router);
+      router.initialNavigation();
+      const location = TestBed.inject(Location);
+      const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+      return {
+        back: async () => {
+          location.back();
+          await settle();
+        },
+        forward: async () => {
+          location.forward();
+          await settle();
+        },
+      };
+    }
+
+    it('keeps the data title when Back and Forward cross a fragment on the same route', async () => {
+      const { back, forward } = await openWithHistory('/items/1');
+      const router = TestBed.inject(Router);
+      TestBed.inject(PageTitle).set(['Loaded item', 'Organization']);
+      await router.navigateByUrl('/items/1#add-session');
+      await back();
+      expect(TestBed.inject(Title).getTitle()).toBe('Loaded item | Organization | Omni League');
+      await forward();
+      expect(TestBed.inject(Title).getTitle()).toBe('Loaded item | Organization | Omni League');
+      expect(TestBed.inject(PageTitle).barText()).toBe('Loaded item');
+    });
+
+    it('applies the route title of the page Back and Forward return to', async () => {
+      const { back, forward } = await openWithHistory('/items/1');
+      const router = TestBed.inject(Router);
+      TestBed.inject(PageTitle).set(['Loaded item', 'Organization']);
+      await router.navigateByUrl('/other');
+      expect(TestBed.inject(PageTitle).barText()).toBe('Other');
+      await back();
+      expect(TestBed.inject(Title).getTitle()).toBe('Item | Omni League');
+      expect(TestBed.inject(PageTitle).barText()).toBe('Item');
+      await forward();
+      expect(TestBed.inject(Title).getTitle()).toBe('Other | Omni League');
+      expect(TestBed.inject(PageTitle).barText()).toBe('Other');
+    });
+
+    it('applies the route title when Back returns to the same route with other parameters', async () => {
+      const { back } = await openWithHistory('/orgs/alpha/leagues');
+      const router = TestBed.inject(Router);
+      TestBed.inject(PageTitle).set(['Leagues', 'Alpha Club']);
+      await router.navigateByUrl('/orgs/beta/leagues');
+      TestBed.inject(PageTitle).set(['Leagues', 'Beta Club']);
+      await back();
+      expect(TestBed.inject(Title).getTitle()).toBe('Leagues | Omni League');
+      expect(TestBed.inject(PageTitle).barText()).toBe('Leagues');
+    });
   });
 });

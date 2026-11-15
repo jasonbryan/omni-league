@@ -1,4 +1,6 @@
+import { Location } from '@angular/common';
 import { Title } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
@@ -23,6 +25,12 @@ const DRAFT_COUNT = 'leagues:draftCount';
 const STAFF_COUNT = 'memberships:staffCount';
 const ATTENTION = 'organizations:getAttention';
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
+
+const HARBOR = {
+  organizationId: 'org_harbor',
+  name: 'Harbor Rec League',
+  slug: 'harbor-rec-league',
+};
 
 async function open() {
   const opened = await openAdmin(ROUTES, URL);
@@ -50,6 +58,32 @@ describe('AdminOverview', () => {
     const { page } = await open();
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
     expectBar(page, 'Coastal Bend Rec Club', 'Overview');
+  });
+
+  it('names the other organization in the bar and the tab once the slug changes and it answers', async () => {
+    const { page, harness, subscription, flush } = await open();
+    await harness.navigateByUrl(`/app/organizations/${HARBOR.slug}`);
+    await flush();
+    expectBar(page, 'Overview');
+    subscription(GET_ADMIN_CONTEXT)!.emit(HARBOR);
+    await flush();
+    expect(TestBed.inject(Title).getTitle()).toBe('Overview | Harbor Rec League | Omni League');
+    expectBar(page, 'Harbor Rec League', 'Overview');
+  });
+
+  it('names the first organization again when Back returns to its slug', async () => {
+    const { page, harness, subscription, flush } = await open();
+    TestBed.inject(Router).initialNavigation();
+    await harness.navigateByUrl(`/app/organizations/${HARBOR.slug}`);
+    subscription(GET_ADMIN_CONTEXT)!.emit(HARBOR);
+    await flush();
+    TestBed.inject(Location).back();
+    await flush();
+    expect(subscription(GET_ADMIN_CONTEXT)!.args).toEqual({ slug: COASTAL.slug });
+    subscription(GET_ADMIN_CONTEXT)!.emit(COASTAL);
+    await flush();
+    expectBar(page, 'Coastal Bend Rec Club', 'Overview');
+    expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
   it('reads "Overview" in the slim bar until the organization answers', async () => {

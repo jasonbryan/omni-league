@@ -96,6 +96,22 @@ describe('AdminLocations', () => {
       expectBar(page, 'Locations');
     });
 
+    it('keeps "Locations" in the bar and names the other organization in the tab once the slug changes and it answers', async () => {
+      await open();
+      await o.harness.navigateByUrl('/app/organizations/harbor-rec-league/locations');
+      await o.flush();
+      expectBar(page, 'Locations');
+      expect(TestBed.inject(Title).getTitle()).toBe('Locations | Omni League');
+      o.subscription(GET_ADMIN_CONTEXT)!.emit({
+        organizationId: 'org_harbor',
+        name: 'Harbor Rec League',
+        slug: 'harbor-rec-league',
+      });
+      await o.flush();
+      expectBar(page, 'Locations');
+      expect(TestBed.inject(Title).getTitle()).toBe('Locations | Harbor Rec League | Omni League');
+    });
+
     it('draws the list and the add form as bare helm cards', async () => {
       await open([]);
       expectBareCards(page.querySelector('main')!, [
