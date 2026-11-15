@@ -3,11 +3,13 @@ import {
   MAX_MINORS_PER_SESSION,
   adultMayRegister,
   ageConfirmationLabel,
+  childNameError,
   ageNotConfirmedMessage,
   minorMayRegister,
   participantKey,
   participantsOffered,
 } from './individualRegistration';
+import { checkMinorName } from './minorName';
 
 describe('participantKey', () => {
   test('is self for the account holder', () => {
@@ -117,4 +119,24 @@ describe('ageNotConfirmedMessage', () => {
 
 test('one guardian can register as many children for a session as a guardian can add to a season', () => {
   expect(MAX_MINORS_PER_SESSION).toBe(20);
+});
+
+describe('childNameError', () => {
+  test('words an empty name for a child and keeps the field and code', () => {
+    const checked = checkMinorName('   ');
+    if (checked.ok) throw new Error('an empty name passes');
+    expect(childNameError(checked.error)).toEqual({
+      field: 'minorName',
+      code: 'minorNameEmpty',
+      message: "Enter your child's name.",
+    });
+  });
+
+  test('leaves the other name errors as they are', () => {
+    for (const name of ['x'.repeat(61), 'Maya\u200bR.']) {
+      const checked = checkMinorName(name);
+      if (checked.ok) throw new Error('the name passes');
+      expect(childNameError(checked.error)).toBe(checked.error);
+    }
+  });
 });

@@ -301,7 +301,7 @@ describe('RegisterCampPage', () => {
         expect(page.querySelector('#minor-name-error')).toBeNull();
         await typeName('');
         await leaveName();
-        expect(nameError()).toBe('Enter the minor’s name.');
+        expect(nameError()).toBe("Enter your child's name.");
         expect(nameInput()?.getAttribute('aria-invalid')).toBe('true');
         expect(nameInput()?.getAttribute('aria-describedby')).toBe(
           'minor-name-description minor-name-error',
@@ -318,7 +318,7 @@ describe('RegisterCampPage', () => {
 
       it('an empty submit shows both errors, focuses the name first, and sends nothing', async () => {
         await submit();
-        expect(nameError()).toBe('Enter the minor’s name.');
+        expect(nameError()).toBe("Enter your child's name.");
         expect(text(page.querySelector('#age-confirmed-error'))).toBe(
           "Confirm your child's age to continue.",
         );

@@ -310,7 +310,7 @@ test.describe('a guardian registers a child', () => {
     await screenshot(page, testInfo, '356-register-child-name-error');
     await childName(page).fill('');
     await registerButton(page).click();
-    await expect(page.locator('#minor-name-error')).toHaveText('Enter the minor’s name.');
+    await expect(page.locator('#minor-name-error')).toHaveText("Enter your child's name.");
     await expect(childName(page)).toBeFocused();
     await childName(page).fill('Maya R.');
     await expect(page.locator('#minor-name-error')).toHaveCount(0);
@@ -359,7 +359,6 @@ test.describe('a guardian registers a child', () => {
       'Maya R. is registered',
     ]);
 
-    // Holding their own place leaves only the child to register.
     await row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
     await expect(page.getByRole('radio', { name: 'My child' })).toBeChecked();
     await expect(page.getByRole('radio', { name: 'Me' })).toHaveCount(0);
@@ -593,59 +592,95 @@ test.describe('the register form on a phone and offline', () => {
   });
 });
 
-test.describe('the camp page rows when "You\'re registered" replaces Register', () => {
+test.describe('the camp page rows when the viewer’s places arrive', () => {
   const WIDTHS = [360, 1280] as const;
   const TOLERANCE = 0.5;
+  const CASES = [
+    { title: 'an adult for an adult camp', camp: ADULT, kind: 'adult', line: "You're registered" },
+    {
+      title: 'a guardian’s child for a youth camp',
+      camp: YOUTH,
+      kind: 'child',
+      line: 'Maya R. is registered',
+    },
+    {
+      title: 'a guardian’s child for a camp for 14 to 30',
+      camp: MIXED,
+      kind: 'child',
+      line: 'Maya R. is registered',
+    },
+    {
+      title: 'an adult for a camp for 14 to 30',
+      camp: MIXED,
+      kind: 'adult',
+      line: "You're registered",
+    },
+  ] as const;
 
-  for (const width of WIDTHS) {
-    test(`keep their place and height at ${width}px`, async ({ page }, testInfo) => {
-      const coarse = testInfo.project.name === 'chromium-mobile';
-      await page.setViewportSize({ width, height: 800 });
-      const { tenant, adult } = await seed();
-      const ids = await sessionIds(tenant, ADULT.slug);
-      await signUp(page, newUser('Steady'));
-      await page.goto(adult);
-      const link = row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' });
-      await expect(link).toBeVisible();
-      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
+  for (const { title, camp, kind, line } of CASES) {
+    for (const width of WIDTHS) {
+      test(`keep their place and height for ${title} at ${width}px`, async ({ page }, testInfo) => {
+        const coarse = testInfo.project.name === 'chromium-mobile';
+        await page.setViewportSize({ width, height: 800 });
+        const seeded = await seed();
+        const campPath = {
+          [ADULT.slug]: seeded.adult,
+          [YOUTH.slug]: seeded.youth,
+          [MIXED.slug]: seeded.mixed,
+        }[camp.slug];
+        const ids = await sessionIds(seeded.tenant, camp.slug);
+        await signUp(page, newUser('Steady'));
+        await page.goto(campPath);
+        const link = row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' });
+        await expect(link).toBeVisible();
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
 
-      const layout = () =>
-        page.evaluate(() => ({
-          page: document.documentElement.scrollHeight,
-          rows: [...document.querySelectorAll('#sessions li')].map((li) => {
-            const box = li.getBoundingClientRect();
-            return { top: box.top + window.scrollY, height: box.height };
-          }),
-        }));
-      const before = await layout();
-      const buttonHeight = (await link.boundingBox())!.height;
+        const layout = () =>
+          page.evaluate(() => ({
+            page: document.documentElement.scrollHeight,
+            rows: [...document.querySelectorAll('#sessions li')].map((li) => {
+              const box = li.getBoundingClientRect();
+              return { top: box.top + window.scrollY, height: box.height };
+            }),
+          }));
+        const actions = row(page, 'Week 1').locator('[data-slot="session-actions"]');
+        const before = await layout();
+        const actionsBefore = (await actions.boundingBox())!;
 
-      // Another tab of the same person registers, so this page changes in place.
-      const other = await page.context().newPage();
-      await other.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
-      await ageBox(other).click();
-      await registerButton(other).click();
-      await expect(other).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
-      const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
-      await expect(line).toHaveText("You're registered");
-      await expect(row(page, 'Week 1')).toContainText('11 places left');
+        // Another tab of the same person registers, so this page changes in place.
+        const other = await page.context().newPage();
+        await other.goto(registerPath(seeded.tenant, camp.slug, ids['Week 1']));
+        if (kind === 'child') {
+          if (camp.slug === MIXED.slug)
+            await other.getByRole('radio', { name: 'My child' }).check();
+          await childName(other).fill('Maya R.');
+        }
+        await ageBox(other).click();
+        await registerButton(other).click();
+        await expect(other).toHaveURL(`${baseURL}${campPath}`, { timeout: 20_000 });
+        const registered = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+        await expect(registered).toHaveText(line);
+        await expect(row(page, 'Week 1')).toContainText('11 places left');
 
-      const after = await layout();
-      expect(Math.abs(after.page - before.page)).toBeLessThanOrEqual(TOLERANCE);
-      expect(after.rows).toHaveLength(before.rows.length);
-      after.rows.forEach((box, index) => {
-        expect(Math.abs(box.top - before.rows[index].top), `row ${index} top`).toBeLessThanOrEqual(
-          TOLERANCE,
-        );
-        expect(
-          Math.abs(box.height - before.rows[index].height),
-          `row ${index} height`,
-        ).toBeLessThanOrEqual(TOLERANCE);
+        const after = await layout();
+        expect(Math.abs(after.page - before.page)).toBeLessThanOrEqual(TOLERANCE);
+        expect(after.rows).toHaveLength(before.rows.length);
+        after.rows.forEach((box, index) => {
+          expect(
+            Math.abs(box.top - before.rows[index].top),
+            `row ${index} top`,
+          ).toBeLessThanOrEqual(TOLERANCE);
+          expect(
+            Math.abs(box.height - before.rows[index].height),
+            `row ${index} height`,
+          ).toBeLessThanOrEqual(TOLERANCE);
+        });
+        const actionsAfter = (await actions.boundingBox())!;
+        expect(Math.abs(actionsAfter.height - actionsBefore.height)).toBeLessThanOrEqual(TOLERANCE);
+        expect(Math.abs(actionsAfter.y - actionsBefore.y)).toBeLessThanOrEqual(TOLERANCE);
+        await expectAccessible(page);
       });
-      expect(Math.abs((await line.boundingBox())!.height - buttonHeight)).toBeLessThanOrEqual(
-        TOLERANCE,
-      );
-    });
+    }
   }
 });
 

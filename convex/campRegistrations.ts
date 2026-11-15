@@ -13,6 +13,7 @@ import {
   MAX_MINORS_PER_SESSION,
   SELF_KEY,
   adultMayRegister,
+  childNameError,
   minorMayRegister,
   participantKey,
   participantValidator,
@@ -32,7 +33,7 @@ function refuse(refusal: CampRegistrationRefusal): never {
 function checkedParticipant(participant: Participant): Participant {
   if (participant.kind === 'self') return participant;
   const checked = checkMinorName(participant.minorName);
-  if (!checked.ok) throw new ConvexError({ ...checked.error });
+  if (!checked.ok) throw new ConvexError({ ...childNameError(checked.error) });
   return { kind: 'minor', minorName: checked.name };
 }
 

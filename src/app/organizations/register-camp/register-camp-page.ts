@@ -29,6 +29,7 @@ import {
   SELF_PARTICIPANT,
   ageConfirmationLabel,
   ageNotConfirmedMessage,
+  childNameError,
   type Participant,
 } from '../../../../convex/lib/individualRegistration';
 import { AuthService } from '../../core/auth/auth.service';
@@ -464,7 +465,7 @@ export class RegisterCampPage {
     const options = this.options();
     return chosen !== null && options.includes(chosen) ? chosen : (options[0] ?? 'self');
   });
-  protected readonly child = new MinorNameForm();
+  protected readonly child = new MinorNameForm('', childNameError);
   private readonly participant = computed<Participant>(() =>
     this.attending() === 'self'
       ? SELF_PARTICIPANT

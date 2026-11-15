@@ -1,7 +1,10 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
-import { checkMinorName } from '../../../convex/lib/minorName';
+import {
+  checkMinorName,
+  type MinorNameError as ConvexMinorNameError,
+} from '../../../convex/lib/minorName';
 import { ConvexOfflineError } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { isTeamFull } from './team-invite-form';
@@ -47,7 +50,7 @@ export class MinorNameForm {
 
   private readonly clientError = computed<MinorNameError | null>(() => {
     const checked = checkMinorName(this.model().name);
-    return checked.ok ? null : { kind: 'text', text: checked.error.message };
+    return checked.ok ? null : { kind: 'text', text: this.wording(checked.error).message };
   });
   private readonly shown: ShownUntilValid;
   private readonly serverError = linkedSignal<string, MinorNameError | null>({
@@ -55,7 +58,11 @@ export class MinorNameForm {
     computation: () => null,
   });
 
-  constructor(initial = '') {
+  constructor(
+    initial = '',
+    private readonly wording: (error: ConvexMinorNameError) => ConvexMinorNameError = (error) =>
+      error,
+  ) {
     this.model = signal({ name: initial });
     this.fields = form(this.model, (path) => {
       required(path.name);

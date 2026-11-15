@@ -11,7 +11,10 @@ import {
 } from '@ng-icons/lucide';
 import { campAgesLabel } from '../../../../convex/lib/campInput';
 import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
-import { minorMayRegister } from '../../../../convex/lib/individualRegistration';
+import {
+  MAX_MINORS_PER_SESSION,
+  participantsOffered,
+} from '../../../../convex/lib/individualRegistration';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
@@ -37,6 +40,15 @@ const SESSION_LINE = 'mt-1.5 flex items-start gap-1.5 text-sm text-muted-foregro
 const SESSION_ICON = 'mt-0.5 shrink-0 text-base';
 
 type PublicCampSession = PublicCampData['sessions'][number];
+
+const NAMES = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' });
+
+/** One line for the viewer's places, so the row keeps the Register button's height however many children they hold. */
+function registeredLine(self: boolean, children: readonly string[]): string | null {
+  if (children.length === 0) return self ? "You're registered" : null;
+  const names = [...(self ? ['You'] : []), ...children];
+  return `${NAMES.format(names)} ${names.length === 1 ? 'is' : 'are'} registered`;
+}
 
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
@@ -131,26 +143,33 @@ type PublicCampSession = PublicCampData['sessions'][number];
                       }}</time></span
                     >
                   </p>
-                  @for (line of session.registeredLines; track line) {
-                    <p
-                      data-slot="session-registered"
-                      class="mt-3 flex h-9 items-center gap-1.5 text-sm font-medium pointer-coarse:min-h-11"
+                  @if (session.canRegister || session.registeredLine) {
+                    <div
+                      data-slot="session-actions"
+                      class="mt-3 flex h-9 items-center gap-3 pointer-coarse:min-h-11"
                     >
-                      <ng-icon
-                        name="lucideCircleCheck"
-                        class="shrink-0 text-base"
-                        aria-hidden="true"
-                      />{{ line }}
-                    </p>
-                  }
-                  @if (session.canRegister; as sessionId) {
-                    <a
-                      [routerLink]="registerPath()"
-                      [queryParams]="{ session: sessionId }"
-                      data-slot="button"
-                      [class]="registerButton + ' mt-3'"
-                      >Register<span class="sr-only"> for {{ session.name }}</span></a
-                    >
+                      @if (session.registeredLine; as line) {
+                        <p
+                          data-slot="session-registered"
+                          class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
+                        >
+                          <ng-icon
+                            name="lucideCircleCheck"
+                            class="shrink-0 text-base"
+                            aria-hidden="true"
+                          /><span class="truncate">{{ line }}</span>
+                        </p>
+                      }
+                      @if (session.canRegister; as sessionId) {
+                        <a
+                          [routerLink]="registerPath()"
+                          [queryParams]="{ session: sessionId }"
+                          data-slot="button"
+                          [class]="registerButton + ' ms-auto shrink-0'"
+                          >Register<span class="sr-only"> for {{ session.name }}</span></a
+                        >
+                      }
+                    </div>
                   }
                 </li>
               }
@@ -208,11 +227,16 @@ export class PublicCampContent {
     campAgesLabel(this.camp().minimumAge, this.camp().maximumAge),
   );
   protected readonly sessions = computed(() => {
-    const childrenMayRegister = minorMayRegister(this.camp().minimumAge);
-    return this.camp().sessions.map((session: PublicCampSession) => {
+    const camp = this.camp();
+    const offered = participantsOffered(camp);
+    return camp.sessions.map((session: PublicCampSession) => {
       const { sessionId } = session;
       const registered = sessionId !== undefined && this.registeredSessionIds().includes(sessionId);
-      const children = this.registeredMinors().filter((minor) => minor.sessionId === sessionId);
+      const children = this.registeredMinors()
+        .filter((minor) => minor.sessionId === sessionId)
+        .map((minor) => minor.minorName);
+      const canAddSelf = offered.includes('self') && !registered;
+      const canAddChild = offered.includes('minor') && children.length < MAX_MINORS_PER_SESSION;
       const open = session.placesLeft > 0 && registrationIsOpen(session, this.now());
       return {
         ...session,
@@ -220,15 +244,9 @@ export class PublicCampContent {
         dates: seasonDateParts(session.startDate, session.endDate),
         times: campSessionTimes(session.dailyStartTime, session.dailyEndTime),
         closes: formatCalendarDate(session.registrationDeadline),
-        registeredLines: [
-          ...(registered ? ["You're registered"] : []),
-          ...children.map((minor) => `${minor.minorName} is registered`),
-        ],
-        // A held place takes away only the guardian's own registration, so the link stays where a child may still be added.
+        registeredLine: registeredLine(registered, children),
         canRegister:
-          open && sessionId !== undefined && (!registered || childrenMayRegister)
-            ? sessionId
-            : null,
+          open && sessionId !== undefined && (canAddSelf || canAddChild) ? sessionId : null,
       };
     });
   });

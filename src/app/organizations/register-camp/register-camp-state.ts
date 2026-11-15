@@ -29,7 +29,7 @@ export function registrationOptions(
   return participantsOffered(answer).filter((kind) => kind !== 'self' || !answer.registered);
 }
 
-/** "Registered" comes before the rest when nothing else can be registered, so a person holding a place still sees it after the deadline or once the session is full. */
+/** "Registered" comes before the rest once nothing else can be registered, so a person holding a place still sees it after the deadline or when the session is full. */
 export function registerCampState({
   answer,
   signedIn,
@@ -44,9 +44,11 @@ export function registerCampState({
   if (!signedIn) return 'signed-out';
   const { session } = answer;
   if (session === null) return 'no-session';
-  if (registrationOptions(answer).length === 0)
-    return answer.registered ? 'registered' : 'adult-not-allowed';
-  if (!registrationIsOpen(session, nowMs)) return 'closed';
+  const noOptionLeft = registrationOptions(answer).length === 0;
+  const open = registrationIsOpen(session, nowMs);
+  if (answer.registered && (noOptionLeft || !open || session.placesLeft === 0)) return 'registered';
+  if (noOptionLeft) return 'adult-not-allowed';
+  if (!open) return 'closed';
   return session.placesLeft === 0 ? 'full' : 'form';
 }
 

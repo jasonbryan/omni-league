@@ -73,6 +73,8 @@ const registerLink = (index: number) =>
   [...rows()[index].querySelectorAll('a')].find((a) => text(a).startsWith('Register'));
 const registered = (index: number) =>
   rows()[index].querySelector('[data-slot="session-registered"]');
+const actions = (index: number) => rows()[index].querySelector('[data-slot="session-actions"]');
+const BOTH_CAMP = { ...JUNIOR_CAMP, minimumAge: 14, maximumAge: 30 };
 
 afterEach(() => {
   vi.useRealTimers();
@@ -180,55 +182,80 @@ describe('PublicCampPage registration, signed in', () => {
     expect(registered(0)?.hasAttribute('role')).toBe(false);
   });
 
-  it('takes the box of the Register button it replaces, so the rows below do not move', async () => {
-    const boxClasses = (element: Element | null | undefined) =>
-      ['mt-3', 'h-9'].filter((name) => element?.classList.contains(name));
+  it('keeps the row of the Register button, so the rows below do not move', async () => {
     await emit(CAMP, ADULT_CAMP);
-    const button = registerLink(0);
-    expect(boxClasses(button)).toEqual(['mt-3', 'h-9']);
+    const before = actions(0)?.className;
+    expect(before?.split(' ')).toEqual(
+      expect.arrayContaining(['mt-3', 'h-9', 'flex', 'items-center', 'pointer-coarse:min-h-11']),
+    );
     await emit(MINE, [WEEK_1]);
-    expect(boxClasses(registered(0))).toEqual(['mt-3', 'h-9']);
-    expect(registered(0)?.classList.contains('pointer-coarse:min-h-11')).toBe(true);
-    expect(registered(0)?.classList.contains('flex')).toBe(true);
-    expect(registered(0)?.classList.contains('items-center')).toBe(true);
+    expect(actions(0)?.className).toBe(before);
+    expect(rows()[0].querySelectorAll('[data-slot="session-actions"]')).toHaveLength(1);
   });
 });
 
 describe('PublicCampPage registration, a guardian’s children', () => {
+  const lines = (index: number) =>
+    [...rows()[index].querySelectorAll('[data-slot="session-registered"]')].map(text);
+
   beforeEach(async () => {
     await open({ signedIn: true });
     await emit(CAMP, JUNIOR_CAMP);
   });
 
-  it('reads "<name> is registered" for each child, in the session they hold, and keeps Register for another', async () => {
-    await emit(MINORS, [
-      { sessionId: WEEK_1, minorName: 'Maya R.' },
-      { sessionId: WEEK_1, minorName: 'Leo R.' },
-    ]);
-    expect([...rows()[0].querySelectorAll('[data-slot="session-registered"]')].map(text)).toEqual([
-      'Maya R. is registered',
-      'Leo R. is registered',
-    ]);
+  it.each([
+    [['Maya R.'], 'Maya R. is registered'],
+    [['Maya R.', 'Leo R.'], 'Maya R. and Leo R. are registered'],
+    [['Maya R.', 'Leo R.', 'Zoe R.'], 'Maya R., Leo R., and Zoe R. are registered'],
+  ])('reads %j as one line, "%s", and keeps Register for another', async (names, line) => {
+    await emit(
+      MINORS,
+      names.map((minorName) => ({ sessionId: WEEK_1, minorName })),
+    );
+    expect(lines(0)).toEqual([line]);
     expect(registerLink(0)?.getAttribute('href')).toBe(`${REGISTER_PATH}?session=${WEEK_1}`);
     expect(registered(1)).toBeNull();
   });
 
-  it('are plain lines that announce nothing on load', async () => {
+  it('is a plain line that truncates and announces nothing on load', async () => {
     await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
     expect(registered(0)?.tagName).toBe('P');
     expect(registered(0)?.hasAttribute('role')).toBe(false);
+    expect(registered(0)?.querySelector('.truncate')).not.toBeNull();
   });
 
-  it('shows the guardian’s own line and then the children’s on a camp that admits both', async () => {
-    await emit(CAMP, { ...JUNIOR_CAMP, minimumAge: 14, maximumAge: 30 });
+  it('puts the line and the Register link in the one row, beside each other', async () => {
+    await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
+    expect(registered(0)?.parentElement).toBe(actions(0));
+    expect(registerLink(0)?.parentElement).toBe(actions(0));
+    expect(rows()[0].querySelectorAll('[data-slot="session-actions"]')).toHaveLength(1);
+  });
+
+  it('reads "You and <name> are registered" on a camp that admits both', async () => {
+    await emit(CAMP, BOTH_CAMP);
     await emit(MINE, [WEEK_1]);
     await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
-    expect([...rows()[0].querySelectorAll('[data-slot="session-registered"]')].map(text)).toEqual([
-      "You're registered",
-      'Maya R. is registered',
-    ]);
+    expect(lines(0)).toEqual(['You and Maya R. are registered']);
     expect(registerLink(0)).toBeDefined();
   });
+
+  it.each([
+    ['JUNIOR_CAMP', JUNIOR_CAMP, [] as string[]],
+    ['a camp for ages 14 to 30', BOTH_CAMP, [WEEK_1]],
+  ])(
+    'keeps the same row classes before and after the answers arrive on %s',
+    async (_label, camp, mine) => {
+      await emit(CAMP, camp);
+      const before = rows().map((_row, index) => actions(index)?.className);
+      expect(before[0]?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'h-9']));
+      await emit(MINE, mine);
+      await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
+      expect(rows().map((_row, index) => actions(index)?.className)).toEqual(before);
+      for (const index of [0, 1]) {
+        expect(rows()[index].querySelectorAll('[data-slot="session-actions"]').length).toBe(1);
+      }
+    },
+  );
 
   it('shows a child’s line after the deadline and on a full session, with no link', async () => {
     await emit(MINORS, [{ sessionId: 'session_week3', minorName: 'Maya R.' }]);
@@ -239,6 +266,19 @@ describe('PublicCampPage registration, a guardian’s children', () => {
   it('keeps the Register link on a camp for adults only off a guardian’s own registered session', async () => {
     await emit(CAMP, ADULT_CAMP);
     await emit(MINE, [WEEK_1]);
+    expect(registerLink(0)).toBeUndefined();
+    expect(registerLink(1)).toBeDefined();
+  });
+
+  it('takes the Register link away once the guardian has 20 children in the session, and not at 19', async () => {
+    const children = (count: number) =>
+      Array.from({ length: count }, (_value, index) => ({
+        sessionId: WEEK_1,
+        minorName: `Child ${index + 1}`,
+      }));
+    await emit(MINORS, children(19));
+    expect(registerLink(0)).toBeDefined();
+    await emit(MINORS, children(20));
     expect(registerLink(0)).toBeUndefined();
     expect(registerLink(1)).toBeDefined();
   });

@@ -494,6 +494,7 @@ describe('campRegistrations.register for a child', () => {
         s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), name)),
       );
       expect(data).toMatchObject({ field: 'minorName', code });
+      if (code === 'minorNameEmpty') expect(data.message).toBe("Enter your child's name.");
     }
     expect((await rows(s)).registrations).toEqual([]);
   });
@@ -596,7 +597,7 @@ describe('campRegistrations.listMyMinorsForCamp', () => {
   const list = (caller: Caller | Setup['t'], campSlug = 'youth-camp') =>
     caller.query(api.campRegistrations.listMyMinorsForCamp, { orgSlug: 'org-a', campSlug });
 
-  test('lists the caller own children by session and no one else', async () => {
+  test('lists the caller’s own children by session and no one else', async () => {
     const s = await setup();
     await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
     await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'Leo R.'));
@@ -622,7 +623,7 @@ describe('campRegistrations.listMyMinorsForCamp', () => {
     expect(names).toEqual(['Maya R.', 'Leo R.', 'Ana R.']);
   });
 
-  test('leaves out the guardian own registration', async () => {
+  test('leaves out the guardian’s own registration', async () => {
     const s = await setup();
     await s.alice.mutation(api.campRegistrations.register, args(s.mixed.sessions['Week 1']));
     expect(await list(s.alice, 'open-ages-camp')).toEqual([]);

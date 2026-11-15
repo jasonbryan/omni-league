@@ -1,6 +1,6 @@
 // Imports only `convex/values` and other `convex/lib` files that do the same, so the app can import it.
 import { v, type Infer } from 'convex/values';
-import { minorNameKey, normalizeMinorName } from './minorName';
+import { minorNameKey, normalizeMinorName, type MinorNameError } from './minorName';
 import { formatCalendarDate } from './seasonInput';
 
 export const ADULT_AGE = 18;
@@ -71,4 +71,11 @@ export function ageNotConfirmedMessage(participant: Participant): string {
   if (participant.kind === 'self') return 'Confirm your age to continue.';
   const name = normalizeMinorName(participant.minorName);
   return `Confirm ${name === '' ? 'your child' : name}'s age to continue.`;
+}
+
+/** The team minor rule's error, worded for a registration, where the field is labelled "Child's name". */
+export function childNameError(error: MinorNameError): MinorNameError {
+  return error.code === 'minorNameEmpty'
+    ? { ...error, message: "Enter your child's name." }
+    : error;
 }
