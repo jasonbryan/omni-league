@@ -122,10 +122,20 @@ describe('TeamPage: a tournament team', () => {
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(o.subscription(FOR_TEAM)?.args).toEqual({ teamId: 'team_crabs' });
-    o.subscription(FOR_TEAM)!.emit({ sport: 'beachVolleyball', setsPerGame: 1, game: null });
+    o.subscription(FOR_TEAM)!.emit({ sport: 'beachVolleyball', setsPerGame: 1, games: [] });
     await o.flush();
     expect(text(panel.querySelector('h2'))).toBe('Report score');
     expect(text(panel.querySelector('[data-slot="empty"] p'))).toBe('No game to report right now.');
+  });
+
+  it('holds the Report score panel’s space for each game the team page counted', async () => {
+    await open({
+      ...CRABS,
+      tournament: { ...CRABS.tournament, reportableGameCount: 3 },
+    });
+    expect(
+      main().querySelectorAll('app-score-report-panel [data-slot="skeleton-block"]'),
+    ).toHaveLength(3);
   });
 
   it('shows a player who is not the captain no Report score panel, and asks for no game', async () => {

@@ -32,6 +32,7 @@ import {
   TOURNAMENT_NOT_FOUND_CODE,
   type RegistrationClosedError,
 } from './lib/teamInput';
+import { reportableGamesOfTeam } from './lib/scoreReports';
 import { sportValidator } from './lib/sports';
 import { bracketExists } from './lib/tournamentBracket';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
@@ -286,6 +287,8 @@ const teamForMemberValidator = v.object({
       slug: v.string(),
       sport: v.optional(sportValidator),
       setsPerGame: v.optional(v.number()),
+      /** The games the captain's Report score panel lists, which it holds space for while it loads; 0 for any other viewer. */
+      reportableGameCount: v.optional(v.number()),
     }),
   ),
   minimumRosterSize: v.number(),
@@ -328,6 +331,7 @@ async function tournamentTeamForMember(
   const organization = await ctx.db.get('organizations', team.organizationId);
   if (!tournament || !program || !organization) return null;
   const viewerCanManage = await canManageTournamentTeam(ctx, reader.user._id, team);
+  const viewerIsCaptain = team.captainUserId === reader.user._id;
   return {
     name: team.name,
     organization: { name: organization.name, slug: organization.slug },
@@ -336,6 +340,9 @@ async function tournamentTeamForMember(
       slug: program.slug,
       sport: tournament.sport,
       setsPerGame: setsPerGameOf(tournament),
+      reportableGameCount: viewerIsCaptain
+        ? (await reportableGamesOfTeam(ctx, tournament._id, team._id)).length
+        : 0,
     },
     // The previous frontend reads `season` and `league` without a check, so a tournament team answers with stand-ins.
     season: { name: program.name, slug: program.slug },
@@ -343,7 +350,7 @@ async function tournamentTeamForMember(
     minimumRosterSize: tournament.minimumRosterSize,
     rosterCount: team.rosterCount,
     roster: await rosterOf(ctx, team, reader, viewerCanManage),
-    viewerIsCaptain: team.captainUserId === reader.user._id,
+    viewerIsCaptain,
     viewerCanManage,
     viewerOnTeam: reader.rosteredTeamIds.has(team._id),
     viewerTeamName: await ownTeamName(ctx, reader),

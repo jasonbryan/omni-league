@@ -20,13 +20,20 @@ export function reportedLine(names: readonly [string, string], score: Score): st
   return `${names[0]} ${scoreText(score)} ${names[1]}.`;
 }
 
-export const REPORTED_NOTE =
-  'The organizer confirms it before the winner advances. Report again to change it until then.';
+export type ReportedGameStage = 'bracket' | 'pool';
 
-export const REPORTED_STATUS: AlertText = {
-  title: 'Score reported',
-  description: 'The organizer confirms it before the winner advances.',
+const WHEN_IT_COUNTS: Record<ReportedGameStage, string> = {
+  bracket: 'before the winner advances',
+  pool: 'before it counts in the standings',
 };
+
+export const reportedNote = (stage: ReportedGameStage) =>
+  `The organizer confirms it ${WHEN_IT_COUNTS[stage]}. Report again to change it until then.`;
+
+export const reportedStatus = (stage: ReportedGameStage): AlertText => ({
+  title: 'Score reported',
+  description: `The organizer confirms it ${WHEN_IT_COUNTS[stage]}.`,
+});
 
 export function reportFailedText(refusal: string | null): AlertText {
   return {

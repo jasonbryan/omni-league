@@ -40,6 +40,8 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
         @if (query.value(); as value) {
           @for (game of games(); track game.gameId) {
             <app-score-report-form
+              class="border-border"
+              [class.border-t]="!$first"
               [game]="game"
               [teamId]="teamId()"
               [sport]="value.sport"
@@ -66,16 +68,26 @@ import { LOAD_FAILED, NO_GAME_TEXT, NO_GAME_TITLE } from './score-report-text';
             </div>
           }
         } @else {
-          <div class="px-4 py-4 md:px-5">
-            <p role="status" class="sr-only">Loading the game.</p>
-            <ng-container [ngTemplateOutlet]="skeleton" />
-          </div>
+          <p role="status" class="sr-only">Loading the game.</p>
+          @for (block of skeletonBlocks(); track block) {
+            <div
+              class="border-border px-4 py-4 md:px-5"
+              [class.border-t]="block > 0"
+              data-slot="skeleton-block"
+            >
+              <ng-container [ngTemplateOutlet]="skeleton" />
+            </div>
+          }
         }
       </section>
     }
     <ng-template #skeleton>
       <div aria-hidden="true">
-        <div hlmSkeleton class="rounded-md h-6 w-64 max-w-full"></div>
+        <div
+          hlmSkeleton
+          class="rounded-md h-6 w-64 max-w-full max-[359px]:h-12"
+          data-slot="skeleton-label"
+        ></div>
         @for (row of rows(); track row) {
           <div [class]="row === 0 ? 'mt-3' : 'mt-5'" data-slot="skeleton-set">
             @if (named()) {
@@ -116,6 +128,8 @@ export class ScoreReportPanel {
   /** The tournament's, known from the team before the game answers, so the skeleton has the form's rows. */
   readonly sport = input<Sport>('beachVolleyball');
   readonly setsPerGame = input(1);
+  /** The games the team page counted, so the skeleton holds the space of that many forms. */
+  readonly gameCount = input(1);
 
   protected readonly query = injectQuery(api.scoreReports.forTeam, () => ({
     teamId: this.teamId(),
@@ -136,9 +150,10 @@ export class ScoreReportPanel {
   protected readonly noGameTitle = NO_GAME_TITLE;
   protected readonly noGameText = NO_GAME_TEXT;
 
-  /** One game at most, in a list so a new game gets a new form with empty boxes. */
-  protected readonly games = computed(() => {
-    const game = this.query.value()?.game;
-    return game ? [game] : [];
-  });
+  protected readonly skeletonBlocks = computed(() =>
+    Array.from({ length: Math.max(1, this.gameCount()) }, (_, index) => index),
+  );
+
+  /** In a list so a new game gets a new form with empty boxes. */
+  protected readonly games = computed(() => this.query.value()?.games ?? []);
 }

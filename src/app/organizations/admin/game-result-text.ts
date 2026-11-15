@@ -69,8 +69,12 @@ export function reportedText(
   return `${reporter} reported ${teams[0]} ${scoreText(score)} ${teams[1]}.`;
 }
 
-export function confirmedText(winnerName: string | null, advancesTo: string | null): AlertText {
-  return { title: 'Report confirmed', description: advancesText(winnerName, advancesTo) };
+export function confirmedText(
+  winnerName: string | null,
+  advancesTo: string | null,
+  stage: GameStage = 'bracket',
+): AlertText {
+  return { title: 'Report confirmed', description: advancesText(winnerName, advancesTo, stage) };
 }
 
 export function confirmFailedText(refusal: string | null): AlertText {

@@ -2,20 +2,26 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireGameOrganizer, requireUser } from './lib/access';
 import { BRACKET_MESSAGES, roundName } from './lib/bracket';
-import { refuseInvalidScore, saveFor, savedValidator, setsPerGameOf } from './lib/gameResults';
-import { currentGameOf } from './lib/scoreReports';
+import {
+  refuseInvalidScore,
+  saveFor,
+  savedValidator,
+  setsPerGameOf,
+  tiesAllowedIn,
+} from './lib/gameResults';
+import { reportableGamesOfTeam } from './lib/scoreReports';
 import { scoreValidator, sportValidator } from './lib/sports';
-import { bracketGames, refuseBracket } from './lib/tournamentBracket';
+import { bracketGames, gameIsDecided, refuseBracket } from './lib/tournamentBracket';
 
 const reportedValidator = v.object({ score: scoreValidator, reportedAt: v.number() });
 
 const teamReportValidator = v.object({
   sport: sportValidator,
   setsPerGame: v.number(),
-  game: v.union(
-    v.null(),
+  games: v.array(
     v.object({
       gameId: v.id('tournamentGames'),
+      stage: v.union(v.literal('bracket'), v.literal('pool')),
       roundName: v.string(),
       teams: v.array(v.object({ teamId: v.id('teams'), name: v.string() })),
       /** The team's own report; the other team's stays with the organizer. */
@@ -33,29 +39,31 @@ export const forTeam = query({
     if (team?.tournamentId === undefined || team.captainUserId !== user._id) return null;
     const tournament = await ctx.db.get('tournaments', team.tournamentId);
     if (!tournament) return null;
-    const games = await bracketGames(ctx, tournament._id);
-    const current = currentGameOf(games, team._id);
-    const base = { sport: tournament.sport, setsPerGame: setsPerGameOf(tournament) };
-    if (!current) return { ...base, game: null };
-    const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
-    const reported = await ctx.db
-      .query('scoreReports')
-      .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', current._id).eq('teamId', team._id))
-      .unique();
-    const teams = [];
-    for (const placed of current.teamIds) {
-      const row = placed && (await ctx.db.get('teams', placed));
-      if (row) teams.push({ teamId: row._id, name: row.name });
-    }
-    return {
-      ...base,
-      game: {
-        gameId: current._id,
-        roundName: roundName(current.round, rounds),
+    const open = await reportableGamesOfTeam(ctx, tournament._id, team._id);
+    const rounds = (await bracketGames(ctx, tournament._id)).reduce(
+      (most, row) => Math.max(most, row.round),
+      0,
+    );
+    const games = [];
+    for (const game of open) {
+      const reported = await ctx.db
+        .query('scoreReports')
+        .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', game._id).eq('teamId', team._id))
+        .unique();
+      const teams = [];
+      for (const placed of game.teamIds) {
+        const row = placed && (await ctx.db.get('teams', placed));
+        if (row) teams.push({ teamId: row._id, name: row.name });
+      }
+      games.push({
+        gameId: game._id,
+        stage: game.stage,
+        roundName: game.stage === 'pool' ? `Round ${game.round}` : roundName(game.round, rounds),
         teams,
         report: reported && { score: reported.score, reportedAt: reported.reportedAt },
-      },
-    };
+      });
+    }
+    return { sport: tournament.sport, setsPerGame: setsPerGameOf(tournament), games };
   },
 });
 
@@ -66,14 +74,10 @@ export const report = mutation({
     const user = await requireUser(ctx);
     const game = await ctx.db.get('tournamentGames', gameId);
     const team = await ctx.db.get('teams', teamId);
-    if (
-      game?.stage !== 'bracket' ||
-      team?.captainUserId !== user._id ||
-      !game.teamIds.includes(team._id)
-    ) {
+    if (!game || team?.captainUserId !== user._id || !game.teamIds.includes(team._id)) {
       throw new Error('Not allowed');
     }
-    if (game.winnerTeamId !== undefined) {
+    if (gameIsDecided(game)) {
       refuseBracket({ code: 'reportsClosed', message: BRACKET_MESSAGES.reportsClosed });
     }
     if (game.teamIds.includes(null)) {
@@ -81,7 +85,7 @@ export const report = mutation({
     }
     const tournament = await ctx.db.get('tournaments', game.tournamentId);
     if (!tournament) throw new Error('Not allowed');
-    refuseInvalidScore(tournament, tournament.sport, score);
+    refuseInvalidScore(tournament, tournament.sport, score, tiesAllowedIn(game, tournament.sport));
     const existing = await ctx.db
       .query('scoreReports')
       .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', gameId).eq('teamId', teamId))
@@ -95,7 +99,7 @@ export const report = mutation({
   },
 });
 
-/** Saves through the writer an organizer's entry uses, so the winner advances and the locks follow. */
+/** Saves through the writer an organizer's entry uses, so the winner advances, the pools lock, and the standings follow. */
 export const confirm = mutation({
   args: {
     reportId: v.id('scoreReports'),
@@ -108,7 +112,6 @@ export const confirm = mutation({
     const reported = await ctx.db.get('scoreReports', reportId);
     if (!reported) throw new Error('Not allowed');
     const access = await requireGameOrganizer(ctx, reported.gameId);
-    if (access.game.stage !== 'bracket') throw new Error('Not allowed');
     if (reported.reportedAt !== expected || !access.game.teamIds.includes(reported.teamId)) {
       refuseBracket({ code: 'reportChanged', message: BRACKET_MESSAGES.reportChanged });
     }

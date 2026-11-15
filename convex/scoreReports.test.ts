@@ -585,22 +585,25 @@ describe('a report whose game changes its teams', () => {
 });
 
 describe('scoreReports.forTeam', () => {
-  test('gives the captain the team’s current game, the sport, and no report before one is sent', async () => {
+  test('gives the captain the team’s current game in a list, the sport, and no report before one is sent', async () => {
     const w = await world();
     const { s, teamIds } = w;
     const game = await crabsSemifinal(w);
     expect(await forTeam(s, s.captain, teamIds['Sand Crabs'])).toEqual({
       sport: 'beachVolleyball',
       setsPerGame: 1,
-      game: {
-        gameId: game._id,
-        roundName: 'Semifinals',
-        teams: [
-          { teamId: teamIds['Sand Crabs'], name: 'Sand Crabs' },
-          { teamId: teamIds['Spike Squad'], name: 'Spike Squad' },
-        ],
-        report: null,
-      },
+      games: [
+        {
+          gameId: game._id,
+          stage: 'bracket',
+          roundName: 'Semifinals',
+          teams: [
+            { teamId: teamIds['Sand Crabs'], name: 'Sand Crabs' },
+            { teamId: teamIds['Spike Squad'], name: 'Spike Squad' },
+          ],
+          report: null,
+        },
+      ],
     });
   });
 
@@ -611,9 +614,9 @@ describe('scoreReports.forTeam', () => {
     const saved = await report(s, s.captain, game, teamIds['Sand Crabs'], set(21, 18));
     await report(s, s.rivalPlayer, game, teamIds['Spike Squad'], set(15, 21));
     const mine = await forTeam(s, s.captain, teamIds['Sand Crabs']);
-    expect(mine?.game?.report).toEqual({ score: set(21, 18), reportedAt: saved.reportedAt });
+    expect(mine?.games[0]?.report).toEqual({ score: set(21, 18), reportedAt: saved.reportedAt });
     const theirs = await forTeam(s, s.rivalPlayer, teamIds['Spike Squad']);
-    expect(theirs?.game?.report?.score).toEqual(set(15, 21));
+    expect(theirs?.games[0]?.report?.score).toEqual(set(15, 21));
   });
 
   test('has no game once the game has a result and the next waits on the other semifinal', async () => {
@@ -623,7 +626,7 @@ describe('scoreReports.forTeam', () => {
       gameId: (await crabsSemifinal(w))._id,
       score: set(21, 10),
     });
-    expect((await forTeam(s, s.captain, teamIds['Sand Crabs']))?.game).toBeNull();
+    expect((await forTeam(s, s.captain, teamIds['Sand Crabs']))?.games).toEqual([]);
   });
 
   test('moves to the Final once both semifinals are settled, and a team that lost has no game', async () => {
@@ -637,10 +640,10 @@ describe('scoreReports.forTeam', () => {
       gameId: (await bombersSemifinal(w))._id,
       score: set(21, 10),
     });
-    expect((await forTeam(s, s.captain, teamIds['Sand Crabs']))?.game).toMatchObject({
-      roundName: 'Final',
-    });
-    expect((await forTeam(s, s.rivalPlayer, teamIds['Spike Squad']))?.game).toBeNull();
+    expect((await forTeam(s, s.captain, teamIds['Sand Crabs']))?.games).toMatchObject([
+      { roundName: 'Final' },
+    ]);
+    expect((await forTeam(s, s.rivalPlayer, teamIds['Spike Squad']))?.games).toEqual([]);
   });
 
   test('is null for a player who is not the captain, an organizer, and a team of no tournament', async () => {
@@ -683,7 +686,7 @@ describe('scoreReports.forTeam', () => {
         createdAt: 1,
       }),
     );
-    expect((await forTeam(s, s.captain, teamId))?.game).toBeNull();
+    expect((await forTeam(s, s.captain, teamId))?.games).toEqual([]);
   });
 });
 

@@ -453,22 +453,4 @@ describe('access to the pool result functions', () => {
     await enter(s, game, { score: ONE_SET }, s.assignedOrganizer);
     expect((await stored(s, game)).score).toEqual(ONE_SET);
   });
-
-  test('an organizer cannot confirm a captain’s report of a pool game', async () => {
-    const { s, teamIds } = await world();
-    const game = await gameOf(s, teamIds, 1, 4);
-    const reportId = await s.t.run((ctx) =>
-      ctx.db.insert('scoreReports', {
-        gameId: game._id,
-        teamId: game.teamIds[0]!,
-        reportedByUserId: s.captain.userId,
-        score: ONE_SET,
-        reportedAt: 5,
-      }),
-    );
-    await expect(
-      s.as(s.admin).mutation(api.scoreReports.confirm, { reportId, expected: 5 }),
-    ).rejects.toThrow(/Not allowed/);
-    expect((await stored(s, game)).score).toBeUndefined();
-  });
 });

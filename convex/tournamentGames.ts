@@ -26,7 +26,7 @@ import {
   storedResultValidator,
 } from './lib/gameResults';
 import { registrationIsOpen } from './lib/registration';
-import { reportsInPlaceOrder, reportViewValidator } from './lib/scoreReports';
+import { reportViewsByGame, reportViewValidator } from './lib/scoreReports';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { scoreValidator } from './lib/sports';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
@@ -122,11 +122,7 @@ async function bracketView(
     if (teamId === null || names.has(teamId)) continue;
     names.set(teamId, (await ctx.db.get('teams', teamId))?.name ?? '');
   }
-  const reports = new Map<Id<'tournamentGames'>, Doc<'scoreReports'>[]>();
-  for (const game of games) {
-    const open = !gameHasResult(game) && game.teamIds.every((teamId) => teamId !== null);
-    reports.set(game._id, open ? await reportsInPlaceOrder(ctx, game) : []);
-  }
+  const reports = await reportViewsByGame(ctx, games, names);
   const rounds = games.reduce((most, game) => Math.max(most, game.round), 0);
   const byId = new Map(games.map((game) => [game._id, game]));
   const final = games.find((game) => game.round === rounds);
@@ -148,13 +144,7 @@ async function bracketView(
           winnerTeamId: game.winnerTeamId ?? null,
           result: gameHasResult(game) ? resultViewOf(game) : null,
           locked: nextHasResult(game, byId),
-          reports: (reports.get(game._id) ?? []).map((reported) => ({
-            reportId: reported._id,
-            teamId: reported.teamId,
-            teamName: names.get(reported.teamId) ?? '',
-            score: reported.score,
-            reportedAt: reported.reportedAt,
-          })),
+          reports: reports.get(game._id) ?? [],
         })),
     })),
   };
@@ -336,6 +326,7 @@ const poolsValidator = v.object({
           /** `null` for a game with no result, and for a tie. */
           winnerTeamId: v.union(v.null(), v.id('teams')),
           result: v.union(v.null(), resultViewValidator),
+          reports: v.array(reportViewValidator),
         }),
       ),
     }),
@@ -371,6 +362,7 @@ export const getPools = query({
     const names = new Map(
       [...setup.seeds, ...setup.unconfirmed].map((team) => [team._id, team.name]),
     );
+    const reports = await reportViewsByGame(ctx, games, names);
     const teamView = (team: Doc<'teams'>) => ({
       teamId: team._id,
       name: team.name,
@@ -394,6 +386,7 @@ export const getPools = query({
             ),
             winnerTeamId: game.winnerTeamId ?? null,
             result: gameHasResult(game) ? resultViewOf(game) : null,
+            reports: reports.get(game._id) ?? [],
           })),
       })),
       seeds: setup.seeds.map(teamView),

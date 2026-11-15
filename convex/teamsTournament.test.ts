@@ -570,9 +570,46 @@ describe('teams.getForMember for a tournament team', () => {
       slug: 'gulf-coast-beach-open',
       sport: 'beachVolleyball',
       setsPerGame: 1,
+      reportableGameCount: 0,
     });
     await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { setsPerGame: 3 }));
     expect(await tournament()).toMatchObject({ setsPerGame: 3 });
+  });
+
+  describe('the count of games the captain can report', () => {
+    const poolGame = (
+      s: Awaited<ReturnType<typeof registered>>['s'],
+      teamIds: Id<'teams'>[],
+      round: number,
+      rest = {},
+    ) =>
+      s.t.run((ctx) =>
+        ctx.db.insert('tournamentGames', {
+          tournamentId: s.gulf,
+          stage: 'pool',
+          pool: 'A',
+          round,
+          slot: 1,
+          teamIds,
+          ...rest,
+        }),
+      );
+
+    test('is the team’s pool games without a result, and only for the captain', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      await poolGame(s, [teamId, otherTeamId], 1);
+      await poolGame(s, [otherTeamId, teamId], 2);
+      await poolGame(s, [teamId, otherTeamId], 3, {
+        score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+        winnerTeamId: teamId,
+      });
+      const countFor = (who: string) =>
+        as(s, who)
+          .query(api.teams.getForMember, { teamId })
+          .then((team) => team?.tournament?.reportableGameCount);
+      expect(await countFor('captain')).toBe(2);
+      expect(await countFor('admin-a')).toBe(0);
+    });
   });
 
   test('gives an admin of the organization the team', async () => {
