@@ -1,6 +1,6 @@
 import { publicTournamentPageValidator } from '../../../../convex/lib/publicPage';
 import { matchesValidator } from '../../core/data/convex/matches-validator';
-import { BEACH_OPEN, BEACH_OPEN_BRACKET } from './testing/tournament-data';
+import { BEACH_OPEN, BEACH_OPEN_BRACKET, BEACH_OPEN_POOLS } from './testing/tournament-data';
 
 const matches = (value: unknown) => matchesValidator(value, publicTournamentPageValidator);
 
@@ -69,6 +69,39 @@ describe('a saved tournament page checked against the current shape', () => {
     it('rejects a score of an unknown kind and a score that is not a pair', () => {
       expect(matches(copyWith({ score: { kind: 'points', a: 1, b: 0 } }))).toBe(false);
       expect(matches(copyWith({ score: { kind: 'goals', a: 'three', b: 1 } }))).toBe(false);
+    });
+  });
+
+  describe('with pools', () => {
+    const [pool] = BEACH_OPEN_POOLS;
+    const copyWith = (change: object) => ({ ...BEACH_OPEN, pools: [{ ...pool, ...change }] });
+
+    it('accepts a copy saved before pools existed', () => {
+      expect(BEACH_OPEN).not.toHaveProperty('pools');
+      expect(matches({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET })).toBe(true);
+    });
+
+    it('accepts a copy saved with pools', () => {
+      expect(matches({ ...BEACH_OPEN, pools: BEACH_OPEN_POOLS })).toBe(true);
+    });
+
+    it('accepts a game with a forfeit, and a tied game with a score and no winner', () => {
+      const games = [
+        { round: 1, teams: ['Sand Crabs', 'Dig Dogs'], forfeit: 1, winner: 0 },
+        { round: 2, teams: ['Sand Crabs', 'Net Results'], score: { kind: 'goals', a: 2, b: 2 } },
+      ];
+      expect(matches(copyWith({ games }))).toBe(true);
+    });
+
+    it('rejects standings that are not a list, and a row without cells', () => {
+      expect(matches(copyWith({ standings: 'none' }))).toBe(false);
+      expect(matches(copyWith({ standings: [{ place: 1, name: 'Sand Crabs' }] }))).toBe(false);
+    });
+
+    it('rejects a winner that is not a place in the game', () => {
+      expect(matches(copyWith({ games: [{ round: 1, teams: ['A', 'B'], winner: 2 }] }))).toBe(
+        false,
+      );
     });
   });
 });

@@ -266,11 +266,33 @@ export const publicBracketValidator = v.object({
 
 export type PublicBracket = Infer<typeof publicBracketValidator>;
 
-// `isFull` and `bracket` are optional so a copy saved before they existed stays valid.
+// Holds no ids, as the bracket does. A standings row's `cells` are text written for the sport's `columns`.
+// `score` and `forfeit` are optional so an unplayed game, and a forfeit with no score, fit.
+export const publicPoolValidator = v.object({
+  // A string, not `poolValidator`, which would bring all of `pools.ts` into the first bundle; the letter `A` to `H`.
+  pool: v.string(),
+  columns: v.array(v.object({ short: v.string(), label: v.string() })),
+  standings: v.array(v.object({ place: v.number(), name: v.string(), cells: v.array(v.string()) })),
+  tiebreakers: v.string(),
+  games: v.array(
+    v.object({
+      round: v.number(),
+      teams: v.array(v.string()),
+      winner: v.optional(publicBracketSideValidator),
+      score: v.optional(scoreValidator),
+      forfeit: v.optional(publicBracketSideValidator),
+    }),
+  ),
+});
+
+export type PublicPool = Infer<typeof publicPoolValidator>;
+
+// `isFull`, `bracket`, and `pools` are optional so a copy saved before they existed stays valid.
 export const publicTournamentPageValidator = v.object({
   ...tournamentDetailsValidator.fields,
   isFull: v.optional(v.boolean()),
   bracket: v.optional(publicBracketValidator),
+  pools: v.optional(v.array(publicPoolValidator)),
 });
 
 export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;

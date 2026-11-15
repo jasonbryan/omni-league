@@ -108,6 +108,7 @@ export const confirm = mutation({
     const reported = await ctx.db.get('scoreReports', reportId);
     if (!reported) throw new Error('Not allowed');
     const access = await requireGameOrganizer(ctx, reported.gameId);
+    if (access.game.stage !== 'bracket') throw new Error('Not allowed');
     if (reported.reportedAt !== expected || !access.game.teamIds.includes(reported.teamId)) {
       refuseBracket({ code: 'reportChanged', message: BRACKET_MESSAGES.reportChanged });
     }

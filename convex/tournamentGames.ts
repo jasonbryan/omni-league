@@ -55,6 +55,13 @@ import {
 
 const gameTeamValidator = v.union(v.null(), v.object({ teamId: v.id('teams'), name: v.string() }));
 
+const resultViewValidator = v.object({
+  score: scoreValidator,
+  forfeitTeamId: v.union(v.null(), v.id('teams')),
+  /** What an Undo or a Clear sends back as `expected`, so it acts only on this result. */
+  resultEnteredAt: v.number(),
+});
+
 const setupValidator = v.object({
   seeds: v.array(v.object({ teamId: v.id('teams'), name: v.string(), rosterCount: v.number() })),
   unconfirmedCount: v.number(),
@@ -73,15 +80,7 @@ const setupValidator = v.object({
               slot: v.number(),
               teams: v.array(gameTeamValidator),
               winnerTeamId: v.union(v.null(), v.id('teams')),
-              result: v.union(
-                v.null(),
-                v.object({
-                  score: scoreValidator,
-                  forfeitTeamId: v.union(v.null(), v.id('teams')),
-                  /** What an Undo or a Clear sends back as `expected`, so it acts only on this result. */
-                  resultEnteredAt: v.number(),
-                }),
-              ),
+              result: v.union(v.null(), resultViewValidator),
               /** The next game has a result, so Undo, Clear, and Correct are refused. */
               locked: v.boolean(),
               reports: v.array(reportViewValidator),
@@ -334,7 +333,9 @@ const poolsValidator = v.object({
           round: v.number(),
           slot: v.number(),
           teams: v.array(gameTeamValidator),
+          /** `null` for a game with no result, and for a tie. */
           winnerTeamId: v.union(v.null(), v.id('teams')),
+          result: v.union(v.null(), resultViewValidator),
         }),
       ),
     }),
@@ -392,6 +393,7 @@ export const getPools = query({
               teamId === null ? null : { teamId, name: names.get(teamId) ?? '' },
             ),
             winnerTeamId: game.winnerTeamId ?? null,
+            result: gameHasResult(game) ? resultViewOf(game) : null,
           })),
       })),
       seeds: setup.seeds.map(teamView),

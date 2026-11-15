@@ -560,3 +560,130 @@ describe('testing:seedTournamentWaitlistEntry', () => {
     );
   });
 });
+
+describe('testing:seedTournamentPools and testing:seedPoolResult', () => {
+  const ARGS = { organizationSlug: 'e2e-org-t1u2', tournamentSlug: 'gulf-coast-beach-open' };
+  const names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
+  const publicPools = async (t: Awaited<ReturnType<typeof seeded>>) =>
+    (
+      await t.query(api.tournaments.getPublicPage, {
+        orgSlug: ARGS.organizationSlug,
+        tournamentSlug: ARGS.tournamentSlug,
+      })
+    )?.pools;
+
+  async function withTeams(sport?: 'soccer') {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, {
+      ...TOURNAMENT,
+      status: 'published',
+      ...(sport && { sport }),
+    });
+    await t.mutation(internal.testing.setTournamentStructure, { ...ARGS, structure: 'pools' });
+    await t.mutation(internal.testing.seedTournamentRosters, {
+      ...ARGS,
+      teams: names.map((name) => ({ name })),
+    });
+    return t;
+  }
+
+  test('throws with IS_TEST unset and writes nothing', async () => {
+    const t = await withTeams();
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(
+      t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await t.run((ctx) => ctx.db.query('tournamentGames').collect())).toEqual([]);
+  });
+
+  test('splits the teams into pools and creates their games, which the public page then shows', async () => {
+    const t = await withTeams();
+    await expect(
+      t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 }),
+    ).resolves.toEqual({ gameCount: 6 });
+    expect((await publicPools(t))?.map((pool) => pool.standings.length)).toEqual([3, 3]);
+  });
+
+  test('refuses a second split, an unknown organization, and an unknown tournament', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    await expect(
+      t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 }),
+    ).rejects.toThrow(/has pool games already/);
+    await expect(
+      t.mutation(internal.testing.seedTournamentPools, {
+        ...ARGS,
+        organizationSlug: 'nowhere',
+        poolCount: 2,
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.seedTournamentPools, {
+        ...ARGS,
+        tournamentSlug: 'nowhere',
+        poolCount: 2,
+      }),
+    ).rejects.toThrow(/No tournament/);
+  });
+
+  test('writes a result for the named pair with the first name’s score first, whichever team the game lists first', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    const score = { kind: 'sets' as const, sets: [{ a: 21, b: 15 }] };
+    await t.mutation(internal.testing.seedPoolResult, {
+      ...ARGS,
+      teams: ['Delta', 'Alpha'],
+      score,
+    });
+    const [a] = (await publicPools(t))!;
+    expect(a.standings[0]).toMatchObject({ name: 'Delta', place: 1 });
+    expect(a.standings[0].cells[1]).toBe('1');
+    await expect(
+      t.mutation(internal.testing.seedPoolResult, { ...ARGS, teams: ['Alpha', 'Delta'], score }),
+    ).rejects.toThrow(/has a result already/);
+  });
+
+  test('writes a forfeit and a tie, and refuses a tie where the sport does not allow it', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    await t.mutation(internal.testing.seedPoolResult, {
+      ...ARGS,
+      teams: ['Alpha', 'Delta'],
+      forfeitTeamName: 'Alpha',
+    });
+    const [a] = (await publicPools(t))!;
+    expect(a.games.find((game) => game.forfeit !== undefined)).toBeDefined();
+    await expect(
+      t.mutation(internal.testing.seedPoolResult, {
+        ...ARGS,
+        teams: ['Alpha', 'Echo'],
+        score: { kind: 'sets', sets: [{ a: 21, b: 21 }] },
+      }),
+    ).rejects.toThrow(/tied/);
+    const soccer = await withTeams('soccer');
+    await soccer.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    await soccer.mutation(internal.testing.seedPoolResult, {
+      ...ARGS,
+      teams: ['Alpha', 'Delta'],
+      score: { kind: 'goals', a: 1, b: 1 },
+    });
+    const tied = (await publicPools(soccer))![0].games.find((game) => game.score !== undefined);
+    expect(tied).toMatchObject({ score: { kind: 'goals', a: 1, b: 1 } });
+    expect(tied?.winner).toBeUndefined();
+  });
+
+  test('refuses a pair that does not play each other, a missing score, and an unknown team', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    const score = { kind: 'sets' as const, sets: [{ a: 21, b: 15 }] };
+    await expect(
+      t.mutation(internal.testing.seedPoolResult, { ...ARGS, teams: ['Alpha', 'Bravo'], score }),
+    ).rejects.toThrow(/do not play each other/);
+    await expect(
+      t.mutation(internal.testing.seedPoolResult, { ...ARGS, teams: ['Alpha', 'Delta'] }),
+    ).rejects.toThrow(/either a score or a forfeitTeamName/);
+    await expect(
+      t.mutation(internal.testing.seedPoolResult, { ...ARGS, teams: ['Alpha', 'Nobody'], score }),
+    ).rejects.toThrow(/No team is named/);
+  });
+});

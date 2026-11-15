@@ -17,6 +17,7 @@ import {
   at,
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_POOLS,
   ORG_SLUG,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
@@ -460,5 +461,59 @@ describe('PublicTournamentPage bracket', () => {
     expect(text(bracketSection(harness)?.querySelector('[data-testid="bracket-winner"]'))).toBe(
       'Winner: Sand Crabs',
     );
+  });
+});
+
+describe('PublicTournamentPage pools', () => {
+  const poolsSection = (harness: RouterTestingHarness) =>
+    host(harness).querySelector('main section#pools');
+
+  it('has no Pools section for a tournament without pool games', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    expect(poolsSection(harness)).toBeNull();
+  });
+
+  it('shows each pool’s standings table and games between the details and the bracket', async () => {
+    const harness = await open();
+    emit({ ...BEACH_OPEN, pools: BEACH_OPEN_POOLS });
+    await settle(harness);
+    const section = poolsSection(harness)!;
+    expect([...section.querySelectorAll('h3')].map(text)).toEqual(['Pool A']);
+    expect(section.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(section.querySelectorAll('li[data-testid="pool-game"]')).toHaveLength(3);
+    const details = host(harness).querySelector('#details-heading')!;
+    const bracket = host(harness).querySelector('section#bracket')!;
+    expect(
+      details.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      section.compareDocumentPosition(bracket) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('says when standings appear for a pool with no result', async () => {
+    const harness = await open();
+    const [pool] = BEACH_OPEN_POOLS;
+    const games = pool.games.map(({ round, teams }) => ({ round, teams }));
+    emit({ ...BEACH_OPEN, pools: [{ ...pool, games }] });
+    await settle(harness);
+    expect(text(poolsSection(harness)?.querySelector('[data-testid="no-standings"]'))).toBe(
+      'Standings appear after the first result.',
+    );
+    expect(poolsSection(harness)?.querySelector('table')).toBeNull();
+  });
+
+  it('follows a new result without a reload', async () => {
+    const harness = await open();
+    const [pool] = BEACH_OPEN_POOLS;
+    const games = pool.games.map(({ round, teams }) => ({ round, teams }));
+    emit({ ...BEACH_OPEN, pools: [{ ...pool, games }] });
+    await settle(harness);
+    expect(poolsSection(harness)?.querySelector('table')).toBeNull();
+    emit({ ...BEACH_OPEN, pools: BEACH_OPEN_POOLS });
+    await settle(harness);
+    expect(poolsSection(harness)?.querySelector('table')).not.toBeNull();
   });
 });

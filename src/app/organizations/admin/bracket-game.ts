@@ -16,7 +16,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideEraser, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
-import { scoresEqual } from '../../../../convex/lib/sports';
+import { POOL_PLAY_TIES, scoresEqual } from '../../../../convex/lib/sports';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { HlmBadge } from '../../ui/badge';
 import { Checkbox } from '../../ui/checkbox';
@@ -36,6 +36,7 @@ import {
   confirmFailedText,
   forfeitNote,
   playedText,
+  type GameStage,
   reportedText,
   restoredText,
   restoreFailedText,
@@ -49,7 +50,7 @@ import {
 } from './game-result-text';
 import { GameResultDraft, type FocusTarget, type ResultBody } from './game-result-state';
 import { GameScoreFields } from './game-score-fields';
-import type { BracketGameView, ManagedTournament } from './tournament-context';
+import type { BracketGameView, ManagedTournament, ResultGameView } from './tournament-context';
 
 type ReportView = BracketGameView['reports'][number];
 
@@ -110,7 +111,12 @@ const TEXT_BUTTON =
   },
   template: `
     <p data-slot="game-label">
-      <span class="sr-only">Game {{ game().slot }}: </span>{{ label() }}
+      @if (stage() === 'pool') {
+        <span class="text-muted-foreground tabular-nums">Round {{ round() }}: </span>
+      } @else {
+        <span class="sr-only">Game {{ game().slot }}: </span>
+      }
+      {{ label() }}
     </p>
     @if (played(); as played) {
       <p data-slot="game-result" class="mt-1 text-muted-foreground">{{ played }}</p>
@@ -210,7 +216,7 @@ const TEXT_BUTTON =
           Enter result<span class="sr-only"> {{ label() }}</span>
         </button>
       } @else if (played()) {
-        @if (game().locked) {
+        @if (locked()) {
           <p data-slot="locked" class="mt-2 text-muted-foreground">{{ lockedText }}</p>
         } @else {
           <div class="mt-2 flex flex-wrap gap-2">
@@ -319,9 +325,10 @@ const TEXT_BUTTON =
   `,
 })
 export class BracketGame {
-  readonly game = input.required<BracketGameView>();
+  readonly game = input.required<ResultGameView>();
   readonly round = input.required<number>();
   readonly tournament = input.required<ManagedTournament>();
+  readonly stage = input<GameStage>('bracket');
 
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
@@ -348,6 +355,7 @@ export class BracketGame {
   protected readonly draft = new GameResultDraft(
     () => this.tournament().sport,
     () => this.tournament().setsPerGame,
+    () => this.stage() === 'pool' && POOL_PLAY_TIES[this.tournament().sport],
   );
 
   private readonly statusAlert = viewChild<AdminAlert>('statusAlert');
@@ -389,13 +397,15 @@ export class BracketGame {
       .join(' v '),
   );
 
+  protected readonly locked = computed(() => this.game().locked === true);
+
   protected readonly canEnter = computed(
     () => this.bothTeams() !== null && this.game().result === null,
   );
 
   protected readonly reportedLines = computed(() => {
     const teams = this.bothTeams();
-    const { reports } = this.game();
+    const reports = this.game().reports ?? [];
     const [first] = reports;
     if (!teams || !first || !this.canEnter()) return [];
     const names = [teams[0].name, teams[1].name] as const;
@@ -417,7 +427,7 @@ export class BracketGame {
     return playedText({
       teams: [teams[0].name, teams[1].name],
       score: result.score,
-      winnerName: nameOf(winnerTeamId),
+      winnerName: winnerTeamId === null ? null : nameOf(winnerTeamId),
       forfeitName: result.forfeitTeamId === null ? null : nameOf(result.forfeitTeamId),
     });
   });
@@ -426,7 +436,7 @@ export class BracketGame {
     const status = this.status();
     if (status === null || status.kind === 'ended') return null;
     const stored = this.game().result?.resultEnteredAt ?? null;
-    if (status.resultEnteredAt !== stored || this.game().locked) return null;
+    if (status.resultEnteredAt !== stored || this.locked()) return null;
     // A correction of a feeding game can put another team here, and the cleared result is not theirs.
     return status.kind === 'cleared' && !sameIds(status.teamIds, this.teamIds()) ? null : status;
   });
@@ -483,7 +493,7 @@ export class BracketGame {
       this.formMode.set(null);
       this.status.set({
         kind: 'saved',
-        text: savedText(saved.winnerName, saved.advancesTo, correcting),
+        text: savedText(saved.winnerName, saved.advancesTo, correcting, this.stage()),
         previous: saved.previous,
         resultEnteredAt: saved.resultEnteredAt,
       });
@@ -540,7 +550,10 @@ export class BracketGame {
         failed: restoreFailedText,
         run: async () => {
           const saved = await this.enterCall.run({ gameId, ...status.cleared });
-          return { kind: 'ended', text: restoredText(saved.winnerName, saved.advancesTo) };
+          return {
+            kind: 'ended',
+            text: restoredText(saved.winnerName, saved.advancesTo, this.stage()),
+          };
         },
       });
     }

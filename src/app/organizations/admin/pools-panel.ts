@@ -38,6 +38,7 @@ import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
+import { BracketGame } from './bracket-game';
 import type { AlertText } from './alert-text';
 import {
   bracketRefusalMessage,
@@ -104,6 +105,7 @@ interface MoveTarget {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
+    BracketGame,
     ChipRadioGroup,
     ConfirmDialog,
     HlmCard,
@@ -367,13 +369,15 @@ interface MoveTarget {
                   <h4 class="mt-4 text-sm font-medium text-muted-foreground">
                     Games in Pool {{ pool.pool }}
                   </h4>
-                  <ol role="list" class="mt-2 flex flex-col gap-1.5" data-slot="pool-games">
+                  <ol role="list" class="mt-2 flex flex-col gap-2" data-slot="pool-games">
                     @for (game of pool.games; track game.gameId) {
-                      <li class="text-sm" data-slot="pool-game">
-                        <span class="text-muted-foreground tabular-nums"
-                          >Round {{ game.round }}</span
-                        >: {{ game.teams[0]?.name }} v {{ game.teams[1]?.name }}
-                      </li>
+                      <app-bracket-game
+                        data-slot="pool-game"
+                        stage="pool"
+                        [game]="game"
+                        [round]="game.round"
+                        [tournament]="tournament()"
+                      />
                     }
                   </ol>
                 }

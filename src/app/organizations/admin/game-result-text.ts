@@ -36,16 +36,26 @@ export function forfeitNote(sport: Sport, setsPerGame: number): string {
 export interface PlayedGame {
   teams: readonly [string, string];
   score: Score;
-  winnerName: string;
+  /** `null` for a tied pool game. */
+  winnerName: string | null;
   forfeitName: string | null;
 }
 
+export type GameStage = 'bracket' | 'pool';
+
 export function playedText({ teams, score, winnerName, forfeitName }: PlayedGame): string {
   const forfeited = forfeitName === null ? '' : ` ${forfeitName} forfeited.`;
-  return `${teams[0]} ${scoreText(score)} ${teams[1]}.${forfeited} ${winnerName} won.`;
+  const outcome = winnerName === null ? 'The game was tied.' : `${winnerName} won.`;
+  return `${teams[0]} ${scoreText(score)} ${teams[1]}.${forfeited} ${outcome}`;
 }
 
-function advancesText(winnerName: string, advancesTo: string | null): string {
+function advancesText(
+  winnerName: string | null,
+  advancesTo: string | null,
+  stage: GameStage = 'bracket',
+): string {
+  if (winnerName === null) return 'The game ended in a tie.';
+  if (stage === 'pool') return `${winnerName} won.`;
   return advancesTo === null
     ? `${winnerName} wins the tournament.`
     : `${winnerName} advances to the ${advancesTo}.`;
@@ -59,7 +69,7 @@ export function reportedText(
   return `${reporter} reported ${teams[0]} ${scoreText(score)} ${teams[1]}.`;
 }
 
-export function confirmedText(winnerName: string, advancesTo: string | null): AlertText {
+export function confirmedText(winnerName: string | null, advancesTo: string | null): AlertText {
   return { title: 'Report confirmed', description: advancesText(winnerName, advancesTo) };
 }
 
@@ -70,18 +80,23 @@ export function confirmFailedText(refusal: string | null): AlertText {
 export const CONFIRM_OFFLINE = 'The game is still reported. Try again when you’re connected.';
 
 export function savedText(
-  winnerName: string,
+  winnerName: string | null,
   advancesTo: string | null,
   corrected: boolean,
+  stage: GameStage = 'bracket',
 ): AlertText {
   return {
     title: corrected ? 'Result corrected' : 'Result saved',
-    description: advancesText(winnerName, advancesTo),
+    description: advancesText(winnerName, advancesTo, stage),
   };
 }
 
-export function restoredText(winnerName: string, advancesTo: string | null): AlertText {
-  return { title: 'Result restored', description: advancesText(winnerName, advancesTo) };
+export function restoredText(
+  winnerName: string | null,
+  advancesTo: string | null,
+  stage: GameStage = 'bracket',
+): AlertText {
+  return { title: 'Result restored', description: advancesText(winnerName, advancesTo, stage) };
 }
 
 export const CLEARED_TEXT: AlertText = {

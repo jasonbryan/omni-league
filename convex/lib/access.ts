@@ -304,8 +304,7 @@ export async function requireGameOrganizer(
 > {
   await requireUser(ctx);
   const game = await ctx.db.get('tournamentGames', gameId);
-  // A pool game has no next game and no Final, which the bracket's result writers read.
-  if (game?.stage !== 'bracket') throw new Error('Not allowed');
+  if (!game) throw new Error('Not allowed');
   const access = await requireTournamentOrganizer(ctx, game.tournamentId);
   return { ...access, game };
 }

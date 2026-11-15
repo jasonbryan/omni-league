@@ -79,6 +79,7 @@ export class GameResultDraft {
   constructor(
     private readonly sport: () => Sport,
     private readonly setsPerGame: () => number,
+    private readonly tiesAllowed: () => boolean = () => false,
   ) {
     this.fields = form(this.model);
     const draft = computed<ScoreDraft>(() => {
@@ -95,7 +96,9 @@ export class GameResultDraft {
         .map((n) => ({ a: pointsOf(model[`a${n}`]), b: pointsOf(model[`b${n}`]) }));
       return { kind: 'sets', sets };
     });
-    this.issue = computed(() => checkScore(this.sport(), this.setsPerGame(), draft()));
+    this.issue = computed(() =>
+      checkScore(this.sport(), this.setsPerGame(), draft(), { allowTie: this.tiesAllowed() }),
+    );
     this.shown = Object.fromEntries(
       SCORE_FIELDS.map((field) => [
         field,

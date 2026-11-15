@@ -22,6 +22,7 @@ import {
   LEAGUE_HEADING,
 } from '../public-league/public-league-header-classes';
 import { PublicBracket } from './public-bracket';
+import { PublicPools } from './public-pools';
 import { tournamentRegistrationCard } from './public-tournament-registration';
 import type { PublicTournamentData } from './public-tournament-view';
 
@@ -32,7 +33,15 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-tournament-content',
-  imports: [HlmBreadcrumbImports, HlmCard, NgIcon, PublicBracket, RouterLink, SavedCopyNote],
+  imports: [
+    HlmBreadcrumbImports,
+    HlmCard,
+    NgIcon,
+    PublicBracket,
+    PublicPools,
+    RouterLink,
+    SavedCopyNote,
+  ],
   providers: [
     provideIcons({ lucideCalendarDays, lucideClock, lucideMapPin, lucideShirt, lucideUsers }),
   ],
@@ -168,6 +177,13 @@ const FACT_ICON =
         </section>
       </div>
     </div>
+    @if (tournament().pools; as pools) {
+      <div class="border-t border-border">
+        <div class="mx-auto w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
+          <app-public-pools [pools]="pools" />
+        </div>
+      </div>
+    }
     <div class="border-t border-border">
       <div class="mx-auto w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
         <app-public-bracket [bracket]="tournament().bracket" />
