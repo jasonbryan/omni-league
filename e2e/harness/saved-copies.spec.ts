@@ -3,6 +3,7 @@ import { expect, test } from '../support/fixtures';
 import { holdQueries } from '../support/hold-queries';
 import {
   expectSavedCopies,
+  organizationCampSavedKeys,
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
   organizationTournamentSavedKeys,
@@ -50,6 +51,22 @@ test.describe('organization page tournament saved-copy keys', VIEWPORT_AGNOSTIC,
     expect(organizationTournamentSavedKeys('gulf-coast', 'soccer')).toEqual([
       'cvx-saved:tournaments:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
       'cvx-saved:tournaments:listOpenForOrganization:{"organizationSlug":"gulf-coast","sport":"soccer"}',
+    ]);
+  });
+});
+
+test.describe('organization page camp saved-copy keys', VIEWPORT_AGNOSTIC, () => {
+  test('the All sports view has the upcoming camps on page 1 and the open camp sessions', () => {
+    expect(organizationCampSavedKeys('gulf-coast')).toEqual([
+      'cvx-saved:camps:listPublic:{"organizationSlug":"gulf-coast","page":1}',
+      'cvx-saved:camps:listOpenForOrganization:{"organizationSlug":"gulf-coast"}',
+    ]);
+  });
+
+  test('a sport view adds the sport to both keys', () => {
+    expect(organizationCampSavedKeys('gulf-coast', 'soccer')).toEqual([
+      'cvx-saved:camps:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
+      'cvx-saved:camps:listOpenForOrganization:{"organizationSlug":"gulf-coast","sport":"soccer"}',
     ]);
   });
 });

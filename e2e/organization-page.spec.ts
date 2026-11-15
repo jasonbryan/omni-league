@@ -28,6 +28,7 @@ import {
   type Tenant,
 } from './support/tenant';
 import { holdQueries } from './support/hold-queries';
+import { seedTenantWithCamps, type CampPageSeed } from './support/camp';
 import type { TournamentSeed } from './support/tournament';
 import { screenshot } from './support/screenshot';
 import { topBarFind } from './support/top-bar-find';
@@ -1416,7 +1417,7 @@ const textOfHtml = (html: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-function rowIdsOf(html: string, kind: 'league' | 'location' | 'tournament'): string[] {
+function rowIdsOf(html: string, kind: 'league' | 'location' | 'tournament' | 'camp'): string[] {
   return [...html.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
 }
 
@@ -1452,7 +1453,7 @@ function disabledOf(nav: string | undefined): string[] {
 const rangeOf = (nav: string | undefined) =>
   textOfHtml(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(nav ?? '')?.[1] ?? '');
 
-const rowIds = (kind: 'league' | 'location' | 'tournament', from: number, to: number) =>
+const rowIds = (kind: 'league' | 'location' | 'tournament' | 'camp', from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
 
 const rowNames = (noun: string, from: number, to: number) =>
@@ -2139,6 +2140,290 @@ test.describe('organization page: Tournaments in the browser', () => {
         await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
         await expectAccessible(page);
         await screenshot(page, testInfo, `337-tournaments-${count}-${width}`);
+      }
+      await page.setViewportSize({ width: 320, height: 800 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        320,
+      );
+    });
+  }
+});
+
+interface CampWeek {
+  name?: string;
+  startsInDays: number;
+  endsInDays?: number;
+  deadlineInDays?: number;
+}
+
+function sandCamp(
+  name: string,
+  weeks: CampWeek[],
+  extra: Partial<CampPageSeed> = {},
+): CampPageSeed {
+  return {
+    name,
+    slug: name.toLowerCase().replace(/ /g, '-'),
+    locations: [SAND_COURTS.name],
+    minimumAge: 9,
+    maximumAge: 14,
+    sessions: weeks.map((week, i) => ({
+      name: week.name ?? `Week ${i + 1}`,
+      startDate: dateFromToday(week.startsInDays),
+      endDate: dateFromToday(week.endsInDays ?? week.startsInDays + 4),
+      places: 20,
+      registrationDeadline: dateFromToday(week.deadlineInDays ?? week.startsInDays - 3),
+    })),
+    ...extra,
+  };
+}
+
+const JUNIOR_CAMP = sandCamp('Junior Beach Volleyball Camp', [
+  { startsInDays: 14 },
+  { startsInDays: 21 },
+]);
+
+function campTenant(camps: CampPageSeed[], name = 'E2E Camps'): Promise<Tenant> {
+  return seedTenantWithCamps(
+    {
+      name,
+      locations: [
+        SAND_COURTS,
+        { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
+      ],
+      leagues: [{ name: 'Open League', sport: 'soccer', locations: ['Alpha Field'] }],
+    },
+    camps,
+  );
+}
+
+test.describe('organization page: Camps, raw server HTML', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'a published camp is in Camps with its ages, next session, and Register link, and its open sessions are in Registration open ordered by deadline with the seasons',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant([JUNIOR_CAMP]);
+      await seedSeasons(tenant, 'open-league', [
+        {
+          name: 'Soon Season',
+          slug: 'soon-season',
+          startDate: dateFromToday(20),
+          endDate: dateFromToday(80),
+          registrationDeadline: dateFromToday(15),
+        },
+      ]);
+      const { status, html } = await fetchRawHtml(request, tenant.path);
+      expect(status).toBe(200);
+
+      const camps = sectionWithId(html, 'camps');
+      expect(plainText(camps)).toMatch(
+        /^Camps Junior Beach Volleyball Camp Ages 9 to 14 Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Junior Beach Volleyball Camp$/,
+      );
+      const path = `${tenant.path}/camps/junior-beach-volleyball-camp`;
+      expect(camps).toMatch(
+        new RegExp(`<a\\b[^>]*href="${path}"[^>]*>Junior Beach Volleyball Camp`),
+      );
+      expect(camps).toMatch(
+        new RegExp(`<a\\b[^>]*href="${path}#sessions"[^>]*>Register<span class="sr-only"> for `),
+      );
+      expect(html.indexOf('id="leagues"')).toBeLessThan(html.indexOf('id="camps"'));
+      expect(html.indexOf('id="camps"')).toBeLessThan(html.indexOf('id="locations"'));
+
+      const open = sectionOf(html);
+      expect(titlesIn(open)).toEqual([
+        'Junior Beach Volleyball Camp',
+        'Open League',
+        'Junior Beach Volleyball Camp',
+      ]);
+      expect(
+        [...open.matchAll(/<h3\b[\s\S]*?<\/h3>\s*<p\b[^>]*>([\s\S]*?)<\/p>/g)].map(([, p]) =>
+          plainText(p),
+        ),
+      ).toEqual(['Week 1', 'Soon Season', 'Week 2']);
+      expect(plainText(open)).toContain(
+        'Registration open Register a team for a season, or yourself or a child for a camp session.',
+      );
+      expect(plainText(open)).toContain('Ages 9 to 14, 20 places left');
+      expect(open).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${path}#sessions"[^>]*>Register<span class="sr-only"> for Junior Beach Volleyball Camp, Week 1`,
+        ),
+      );
+    },
+  );
+
+  test(
+    'a draft camp and a camp whose sessions have all ended are listed nowhere, and a camp past its first week lists the next',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant([
+        sandCamp('Draft Camp', [{ startsInDays: 20 }], { status: 'draft' }),
+        sandCamp('Ended Camp', [{ startsInDays: -9, endsInDays: -5 }]),
+        sandCamp('Midway Camp', [
+          { name: 'Week 1', startsInDays: -3, endsInDays: 1 },
+          { name: 'Week 2', startsInDays: 8 },
+        ]),
+      ]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      const camps = sectionWithId(html, 'camps');
+      expect(titlesIn(camps)).toEqual(['Midway Camp']);
+      expect(plainText(camps)).toContain('In progress');
+      expect(html).not.toContain('Draft Camp');
+      expect(html).not.toContain('Ended Camp');
+      expect(titlesIn(sectionOf(html))).toEqual(['Midway Camp']);
+    },
+  );
+
+  test(
+    '7 upcoming camps: page 1 holds 5, page 2 the last 2 with its range, links, and canonical, and a page past the last shows page 1',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant(
+        Array.from({ length: 7 }, (_, i) => sandCamp(`Camp ${i + 1}`, [{ startsInDays: 20 + i }])),
+      );
+      const first = await fetchRawHtml(request, tenant.path);
+      expect(rowIdsOf(first.html, 'camp')).toEqual(rowIds('camp', 1, 5));
+      expect(titlesIn(sectionWithId(first.html, 'camps'))).toEqual([
+        'Camp 1',
+        'Camp 2',
+        'Camp 3',
+        'Camp 4',
+        'Camp 5',
+      ]);
+      const firstControl = controlOf(first.html, 'Camps pages');
+      expect(rangeOf(firstControl)).toBe('1–5 of 7 camps');
+      expect(linksOf(firstControl).find((link) => link.text === 'Next page')?.href).toBe(
+        `${tenant.path}?campsPage=2#camps`,
+      );
+
+      const second = await fetchRawHtml(request, `${tenant.path}?campsPage=2`);
+      expect(second.status).toBe(200);
+      expect(rowIdsOf(second.html, 'camp')).toEqual(['camp-6', 'camp-7']);
+      expect(titlesIn(sectionWithId(second.html, 'camps'))).toEqual(['Camp 6', 'Camp 7']);
+      const control = controlOf(second.html, 'Camps pages');
+      expect(rangeOf(control)).toBe('6–7 of 7 camps');
+      const links = linksOf(control);
+      expect(links.filter((link) => link.current).map((link) => link.text)).toEqual(['Page 2']);
+      expect(links.find((link) => link.text === 'Previous page')?.href).toBe(
+        `${tenant.path}#camps`,
+      );
+      expect(disabledOf(control)).toEqual(['Next page']);
+      expect(canonicalHrefs(second.html).map(decoded)).toEqual([
+        `${ORIGIN}${tenant.path}?campsPage=2`,
+      ]);
+
+      for (const query of ['3', '0', 'abc']) {
+        const past = await fetchRawHtml(request, `${tenant.path}?campsPage=${query}`);
+        expect(rowIdsOf(past.html, 'camp'), query).toEqual(rowIds('camp', 1, 5));
+        expect(canonicalHrefs(past.html).map(decoded), query).toEqual([`${ORIGIN}${tenant.path}`]);
+      }
+    },
+  );
+
+  test(
+    'a division filter leaves the camps in place, because a camp has no division',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant([JUNIOR_CAMP]);
+      const { html } = await fetchRawHtml(request, `${tenant.path}?gender=womens`);
+      expect(titlesIn(sectionWithId(html, 'camps'))).toEqual(['Junior Beach Volleyball Camp']);
+    },
+  );
+
+  test(
+    'an organization with no upcoming camp has no Camps section',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant([
+        sandCamp('Draft Camp', [{ startsInDays: 20 }], { status: 'draft' }),
+        sandCamp('Ended Camp', [{ startsInDays: -9, endsInDays: -5 }]),
+      ]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      expect(html).not.toContain('id="camps"');
+      expect(html).not.toContain('campsPage');
+      expect(html).toContain('id="leagues"');
+      expect((await fetchRawHtml(request, (await smallTenant()).path)).html).not.toContain(
+        'id="camps"',
+      );
+    },
+  );
+});
+
+test.describe('organization page: Camps in the browser', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('Register opens the camp page at its sessions, and Next by keyboard moves to page 2 and focuses the heading', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const tenant = await campTenant([
+      JUNIOR_CAMP,
+      ...Array.from({ length: 6 }, (_, i) => sandCamp(`Camp ${i + 1}`, [{ startsInDays: 40 + i }])),
+    ]);
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const section = page.locator('#camps');
+    await expect(section.getByRole('heading', { level: 2, name: 'Camps' })).toBeVisible();
+    await expect(section.locator(':scope > ul > li h3')).toHaveText([
+      'Junior Beach Volleyball Camp',
+      'Camp 1',
+      'Camp 2',
+      'Camp 3',
+      'Camp 4',
+    ]);
+
+    await section
+      .getByRole('navigation', { name: 'Camps pages' })
+      .getByRole('link', { name: 'Next page' })
+      .focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${tenant.path}?campsPage=2#camps`);
+    await expect(section.locator(':scope > ul > li h3')).toHaveText(['Camp 5', 'Camp 6']);
+    await expect(section.getByRole('heading', { level: 2, name: 'Camps' })).toBeFocused();
+
+    await page.goBack();
+    await section.getByRole('link', { name: 'Register for Junior Beach Volleyball Camp' }).click();
+    await expect(page).toHaveURL(`${tenant.path}/camps/junior-beach-volleyball-camp#sessions`);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Junior Beach Volleyball Camp' }),
+    ).toBeVisible();
+  });
+
+  const STATES = [
+    ['upcoming camps on page 1', '', 7],
+    ['the last page of the camps', '?campsPage=2', 7],
+    ['one camp and no page control', '', 1],
+    ['no upcoming camp', '', 0],
+  ] as const;
+
+  for (const [label, query, count] of STATES) {
+    test(`${label}: passes the axe helper at 360px and 1280px, and nothing scrolls sideways at 320px`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'the widths are set by the test');
+      const tenant = await campTenant(
+        Array.from({ length: count }, (_, i) =>
+          sandCamp(`Camp ${i + 1} with a long name that wraps on a phone`, [
+            { startsInDays: 20 + i },
+          ]),
+        ),
+      );
+      await page.goto(`${tenant.path}${query}`);
+      await hydrated(consoleGuard);
+      if (count > 0) await expect(page.locator('#camps')).toBeVisible();
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
+        await expectAccessible(page);
+        await screenshot(page, testInfo, `372-camps-${count}-${width}`);
       }
       await page.setViewportSize({ width: 320, height: 800 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(

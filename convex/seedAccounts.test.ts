@@ -295,6 +295,7 @@ const NO_BACKFILL = {
   staffCounts: 0,
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
+  campFields: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {

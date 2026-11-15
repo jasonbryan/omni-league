@@ -1,5 +1,5 @@
 import { convexRun } from './convex';
-import type { Sport, Tenant } from './tenant';
+import { seedTenant, type Sport, type Tenant, type TenantSeed } from './tenant';
 
 export interface CampSeed {
   name: string;
@@ -67,4 +67,14 @@ export async function seedPublishedCamp(tenant: Tenant, camp: CampPageSeed): Pro
     });
   }
   return `${tenant.path}/camps/${slug}`;
+}
+
+/** The tenant of `seed`, then its camps, so each names locations in `seed.locations`. Local runs only. */
+export async function seedTenantWithCamps(
+  seed: TenantSeed,
+  camps: CampPageSeed[],
+): Promise<Tenant> {
+  const tenant = await seedTenant(seed);
+  for (const camp of camps) await seedPublishedCamp(tenant, camp);
+  return tenant;
 }

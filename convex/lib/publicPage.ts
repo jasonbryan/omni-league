@@ -350,3 +350,36 @@ export const publicOpenTournamentsValidator = v.array(
 );
 
 export type PublicOpenTournaments = Infer<typeof publicOpenTournamentsValidator>;
+
+const publicCampRowFields = {
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  minimumAge: v.number(),
+  maximumAge: v.number(),
+  locationNames: v.array(v.string()),
+};
+
+const publicCampSessionFields = {
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+  placesLeft: v.number(),
+};
+
+// `nextSession` is the earliest session that had not ended when the query ran; `lastSessionEndDate` lets the page drop a camp that has ended since.
+export const publicCampsValidator = publicListValidator(
+  v.object({
+    ...publicCampRowFields,
+    lastSessionEndDate: v.string(),
+    nextSession: v.object({ name: v.string(), ...publicCampSessionFields }),
+  }),
+);
+
+export type PublicCamps = Infer<typeof publicCampsValidator>;
+
+export const publicOpenCampSessionsValidator = v.array(
+  v.object({ ...publicCampRowFields, sessionName: v.string(), ...publicCampSessionFields }),
+);
+
+export type PublicOpenCampSessions = Infer<typeof publicOpenCampSessionsValidator>;

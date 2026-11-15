@@ -7,6 +7,7 @@ import { recountMemberships } from './lib/memberships';
 import { BACKFILL_TEAM_COUNT_SCAN_LIMIT, recountTeams, recountWaiting } from './lib/rosterWrites';
 import {
   BACKFILL_SCAN_LIMIT,
+  backfillCampFields,
   backfillOrganizationTenantFields,
   recountDraftLeagues,
   recountPublishedSeasons,
@@ -21,19 +22,28 @@ const phaseValidator = v.union(
   v.literal('organizations'),
   v.literal('seasons'),
   v.literal('teams'),
+  v.literal('camps'),
 );
 type Phase = Infer<typeof phaseValidator>;
 
 // Leagues run before organizations, because an organization's counts read them.
-const PHASES: readonly Phase[] = ['locations', 'leagues', 'organizations', 'seasons', 'teams'];
+const PHASES: readonly Phase[] = [
+  'locations',
+  'leagues',
+  'organizations',
+  'seasons',
+  'teams',
+  'camps',
+];
 
-// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one.
+// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A camp reads its sessions, at most 200.
 export const BATCH_SIZE: Record<Phase, number> = {
   locations: 100,
   leagues: 10,
   organizations: 2,
   seasons: 5,
   teams: 100,
+  camps: 20,
 };
 
 const backfilledValidator = v.object({
@@ -46,6 +56,7 @@ const backfilledValidator = v.object({
   teamCounts: v.number(),
   waitlistCounts: v.number(),
   pendingInviteCounts: v.number(),
+  campFields: v.number(),
 });
 type Backfilled = Infer<typeof backfilledValidator>;
 
@@ -60,6 +71,7 @@ function noneBackfilled(): Backfilled {
     teamCounts: 0,
     waitlistCounts: 0,
     pendingInviteCounts: 0,
+    campFields: 0,
   };
 }
 
@@ -213,6 +225,13 @@ async function backfillPhase(
         // A team stored before team invites existed has none.
         await ctx.db.patch('teams', team._id, { pendingInviteCount: 0 });
         backfilled.pendingInviteCounts++;
+      }
+      return { continueCursor, isDone };
+    }
+    case 'camps': {
+      const { page, continueCursor, isDone } = await ctx.db.query('camps').paginate(paginationOpts);
+      for (const camp of page) {
+        if (await backfillCampFields(ctx, camp)) backfilled.campFields++;
       }
       return { continueCursor, isDone };
     }

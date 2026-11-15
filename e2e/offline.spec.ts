@@ -6,12 +6,13 @@ import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import {
   expectSavedCopies,
+  organizationCampSavedKeys,
   organizationPageSavedKeys,
   organizationTournamentSavedKeys,
 } from './support/saved-copies';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedBracket } from './support/bracket';
-import { seedPublishedCamp } from './support/camp';
+import { seedPublishedCamp, seedTenantWithCamps } from './support/camp';
 import { convexRun } from './support/convex';
 import { seedPoolPlay, seedPoolResult, seedPoolsStructure } from './support/pools';
 import { seedTournament } from './support/tournament';
@@ -283,6 +284,86 @@ test.describe('tournaments offline', () => {
     await expect(rows.locator('h3')).toHaveText(['Closing Open', 'Later Open']);
     await expect(rows.first()).toContainText('Registration closed');
     await expect(cards).toHaveText(['Later Open']);
+    await expect(note).toBeVisible();
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('camps offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('the Camps section and the open camp sessions show from the saved copy, and a camp that ended since is dropped', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const place = { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' };
+    const week = (
+      name: string,
+      startsInDays: number,
+      endsInDays: number,
+      deadlineInDays: number,
+    ) => ({
+      name,
+      startDate: dateFromToday(startsInDays),
+      endDate: dateFromToday(endsInDays),
+      places: 20,
+      registrationDeadline: dateFromToday(deadlineInDays),
+    });
+    const camp = (name: string, sessions: ReturnType<typeof week>[]) => ({
+      name,
+      slug: name.toLowerCase().replace(/ /g, '-'),
+      sport: 'soccer' as const,
+      locations: [place.name],
+      minimumAge: 8,
+      maximumAge: 12,
+      sessions,
+    });
+    const tenant = await seedTenantWithCamps(
+      {
+        name: 'E2E Offline Camps',
+        locations: [place],
+        leagues: [{ name: 'Soccer League', sport: 'soccer', locations: [place.name] }],
+      },
+      [
+        camp('Closing Camp', [week('Week 1', 4, 8, 1), week('Week 2', 20, 24, 17)]),
+        camp('Ends Tomorrow Camp', [week('Week 1', -3, 1, -6)]),
+      ],
+    );
+    const rows = page.locator('#camps > ul > li');
+    const cards = page.locator('#registration-open > ul > li');
+    const note = page.locator('app-saved-copy-note');
+    await page.clock.install();
+
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows.locator('h3')).toHaveText(['Ends Tomorrow Camp', 'Closing Camp']);
+    await expectSavedCopies(page, [
+      ...organizationPageSavedKeys(tenant.slug),
+      ...organizationCampSavedKeys(tenant.slug),
+    ]);
+    await expect(note).toHaveCount(0);
+    await rows.getByRole('link', { name: 'Closing Camp', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Closing Camp' })).toBeVisible();
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+    await expect(note).toBeVisible();
+    await expect(rows.locator('h3')).toHaveText(['Ends Tomorrow Camp', 'Closing Camp']);
+    await expect(rows.nth(1)).toContainText('Registration open');
+    await expect(cards.locator('h3')).toHaveText(['Closing Camp', 'Closing Camp']);
+    await expect(page.getByRole('link', { name: 'Register for a camp' })).toBeVisible();
+
+    // Two days on, the saved copy still lists each camp; the page applies the date.
+    await page.clock.fastForward('48:00:00');
+    await expect(rows.locator('h3')).toHaveText(['Closing Camp']);
+    await expect(rows.first()).toContainText('Registration closed');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toContainText('Week 2');
     await expect(note).toBeVisible();
 
     await context.setOffline(false);

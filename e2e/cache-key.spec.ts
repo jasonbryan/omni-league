@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
+import { seedTenantWithCamps } from './support/camp';
 import { RAW_HTTP } from './support/raw-http';
 import {
   dateFromToday,
@@ -387,13 +388,13 @@ test.describe('query strings and the CDN', () => {
 const PUBLIC_PAGE_CACHE = 'public,max-age=0,s-maxage=60,stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
 
-const rowIdsOf = (body: string, kind: 'league' | 'location' | 'tournament') =>
+const rowIdsOf = (body: string, kind: 'league' | 'location' | 'tournament' | 'camp') =>
   [...body.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
 const canonicalOf = (body: string) => {
   const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(body)?.[0] ?? '';
   return /\bhref="([^"]*)"/.exec(tag)?.[1]?.replaceAll('&amp;', '&');
 };
-const rowIds = (kind: 'league' | 'location' | 'tournament', from: number, to: number) =>
+const rowIds = (kind: 'league' | 'location' | 'tournament' | 'camp', from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
 
 /**
@@ -596,6 +597,86 @@ test.describe('the tournaments page of the organization page', () => {
       }
       const second = await rawGet(`${path}?tournamentsPage=2`);
       expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?tournamentsPage=2`);
+    },
+  );
+});
+
+test.describe('the camps page of the organization page', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
+
+  async function sevenCamps(): Promise<string> {
+    const location = { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' };
+    const tenant = await seedTenantWithCamps(
+      {
+        name: 'E2E Cache Key Camps',
+        locations: [location],
+        leagues: [{ name: 'Alpha League', sport: 'soccer', locations: [location.name] }],
+      },
+      Array.from({ length: 7 }, (_, i) => ({
+        name: `Camp ${i + 1}`,
+        slug: `camp-${i + 1}`,
+        locations: [location.name],
+        minimumAge: 9,
+        maximumAge: 14,
+        sessions: [
+          {
+            name: 'Week 1',
+            startDate: dateFromToday(20 + i),
+            endDate: dateFromToday(24 + i),
+            places: 20,
+            registrationDeadline: dateFromToday(10),
+          },
+        ],
+      })),
+    );
+    return tenant.path;
+  }
+
+  test(
+    'a page that is not valid or past the last renders page 1, cacheable, with no Location and none of the value; ?campsPage=2 holds the last 2 and never gets another page’s body',
+    RAW_HTTP,
+    async () => {
+      const path = await sevenCamps();
+      for (const query of [
+        '?campsPage=0',
+        '?campsPage=3',
+        '?campsPage=2.5',
+        '?campsPage=abc',
+        '?campsPage=2&campsPage=3',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+          PUBLIC_PAGE_CACHE,
+        );
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(rowIdsOf(response.body, 'camp'), query).toEqual(rowIds('camp', 1, 5));
+        expect(canonicalOf(response.body), query).toBe(`${ORIGIN}${path}`);
+        expect(response.body, query).not.toContain(query.slice(1));
+      }
+      for (const sample of [
+        (c: string) => `?campsPage=${c}`,
+        (c: string) => `?campsPage=2&campsPage=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+      }
+
+      const expected: Record<string, string[]> = {
+        '?campsPage=2': ['camp-6', 'camp-7'],
+        '': rowIds('camp', 1, 5),
+      };
+      for (const query of ['?campsPage=2', '', '?campsPage=2', '']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(rowIdsOf(response.body, 'camp'), query).toEqual(expected[query]);
+      }
+      const second = await rawGet(`${path}?campsPage=2`);
+      expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?campsPage=2`);
     },
   );
 });

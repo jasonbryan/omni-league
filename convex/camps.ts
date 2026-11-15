@@ -20,7 +20,25 @@ import {
   publicCampSessions,
   recountCampSessions,
 } from './lib/campLookup';
-import { getCampPublicPageReturns, type PublicCampPage } from './lib/publicPage';
+import {
+  OPEN_CAMPS_READ_LIMIT,
+  OPEN_CAMP_SESSIONS_LIMIT,
+  publicCampRow,
+  publishedProgramOf,
+  sessionRow,
+  sessionsOf,
+  today,
+  upcomingCamps,
+} from './lib/campPublicList';
+import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import {
+  getCampPublicPageReturns,
+  publicCampsValidator,
+  publicOpenCampSessionsValidator,
+  type PublicCamps,
+  type PublicCampPage,
+  type PublicOpenCampSessions,
+} from './lib/publicPage';
 import { programStatusValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
@@ -29,6 +47,8 @@ import { sportValidator } from './lib/sports';
 import { insertDraftCamp, leagueSlugTaken, publishCamp } from './lib/tenantWrites';
 
 export const ADMIN_CAMPS_LIMIT = 200;
+
+const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 
 function refuse(error: CampInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -211,5 +231,61 @@ export const getPublicPage = query({
       locations: details.locations,
       sessions: await publicCampSessions(ctx, found.camp),
     };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const listPublic = query({
+  args: { organizationSlug: v.string(), page: v.number(), sport: v.optional(sportValidator) },
+  returns: publicCampsValidator,
+  handler: async (ctx, { organizationSlug, page: requested, sport }): Promise<PublicCamps> => {
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) return EMPTY_LIST;
+    const read = await upcomingCamps(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
+    const { page, pageCount } = pageOf(read.length, requested);
+    if (pageCount === 0) return EMPTY_LIST;
+    const from = today();
+    const rows = [];
+    for (const camp of pageRows(read.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
+      const program = await publishedProgramOf(ctx, camp);
+      // Sessions run in start order, so the first that has not ended is the earliest to come.
+      const next = (await sessionsOf(ctx, camp._id)).find((session) => session.endDate >= from);
+      if (program && next && camp.lastSessionEndDate !== undefined) {
+        rows.push({
+          ...(await publicCampRow(ctx, organization, camp, program)),
+          lastSessionEndDate: camp.lastSessionEndDate,
+          nextSession: { name: next.name, ...sessionRow(next) },
+        });
+      }
+    }
+    return { rows, page, pageCount, total: read.length };
+  },
+});
+
+// Reads from today's date only to skip sessions that have started or closed; the page decides at the viewer's time which are open (`registrationIsOpen`).
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const listOpenForOrganization = query({
+  args: { organizationSlug: v.string(), sport: v.optional(sportValidator) },
+  returns: publicOpenCampSessionsValidator,
+  handler: async (ctx, { organizationSlug, sport }): Promise<PublicOpenCampSessions> => {
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) return [];
+    const from = today();
+    const read = await upcomingCamps(ctx, organization._id, sport).take(OPEN_CAMPS_READ_LIMIT);
+    const cards: PublicOpenCampSessions = [];
+    for (const camp of read) {
+      const program = await publishedProgramOf(ctx, camp);
+      if (!program) continue;
+      const row = await publicCampRow(ctx, organization, camp, program);
+      for (const session of await sessionsOf(ctx, camp._id)) {
+        const { placesLeft, ...dates } = sessionRow(session);
+        if (session.startDate <= from || session.registrationDeadline < from || placesLeft === 0) {
+          continue;
+        }
+        cards.push({ ...row, sessionName: session.name, ...dates, placesLeft });
+        if (cards.length >= OPEN_CAMP_SESSIONS_LIMIT) return cards;
+      }
+    }
+    return cards;
   },
 });

@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi } from 
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { BACKFILL_TEAM_COUNT_SCAN_LIMIT } from './lib/rosterWrites';
-import { BACKFILL_SCAN_LIMIT } from './lib/tenantWrites';
+import { BACKFILL_SCAN_LIMIT, insertTenant } from './lib/tenantWrites';
 import { BATCH_SIZE } from './releaseBackfill';
 import schema from './schema';
 import {
+  insertCampProgram,
   insertLeagueWithProgram,
   modules,
   leagueRequiredFields,
@@ -30,6 +31,7 @@ const ZERO = {
   teamCounts: 0,
   waitlistCounts: 0,
   pendingInviteCounts: 0,
+  campFields: 0,
 };
 
 beforeEach(() => {
@@ -258,6 +260,62 @@ describe('the release backfill', () => {
     expect(after.leagues.find((league) => league.name === 'Draft 0')?.status).toBe('draft');
     expect(after.season).toMatchObject({ teamCount: 3, waitlistCount: 2 });
     expect(after.teams.every((team) => team.pendingInviteCount === 0)).toBe(true);
+  });
+
+  test('sets the status, sport, and last session end of a camp written before they were kept, and not a camp that has them', async () => {
+    const t = setup();
+    const { legacy, current } = await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, {
+        organization: { name: 'Camp Org', slug: 'camp-org' },
+        locations: [],
+        leagues: [],
+      });
+      const camp = async (slug: string, status: 'draft' | 'published') => {
+        const programId = await insertCampProgram(ctx, organizationId, slug, slug);
+        await ctx.db.patch('programs', programId, { status });
+        return ctx.db.insert('camps', {
+          programId,
+          organizationId,
+          minimumAge: 9,
+          maximumAge: 14,
+        });
+      };
+      const legacy = await camp('legacy', 'published');
+      const current = await camp('current', 'draft');
+      for (const [name, startDate, endDate] of [
+        ['Week 1', '2030-07-01', '2030-07-05'],
+        ['Week 2', '2030-07-08', '2030-07-12'],
+      ]) {
+        await ctx.db.insert('campSessions', {
+          campId: legacy,
+          organizationId,
+          name,
+          startDate,
+          endDate,
+          places: 10,
+          registrationDeadline: startDate,
+          registeredCount: 0,
+        });
+      }
+      await ctx.db.patch('camps', current, { status: 'draft', sport: 'beachVolleyball' });
+      return { legacy, current };
+    });
+
+    const first = await t.action(internal.releaseBackfill.run, {});
+    expect(first.backfilled.campFields).toBe(1);
+    const rows = await t.run(async (ctx) => [
+      await ctx.db.get('camps', legacy),
+      await ctx.db.get('camps', current),
+    ]);
+    expect(rows[0]).toMatchObject({
+      status: 'published',
+      sport: 'soccer',
+      lastSessionEndDate: '2030-07-12',
+      sessionCount: 2,
+    });
+    expect(rows[1]).toMatchObject({ status: 'draft', sport: 'beachVolleyball' });
+    expect(rows[1]).not.toHaveProperty('lastSessionEndDate');
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.campFields).toBe(0);
   });
 
   test('runs on a deployment that is not a preview or staging one', async () => {

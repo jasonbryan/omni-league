@@ -28,6 +28,7 @@ import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_bracket from "../lib/bracket.js";
 import type * as lib_campInput from "../lib/campInput.js";
 import type * as lib_campLookup from "../lib/campLookup.js";
+import type * as lib_campPublicList from "../lib/campPublicList.js";
 import type * as lib_campRegistrants from "../lib/campRegistrants.js";
 import type * as lib_campRegistration from "../lib/campRegistration.js";
 import type * as lib_campRegistrationReads from "../lib/campRegistrationReads.js";
@@ -149,6 +150,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bracket": typeof lib_bracket;
   "lib/campInput": typeof lib_campInput;
   "lib/campLookup": typeof lib_campLookup;
+  "lib/campPublicList": typeof lib_campPublicList;
   "lib/campRegistrants": typeof lib_campRegistrants;
   "lib/campRegistration": typeof lib_campRegistration;
   "lib/campRegistrationReads": typeof lib_campRegistrationReads;

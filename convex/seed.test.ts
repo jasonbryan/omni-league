@@ -54,6 +54,7 @@ const NONE = {
   staffCounts: 0,
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
+  campFields: 0,
 };
 const NO_ROWS = {
   organizations: 0,
@@ -867,6 +868,7 @@ describe('seed:demo', () => {
         staffCounts: 2,
         staffInviteCounts: 2,
         draftLeagueCounts: 2,
+        campFields: 0,
       },
     });
 
@@ -1049,6 +1051,7 @@ describe('seed:demo', () => {
       DEMO_SEASONS,
       DEMO_RUN_SEASONS,
       DEMO_TOURNAMENTS,
+      DEMO_CAMPS,
       DEMO_ACCOUNTS,
       DEMO_ACCOUNT_DOMAIN,
       DEMO_TEAM_SEASON,
@@ -1074,6 +1077,7 @@ describe('seed:demo', () => {
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_TOURNAMENTS)).toBe(true);
+    expect(Array.isArray(DEMO_CAMPS)).toBe(true);
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual([
       'admin',
       'organizer',
@@ -1387,6 +1391,40 @@ describe('seed:demo camps', () => {
     expect(fall.camp.minimumAge).toBeLessThanOrEqual(fall.camp.maximumAge);
   });
 
+  test('lists the published camps on the organization page with Junior Beach Volleyball Camp’s open sessions, and not the draft', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const args = { organizationSlug: 'gulf-coast-sport-social' };
+    const listed = await t.query(api.camps.listPublic, { ...args, page: 1 });
+    expect(listed.rows.map((row) => row.name).sort()).toEqual([
+      'Adult Beach Skills Camp',
+      'Junior Beach Volleyball Camp',
+    ]);
+    const open = await t.query(api.camps.listOpenForOrganization, args);
+    expect(
+      open.filter((card) => card.name === 'Junior Beach Volleyball Camp').map((c) => c.sessionName),
+    ).toEqual(['Week 1', 'Week 2', 'Week 3']);
+  });
+
+  test('sets the status, sport, and last session end of camps written before they were kept, and a second run changes none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      for (const camp of await ctx.db.query('camps').collect()) {
+        await ctx.db.patch('camps', camp._id, {
+          status: undefined,
+          sport: undefined,
+          lastSessionEndDate: undefined,
+        });
+      }
+    });
+    const args = { organizationSlug: 'gulf-coast-sport-social', page: 1 };
+    expect((await t.query(api.camps.listPublic, args)).rows).toEqual([]);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.campFields).toBe(3);
+    expect((await t.query(api.camps.listPublic, args)).rows).toHaveLength(2);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.campFields).toBe(0);
+  });
+
   test('adds only the camp whose web address is free where a program holds the other', async () => {
     const t = setup();
     await t.run(async (ctx) => {
@@ -1669,6 +1707,7 @@ describe('seed:demo backfill against a recount', () => {
       staffCounts: 1,
       staffInviteCounts: 1,
       draftLeagueCounts: 1,
+      campFields: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({

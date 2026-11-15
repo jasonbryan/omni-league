@@ -1,10 +1,9 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { hasDivisionFilters, type DivisionFilters } from '../../../convex/lib/leagueFilters';
+import type { OpenCardKind } from './open-registration';
 
 export const UNSEEN_OPEN_SEASON_COUNT = 2;
-
-export type OpenCardKind = 'season' | 'tournament';
 
 export interface OpenSeasonsView {
   readonly slug: string;
