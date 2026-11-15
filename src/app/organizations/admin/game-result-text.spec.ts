@@ -1,4 +1,4 @@
-import { playedText, restoredText, savedText } from './game-result-text';
+import { confirmedText, playedText, restoredText, savedText } from './game-result-text';
 
 const SCORE = { kind: 'goals' as const, a: 2, b: 2 };
 
@@ -40,6 +40,18 @@ describe('savedText', () => {
   it('says a game with no winner ended in a tie, in either stage', () => {
     expect(savedText(null, null, false, 'pool').description).toBe('The game ended in a tie.');
     expect(savedText(null, null, true).description).toBe('The game ended in a tie.');
+  });
+});
+
+describe('confirmedText', () => {
+  it('follows the stage of the game', () => {
+    expect(confirmedText('Ace', 'Final').description).toBe('Ace advances to the Final.');
+    expect(confirmedText('Ace', null).description).toBe('Ace wins the tournament.');
+    expect(confirmedText('Ace', null, 'pool')).toEqual({
+      title: 'Report confirmed',
+      description: 'Ace won.',
+    });
+    expect(confirmedText(null, null, 'pool').description).toBe('The game ended in a tie.');
   });
 });
 

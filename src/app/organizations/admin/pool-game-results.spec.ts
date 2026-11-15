@@ -14,6 +14,7 @@ const POOLS = 'tournamentGames:getPools';
 const ENTER = 'tournamentGames:enterResult';
 const CORRECT = 'tournamentGames:correctResult';
 const UNDO = 'tournamentGames:undoResult';
+const CONFIRM = 'scoreReports:confirm';
 
 const TOURNAMENT = {
   tournamentId: 'tn_winter',
@@ -52,7 +53,19 @@ interface Result {
   resultEnteredAt: number;
 }
 
-function poolsOf(result: Result | null = null, winnerTeamId: string | null = null) {
+interface Reported {
+  reportId: string;
+  teamId: string;
+  teamName: string;
+  score: unknown;
+  reportedAt: number;
+}
+
+function poolsOf(
+  result: Result | null = null,
+  winnerTeamId: string | null = null,
+  reports: Reported[] = [],
+) {
   return {
     confirmedCount: 6,
     unconfirmedCount: 0,
@@ -61,7 +74,15 @@ function poolsOf(result: Result | null = null, winnerTeamId: string | null = nul
         pool: 'A',
         teams: [1, 4, 5].map(withRoster),
         games: [
-          { gameId: 'g_1', round: 1, slot: 1, teams: [team(1), team(4)], winnerTeamId, result },
+          {
+            gameId: 'g_1',
+            round: 1,
+            slot: 1,
+            teams: [team(1), team(4)],
+            winnerTeamId,
+            result,
+            reports: [],
+          },
           {
             gameId: 'g_2',
             round: 2,
@@ -69,6 +90,7 @@ function poolsOf(result: Result | null = null, winnerTeamId: string | null = nul
             teams: [team(1), team(5)],
             winnerTeamId: null,
             result: null,
+            reports,
           },
         ],
       },
@@ -242,5 +264,77 @@ describe('Pool game results', () => {
     await o.flush();
     await press(button('g_1', 'Undo'));
     expect(calls()[1]).toEqual([ENTER, { gameId: 'g_1', score: goals(2, 2) }]);
+  });
+
+  describe('a pool game with a captain’s report', () => {
+    const report = (teamName: string, a: number, b: number, reportedAt = 2_345): Reported => ({
+      reportId: `sr_${teamName}`,
+      teamId: teamName === 'Team 01' ? 'tm_1' : 'tm_5',
+      teamName,
+      score: goals(a, b),
+      reportedAt,
+    });
+    const REPORTED = (...reports: Reported[]) => poolsOf(null, null, reports);
+    const SAVED_WIN = {
+      winnerTeamId: 'tm_1',
+      winnerName: 'Team 01',
+      advancesTo: null,
+      previous: null,
+      resultEnteredAt: 5_000,
+    };
+
+    it('reads Reported with the team’s score, Confirm and Correct score, and no Enter result', async () => {
+      await open(REPORTED(report('Team 05', 1, 3)));
+      expect(text(row('g_2').querySelector('[data-slot="reports"] [data-slot="badge"]'))).toBe(
+        'Reported',
+      );
+      expect(text(row('g_2').querySelector('[data-slot="report"] span'))).toBe(
+        'Team 05 reported Team 01 1–3 Team 05.',
+      );
+      expect(text(button('g_2', 'Confirm'))).toBe('Confirm the score reported by Team 05');
+      expect(text(button('g_2', 'Correct score'))).toBe('Correct score Team 01 v Team 05');
+      expect(button('g_2', 'Enter result')).toBeUndefined();
+      expect(button('g_1', 'Enter result')).toBeDefined();
+    });
+
+    it('Confirm sends the report and the time it was shown', async () => {
+      await open(REPORTED(report('Team 05', 1, 3, 2_345)));
+      await press(button('g_2', 'Confirm'));
+      expect(calls()).toEqual([[CONFIRM, { reportId: 'sr_Team 05', expected: 2_345 }]]);
+    });
+
+    it('says a confirmed win names the winner and no round or tournament', async () => {
+      await open(REPORTED(report('Team 01', 3, 1)));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].resolve(SAVED_WIN);
+      o.subscription(POOLS)!.emit(poolsOf());
+      await o.flush();
+      const alert = row('g_2').querySelector('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe('Report confirmed');
+      const description = text(alert.querySelector('[data-slot="alert-description"]'));
+      expect(description).toContain('Team 01 won.');
+      expect(description).not.toContain('tournament');
+      expect(description).not.toContain('advances');
+    });
+
+    it('says a confirmed tie ended in a tie', async () => {
+      await open(REPORTED(report('Team 01', 2, 2)));
+      await press(button('g_2', 'Confirm'));
+      o.convex.calls[0].resolve({ ...SAVED_WIN, winnerTeamId: null, winnerName: null });
+      o.subscription(POOLS)!.emit(poolsOf());
+      await o.flush();
+      expect(
+        text(row('g_2').querySelector('[data-slot="alert"] [data-slot="alert-description"]')),
+      ).toContain('The game ended in a tie.');
+    });
+
+    it('Correct score opens the form with a lone report’s score, and a tie is accepted in soccer', async () => {
+      await open(REPORTED(report('Team 05', 2, 2)));
+      await press(button('g_2', 'Correct score'));
+      expect(input('g_2', 'a1').value).toBe('2');
+      expect(input('g_2', 'b1').value).toBe('2');
+      await press(button('g_2', 'Save result'));
+      expect(calls()).toEqual([[ENTER, { gameId: 'g_2', score: goals(2, 2) }]]);
+    });
   });
 });

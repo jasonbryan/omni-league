@@ -15,7 +15,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucidePencil } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../convex/_generated/dataModel';
-import type { Sport } from '../../../convex/lib/sports';
+import { POOL_PLAY_TIES, type Sport } from '../../../convex/lib/sports';
 import { api, injectMutation, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import type { AlertText } from '../organizations/admin/alert-text';
@@ -24,28 +24,29 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-cl
 import { GameResultDraft } from '../organizations/admin/game-result-state';
 import { SAVE_OFFLINE } from '../organizations/admin/game-result-text';
 import { GameScoreFields } from '../organizations/admin/game-score-fields';
+import { HlmBadge } from '../ui/badge';
 import { HlmSpinner } from '../ui/spinner';
 import {
   gameLabel,
-  REPORTED_NOTE,
-  REPORTED_STATUS,
   reportedLine,
+  reportedNote,
+  reportedStatus,
   reportFailedText,
 } from './score-report-text';
 
 export type ReportableGame = NonNullable<
-  NonNullable<FunctionReturnType<typeof api.scoreReports.forTeam>>['game']
->;
+  FunctionReturnType<typeof api.scoreReports.forTeam>
+>['games'][number];
 
 /** A new game gets a new form, so no box or status carries over. */
 @Component({
   selector: 'app-score-report-form',
-  imports: [AdminAlert, AdminOfflineAlert, GameScoreFields, HlmSpinner, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, GameScoreFields, HlmBadge, HlmSpinner, NgIcon],
   providers: [provideIcons({ lucidePencil })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block px-4 py-4 md:px-5' },
   template: `
-    <p class="font-medium" data-slot="game-label">{{ label() }}</p>
+    <p class="font-medium max-[359px]:min-h-12" data-slot="game-label">{{ label() }}</p>
     @if (status(); as status) {
       <app-admin-alert
         #statusAlert
@@ -115,10 +116,13 @@ export type ReportableGame = NonNullable<
         </p>
       </form>
     } @else {
-      <p class="mt-3" data-slot="reported">
-        <span class="text-muted-foreground">Your report: </span>{{ reportedText() }}
+      <p class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span hlmBadge variant="secondary">Reported</span>
+        <span data-slot="reported"
+          ><span class="text-muted-foreground">Your report: </span>{{ reportedText() }}</span
+        >
       </p>
-      <p class="mt-1 text-sm text-muted-foreground">{{ reportedNote }}</p>
+      <p class="mt-1 text-sm text-muted-foreground">{{ reportedNote() }}</p>
       <button
         #openButton
         type="button"
@@ -146,11 +150,11 @@ export class ScoreReportForm {
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly saveOffline = SAVE_OFFLINE;
-  protected readonly reportedNote = REPORTED_NOTE;
 
   protected readonly draft = new GameResultDraft(
     () => this.sport(),
     () => this.setsPerGame(),
+    () => this.game().stage === 'pool' && POOL_PLAY_TIES[this.sport()],
   );
   private readonly editing = signal(false);
   protected readonly status = signal<AlertText | null>(null);
@@ -165,6 +169,7 @@ export class ScoreReportForm {
     const { report } = this.game();
     return report ? reportedLine(this.names(), report.score) : '';
   });
+  protected readonly reportedNote = computed(() => reportedNote(this.game().stage));
   protected readonly formOpen = computed(() => this.editing() || this.game().report === null);
   protected readonly failure = computed(() => reportFailedText(this.draft.refusal()));
 
@@ -196,7 +201,7 @@ export class ScoreReportForm {
     );
     if (outcome.sent) {
       this.editing.set(false);
-      this.status.set(REPORTED_STATUS);
+      this.status.set(reportedStatus(this.game().stage));
       this.focusAfterRender(() => this.focusStatusUnlessMoved());
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusBox(outcome.focus));

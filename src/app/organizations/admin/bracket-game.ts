@@ -533,7 +533,7 @@ export class BracketGame {
         const saved = await this.confirmCall.run({ reportId, expected: reportedAt });
         return {
           kind: 'saved',
-          text: confirmedText(saved.winnerName, saved.advancesTo),
+          text: confirmedText(saved.winnerName, saved.advancesTo, this.stage()),
           previous: saved.previous,
           resultEnteredAt: saved.resultEnteredAt,
         };

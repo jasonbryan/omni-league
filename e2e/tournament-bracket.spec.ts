@@ -1343,8 +1343,8 @@ test.describe('Tournaments: the Report score panel while it loads', () => {
     ['the empty state', false],
   ] as const) {
     for (const setsPerGame of [1, 3] as const) {
-      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px.
-      for (const width of [360, 1280]) {
+      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px; at 320px the label wraps to a second line.
+      for (const width of [320, 360, 1280]) {
         test(`at ${width}px its skeleton is as tall as ${state} of a ${setsPerGame === 1 ? 'game of 1 set' : 'best of 3'}, so the roster below does not move`, async ({
           page,
           browser,
