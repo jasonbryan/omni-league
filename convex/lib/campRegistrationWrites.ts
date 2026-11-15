@@ -25,3 +25,28 @@ export async function insertCampRegistration(
   await ctx.db.patch('campSessions', session._id, { registeredCount: session.registeredCount + 1 });
   return id;
 }
+
+const USER_REGISTRATIONS_BATCH = 100;
+
+/** A session that is already gone is skipped, so a stale row cannot block deleting the account. */
+export async function deleteUserCampRegistrations(
+  ctx: Pick<MutationCtx, 'db'>,
+  userId: Id<'users'>,
+): Promise<void> {
+  for (;;) {
+    const batch = await ctx.db
+      .query('campRegistrations')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .take(USER_REGISTRATIONS_BATCH);
+    for (const registration of batch) {
+      await ctx.db.delete('campRegistrations', registration._id);
+      // Read per row: several rows of one session each lower its count.
+      const session = await ctx.db.get('campSessions', registration.sessionId);
+      if (!session) continue;
+      await ctx.db.patch('campSessions', session._id, {
+        registeredCount: Math.max(0, session.registeredCount - 1),
+      });
+    }
+    if (batch.length < USER_REGISTRATIONS_BATCH) return;
+  }
+}
