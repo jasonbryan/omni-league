@@ -25,7 +25,11 @@ import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { CREATED_STATUS, CREATED_TITLE } from '../admin/footer-status';
-import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
+import {
+  STICKY_FOOTER_CLEARANCE,
+  StickyFooter,
+  WEB_ADDRESS_CLEARANCE,
+} from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
@@ -474,7 +478,7 @@ export class SeasonCreateForm {
     };
   });
 
-  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly clearanceClass = `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;

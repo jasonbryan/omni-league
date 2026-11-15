@@ -7,7 +7,7 @@ import { CITY_STATE_HINT, ORGANIZATION_MESSAGES } from '../../../convex/lib/orga
 import { slugify } from '../../../convex/lib/slugs';
 import { AVAILABILITY_PAUSE_MS } from '../core/forms/slug-availability';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
-import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
+import { CONVEX_CLIENT, ConvexConnection, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { appRouteTitle } from '../shell/testing/app-route-title';
 import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
@@ -786,19 +786,127 @@ describe('CreateOrganizationPage', () => {
       expect(classes()).toBe(before);
     });
 
-    it('shows no taken error while the create is in flight or after it succeeded', async () => {
+    async function pressWith(answer: boolean | null) {
       await typeValue('name', NAME);
       await pause();
+      if (answer !== null) {
+        latest().emit(answer);
+        await stable();
+      }
       submitButton().click();
-      await stable();
+      await flush();
       expect(convex.calls).toHaveLength(1);
+    }
+
+    function holdNavigation() {
+      let finish!: () => void;
+      const held = new Promise<boolean>((resolve) => {
+        finish = () => resolve(true);
+      });
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockReturnValue(held);
+      return { finish, navigate };
+    }
+
+    it('shows no taken error while the create is in flight when no answer was in at the press', async () => {
+      await pressWith(null);
       latest().emit(false);
       await stable();
       expect(page.querySelector('#slug-error')).toBeNull();
       expect(input('slug').getAttribute('aria-invalid')).toBeNull();
-      convex.calls[0].resolve({ slug: SLUG });
+    });
+
+    it('keeps the taken message, the same element with the same text, through the flight and the refusal', async () => {
+      await typeValue('name', NAME);
+      await pause();
       latest().emit(false);
+      await stable();
+      const shown = page.querySelector('#slug-error');
+      const message = `${SLUG} is already taken. Choose another web address.`;
+      expect(error('slug')).toBe(message);
+      submitButton().click();
+      await flush();
+      expect(convex.calls).toHaveLength(1);
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: ORGANIZATION_MESSAGES.slugTaken(SLUG),
+        }),
+      );
+      await flush();
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+    });
+
+    it('keeps Available through the flight', async () => {
+      await pressWith(true);
+      expect(availability()?.textContent?.trim()).toBe('Available');
+    });
+
+    it('ignores an answer that turns taken in flight, until the navigation settles', async () => {
+      const { finish, navigate } = holdNavigation();
+      await pressWith(true);
+      latest().emit(false);
+      await stable();
       expect(page.querySelector('#slug-error')).toBeNull();
+      expect(availability()?.textContent?.trim()).toBe('Available');
+      convex.calls[0]?.resolve({ slug: SLUG });
+      await flush();
+      expect(navigate).toHaveBeenCalledTimes(1);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      finish();
+      await flush();
+    });
+
+    it('ends the hold and the pending state when the navigation fails', async () => {
+      vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockRejectedValue(new Error('chunk'));
+      await typeValue('name', NAME);
+      await pause();
+      latest().emit(true);
+      await stable();
+      const component = harness.routeDebugElement!.componentInstance as {
+        submit(event: Event): Promise<void>;
+      };
+      const sent = component.submit(new Event('submit'));
+      await flush();
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      convex.calls[0]?.resolve({ slug: SLUG });
+      await expect(sent).rejects.toThrow('chunk');
+      await stable();
+      expect(submitButton().getAttribute('aria-disabled')).toBeNull();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+
+    it('shows the live answer again once the create is refused as offline', async () => {
+      await pressWith(true);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      convex.calls[0]?.reject(new ConvexOfflineError());
+      await flush();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+
+    it('shows the live answer again once a refusal other than the address ends the hold', async () => {
+      await pressWith(true);
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'name',
+          code: 'nameEmpty',
+          message: ORGANIZATION_MESSAGES.nameEmpty,
+        }),
+      );
+      await flush();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
     });
 
     it('does not use the word slug in any message on the field', async () => {
