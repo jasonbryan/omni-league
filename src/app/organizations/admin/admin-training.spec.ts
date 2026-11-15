@@ -4,6 +4,7 @@ import { ConvexError } from 'convex/values';
 import { TRAINING_MESSAGES } from '../../../../convex/lib/trainingInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
@@ -169,6 +170,7 @@ describe('AdminTraining', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Training | Coastal Bend Rec Club | Omni League',
       );
+      expectBar(page, 'Training');
     });
 
     it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {
