@@ -5,7 +5,7 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
-import { signUp } from './support/session';
+import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
 
@@ -230,5 +230,165 @@ test.describe('register for a camp session', () => {
     }
     await expectAccessible(page);
     await screenshot(page, testInfo, '355-register-not-found');
+  });
+});
+
+test.describe('places and refusals between people', () => {
+  const onePlace = {
+    ...ADULT,
+    name: 'One Place Camp',
+    slug: 'one-place-camp',
+    sessions: [week('Only week', 30, 23, 1)],
+  };
+
+  test('each registration takes one place for everyone, and only the person who registered reads "You\'re registered"', async ({
+    page,
+    browser,
+  }) => {
+    const { tenant, adult } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    await signUp(page, newUser('First'));
+    const second = await otherUser(browser, newUser('Second'));
+    try {
+      await second.goto(adult);
+      await expect(row(second, 'Week 1')).toContainText('12 places left');
+
+      await page.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+      await expect(row(page, 'Week 1')).toContainText('11 places left');
+
+      // The second visitor's open page follows the count without a reload.
+      await expect(row(second, 'Week 1')).toContainText('11 places left');
+      await expect(row(second, 'Week 1').locator('[data-slot="session-registered"]')).toHaveCount(
+        0,
+      );
+      await row(second, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
+      await ageBox(second).click();
+      await registerButton(second).click();
+      await expect(second).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+      await expect(row(second, 'Week 1')).toContainText('10 places left');
+      await expect(row(second, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText(
+        "You're registered",
+      );
+      await expect(row(page, 'Week 1')).toContainText('10 places left');
+    } finally {
+      await second.context().close();
+    }
+  });
+
+  test.describe('a second press from another tab', () => {
+    test.use({ expectedConvexErrors: ['campRegistrations:register'] });
+
+    test('is refused as already registered and takes no second place', async ({ page }) => {
+      const { tenant, adult } = await seed();
+      const ids = await sessionIds(tenant, ADULT.slug);
+      await signUp(page, newUser('Twice'));
+      const path = registerPath(tenant, ADULT.slug, ids['Week 1']);
+      const other = await page.context().newPage();
+      await page.goto(path);
+      await other.goto(path);
+      await ageBox(page).click();
+      await ageBox(other).click();
+
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+      await registerButton(other).click();
+
+      await expect(alert(other)).toContainText("You're registered for Week 1.");
+      await expect(ageBox(other)).toHaveCount(0);
+      await page.goto(adult);
+      await expect(row(page, 'Week 1')).toContainText('11 places left');
+    });
+  });
+
+  test.describe('the last place taken while another form is open', () => {
+    test.use({ expectedConvexErrors: ['campRegistrations:register'] });
+
+    test('refuses the later press as full and takes nothing', async ({ page, browser }) => {
+      const tenant = await seedTenant({
+        name: 'E2E Camp Last Place',
+        locations: [{ name: PLACE, address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' }],
+      });
+      const camp = await seedPublishedCamp(tenant, onePlace);
+      const ids = await sessionIds(tenant, onePlace.slug);
+      const path = registerPath(tenant, onePlace.slug, ids['Only week']);
+      await signUp(page, newUser('Early'));
+      const late = await otherUser(browser, newUser('Late'));
+      try {
+        await late.goto(path);
+        await ageBox(late).click();
+        await page.goto(path);
+        await ageBox(page).click();
+        await registerButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}${camp}`, { timeout: 20_000 });
+
+        await registerButton(late).click();
+        await expect(alert(late)).toContainText('This session is full.');
+        await expect(ageBox(late)).toHaveCount(0);
+        await expect(late.getByRole('link', { name: 'Back to the camp page' })).toHaveAttribute(
+          'href',
+          camp,
+        );
+        await late.goto(camp);
+        await expect(row(late, 'Only week')).toContainText('Full');
+        await expect(
+          row(late, 'Only week').locator('[data-slot="session-registered"]'),
+        ).toHaveCount(0);
+      } finally {
+        await late.context().close();
+      }
+    });
+  });
+});
+
+test.describe('the register form on a phone and offline', () => {
+  test('keeps Register at the bottom edge of a short phone screen, and in the flow at 1280px', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    await signUp(page, newUser('Phone'));
+    const phone = testInfo.project.name === 'chromium-mobile';
+    await page.setViewportSize(phone ? { width: 360, height: 400 } : { width: 1280, height: 720 });
+    await page.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
+    const footer = page.locator('[data-slot="form-footer"]');
+    await expect(footer).toHaveCSS('position', phone ? 'sticky' : 'static');
+    await expect(registerButton(page)).toBeInViewport({ ratio: 1 });
+    if (phone) {
+      expect((await registerButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect(registerButton(page)).toBeInViewport({ ratio: 1 });
+    }
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '355-register-footer');
+  });
+
+  test('refuses to send while offline, keeps the ticked box, and registers once the connection is back', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, adult } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    await signUp(page, newUser('Offline'));
+    await page.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
+    await ageBox(page).click();
+    await page.context().setOffline(true);
+    try {
+      await expect(registerButton(page)).toHaveAttribute('aria-disabled', 'true');
+      await registerButton(page).click({ force: true });
+      await expect(alert(page)).toContainText("You're offline");
+      await expect(alert(page)).toBeFocused();
+      await expect(ageBox(page)).toBeChecked();
+      await expect(page).toHaveURL(/\/register\?session=/);
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '355-register-offline');
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await expect(registerButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+    await expect(row(page, 'Week 1')).toContainText('11 places left');
   });
 });
