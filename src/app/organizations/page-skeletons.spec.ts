@@ -10,7 +10,10 @@ import {
 } from './organization-skeleton';
 import { PublicLeagueSkeleton } from './public-league/public-league-skeleton';
 import type { PublicPageNames } from './public-league/public-page-names';
+import { REGISTRATION_CARD_CLASS } from './public-league/public-season-header-classes';
+import { registrationCard, registrationLines } from './public-season/public-season-registration';
 import { PublicSeasonSkeleton } from './public-season/public-season-skeleton';
+import { SUMMER_2027 } from './public-season/testing/season-data';
 import { PublicTournamentSkeleton } from './public-tournament/public-tournament-skeleton';
 
 const SEASON_NAMES: PublicPageNames = {
@@ -22,6 +25,25 @@ const SEASON_NAMES: PublicPageNames = {
   },
   season: { slug: 'summer-2027', name: 'Summer 2027' },
 };
+
+const OPEN_NAMES: PublicPageNames = {
+  ...SEASON_NAMES,
+  season: {
+    slug: 'summer-2027',
+    name: 'Summer 2027',
+    registration: { deadline: '2027-05-23', startDate: '2027-06-06', isFull: false },
+  },
+};
+const FULL_NAMES: PublicPageNames = {
+  ...SEASON_NAMES,
+  season: {
+    slug: 'summer-2027',
+    name: 'Summer 2027',
+    registration: { deadline: '2027-05-23', startDate: '2027-06-06', isFull: true },
+  },
+};
+const BEFORE_DEADLINE = Date.parse('2027-05-01T00:00:00Z');
+const AFTER_DEADLINE = Date.parse('2027-05-30T00:00:00Z');
 
 const ROWS = '[data-testid="skeleton-breadcrumb-row"]';
 const rowCount = (root: Element) => root.querySelectorAll(ROWS).length;
@@ -58,6 +80,18 @@ describe('page skeletons', () => {
         PublicSeasonSkeleton,
         { names: SEASON_NAMES },
         { 'rounded-md': 12, 'rounded-full': 2, 'rounded-lg': 4 },
+      ],
+      [
+        'season given an open registration',
+        PublicSeasonSkeleton,
+        { names: OPEN_NAMES, now: BEFORE_DEADLINE },
+        { 'rounded-md': 10, 'rounded-full': 2, 'rounded-lg': 6 },
+      ],
+      [
+        'season given a full registration',
+        PublicSeasonSkeleton,
+        { names: FULL_NAMES, now: BEFORE_DEADLINE },
+        { 'rounded-md': 10, 'rounded-full': 2, 'rounded-lg': 6 },
       ],
       ['find', FindSkeleton, {}, { 'rounded-md': 7, 'rounded-xl': 3, 'rounded-full': 3 }],
     ];
@@ -303,6 +337,123 @@ describe('page skeletons', () => {
       expect(root.querySelector(HEADING)?.className).toContain('h-7');
       expect(rowCount(root)).toBe(2);
       expect(text(root.querySelector(HEADING))).toBe('');
+    });
+  });
+  describe('the season skeleton registration card', () => {
+    const skeleton = (names?: PublicPageNames, now?: number) => {
+      const fixture = TestBed.createComponent(PublicSeasonSkeleton);
+      fixture.componentRef.setInput('names', names);
+      fixture.componentRef.setInput('now', now);
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+    const text = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const card = (root: HTMLElement) => root.querySelector('[data-testid="season-skeleton-card"]')!;
+    const bars = (root: HTMLElement) =>
+      [...card(root).querySelectorAll('[data-slot="skeleton"]')].map((bar) => ({
+        text: text(bar),
+        buttonBar: bar.classList.contains('h-11'),
+      }));
+    const lines = (kind: 'open' | 'full') => {
+      const season = kind === 'full' ? { ...SUMMER_2027, isFull: true } : SUMMER_2027;
+      const registration = registrationCard(season, BEFORE_DEADLINE);
+      if (registration?.kind !== kind) throw new Error(`expected a ${kind} card`);
+      return registrationLines(registration);
+    };
+    const CLOSED_BARS = [
+      { text: '', buttonBar: false },
+      { text: '', buttonBar: false },
+      { text: '', buttonBar: false },
+      { text: '', buttonBar: true },
+    ];
+
+    it('draws the open card’s title, two button bars, and note, each text as the card’s own words in a bar', () => {
+      const root = skeleton(OPEN_NAMES, BEFORE_DEADLINE);
+      const { title, note } = lines('open');
+
+      expect(bars(root)).toEqual([
+        { text: title, buttonBar: false },
+        { text: '', buttonBar: true },
+        { text: '', buttonBar: true },
+        { text: note, buttonBar: false },
+      ]);
+      expect(title).toBe('Registration open · closes May 23, 2027');
+    });
+
+    it('draws the full card’s title, note, and two button bars', () => {
+      const root = skeleton(FULL_NAMES, BEFORE_DEADLINE);
+      const { title, note } = lines('full');
+
+      expect(bars(root)).toEqual([
+        { text: title, buttonBar: false },
+        { text: note, buttonBar: false },
+        { text: '', buttonBar: true },
+        { text: '', buttonBar: true },
+      ]);
+    });
+
+    it.each([
+      ['open', OPEN_NAMES],
+      ['full', FULL_NAMES],
+    ] as const)(
+      'sets the %s card’s text in the card’s classes, wrapping as it does, with the text kept out of sight',
+      (kind, names) => {
+        const root = skeleton(names, BEFORE_DEADLINE);
+        const [title, note] = [...card(root).querySelectorAll('p')];
+
+        expect(title.className).toBe('text-lg font-semibold tracking-tight');
+        expect(note.className).toContain('text-sm');
+        for (const bar of card(root).querySelectorAll('p > [data-slot="skeleton"]')) {
+          expect(bar.classList).toContain('box-decoration-clone');
+          expect(bar.classList).toContain('rounded-md');
+          expect(bar.classList).not.toContain('block');
+          expect(bar.children).toHaveLength(1);
+          expect(bar.children[0].classList).toContain('invisible');
+        }
+      },
+    );
+
+    it.each([
+      ['open', OPEN_NAMES],
+      ['full', FULL_NAMES],
+    ] as const)(
+      'gives the %s card the loaded card’s classes, so it takes the loaded card’s height',
+      (kind, names) => {
+        expectBareCard(card(skeleton(names, BEFORE_DEADLINE)), REGISTRATION_CARD_CLASS[kind]);
+      },
+    );
+
+    it('hides the card’s words from assistive technology, so only Loading the season. is read', () => {
+      for (const names of [OPEN_NAMES, FULL_NAMES]) {
+        const root = skeleton(names, BEFORE_DEADLINE);
+        const readable = root.cloneNode(true) as HTMLElement;
+        readable.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+
+        expect(card(root).getAttribute('aria-hidden')).toBe('true');
+        expect(text(readable)).toBe('Loading the season.');
+        expect(root.querySelectorAll('a, button, h1, h2, h3, [role="heading"]')).toHaveLength(0);
+      }
+    });
+
+    it('draws the closed bars when the link’s site said open and the deadline has passed', () => {
+      const root = skeleton(OPEN_NAMES, AFTER_DEADLINE);
+
+      expect(bars(root)).toEqual(CLOSED_BARS);
+      expectBareCard(card(root), 'p-5 md:p-6');
+    });
+
+    it('draws the closed bars when the link’s site said full and the deadline has passed', () => {
+      expect(bars(skeleton(FULL_NAMES, AFTER_DEADLINE))).toEqual(CLOSED_BARS);
+    });
+
+    it('draws the closed bars for names with no registration, and for no names', () => {
+      expect(bars(skeleton(SEASON_NAMES, BEFORE_DEADLINE))).toEqual(CLOSED_BARS);
+      expect(bars(skeleton(undefined, BEFORE_DEADLINE))).toEqual(CLOSED_BARS);
+    });
+
+    it('draws the closed bars when the page gives no clock', () => {
+      expect(bars(skeleton(OPEN_NAMES))).toEqual(CLOSED_BARS);
     });
   });
 });
