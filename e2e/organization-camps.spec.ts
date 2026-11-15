@@ -876,6 +876,33 @@ test.describe('Camp sessions: who registered', () => {
     await expectAccessible(page);
   });
 
+  test('a name with no break scrolls the table inside its region, not the page, at 320px', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, camp } = await sessionWith(page);
+    const guardian = await seedUser(newUser('Guardian'));
+    const unbroken = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
+    await seedCampRegistration(tenant, JUNIOR.slug, 'Week 1', guardian, {
+      kind: 'minor',
+      minorName: unbroken,
+    });
+    await page.goto(camp);
+    await openList(page);
+    await page.setViewportSize({ width: 320, height: 800 });
+    const region = registrantsOf(page).getByRole('region', { name: 'Registrants of Week 1' });
+    await expect(region).toContainText(unbroken);
+    const sizes = await region.evaluate((element) => ({
+      regionScroll: element.scrollWidth,
+      regionClient: element.clientWidth,
+      pageScroll: document.documentElement.scrollWidth,
+      pageClient: document.documentElement.clientWidth,
+    }));
+    expect(sizes.regionScroll).toBeGreaterThan(sizes.regionClient);
+    expect(sizes.pageScroll).toBeLessThanOrEqual(sizes.pageClient);
+    await screenshot(page, testInfo, 'camp-registrants-unbroken-name');
+    await expectAccessible(page);
+  });
+
   test('a session no one registered for says so', async ({ page }, testInfo) => {
     const { camp } = await sessionWith(page);
     await page.goto(camp);

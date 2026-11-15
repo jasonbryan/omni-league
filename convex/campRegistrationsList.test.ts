@@ -312,6 +312,22 @@ describe('campRegistrations.listForSession', () => {
     expect(rows).toHaveLength(2);
   });
 
+  test('shows the guardian’s name alone when the sign-in account holding the email is gone', async () => {
+    const s = await setup();
+    await register(s, week1(s), s.guardian.userId, MINOR('Maya R.'));
+    await s.t.run(async (ctx) => {
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: { model: 'user', where: [{ field: '_id', value: s.guardian.authUserId }] },
+      } as never);
+    });
+    const rows = await s.asAdmin.query(api.campRegistrations.listForSession, {
+      sessionId: week1(s),
+    });
+    expect(rows.map(({ name, guardian }) => ({ name, guardian }))).toEqual([
+      { name: 'Maya R.', guardian: { name: 'Gail Guardian', email: '' } },
+    ]);
+  });
+
   test('names a registrant whose account is gone, with no guardian line', async () => {
     const s = await setup();
     await register(s, week1(s), s.adult.userId, SELF);
