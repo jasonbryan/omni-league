@@ -281,7 +281,9 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                               class="mt-0.5 shrink-0 text-base"
                               aria-hidden="true"
                             />
-                            <app-minor-name-error-text [error]="nameError" />
+                            <span class="min-w-0 break-words"
+                              ><app-minor-name-error-text [error]="nameError"
+                            /></span>
                           </div>
                         }
                       </div>
@@ -299,8 +301,10 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                         [describedBy]="error() ? 'age-confirmed-error' : null"
                         [showInvalid]="!!error()"
                       />
-                      <div hlmFieldContent>
-                        <label hlmFieldLabel for="age-confirmed">{{ ageLabel() }}</label>
+                      <div hlmFieldContent class="min-w-0">
+                        <label hlmFieldLabel for="age-confirmed" class="break-words">{{
+                          ageLabel()
+                        }}</label>
                         @if (error(); as error) {
                           <div hlmFieldError id="age-confirmed-error">
                             <ng-icon
@@ -308,7 +312,7 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                               class="mt-0.5 shrink-0 text-base"
                               aria-hidden="true"
                             />
-                            <span>{{ error }}</span>
+                            <span class="min-w-0 break-words">{{ error }}</span>
                           </div>
                         }
                       </div>

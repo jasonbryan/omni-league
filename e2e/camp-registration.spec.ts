@@ -399,6 +399,49 @@ test.describe('a guardian registers a child', () => {
   });
 });
 
+test.describe('a 60-character name without spaces', () => {
+  const LONG = 'W'.repeat(60);
+
+  test('stays inside the card on the register page and the camp page at 360px', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(registerPath(tenant, YOUTH.slug, ids['Week 1']));
+    await childName(page).fill(LONG);
+    await registerButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toHaveText(
+      `Confirm ${LONG}'s age to continue.`,
+    );
+    const insideCard = async (selector: string) => {
+      const card = (await page.locator('[data-slot="card"]').first().boundingBox())!;
+      const box = (await page.locator(selector).boundingBox())!;
+      expect(box.x + box.width, selector).toBeLessThanOrEqual(card.x + card.width + 0.5);
+    };
+    await insideCard('label[for="age-confirmed"]');
+    await insideCard('#age-confirmed-error');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      360,
+    );
+    await expectAccessible(page);
+
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+    await expect(line).toHaveText(`${LONG} is registered`);
+    const rowBox = (await row(page, 'Week 1').boundingBox())!;
+    const lineBox = (await line.boundingBox())!;
+    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      360,
+    );
+    await expectAccessible(page);
+  });
+});
+
 test.describe('a guardian registers the same child again', () => {
   test.use({ expectedConvexErrors: ['campRegistrations:register'] });
 
