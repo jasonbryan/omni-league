@@ -64,7 +64,6 @@ const OR = new Intl.ListFormat('en-US', { type: 'disjunction' });
 
 interface PickerGroup {
   id: 'leagues' | 'tournaments' | 'camps' | 'training';
-  /** Names the group in a sentence. */
   phrase: string;
   legend: string;
   items: {
