@@ -529,3 +529,194 @@ describe('the organizer’s pools answer', () => {
     ]);
   });
 });
+
+const clearResult = (s: TournamentWorld, game: Doc<'tournamentGames'>, expected: number) =>
+  s.as(s.admin).mutation(api.tournamentGames.undoResult, { gameId: game._id, expected });
+
+const rowOf = async (s: TournamentWorld, name: string) =>
+  (await standingsOfPoolA(s)).find((row) => row.name === name);
+
+describe('Clear and Undo on a confirmed pool report', () => {
+  test('Undo straight after Confirm returns the game to Reported, drops it from the standings, and the same report confirms again', async () => {
+    const w = await world();
+    const { s } = w;
+    const game = await gameBetween(w, 1, 8);
+    await reportFor(w, 1, game, set(21, 18));
+    const row = (await reportRows(s))[0];
+    const saved = await confirm(s, s.admin, row);
+    expect((await rowOf(s, 'Team 01'))?.cells.slice(0, 3)).toEqual(['1', '1', '0']);
+
+    await clearResult(s, game, saved.resultEnteredAt);
+    expect((await storedGame(s, game)).score).toBeUndefined();
+    expect((await rowOf(s, 'Team 01'))?.cells[0]).toBe('0');
+    expect((await shownGame(s, game)).reports).toHaveLength(1);
+
+    await confirm(s, s.admin, row);
+    expect((await rowOf(s, 'Team 01'))?.cells.slice(0, 3)).toEqual(['1', '1', '0']);
+  });
+
+  test('Clear on a confirmed tie removes it from the standings, and entering the cleared tie again restores it', async () => {
+    const w = await world('soccer');
+    const { s } = w;
+    const game = await gameBetween(w, 4, 5);
+    await reportFor(w, 4, game, goals(2, 2));
+    const saved = await confirm(s, s.admin, (await reportRows(s))[0]);
+    expect((await rowOf(s, 'Team 04'))?.cells[0]).toBe('1');
+
+    await clearResult(s, game, saved.resultEnteredAt);
+    expect((await rowOf(s, 'Team 04'))?.cells[0]).toBe('0');
+    expect((await storedGame(s, game)).score).toBeUndefined();
+
+    await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+      gameId: game._id,
+      score: goals(2, 2),
+    });
+    expect((await rowOf(s, 'Team 04'))?.cells[0]).toBe('1');
+    expect((await storedGame(s, game)).winnerTeamId).toBeUndefined();
+  });
+
+  test('Undo after Correct restores the confirmed score', async () => {
+    const w = await world();
+    const { s } = w;
+    const game = await gameBetween(w, 1, 8);
+    await reportFor(w, 1, game, set(21, 18));
+    await confirm(s, s.admin, (await reportRows(s))[0]);
+    const corrected = await s.as(s.admin).mutation(api.tournamentGames.correctResult, {
+      gameId: game._id,
+      score: set(10, 21),
+    });
+    await s.as(s.admin).mutation(api.tournamentGames.undoResult, {
+      gameId: game._id,
+      expected: corrected.resultEnteredAt,
+      restore: corrected.previous!,
+    });
+    expect(await storedGame(s, game)).toMatchObject({
+      score: set(21, 18),
+      winnerTeamId: w.teamIds[0],
+    });
+  });
+
+  test('a Clear that follows a newer entry is refused, and the newer result stays', async () => {
+    const w = await world();
+    const { s } = w;
+    const game = await gameBetween(w, 1, 8);
+    await reportFor(w, 1, game, set(21, 18));
+    const saved = await confirm(s, s.admin, (await reportRows(s))[0]);
+    await s.as(s.admin).mutation(api.tournamentGames.correctResult, {
+      gameId: game._id,
+      score: set(10, 21),
+    });
+    await expectRefused(clearResult(s, game, saved.resultEnteredAt), 'resultChanged');
+    expect((await storedGame(s, game)).score).toEqual(set(10, 21));
+  });
+});
+
+describe('invalid and competing pool reports', () => {
+  test.each([
+    ['goals for beach volleyball', 'beachVolleyball', goals(2, 1)],
+    ['sets for soccer', 'soccer', set(21, 18)],
+    ['runs for soccer', 'soccer', runs(3, 1)],
+    ['a negative number of goals', 'soccer', goals(-1, 2)],
+    ['a fraction of a run', 'softball', runs(2.5, 1)],
+  ] as const)('%s is refused, and nothing is stored', async (_label, sport, score) => {
+    const w = await world(sport);
+    const game = await gameBetween(w, 1, 8);
+    await expectRefused(reportFor(w, 1, game, score), 'invalidScore');
+    expect(await reportRows(w.s)).toEqual([]);
+  });
+
+  test('both captains confirmed at once leave one result, and the second Confirm is refused', async () => {
+    const w = await world();
+    const { s } = w;
+    const game = await gameBetween(w, 1, 8);
+    await reportFor(w, 1, game, set(21, 18));
+    await reportFor(w, 8, game, set(15, 21));
+    const rows = await reportRows(s);
+    const settled = await Promise.allSettled(rows.map((row) => confirm(s, s.admin, row)));
+    expect(settled.map((outcome) => outcome.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect((await storedGame(s, game)).score).toBeDefined();
+  });
+
+  test('a report for a pool game of a tournament the captain’s team is not in is refused', async () => {
+    const w = await world();
+    const game = await gameBetween(w, 1, 8);
+    const elsewhere = await w.s.t.run(async (ctx) =>
+      ctx.db.insert('teams', {
+        organizationId: w.s.a,
+        name: 'Team Elsewhere',
+        sortName: 'team elsewhere',
+        captainUserId: w.s.admin.userId,
+        rosterCount: 1,
+        createdAt: 1,
+      }),
+    );
+    await expect(
+      w.s.as(w.s.admin).mutation(api.scoreReports.report, {
+        gameId: game._id,
+        teamId: elsewhere,
+        score: set(21, 18),
+      }),
+    ).rejects.toThrow('Not allowed');
+  });
+});
+
+describe('a bracket game in a sport that allows pool ties', () => {
+  async function soccerBracket() {
+    vi.useFakeTimers({ now: AFTER_DEADLINE });
+    const s = await tournamentWorld();
+    await s.t.run(async (ctx) => {
+      const tournament = (await ctx.db.get('tournaments', s.gulf))!;
+      await ctx.db.patch('tournaments', s.gulf, { sport: 'soccer' });
+      await ctx.db.patch('programs', tournament.programId, { sport: 'soccer' });
+    });
+    const captains = [s.captain, s.rival, s.player, s.rivalPlayer];
+    const teamIds: Id<'teams'>[] = [];
+    for (const [index, captain] of captains.entries()) {
+      teamIds.push(
+        await s.t.run((ctx) =>
+          ctx.db.insert('teams', {
+            organizationId: s.a,
+            tournamentId: s.gulf,
+            name: `Bracket ${index + 1}`,
+            sortName: `bracket ${index + 1}`,
+            captainUserId: captain.userId,
+            rosterCount: 2,
+            createdAt: 2_000 + index,
+          }),
+        ),
+      );
+    }
+    await s.as(s.admin).mutation(api.tournamentGames.createBracket, { tournamentId: s.gulf });
+    const game = await s.t.run(async (ctx) =>
+      (await ctx.db.query('tournamentGames').collect()).find(
+        (row) => row.stage === 'bracket' && row.round === 1 && row.teamIds.includes(teamIds[0]),
+      ),
+    );
+    return { s, teamIds, game: game! };
+  }
+
+  test('refuses a tied report, as a bracket game needs a winner', async () => {
+    const { s, teamIds, game } = await soccerBracket();
+    await expectRefused(
+      s.as(s.captain).mutation(api.scoreReports.report, {
+        gameId: game._id,
+        teamId: teamIds[0],
+        score: goals(1, 1),
+      }),
+      'invalidScore',
+    );
+    expect(await reportRows(s)).toEqual([]);
+  });
+
+  test('accepts a decided report, and Confirm advances the winner', async () => {
+    const { s, teamIds, game } = await soccerBracket();
+    await s.as(s.captain).mutation(api.scoreReports.report, {
+      gameId: game._id,
+      teamId: teamIds[0],
+      score: goals(2, 1),
+    });
+    const saved = await confirm(s, s.admin, (await reportRows(s))[0]);
+    expect(saved.winnerTeamId).not.toBeNull();
+    expect(saved.advancesTo).not.toBeNull();
+  });
+});

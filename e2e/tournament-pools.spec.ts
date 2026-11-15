@@ -789,11 +789,11 @@ interface PoolReportWorld {
   teamPath: (name: string) => string;
 }
 
-/** Six teams in 2 pools, with pool games; Ace and Dune each have a captain who has signed in on a page of their own. */
+/** Six teams, or the `names` given, in 2 pools with pool games; Ace and Dune each have a captain who has signed in on a page of their own. */
 async function withPoolReportWorld(
   page: Page,
   browser: Browser,
-  { sport = 'beachVolleyball' }: { sport?: Sport },
+  { sport = 'beachVolleyball', names = SIX }: { sport?: Sport; names?: readonly string[] },
   use: (world: PoolReportWorld) => Promise<void>,
 ) {
   const seeded = await adminOf(page, { teams: [], sport });
@@ -808,7 +808,7 @@ async function withPoolReportWorld(
     const { teamIds } = (await convexRun('testing:seedTournamentRosters', {
       organizationSlug: seeded.tenant.slug,
       tournamentSlug: SLUG,
-      teams: SIX.map((name) => ({
+      teams: names.map((name) => ({
         name,
         ...(name === 'Ace' && { captainEmail: captains[0].email }),
         ...(name === 'Dune' && { captainEmail: captains[1].email }),
@@ -820,7 +820,7 @@ async function withPoolReportWorld(
       publicPath: `/organizations/${seeded.tenant.slug}/tournaments/${SLUG}`,
       ace,
       dune,
-      teamPath: (name) => `/app/teams/${teamIds[SIX.indexOf(name)]}`,
+      teamPath: (name) => `/app/teams/${teamIds[names.indexOf(name)]}`,
     });
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
@@ -970,31 +970,94 @@ test.describe('Tournaments: pool score reports', () => {
     });
   });
 
-  for (const width of [320, 360, 1280]) {
-    test(`at ${width}px the skeleton holds the space of the team's two pool games, so the roster below does not move`, async ({
-      page,
-      browser,
-    }) => {
-      await withPoolReportWorld(page, browser, {}, async (world) => {
-        const { ace } = world;
-        await ace.setViewportSize({ width, height: 900 });
-        const rosterTop = async () =>
-          (await ace.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
-        const held = await holdQueries(ace, ['scoreReports:forTeam']);
-        await ace.goto(world.teamPath('Ace'));
-        await expect(reportPanel(ace).getByRole('status')).toHaveText('Loading the game.');
-        await expect.poll(() => held.isHolding()).toBe(true);
-        const before = await reportPanel(ace).boundingBox();
-        const rosterBefore = await rosterTop();
+  const EIGHT = TWELVE.slice(0, 8);
+  const GAME_COUNTS = [
+    { games: 1, names: SIX, played: ['Eddy'] },
+    { games: 2, names: SIX, played: [] },
+    { games: 3, names: EIGHT, played: [] },
+  ] as const;
 
-        held.release();
-        await expect(reportPanel(ace).getByRole('form')).toHaveCount(2);
-        const after = await reportPanel(ace).boundingBox();
-        expect(Math.abs((after?.height ?? Infinity) - (before?.height ?? -1))).toBeLessThan(0.5);
-        expect(Math.abs(((await rosterTop()) ?? Infinity) - (rosterBefore ?? -1))).toBeLessThan(
-          0.5,
-        );
+  for (const { games, names, played } of GAME_COUNTS) {
+    for (const width of [320, 360, 1280]) {
+      test(`at ${width}px the skeleton holds the space of the team's ${games} pool ${games === 1 ? 'game' : 'games'} to report, so the roster below does not move`, async ({
+        page,
+        browser,
+      }, testInfo) => {
+        await withPoolReportWorld(page, browser, { names }, async (world) => {
+          const { ace, tenant } = world;
+          for (const opponent of played) {
+            await seedPoolResult(tenant, SLUG, ['Ace', opponent], {
+              score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+            });
+          }
+          await ace.setViewportSize({ width, height: 900 });
+          const rosterTop = async () =>
+            (await ace.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+          const held = await holdQueries(ace, ['scoreReports:forTeam']);
+          await ace.goto(world.teamPath('Ace'));
+          await expect(reportPanel(ace).getByRole('status')).toHaveText('Loading the game.');
+          await expect.poll(() => held.isHolding()).toBe(true);
+          const before = await reportPanel(ace).boundingBox();
+          const rosterBefore = await rosterTop();
+
+          held.release();
+          await expect(reportPanel(ace).getByRole('form')).toHaveCount(games);
+          const after = await reportPanel(ace).boundingBox();
+          const panelShift = (after?.height ?? Infinity) - (before?.height ?? -1);
+          const rosterShift = ((await rosterTop()) ?? Infinity) - (rosterBefore ?? -1);
+          testInfo.annotations.push({
+            type: 'shift',
+            description: `panel ${panelShift}px, roster ${rosterShift}px`,
+          });
+          expect(Math.abs(panelShift)).toBeLessThan(0.5);
+          expect(Math.abs(rosterShift)).toBeLessThan(0.5);
+          await expectNoSidewaysScroll(ace);
+        });
       });
-    });
+    }
   }
+
+  test('Undo after Confirm returns the pool game to Reported, and Clear result then Undo restores the result and the standings', async ({
+    page,
+    browser,
+  }) => {
+    await withPoolReportWorld(page, browser, {}, async (world) => {
+      const { ace, managePath, publicPath } = world;
+      await ace.goto(world.teamPath('Ace'));
+      const form = reportForm(ace, ACE_ROUND_THREE);
+      await reportBox(form, 'Ace').fill('21');
+      await reportBox(form, 'Dune').fill('18');
+      await reportButton(form).click();
+      await expect(reportPanel(ace).locator('[data-slot="reported"]')).toBeVisible();
+
+      await page.goto(managePath);
+      const game = poolGame(page, ACE_ROUND_THREE);
+      await confirmButton(game).click();
+      await expect(gameResult(game)).toHaveText('Ace 21–18 Dune. Ace won.');
+
+      await undoButton(game).click();
+      await expect(gameResult(game)).toHaveCount(0);
+      await expect(game.locator('[data-slot="badge"]')).toHaveText('Reported');
+      await expect(confirmButton(game)).toBeVisible();
+
+      await confirmButton(game).click();
+      await expect(gameResult(game)).toHaveText('Ace 21–18 Dune. Ace won.');
+      await clearButton(game).click();
+      await expect(savedStatus(game, 'Result cleared')).toBeVisible();
+      await expect(gameResult(game)).toHaveCount(0);
+
+      const reader = await browser.newContext({ baseURL, viewport: page.viewportSize() });
+      try {
+        const visitor = await reader.newPage();
+        await visitor.goto(publicPath);
+        await expect(visitor.locator('section#pools table')).toHaveCount(0);
+        await undoButton(game).click();
+        await expect(savedStatus(game, 'Result restored')).toContainText('Ace won.');
+        await expect(gameResult(game)).toHaveText('Ace 21–18 Dune. Ace won.');
+        await expect(visitor.locator('section#pools table')).toHaveCount(1);
+      } finally {
+        await reader.close();
+      }
+    });
+  });
 });
