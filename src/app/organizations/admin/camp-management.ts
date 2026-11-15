@@ -391,7 +391,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                             }
                           </div>
                           @if (isOpen(row)) {
-                            <div [id]="registrantsId(row)" class="basis-full">
+                            <div [id]="registrantsId(row)" class="basis-full min-w-0">
                               <app-camp-registrants
                                 [sessionId]="row.campSessionId"
                                 [sessionName]="row.name"
