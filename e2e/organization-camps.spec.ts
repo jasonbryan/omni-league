@@ -887,9 +887,12 @@ test.describe('Camp sessions: who registered', () => {
 
   test('the list shows a skeleton while its answer is held', async ({ page }, testInfo) => {
     const { camp } = await sessionWith(page);
+    const held = await holdQueries(page, ['campRegistrations:listForSession'], {
+      watchFromStart: false,
+    });
     await page.goto(camp);
     await expect(sessionRows(page)).toHaveCount(1);
-    const held = await holdQueries(page, ['campRegistrations:listForSession']);
+    held.watchNewSubscriptions();
     await openList(page);
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(
@@ -901,24 +904,20 @@ test.describe('Camp sessions: who registered', () => {
     await expect(registrantsOf(page)).toHaveText('No one has registered yet.');
   });
 
-  test.describe('a list the server fails', () => {
-    test.use({ expectedConvexErrors: ['campRegistrations:listForSession'] });
-
-    test('shows the alert with Try again and the rest of the page stays', async ({
-      page,
-    }, testInfo) => {
-      const { camp } = await sessionWith(page);
-      await failFirstAnswer(page, 'campRegistrations:listForSession');
-      await page.goto(camp);
-      await openList(page);
-      await expect(registrantsOf(page).getByRole('alert')).toContainText(
-        'The registrants could not be loaded.',
-      );
-      await expect(registrantsOf(page).getByRole('link', { name: 'Try again' })).toBeVisible();
-      await expect(addForm(page)).toBeVisible();
-      await screenshot(page, testInfo, 'camp-registrants-error');
-      await expectAccessible(page);
-    });
+  test('a list the server fails shows the alert with Try again and the rest of the page stays', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await sessionWith(page);
+    await failFirstAnswer(page, 'campRegistrations:listForSession');
+    await page.goto(camp);
+    await openList(page);
+    await expect(registrantsOf(page).getByRole('alert')).toContainText(
+      'The registrants could not be loaded.',
+    );
+    await expect(registrantsOf(page).getByRole('link', { name: 'Try again' })).toBeVisible();
+    await expect(addForm(page)).toBeVisible();
+    await screenshot(page, testInfo, 'camp-registrants-error');
+    await expectAccessible(page);
   });
 
   test('opened offline, the list says it will load when connected', async ({
