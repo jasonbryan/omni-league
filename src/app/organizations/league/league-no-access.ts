@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
 import { HlmCard } from '../../ui/card';
+import { PageTitle } from '../../core/page-title';
 
 @Component({
   selector: 'app-league-no-access',
@@ -42,6 +42,6 @@ import { HlmCard } from '../../ui/card';
 })
 export class LeagueNoAccess {
   constructor() {
-    inject(Title).setTitle('No access | Omni League');
+    inject(PageTitle).set(['No access']);
   }
 }

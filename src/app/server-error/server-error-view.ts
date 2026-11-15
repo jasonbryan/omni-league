@@ -6,13 +6,13 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCloudOff, lucideRotateCw } from '@ng-icons/lucide';
 import { setServerErrorStatus } from '../core/server-error-status';
 import { focusWhenReplacing } from '../core/replaced-focus';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmCard } from '../ui/card';
+import { PageTitle } from '../core/page-title';
 
 /** It never shows the error's message, which on the server is the real one. */
 @Component({
@@ -62,6 +62,6 @@ export class ServerErrorView {
   constructor() {
     focusWhenReplacing(() => this.heading().nativeElement);
     setServerErrorStatus();
-    inject(Title).setTitle('Temporarily unavailable | Omni League');
+    inject(PageTitle).set(['Temporarily unavailable']);
   }
 }

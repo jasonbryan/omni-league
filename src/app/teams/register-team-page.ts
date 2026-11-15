@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, required } from '@angular/forms/signals';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -59,6 +58,7 @@ import {
 } from './register-team-state';
 import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
 import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
+import { PageTitle } from '../core/page-title';
 
 export const REGISTER_MESSAGES = {
   failedTitle: 'The team could not be registered.',
@@ -377,7 +377,7 @@ export class RegisterTeamPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly registerTeam = injectMutation(api.teams.register);
 
   protected readonly messages = REGISTER_MESSAGES;
@@ -512,7 +512,7 @@ export class RegisterTeamPage {
     // The not-found and server-error views set their own title.
     effect(() => {
       const season = this.season();
-      if (season) this.title.setTitle(`Register a team | ${season.seasonName} | Omni League`);
+      if (season) this.pageTitle.set(['Register a team', season.seasonName]);
     });
     effect(() => {
       const alert = this.cardAlert();

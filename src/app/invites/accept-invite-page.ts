@@ -11,7 +11,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -48,6 +47,7 @@ import { HlmCard } from '../ui/card';
 import { HlmSpinner } from '../ui/spinner';
 import { InviteTokenStore } from './invite-token-store';
 import { HlmSkeleton } from '../ui/skeleton';
+import { PageTitle } from '../core/page-title';
 
 interface InviteSummary {
   organizationName: string;
@@ -401,7 +401,7 @@ export class AcceptInvitePage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly store = inject(InviteTokenStore);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
 
   protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
@@ -555,13 +555,13 @@ export class AcceptInvitePage {
     effect(() => {
       const view = this.view();
       if (view !== 'loadFailed') {
-        this.title.setTitle(
+        this.pageTitle.set([
           view === 'accepted'
-            ? 'Invite accepted | Omni League'
+            ? 'Invite accepted'
             : view === 'invalid'
-              ? 'Invite unavailable | Omni League'
-              : 'Staff invite | Omni League',
-        );
+              ? 'Invite unavailable'
+              : 'Staff invite',
+        ]);
       }
       // An unusable invite is refused for good: nothing more to accept with this token. The link
       // may be opened again on this page (`captured` changes), which stores the token again.

@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
 import { HlmCard } from '../../ui/card';
 import { PRIMARY_BUTTON } from './button-classes';
+import { PageTitle } from '../../core/page-title';
 
 @Component({
   selector: 'app-tournament-no-access',
@@ -41,6 +41,6 @@ export class TournamentNoAccess {
   protected readonly primaryButton = PRIMARY_BUTTON;
 
   constructor() {
-    inject(Title).setTitle('No access | Omni League');
+    inject(PageTitle).set(['No access']);
   }
 }

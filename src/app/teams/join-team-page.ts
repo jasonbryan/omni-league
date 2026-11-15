@@ -12,7 +12,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
-import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -58,6 +57,7 @@ import { MinorNameErrorText } from './minor-name-error-text';
 import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
 import { HlmCard } from '../ui/card';
 import { HlmSkeleton } from '../ui/skeleton';
+import { PageTitle } from '../core/page-title';
 
 interface TeamInviteSummary {
   teamName: string;
@@ -586,7 +586,7 @@ export class JoinTeamPage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly store = inject(TeamInviteTokenStore);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
 
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
   protected readonly primaryButton = PRIMARY_BUTTON;
@@ -822,13 +822,13 @@ export class JoinTeamPage {
       const view = this.view();
       if (view !== 'loadFailed') {
         const team = this.joined()?.teamName;
-        this.title.setTitle(
+        this.pageTitle.set([
           view === 'accepted' && team
-            ? `Joined ${team} | Omni League`
+            ? `Joined ${team}`
             : view === 'invalid'
-              ? 'Invite unavailable | Omni League'
-              : 'Team invite | Omni League',
-        );
+              ? 'Invite unavailable'
+              : 'Team invite',
+        ]);
       }
       // An unusable invite and a roster refusal end this link here. The link may be opened again on this page (`captured` changes), which stores the token again.
       this.store.captured();

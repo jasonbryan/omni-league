@@ -212,6 +212,6 @@ export class AdminOverview {
   }
 
   constructor() {
-    bindAdminTitle('Overview');
+    bindAdminTitle('Overview', { bar: 'organization' });
   }
 }

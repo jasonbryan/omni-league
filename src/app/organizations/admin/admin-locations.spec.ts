@@ -3,6 +3,7 @@ import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { LOCATION_MESSAGES } from '../../../../convex/lib/locationInput';
 import { ConvexConnection } from '../../core/data/convex';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
@@ -92,6 +93,7 @@ describe('AdminLocations', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Locations | Coastal Bend Rec Club | Omni League',
       );
+      expectBar(page, 'Locations');
     });
 
     it('draws the list and the add form as bare helm cards', async () => {

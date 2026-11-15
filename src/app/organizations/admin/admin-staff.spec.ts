@@ -24,6 +24,7 @@ import {
 } from '../../ui/testing/form-shapes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { expectBadge } from '../../ui/testing/badge';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
@@ -302,6 +303,7 @@ describe('AdminStaff', () => {
         'Org admins manage everything here. League organizers run the leagues, tournaments, and camps you assign them.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe('Staff | Coastal Bend Rec Club | Omni League');
+      expectBar(page, 'Staff');
     });
 
     it('lists each member with name, "(you)", email, and role, a league organizer with their leagues', async () => {

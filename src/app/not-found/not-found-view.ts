@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCompass, lucideHouse, lucideSearch } from '@ng-icons/lucide';
@@ -10,6 +9,7 @@ import {
   PRIMARY_BUTTON_LARGE,
 } from '../ui/button/button-classes';
 import { HlmCard } from '../ui/card';
+import { PageTitle } from '../core/page-title';
 
 /** It reads no data and nothing per visitor, so the server and the browser render the same DOM. */
 @Component({
@@ -78,6 +78,6 @@ export class NotFoundView {
 
   constructor() {
     setNotFoundStatus();
-    inject(Title).setTitle('Page not found | Omni League');
+    inject(PageTitle).set(['Page not found']);
   }
 }

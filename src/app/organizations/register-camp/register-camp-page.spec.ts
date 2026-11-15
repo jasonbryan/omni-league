@@ -2,6 +2,9 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { MAX_CAMP_SESSION_NAME_LENGTH } from '../../../../convex/lib/campSessionInput';
+import { appRouteTitle } from '../../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../../shell/testing/bar-title';
 import { ConvexError } from 'convex/values';
 import { AuthService } from '../../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../../core/auth/testing/fake-auth-client';
@@ -71,9 +74,11 @@ describe('RegisterCampPage', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
         provideRouter([
           {
             path: 'app/organizations/:orgSlug/camps/:campSlug/register',
+            title: appRouteTitle('organizations/:orgSlug/camps/:campSlug/register'),
             component: RegisterCampPage,
           },
           { path: 'sign-in', component: Elsewhere },
@@ -680,6 +685,32 @@ describe('RegisterCampPage', () => {
       expect(document.activeElement).toBe(alert);
       expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
       vi.restoreAllMocks();
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Register for a camp session" while the query is held, then keeps it for the form', async () => {
+      await open();
+      expectBar(page, 'Register for a camp session');
+      await answer(OPEN);
+      expectBar(page, 'Register for Week 1');
+    });
+
+    it('names the not-found and server-error views', async () => {
+      await open();
+      await answer(null);
+      expectBar(page, 'Page not found');
+      registration()!.fail(new Error('Server Error: secret'));
+      await flush();
+      expectBar(page, 'Temporarily unavailable');
+    });
+
+    it('keeps one truncated line for a session named at the limit', async () => {
+      await open();
+      const name = 'W'.repeat(MAX_CAMP_SESSION_NAME_LENGTH);
+      await answer({ ...OPEN, session: { ...SESSION, name } });
+      expectBar(page, `Register for ${name}`);
+      expect(page.querySelector('header p')?.classList).toContain('truncate');
     });
   });
 });

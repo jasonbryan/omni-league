@@ -1,5 +1,6 @@
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
@@ -45,9 +46,15 @@ describe('AdminOverview', () => {
     expect(main.textContent).not.toContain('Locations');
   });
 
-  it('sets the title to "Overview | <organization> | Omni League"', async () => {
-    await open();
+  it('sets the title to "Overview | <organization> | Omni League", and the slim bar names the organization', async () => {
+    const { page } = await open();
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
+    expectBar(page, 'Coastal Bend Rec Club', 'Overview');
+  });
+
+  it('reads "Overview" in the slim bar until the organization answers', async () => {
+    const { page } = await openAdmin(ROUTES, URL);
+    expectBar(page, 'Overview');
   });
 
   it('asks the counters, the attention list, and the open seasons, and no pending-invite counter', async () => {
