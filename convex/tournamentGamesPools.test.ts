@@ -1055,25 +1055,6 @@ describe('pool games and the readers of bracket games', () => {
       (await s.as(s.admin).query(api.tournamentGames.getSetup, TOURNAMENT_SLUGS))!.bracket,
     ).toBeNull();
   });
-
-  test('a captain’s score report is refused for a pool game', async () => {
-    const { s, game } = await withPoolGame();
-    const captained = game.teamIds[0]!;
-    await expect(
-      s.as(s.captain).mutation(api.scoreReports.report, {
-        gameId: game._id,
-        teamId: captained,
-        score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
-      }),
-    ).rejects.toThrow(/Not allowed/);
-  });
-
-  test('the team’s report view offers no pool game', async () => {
-    const { s, game } = await withPoolGame();
-    const captained = game.teamIds[0]!;
-    const view = await s.as(s.captain).query(api.scoreReports.forTeam, { teamId: captained });
-    expect(view).toMatchObject({ game: null });
-  });
 });
 
 describe('every team count and pool count', () => {
@@ -1130,29 +1111,6 @@ describe('every team count and pool count', () => {
       }
       expect((await teamRows(s)).every((team) => team.pool === undefined)).toBe(true);
     }
-  });
-});
-
-describe('a score report that sits on a pool game', () => {
-  test('an organizer cannot confirm it, and the pool game keeps no result', async () => {
-    const { s } = await world(6);
-    await split(s, 2);
-    await createGames(s);
-    const game = (await poolGames(s))[0];
-    const teamId = game.teamIds[0]!;
-    const reportId = await s.t.run((ctx) =>
-      ctx.db.insert('scoreReports', {
-        gameId: game._id,
-        teamId,
-        reportedByUserId: s.captain.userId,
-        score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
-        reportedAt: 5,
-      }),
-    );
-    await expect(
-      s.as(s.admin).mutation(api.scoreReports.confirm, { reportId, expected: 5 }),
-    ).rejects.toThrow(/Not allowed/);
-    expect((await poolGames(s)).every((row) => row.winnerTeamId === undefined)).toBe(true);
   });
 });
 

@@ -1322,6 +1322,19 @@ const DEMO_BRACKET_REPORT = {
   score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
 } as const;
 
+/**
+ * Reef Breakers' captain has reported the score of the last game of Pool A, Reef Breakers v Shell Shock, so it reads Reported
+ * on the organizer's page and the standings do not count it. player@'s Sandbar Six does not play it.
+ */
+const DEMO_POOL_REPORT = {
+  pool: 'A',
+  round: 3,
+  slot: 2,
+  teamName: 'Reef Breakers',
+  captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
+  score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
+} as const;
+
 /** Each team is inserted by name in `DEMO_BRACKET_TOURNAMENT`, in seed order, once both players' accounts exist. */
 export const DEMO_BRACKET_TEAMS: readonly {
   name: string;
@@ -1368,7 +1381,10 @@ export const DEMO_POOL_TOURNAMENT = {
 
 const DEMO_POOL_COUNT = 2;
 
-/** Each team is inserted by name in `DEMO_POOL_TOURNAMENT`, in seed order, once both players' accounts exist. */
+/**
+ * Each team is inserted by name in `DEMO_POOL_TOURNAMENT`, in seed order, once both players' accounts exist.
+ * player@ captains Sandbar Six, which has two pool games to report: round 2 against Shell Shock and round 3 against Tidal Wave.
+ */
 export const DEMO_POOL_TEAMS: readonly {
   name: string;
   captainEmail: string;
@@ -1391,7 +1407,7 @@ export const DEMO_POOL_TEAMS: readonly {
   },
   {
     name: 'Sandbar Six',
-    captainEmail: DEMO_FREE_AGENT_PEOPLE[0].email,
+    captainEmail: `player@${DEMO_ACCOUNT_DOMAIN}`,
     partnerEmail: DEMO_BRACKET_PARTNERS[3].email,
   },
   {
@@ -1767,6 +1783,7 @@ export const insertDemoTeams = internalMutation({
     await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
     await insertDemoPools(ctx);
     await insertDemoPoolResults(ctx, captains);
+    await insertDemoPoolReport(ctx, captains);
     await insertDemoBracket(ctx);
     await insertDemoBracketResults(ctx, captains);
     await insertDemoBracketReport(ctx, captains);
@@ -1943,13 +1960,39 @@ async function insertDemoBracketReport(
   ctx: MutationCtx,
   people: readonly { email: string; authUserId: string }[],
 ): Promise<void> {
-  const { round, slot, teamName, captainEmail, score } = DEMO_BRACKET_REPORT;
+  const { round, slot, ...reported } = DEMO_BRACKET_REPORT;
   const tournament = await demoBracketTournament(ctx);
+  const game =
+    tournament &&
+    (await bracketGames(ctx, tournament._id)).find(
+      (row) => row.round === round && row.slot === slot,
+    );
+  if (tournament && game) await insertDemoReport(ctx, people, tournament, game, reported);
+}
+
+async function insertDemoPoolReport(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const { pool, round, slot, ...reported } = DEMO_POOL_REPORT;
+  const tournament = await demoTournament(ctx, DEMO_POOL_TOURNAMENT);
+  const game =
+    tournament &&
+    (await poolGames(ctx, tournament._id)).find(
+      (row) => row.pool === pool && row.round === round && row.slot === slot,
+    );
+  if (tournament && game) await insertDemoReport(ctx, people, tournament, game, reported);
+}
+
+async function insertDemoReport(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+  tournament: Doc<'tournaments'>,
+  game: Doc<'tournamentGames'>,
+  { teamName, captainEmail, score }: { teamName: string; captainEmail: string; score: Score },
+): Promise<void> {
   const authUserId = people.find((person) => person.email === captainEmail)?.authUserId;
-  if (!tournament || authUserId === undefined) return;
-  const game = (await bracketGames(ctx, tournament._id)).find(
-    (row) => row.round === round && row.slot === slot,
-  );
+  if (authUserId === undefined) return;
   const team = await ctx.db
     .query('teams')
     .withIndex('by_tournamentId_and_sortName', (q) =>
@@ -1960,7 +2003,7 @@ async function insertDemoBracketReport(
     .query('users')
     .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
     .unique();
-  if (!game || !team || !captain || !game.teamIds.includes(team._id)) return;
+  if (!team || !captain || !game.teamIds.includes(team._id)) return;
   if (gameHasResult(game) || game.teamIds.includes(null)) return;
   const reported = await ctx.db
     .query('scoreReports')

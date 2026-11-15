@@ -12,15 +12,16 @@ const FOR_TEAM = 'scoreReports:forTeam';
 const REPORT = 'scoreReports:report';
 
 /** What the team page knows of its tournament before the game answers. */
-const TOURNAMENT: { sport: Sport; setsPerGame: number } = {
+const TOURNAMENT: { sport: Sport; setsPerGame: number; gameCount: number } = {
   sport: 'beachVolleyball',
   setsPerGame: 1,
+  gameCount: 1,
 };
 
 @Component({
   imports: [ScoreReportPanel],
   template:
-    '<app-score-report-panel [teamId]="teamId" [sport]="tournament.sport" [setsPerGame]="tournament.setsPerGame" />',
+    '<app-score-report-panel [teamId]="teamId" [sport]="tournament.sport" [setsPerGame]="tournament.setsPerGame" [gameCount]="tournament.gameCount" />',
 })
 class Host {
   protected readonly teamId = 'tm_crabs' as Id<'teams'>;
@@ -33,6 +34,7 @@ const ONE_SET = { kind: 'sets', sets: [{ a: 21, b: 18 }] };
 
 const GAME = {
   gameId: 'g_semi',
+  stage: 'bracket' as 'bracket' | 'pool',
   roundName: 'Semifinals',
   teams: [
     { teamId: 'tm_crabs', name: 'Sand Crabs' },
@@ -41,11 +43,23 @@ const GAME = {
   report: null as null | { score: unknown; reportedAt: number },
 };
 
-const answer = (game: unknown = GAME, more: object = {}) => ({
+const answerOf = (games: readonly unknown[], more: object = {}) => ({
   sport: 'beachVolleyball',
   setsPerGame: 1,
-  game,
+  games,
   ...more,
+});
+
+const answer = (game: unknown = GAME, more: object = {}) =>
+  answerOf(game === null ? [] : [game], more);
+
+const poolGame = (round: number, opponent: string, report: unknown = null) => ({
+  ...GAME,
+  gameId: `g_pool${round}`,
+  stage: 'pool' as const,
+  roundName: `Round ${round}`,
+  teams: [GAME.teams[0], { teamId: `tm_${opponent}`, name: opponent }],
+  report,
 });
 
 describe('ScoreReportPanel', () => {
@@ -101,7 +115,7 @@ describe('ScoreReportPanel', () => {
     const setRows = () => page.querySelectorAll('[data-slot="skeleton-set"]');
 
     afterEach(() => {
-      Object.assign(TOURNAMENT, { sport: 'beachVolleyball', setsPerGame: 1 });
+      Object.assign(TOURNAMENT, { sport: 'beachVolleyball', setsPerGame: 1, gameCount: 1 });
     });
 
     it.each([1, 3])(
@@ -404,6 +418,161 @@ describe('ScoreReportPanel', () => {
       expect(alertOf()).toBeNull();
       expect(page.querySelector<HTMLInputElement>('#report-g_final-a1')!.value).toBe('');
       expect(page.querySelector<HTMLInputElement>('#report-g_final-b1')!.value).toBe('');
+    });
+  });
+
+  describe('pool play', () => {
+    const TWO = answerOf([poolGame(2, 'Spike Squad'), poolGame(3, 'Beach Bombers')]);
+    const poolInput = (round: number, name: string) =>
+      page.querySelector<HTMLInputElement>(`#report-g_pool${round}-${name}`)!;
+    const labels = () =>
+      [...page.querySelectorAll('[data-slot="game-label"]')].map((label) => text(label));
+    const forms = () => [...page.querySelectorAll<HTMLFormElement>('form')];
+    const sendFor = (round: number) =>
+      forms()
+        .find((f) => f.getAttribute('aria-label')?.includes(`Round ${round}`))!
+        .querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+    async function typeInto(round: number, name: string, value: string) {
+      const field = poolInput(round, name);
+      field.value = value;
+      field.dispatchEvent(new Event('input'));
+      await o.harness.fixture.whenStable();
+    }
+
+    it('lists each game that has no confirmed result, in the order the server sent, each with Report score', async () => {
+      await open(TWO);
+      expect(labels()).toEqual([
+        'Round 2: Sand Crabs v Spike Squad',
+        'Round 3: Sand Crabs v Beach Bombers',
+      ]);
+      expect(forms()).toHaveLength(2);
+      expect(forms().map((f) => text(f.querySelector('button[type="submit"]')))).toEqual([
+        'Report score',
+        'Report score',
+      ]);
+    });
+
+    it('separates the second game from the first with a line, and not the first from the heading', async () => {
+      await open(TWO);
+      const hosts = [...page.querySelectorAll('app-score-report-form')];
+      expect(hosts.map((host) => host.classList.contains('border-t'))).toEqual([false, true]);
+    });
+
+    it('sends the game and team of the form that was pressed, and leaves the other form alone', async () => {
+      await open(TWO);
+      await typeInto(3, 'a1', '21');
+      await typeInto(3, 'b1', '18');
+      await press(sendFor(3));
+      expect(calls()).toEqual([
+        [REPORT, { gameId: 'g_pool3', teamId: 'tm_crabs', score: ONE_SET }],
+      ]);
+      expect(poolInput(2, 'a1').value).toBe('');
+    });
+
+    it('shows Reported and when it counts on a game the team has reported, and the form on the other', async () => {
+      await open(
+        answerOf([
+          poolGame(2, 'Spike Squad', { score: ONE_SET, reportedAt: 9_000 }),
+          poolGame(3, 'Beach Bombers'),
+        ]),
+      );
+      const badge = page.querySelector('app-score-report-form [data-slot="badge"]');
+      expect(text(badge)).toBe('Reported');
+      expect(text(page.querySelector('[data-slot="reported"]'))).toBe(
+        'Your report: Sand Crabs 21–18 Spike Squad.',
+      );
+      expect(text(section())).toContain(
+        'The organizer confirms it before it counts in the standings. Report again to change it until then.',
+      );
+      expect(text(section())).not.toContain('the winner advances');
+      expect(forms()).toHaveLength(1);
+    });
+
+    it('says in the status that the organizer confirms it before it counts in the standings', async () => {
+      await open(TWO);
+      await typeInto(2, 'a1', '21');
+      await typeInto(2, 'b1', '18');
+      await press(sendFor(2));
+      o.convex.calls[0].resolve({ reportedAt: 9_000 });
+      o.subscription(FOR_TEAM)!.emit(
+        answerOf([
+          poolGame(2, 'Spike Squad', { score: ONE_SET, reportedAt: 9_000 }),
+          poolGame(3, 'Beach Bombers'),
+        ]),
+      );
+      await o.flush();
+      expect(text(alertOf())).toBe(
+        'Score reported The organizer confirms it before it counts in the standings.',
+      );
+    });
+
+    it('a soccer pool game takes a tied score, and sends it', async () => {
+      await open(answerOf([poolGame(2, 'Spike Squad')], { sport: 'soccer' }));
+      await typeInto(2, 'a1', '2');
+      await typeInto(2, 'b1', '2');
+      await press(sendFor(2));
+      expect(calls()).toEqual([
+        [REPORT, { gameId: 'g_pool2', teamId: 'tm_crabs', score: { kind: 'goals', a: 2, b: 2 } }],
+      ]);
+    });
+
+    it('a beach volleyball pool game refuses a tied set, and sends nothing', async () => {
+      await open(answerOf([poolGame(2, 'Spike Squad')]));
+      await typeInto(2, 'a1', '21');
+      await typeInto(2, 'b1', '21');
+      await press(sendFor(2));
+      expect(calls()).toEqual([]);
+    });
+
+    it('a bracket game of a soccer tournament still refuses a tie', async () => {
+      await open(answer(GAME, { sport: 'soccer' }));
+      await type('a1', '2');
+      await type('b1', '2');
+      await press(button('Report score'));
+      expect(calls()).toEqual([]);
+    });
+
+    it('shows the empty state once every pool game has a result', async () => {
+      await open(answerOf([]));
+      expect(text(section()!.querySelector('[data-slot="empty"] p'))).toBe(
+        'No game to report right now.',
+      );
+    });
+
+    describe('the skeleton before the games answer', () => {
+      const blocks = () => page.querySelectorAll('[data-slot="skeleton-block"]');
+
+      it.each([
+        [0, 1],
+        [1, 1],
+        [3, 3],
+      ])(
+        'holds the space of the %s games the team page counted, at least one form',
+        async (count, expected) => {
+          TOURNAMENT.gameCount = count;
+          await open();
+          expect(blocks()).toHaveLength(expected);
+          expect([...blocks()].map((block) => block.classList.contains('border-t'))).toEqual(
+            Array.from({ length: expected }, (_, index) => index > 0),
+          );
+          expect(page.querySelectorAll('[role="status"]')).toHaveLength(1);
+        },
+      );
+    });
+  });
+
+  describe('a long game label', () => {
+    it('keeps two lines at the narrowest widths, in the skeleton and in the form', async () => {
+      await open();
+      const skeletonLabel = page.querySelector('[data-slot="skeleton-label"]')!;
+      expect(skeletonLabel.className).toContain('max-[359px]:min-h-12');
+      o.subscription(FOR_TEAM)!.emit(answer());
+      await o.flush();
+      expect(text(section()!.querySelector('[data-slot="game-label"]'))).toBeTruthy();
+      expect(section()!.querySelector('[data-slot="game-label"]')!.className).toContain(
+        'max-[359px]:min-h-12',
+      );
     });
   });
 });

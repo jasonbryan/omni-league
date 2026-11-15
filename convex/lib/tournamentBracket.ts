@@ -60,10 +60,14 @@ export async function bracketExists(
   return first !== null;
 }
 
-/** A bye has a winner from the start, but only one team; a result is a winner between two, or the score of a tied pool game. */
+/** True for a bye, which has a winner from the start, and for a tied pool game, which has a score and no winner. */
+export function gameIsDecided(game: Doc<'tournamentGames'>): boolean {
+  return game.winnerTeamId !== undefined || game.score !== undefined;
+}
+
+/** A bye has only one team; a result is a winner between two, or the score of a tied pool game. */
 export function gameHasResult(game: Doc<'tournamentGames'>): boolean {
-  const decided = game.winnerTeamId !== undefined || game.score !== undefined;
-  return decided && game.teamIds.every((teamId) => teamId !== null);
+  return gameIsDecided(game) && game.teamIds.every((teamId) => teamId !== null);
 }
 
 export function bracketHasResult(games: readonly Doc<'tournamentGames'>[]): boolean {

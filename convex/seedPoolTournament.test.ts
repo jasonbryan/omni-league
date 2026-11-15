@@ -194,3 +194,122 @@ describe('seed:demo: the Fall Pool Play Open has results for half of its pool ga
     expect(played((await fallPoolPlay(t)).games)).toHaveLength(1);
   });
 });
+
+describe('seed:demo: the Fall Pool Play Open has a pool game for player@ to report and a report for admin@ to confirm', () => {
+  const PLAYER = { email: DEMO_ACCOUNTS.player.email, authUserId: 'auth-player' };
+
+  /** The people of the pool teams, with player@ in the place of Sandbar Six's earlier captain. */
+  const people = () => [...PEOPLE.filter((person) => person.email !== PLAYER.email), PLAYER, ADMIN];
+
+  async function reportsOf(t: T) {
+    const { games, teams } = await fallPoolPlay(t);
+    return t.run(async (ctx) => {
+      const nameOf = (id: string) => teams.find((team) => team._id === id)?.name;
+      const rows = await ctx.db.query('scoreReports').collect();
+      return rows
+        .filter((row) => games.some((game) => game._id === row.gameId))
+        .map((row) => {
+          const game = games.find((candidate) => candidate._id === row.gameId)!;
+          return {
+            row,
+            game,
+            reporter: nameOf(row.teamId),
+            between: game.teamIds.map((id) => nameOf(id!)),
+          };
+        });
+    });
+  }
+
+  test('makes player@ the captain of Sandbar Six, which has two pool games without a result', async () => {
+    const t = setup();
+    await seedDemo(t, people());
+    const { teams, games } = await fallPoolPlay(t);
+    const sandbarSix = teams.find((team) => team.name === 'Sandbar Six')!;
+    const player = await t.run(async (ctx) =>
+      (await ctx.db.query('users').collect()).find((user) => user.authUserId === PLAYER.authUserId),
+    );
+    expect(sandbarSix.captainUserId).toBe(player?._id);
+    const open = games
+      .filter((game) => game.teamIds.includes(sandbarSix._id) && game.score === undefined)
+      .sort((a, b) => a.round - b.round);
+    expect(open.map((game) => game.round)).toEqual([2, 3]);
+  });
+
+  test('has one captain’s report on another pool game, from Reef Breakers, that has no result', async () => {
+    const t = setup();
+    await seedDemo(t, people());
+    const reports = await reportsOf(t);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ reporter: 'Reef Breakers' });
+    expect(reports[0].between).toEqual(['Reef Breakers', 'Shell Shock']);
+    expect(reports[0].game.score).toBeUndefined();
+    expect(reports[0].row.score).toEqual({ kind: 'sets', sets: [{ a: 21, b: 17 }] });
+  });
+
+  test('shows admin@ the report as waiting, and the standings do not count it', async () => {
+    const t = setup();
+    await seedDemo(t, people());
+    await t.run(async (ctx) => {
+      const user = (await ctx.db.query('users').collect()).find(
+        (row) => row.authUserId === ADMIN.authUserId,
+      )!;
+      const organization = (await ctx.db.query('organizations').collect()).find(
+        (row) => row.slug === DEMO_POOL_TOURNAMENT.orgSlug,
+      )!;
+      await ctx.db.insert('memberships', {
+        userId: user._id,
+        organizationId: organization._id,
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+    });
+    const admin = t.withIdentity({
+      subject: ADMIN.authUserId,
+      issuer: 'http://127.0.0.1:3211',
+      name: 'admin',
+      sessionId: 's1',
+    });
+    const pools = await admin.query(api.tournamentGames.getPools, {
+      orgSlug: DEMO_POOL_TOURNAMENT.orgSlug,
+      tournamentSlug: DEMO_POOL_TOURNAMENT.tournamentSlug,
+    });
+    const waiting = pools?.pools.flatMap((pool) => pool.games).filter((g) => g.reports.length > 0);
+    expect(waiting).toHaveLength(1);
+    expect(waiting?.[0].reports[0].teamName).toBe('Reef Breakers');
+    const page = await t.query(api.tournaments.getPublicPage, {
+      orgSlug: DEMO_POOL_TOURNAMENT.orgSlug,
+      tournamentSlug: DEMO_POOL_TOURNAMENT.tournamentSlug,
+    });
+    const reefBreakers = page?.pools?.[0].standings.find((row) => row.name === 'Reef Breakers');
+    expect(reefBreakers?.cells[0]).toBe('2');
+  });
+
+  test('is inserted once, so a second run changes nothing', async () => {
+    const t = setup();
+    await seedDemo(t, people());
+    const first = await reportsOf(t);
+    await t.mutation(internal.seed.insertDemoTeams, { captains: people() });
+    expect(await reportsOf(t)).toEqual(first);
+  });
+
+  test('adds no report to a reported game once an organizer has entered its result', async () => {
+    const t = setup();
+    await seedDemo(t, people());
+    const reefBreakers = (await fallPoolPlay(t)).teams.find(
+      (team) => team.name === 'Reef Breakers',
+    )!;
+    const game = (await fallPoolPlay(t)).games.find(
+      (row) => row.round === 3 && row.teamIds.includes(reefBreakers._id),
+    )!;
+    const reported = await reportsOf(t);
+    await t.run(async (ctx) => {
+      for (const { row } of reported) await ctx.db.delete('scoreReports', row._id);
+      await ctx.db.patch('tournamentGames', game._id, {
+        winnerTeamId: game.teamIds[0]!,
+        score: { kind: 'sets', sets: [{ a: 21, b: 5 }] },
+      });
+    });
+    await t.mutation(internal.seed.insertDemoTeams, { captains: people() });
+    expect(await reportsOf(t)).toEqual([]);
+  });
+});
