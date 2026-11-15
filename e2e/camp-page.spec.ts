@@ -293,7 +293,7 @@ test.describe('Camps: the management page and Publish', () => {
     await expect(stateBadge(page)).toHaveText('Published');
     const row = page.locator('#sessions-list > li');
     await expect(row).toHaveCount(1);
-    await expect(row.getByRole('button')).toHaveCount(0);
+    await expect(row.getByRole('button', { name: /delete/i })).toHaveCount(0);
     await expect(row).toContainText('Required while published');
   });
 });

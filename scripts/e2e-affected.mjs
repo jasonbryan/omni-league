@@ -844,6 +844,12 @@ export const AREAS = [
     ]),
     specs: ['tournament-bracket', 'tournament-pools', 'organization-tournaments'],
   },
+  {
+    // camp-page.spec.ts drives the admin camp page, which the admin area's specs leave out.
+    name: 'admin camp page',
+    test: matching(/^src\/app\/organizations\/admin\/(?:camp-[\w-]+|publish-camp-dialog)\.ts$/),
+    specs: [...ADMIN, 'camp-page'],
+  },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
     name: 'create organization',
