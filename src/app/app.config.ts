@@ -1,5 +1,5 @@
 import { ApplicationConfig, isDevMode, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter, UrlSerializer } from '@angular/router';
+import { provideRouter, TitleStrategy, UrlSerializer } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { provideClientHydration } from '@angular/platform-browser';
@@ -14,6 +14,7 @@ import {
   provideLoadedAddressOnFailedFirstNavigation,
   withQuietNavigationFailure,
 } from './core/navigation-failure';
+import { PageTitleStrategy } from './core/page-title';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { provideUpdatePrompt } from './shell/update-prompt-provider';
 
@@ -21,6 +22,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, ...withQuietNavigationFailure()),
+    { provide: TitleStrategy, useClass: PageTitleStrategy },
     provideLoadedAddressOnFailedFirstNavigation(),
     provideFocusMainAfterNavigation(),
     // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops it, so hydration keeps the page instead of navigating to `/`.

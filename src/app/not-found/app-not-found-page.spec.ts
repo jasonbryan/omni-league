@@ -1,7 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { AppNotFoundPage } from './app-not-found-page';
 
 describe('AppNotFoundPage', () => {
@@ -42,5 +45,18 @@ describe('AppNotFoundPage', () => {
     ).toEqual([['Go to the home page', '/']]);
     expect(main?.querySelector('.ring-1')).not.toBeNull();
     expect(main?.textContent).toContain('start again from the home page');
+  });
+
+  it('names the page in the slim bar from the catch-all route title, then from the view', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+        BAR_TITLE_PROVIDER,
+        provideRouter([{ path: '**', title: appRouteTitle('**'), component: AppNotFoundPage }]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create('/app/nothing-here');
+    await harness.fixture.whenStable();
+    expectBar(harness.routeNativeElement!, 'Page not found');
   });
 });

@@ -48,6 +48,17 @@ const CONVEX_BARREL_PATTERN = {
   allowTypeImports: true,
 };
 
+// PageTitle (core/page-title.ts) is the only writer of the tab title, so the slim bar, which reads
+// it, always names the page the tab names. PageMeta sets the public pages' titles, which have no bar.
+// Specs may import Title to read getTitle(). The blocks below that apply to non-spec files repeat it.
+const TITLE_PATH = {
+  name: '@angular/platform-browser',
+  importNames: ['Title'],
+  message:
+    'Set the tab title through PageTitle (src/app/core/page-title.ts), which also names the page in the app shell.',
+};
+const TITLE_WRITERS = ['src/app/core/page-title.ts', 'src/app/core/page-meta.ts'];
+
 export default defineConfig([
   globalIgnores([
     'convex/_generated/',
@@ -141,7 +152,7 @@ export default defineConfig([
       'no-restricted-imports': [
         'error',
         {
-          paths: [CONVEX_BROWSER_PATH, ...CONVEX_SERVER_PATHS, ...REACT_PATHS],
+          paths: [CONVEX_BROWSER_PATH, ...CONVEX_SERVER_PATHS, TITLE_PATH, ...REACT_PATHS],
           patterns: [...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
         },
       ],
@@ -166,7 +177,7 @@ export default defineConfig([
       'no-restricted-imports': [
         'error',
         {
-          paths: [...CONVEX_SERVER_PATHS, ...REACT_PATHS],
+          paths: [...CONVEX_SERVER_PATHS, TITLE_PATH, ...REACT_PATHS],
           patterns: [...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
         },
       ],
@@ -186,7 +197,21 @@ export default defineConfig([
       'src/app/core/*.ts',
       'src/app/shell/update-prompt*.ts',
     ],
-    ignores: ['src/**/*.spec.ts'],
+    ignores: ['src/**/*.spec.ts', ...TITLE_WRITERS],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [CONVEX_BROWSER_PATH, ...CONVEX_SERVER_PATHS, TITLE_PATH, ...REACT_PATHS],
+          patterns: [CONVEX_BARREL_PATTERN, ...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
+        },
+      ],
+    },
+  },
+
+  // The two files that write the title are in the block above's globs, so they repeat its restrictions without Title.
+  {
+    files: TITLE_WRITERS,
     rules: {
       'no-restricted-imports': [
         'error',
@@ -260,6 +285,7 @@ export default defineConfig([
           paths: [
             CONVEX_BROWSER_PATH,
             ...CONVEX_SERVER_PATHS,
+            TITLE_PATH,
             // Un-prefixed built-ins (`fs`, `fs/promises`, ...), as exact names: a pattern like
             // `path` would also match a relative `./path` module.
             ...builtinModules.map((name) => ({

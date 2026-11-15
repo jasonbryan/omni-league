@@ -130,6 +130,7 @@ describe('seasons.getPublicPage', () => {
             slug: 'summer-2027',
             startDate: '2027-06-06',
             registrationDeadline: '2027-05-30',
+            isFull: false,
           },
         ],
       },
@@ -269,6 +270,29 @@ describe('seasons.getPublicPage', () => {
       's5',
       's4',
     ]);
+  });
+
+  test('upcomingSeasons marks a season full at its maximum, and not one with room', async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (candidate) => candidate.slug === 'coed-7v7',
+      )!;
+      await insertSeason(
+        ctx,
+        league,
+        { ...SUMMER, name: 'Full', slug: 'full', maxTeams: 2 },
+        'published',
+      );
+      const full = (await ctx.db.query('seasons').collect()).find(
+        (season) => season.slug === 'full',
+      )!;
+      await ctx.db.patch('seasons', full._id, { teamCount: 2 });
+    });
+    const page = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
+    expect(
+      Object.fromEntries(page?.league.upcomingSeasons?.map((s) => [s.slug, s.isFull]) ?? []),
+    ).toEqual({ full: true, 'coed-summer': false });
   });
 
   test('upcomingSeasons never holds a draft season or a season of another league or organization', async () => {

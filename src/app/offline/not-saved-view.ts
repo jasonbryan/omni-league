@@ -6,12 +6,12 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideRotateCw, lucideWifiOff } from '@ng-icons/lucide';
 import { focusWhenReplacing } from '../core/replaced-focus';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { HlmCard } from '../ui/card';
+import { PageTitle } from '../core/page-title';
 
 /**
  * The page's live subscription stays open, so the page replaces this view by itself when the connection returns.
@@ -63,6 +63,6 @@ export class NotSavedView {
 
   constructor() {
     focusWhenReplacing(() => this.heading().nativeElement);
-    inject(Title).setTitle('Not saved on this device | Omni League');
+    inject(PageTitle).set(['Not saved on this device']);
   }
 }

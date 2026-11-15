@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { CAMP_SESSION_MESSAGES } from '../../../../convex/lib/campSessionInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
@@ -498,6 +500,39 @@ describe('CampManagement', () => {
         await remove('Week 3');
         expect(sessionsCard().querySelector('[role="alert"]')).toBeNull();
       });
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Camp" while the query is held, then the camp name', async () => {
+      await open();
+      expectBar(page, 'Camp');
+      o.subscription(GET_CAMP)!.emit(CAMP);
+      await o.flush();
+      expectBar(page, 'Junior Beach Volleyball Camp');
+    });
+
+    it('names the not-found, no-access and server-error views', async () => {
+      await open(CAMP);
+      o.subscription(GET_CAMP)!.emit(null);
+      await o.flush();
+      expectBar(page, 'Page not found');
+      o.subscription(GET_CAMP)!.fail(forbiddenError());
+      await o.flush();
+      expectBar(page, 'No access');
+      o.subscription(GET_CAMP)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expectBar(page, 'Temporarily unavailable');
+    });
+
+    it('keeps the camp name through a navigation to the same path with a new fragment', async () => {
+      await open(CAMP, []);
+      await TestBed.inject(Router).navigateByUrl(`${CAMP_URL}#add-session`);
+      await o.flush();
+      expectBar(page, 'Junior Beach Volleyball Camp');
+      expect(TestBed.inject(Title).getTitle()).toBe(
+        'Junior Beach Volleyball Camp | Coastal Bend Rec Club | Omni League',
+      );
     });
   });
 });

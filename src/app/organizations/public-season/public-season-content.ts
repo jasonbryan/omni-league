@@ -41,9 +41,14 @@ import { PageControl } from '../page-control';
 import { CRUMB_LIST } from '../public-league/public-league-header-classes';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
 import { publicPageNames } from '../public-league/public-page-names';
-import { SEASON_CRUMB_LINK, SEASON_HEADING } from '../public-league/public-season-header-classes';
+import {
+  REGISTRATION_CARD_CLASS,
+  SEASON_CRUMB_LINK,
+  SEASON_HEADING,
+} from '../public-league/public-season-header-classes';
 import {
   registrationCard,
+  registrationLines,
   teamCard,
   type RegistrationCard,
   type ViewerTeam,
@@ -53,17 +58,6 @@ import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
 const FACT = 'relative min-h-18 py-4 ps-14';
-const REGISTRATION_CARD = 'p-5 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
-/**
- * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration. The signed-out card
- * stays in the card behind the team card, so the card is never shorter than it; these floors cover the team card when it is the taller one.
- * A full season is still open for registration, so a captain below the minimum gets the open team card.
- */
-const RESERVED_HEIGHT = {
-  open: 'min-h-66 sm:min-h-58',
-  full: 'min-h-66 sm:min-h-58',
-  closed: 'min-h-47 md:min-h-49',
-} as const;
 const PHASE_BADGES: Record<RegistrationCard['kind'], HlmBadgeVariant> = {
   open: 'secondary',
   full: 'outline',
@@ -156,9 +150,8 @@ const FACT_ICON =
                   [attr.aria-hidden]="team() ? 'true' : null"
                 >
                   @if (card.kind === 'open') {
-                    <p class="text-lg font-semibold tracking-tight">
-                      Registration open &middot; closes {{ card.closes }}
-                    </p>
+                    @let text = lines(card);
+                    <p class="text-lg font-semibold tracking-tight">{{ text.title }}</p>
                     <div class="mt-5 flex flex-col gap-2">
                       <a
                         [routerLink]="registerTeamHref()"
@@ -180,13 +173,11 @@ const FACT_ICON =
                         />Register as a free agent</a
                       >
                     </div>
-                    <p class="mt-4 text-sm text-muted-foreground">
-                      Captains register a team, then invite their players. Without a team? Register
-                      as a free agent, and an organizer places you on one.
-                    </p>
+                    <p class="mt-4 text-sm text-muted-foreground">{{ text.note }}</p>
                   } @else if (card.kind === 'full') {
-                    <p class="text-lg font-semibold tracking-tight">This season is full</p>
-                    <p class="mt-2 text-sm text-muted-foreground">{{ card.note }}</p>
+                    @let text = lines(card);
+                    <p class="text-lg font-semibold tracking-tight">{{ text.title }}</p>
+                    <p class="mt-2 text-sm text-muted-foreground">{{ text.note }}</p>
                     <div class="mt-5 flex flex-col gap-2">
                       <a
                         [routerLink]="registerTeamHref()"
@@ -435,6 +426,7 @@ export class PublicSeasonContent {
 
   protected readonly phaseLabel = (card: RegistrationCard) =>
     card.kind === 'full' ? FULL_BADGE_TEXT : BADGE_TEXT[card.phase];
+  protected readonly lines = registrationLines;
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
@@ -456,10 +448,9 @@ export class PublicSeasonContent {
     return `${total} ${total === 1 ? 'team' : 'teams'}`;
   });
   protected readonly card = computed(() => registrationCard(this.season(), this.now()));
-  protected readonly registrationCardClass = computed(() => {
-    const kind = this.card()?.kind;
-    return kind ? `${RESERVED_HEIGHT[kind]} ${REGISTRATION_CARD}` : REGISTRATION_CARD;
-  });
+  protected readonly registrationCardClass = computed(
+    () => REGISTRATION_CARD_CLASS[this.card()?.kind ?? 'closed'],
+  );
   protected readonly team = computed(() => {
     const team = this.viewerTeam();
     return team && teamCard(team, this.season(), this.now());

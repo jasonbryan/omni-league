@@ -1,6 +1,7 @@
 import { RESPONSE_INIT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
+import { PageTitle } from '../core/page-title';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { expectBareCard, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { NotSavedView } from './not-saved-view';
@@ -61,5 +62,10 @@ describe('NotSavedView', () => {
     create(responseInit);
     expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
     expect(responseInit.status).toBeUndefined();
+  });
+
+  it('sets its title through PageTitle', () => {
+    create();
+    expect(TestBed.inject(PageTitle).barText()).toBe('Not saved on this device');
   });
 });

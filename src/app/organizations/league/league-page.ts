@@ -31,7 +31,7 @@ import { LeagueSidebar } from './league-sidebar';
       @switch (context.state()) {
         @case ('ready') {
           @if (context.league(); as league) {
-            <ng-template appShellSidebar [appShellOrganizationName]="league.organization.name">
+            <ng-template appShellSidebar>
               @if (league.role === 'orgAdmin') {
                 <app-admin-sidebar
                   [organization]="{

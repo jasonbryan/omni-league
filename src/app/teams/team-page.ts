@@ -12,7 +12,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -61,6 +60,7 @@ import { TeamPendingInvites } from './team-pending-invites';
 import { HlmCard } from '../ui/card';
 import { INLINE_LINK } from './team-links';
 import { HlmSkeleton } from '../ui/skeleton';
+import { PageTitle } from '../core/page-title';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
@@ -477,7 +477,7 @@ export interface TeamPageNavigationState {
 })
 export class TeamPage {
   private readonly auth = inject(AuthService);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -667,8 +667,8 @@ export class TeamPage {
     // The not-found and server-error views set their own title.
     effect(() => {
       const team = this.team();
-      if (team) this.title.setTitle(`${team.name} | Omni League`);
-      else if (this.state() === 'forbidden') this.title.setTitle('No access | Omni League');
+      if (team) this.pageTitle.set([team.name]);
+      else if (this.state() === 'forbidden') this.pageTitle.set(['No access']);
     });
     // The confirmation takes focus once, when it first shows with the team.
     effect(() => {

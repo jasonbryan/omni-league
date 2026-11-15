@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { appRouteTitle } from '../../../shell/testing/app-route-title';
 import { Elsewhere } from '../../admin/testing/admin-harness';
 import { LeaguePage } from '../league-page';
 
@@ -81,7 +82,11 @@ export const MINE_AS_ORGANIZER = [
 export const LEAGUE_URL = `/app/organizations/${GULF.slug}/leagues/${COED.slug}`;
 
 export const LEAGUE_ROUTES: Routes = [
-  { path: 'app/organizations/:orgSlug/leagues/:leagueSlug', component: LeaguePage },
+  {
+    path: 'app/organizations/:orgSlug/leagues/:leagueSlug',
+    title: appRouteTitle('organizations/:orgSlug/leagues/:leagueSlug'),
+    component: LeaguePage,
+  },
   { path: 'app/organizations/:slug', component: Elsewhere },
   { path: 'app', component: Elsewhere },
   { path: 'organizations/:orgSlug', component: Elsewhere },

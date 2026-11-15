@@ -1,6 +1,9 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { MAX_TEAM_NAME_LENGTH } from '../../../convex/lib/teamInput';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { expectBar } from '../shell/testing/bar-title';
 import { forbiddenError, openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { expectBareCard, expectBareCards, MESSAGE_CARD_LAYOUT } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
@@ -14,7 +17,7 @@ class Start {}
 const GET = 'teams:getForMember';
 const URL = '/app/teams/team_sharks';
 const ROUTES = [
-  { path: 'app/teams/:teamId', component: TeamPage },
+  { path: 'app/teams/:teamId', title: appRouteTitle('teams/:teamId'), component: TeamPage },
   { path: 'start', component: Start },
 ];
 const SHARKS = {
@@ -202,5 +205,37 @@ describe('TeamPage', () => {
     await o.flush();
     expect(o.harness.routeNativeElement!.querySelector('app-server-error-view')).not.toBeNull();
     expect(main().textContent).not.toContain('internal-db');
+  });
+
+  describe('slim bar', () => {
+    const bar = () => expectBar(o.harness.routeNativeElement!, 'Sand Sharks');
+
+    it('reads "Team" while the query is held, then the team name', async () => {
+      await open();
+      expectBar(o.harness.routeNativeElement!, 'Team');
+      await answer(SHARKS);
+      bar();
+    });
+
+    it('names the no-access, not-found and server-error views', async () => {
+      await open();
+      o.subscription(GET)!.fail(forbiddenError());
+      await o.flush();
+      expectBar(o.harness.routeNativeElement!, 'No access');
+      await answer(null);
+      expectBar(o.harness.routeNativeElement!, 'Page not found');
+      o.subscription(GET)!.fail(new Error('internal-db'));
+      await o.flush();
+      expectBar(o.harness.routeNativeElement!, 'Temporarily unavailable');
+    });
+
+    it('keeps one truncated line for a team named at the limit', async () => {
+      await open();
+      await answer({ ...SHARKS, name: 'T'.repeat(MAX_TEAM_NAME_LENGTH) });
+      expectBar(o.harness.routeNativeElement!, 'T'.repeat(MAX_TEAM_NAME_LENGTH));
+      expect(o.harness.routeNativeElement!.querySelector('header p')?.classList).toContain(
+        'truncate',
+      );
+    });
   });
 });

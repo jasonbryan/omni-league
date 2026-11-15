@@ -3,6 +3,8 @@ import { By, Title } from '@angular/platform-browser';
 import { RouterLink, type Routes } from '@angular/router';
 import { ConvexError } from 'convex/values';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { appRouteTitle } from '../../shell/testing/app-route-title';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
@@ -19,7 +21,11 @@ import {
 } from './testing/admin-harness';
 
 const ROUTES: Routes = [
-  { path: 'app/organizations/:orgSlug/tournaments/:tournamentSlug', component: TournamentPage },
+  {
+    path: 'app/organizations/:orgSlug/tournaments/:tournamentSlug',
+    title: appRouteTitle('organizations/:orgSlug/tournaments/:tournamentSlug'),
+    component: TournamentPage,
+  },
   { path: 'app/organizations/:slug', component: Elsewhere },
   { path: 'app', component: Elsewhere },
   { path: 'organizations/:orgSlug', component: Elsewhere },
@@ -682,6 +688,31 @@ describe('TournamentManagement', () => {
       expect(text(dialog()!.querySelector('[data-slot="alert"]'))).toContain(
         "You're offline. Nothing was sent.",
       );
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Tournament" while the query is held, then the tournament name', async () => {
+      await open();
+      expectBar(page, 'Tournament');
+      o.subscription(GET)!.emit(DRAFT);
+      await o.flush();
+      o.subscription(LIST_WAITLIST)?.emit(NO_WAITLIST);
+      await o.flush();
+      expectBar(page, 'Winter Doubles Classic');
+    });
+
+    it('names the not-found, no-access and server-error views', async () => {
+      await open(DRAFT);
+      o.subscription(GET)!.emit(null);
+      await o.flush();
+      expectBar(page, 'Page not found');
+      o.subscription(GET)!.fail(forbiddenError());
+      await o.flush();
+      expectBar(page, 'No access');
+      o.subscription(GET)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expectBar(page, 'Temporarily unavailable');
     });
   });
 });
