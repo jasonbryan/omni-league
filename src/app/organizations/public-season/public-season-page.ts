@@ -60,7 +60,7 @@ import type { PublicSeasonTeams, PublicSeasonView } from './public-season-view';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
       } @else {
-        <app-public-season-skeleton [names]="names()" />
+        <app-public-season-skeleton [names]="names()" [now]="now()" />
       }
       <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>

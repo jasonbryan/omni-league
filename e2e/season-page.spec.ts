@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
 import { expectBadges, PUBLIC_BADGE_HEIGHT } from './support/badges';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -844,6 +844,12 @@ async function topOf(locator: Locator): Promise<number> {
   return box.y;
 }
 
+async function heightOf(locator: Locator): Promise<number> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error('the page has no box to measure');
+  return box.height;
+}
+
 async function skeletonTops(page: Page): Promise<Record<Part, number>> {
   return {
     heading: await topOf(page.getByTestId('season-skeleton-heading')),
@@ -1027,7 +1033,7 @@ const NAMED_WIDTHS = [
   { width: 640, project: 'chromium-desktop', pointer: 'a mouse' },
 ];
 
-async function seedNamedSeasons(registration: 'closed' | 'open'): Promise<Tenant> {
+async function seedNamedSeasons(registration: 'closed' | 'open' | 'full'): Promise<Tenant> {
   const { tenant, args } = newTenant({
     name: 'E2E Season Page',
     locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
@@ -1038,13 +1044,14 @@ async function seedNamedSeasons(registration: 'closed' | 'open'): Promise<Tenant
     })),
   });
   const dates =
-    registration === 'open'
-      ? {
+    registration === 'closed'
+      ? { startDate: '2027-06-06', endDate: '2027-08-29' }
+      : {
           startDate: dateFromToday(40),
           endDate: dateFromToday(100),
           registrationDeadline: dateFromToday(20),
-        }
-      : { startDate: '2027-06-06', endDate: '2027-08-29' };
+        };
+  const captains = NAMED_SEASONS.map(() => newUser('Captain'));
   await seedBatch({
     tenant: args,
     seasons: NAMED_SEASONS.map(({ leagueSlug, season, seasonSlug }) => ({
@@ -1052,9 +1059,30 @@ async function seedNamedSeasons(registration: 'closed' | 'open'): Promise<Tenant
       name: season,
       slug: seasonSlug,
       ...dates,
+      ...(registration === 'full' && { maxTeams: 1 }),
     })),
+    ...(registration === 'full' && {
+      accounts: captains,
+      teams: NAMED_SEASONS.map(({ leagueSlug, seasonSlug }, index) => ({
+        leagueSlug,
+        seasonSlug,
+        name: 'Sand Sharks',
+        captainEmail: captains[index].email,
+      })),
+    }),
   });
   return tenant;
+}
+
+interface Followed {
+  before: Record<Part, number>;
+  after: Record<Part, number>;
+  cardHeight: { before: number; after: number };
+}
+
+interface Start {
+  path: string;
+  heading: string;
 }
 
 async function followSeasonRow(
@@ -1063,34 +1091,54 @@ async function followSeasonRow(
   tenant: Tenant,
   named: NamedSeason,
   measure: (page: Page) => Promise<void> = () => Promise.resolve(),
-): Promise<{ before: Record<Part, number>; after: Record<Part, number> }> {
+  from?: { start?: Start; link?: (path: string) => string },
+): Promise<Followed> {
   const path = `${tenant.path}/leagues/${named.leagueSlug}/seasons/${named.seasonSlug}`;
+  const start = from?.start ?? {
+    path: `${tenant.path}/leagues/${named.leagueSlug}`,
+    heading: named.league,
+  };
   const held = await holdQueries(page, ['seasons:getPublicPage']);
-  await page.goto(`${tenant.path}/leagues/${named.leagueSlug}`);
-  await expect(page.getByRole('heading', { level: 1, name: named.league })).toBeVisible();
+  await page.goto(start.path);
+  await expect(page.getByRole('heading', { level: 1, name: start.heading })).toBeVisible();
   await hydrated(consoleGuard);
-  await page.locator(`#seasons a[href="${path}"]`).click();
+  await page.locator(from?.link?.(path) ?? `#seasons a[href="${path}"]`).click();
   await expect.poll(() => held.isHolding()).toBe(true);
   const skeleton = page.getByTestId('season-skeleton');
   await expect(skeleton).toBeVisible();
   await measure(page);
   const before = await skeletonTops(page);
+  const heightBefore = await heightOf(page.getByTestId('season-skeleton-card'));
 
   held.release();
   const h1 = page.getByRole('heading', { level: 1, name: named.season });
   await expect(h1).toBeVisible();
   await expect(skeleton).toHaveCount(0);
-  return { before, after: await loadedTops(page, h1) };
+  return {
+    before,
+    after: await loadedTops(page, h1),
+    cardHeight: {
+      before: heightBefore,
+      after: await heightOf(page.locator('#registration > div')),
+    },
+  };
 }
 
 function expectLanded(
-  { before, after }: { before: Record<Part, number>; after: Record<Part, number> },
+  { before, after, cardHeight }: Followed,
   parts: readonly Part[],
+  options: { cardHeight?: boolean } = {},
 ): void {
   for (const part of parts) {
     expect(
       Math.abs(after[part] - before[part]),
       `${part}: the skeleton is at ${before[part]}, the page at ${after[part]}`,
+    ).toBeLessThanOrEqual(LAND_TOLERANCE);
+  }
+  if (options.cardHeight) {
+    expect(
+      Math.abs(cardHeight.after - cardHeight.before),
+      `card height: the skeleton's is ${cardHeight.before}, the page's ${cardHeight.after}`,
     ).toBeLessThanOrEqual(LAND_TOLERANCE);
   }
 }
@@ -1142,20 +1190,215 @@ test.describe('public season page: the names a link carried in the skeleton', ()
     }
   }
 
-  for (const project of ['chromium-mobile', 'chromium-desktop']) {
+  for (const { width, project, pointer } of NAMED_WIDTHS) {
     for (const named of NAMED_SEASONS) {
-      test(`at 360px in the ${project} project, a ${named.length} open season’s heading and registration card land within ${LAND_TOLERANCE}px of the skeleton’s`, async ({
+      test(`at ${width}px with ${pointer}, a ${named.length} open season’s heading, registration card, and details land within ${LAND_TOLERANCE}px of the skeleton’s, and the card is as tall`, async ({
         page,
         consoleGuard,
       }, testInfo) => {
         test.skip(testInfo.project.name !== project, 'one Chromium project per pointer');
-        await page.setViewportSize({ width: 360, height: 800 });
+        await page.setViewportSize({ width, height: 800 });
         const tenant = await seedNamedSeasons('open');
 
-        expectLanded(await followSeasonRow(page, consoleGuard, tenant, named), ['heading', 'card']);
+        expectLanded(await followSeasonRow(page, consoleGuard, tenant, named), ALL_PARTS, {
+          cardHeight: true,
+        });
       });
     }
   }
+
+  const FULL_WIDTHS = [NAMED_WIDTHS[0], NAMED_WIDTHS[5]];
+  for (const { width, project, pointer } of FULL_WIDTHS) {
+    for (const named of NAMED_SEASONS) {
+      test(`at ${width}px with ${pointer}, a ${named.length} full season followed from the league page’s registration card draws the full card and lands within ${LAND_TOLERANCE}px`, async ({
+        page,
+        consoleGuard,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== project, 'one Chromium project per pointer');
+        await page.setViewportSize({ width, height: 800 });
+        const tenant = await seedNamedSeasons('full');
+
+        const followed = await followSeasonRow(
+          page,
+          consoleGuard,
+          tenant,
+          named,
+          async (held) => {
+            const card = held.getByTestId('season-skeleton-card');
+            await expect(card).toContainText('This season is full');
+            await expect(card).toContainText('Join the waitlist');
+          },
+          { link: (path) => `#registration-open h3 a[href="${path}"]` },
+        );
+
+        expectLanded(followed, ALL_PARTS, { cardHeight: true });
+      });
+    }
+  }
+
+  test('at 360px with a touch screen, an open season followed from the organization page’s league row Register lands within 4px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one Chromium project per pointer');
+    await page.setViewportSize({ width: 360, height: 800 });
+    const tenant = await seedNamedSeasons('open');
+    const [, middle] = NAMED_SEASONS;
+
+    const followed = await followSeasonRow(
+      page,
+      consoleGuard,
+      tenant,
+      middle,
+      async (held) => {
+        await expect(held.getByTestId('season-skeleton-card')).toContainText(
+          'Registration open · closes',
+        );
+      },
+      {
+        start: { path: tenant.path, heading: tenant.name },
+        link: (path) => `[id^="league-"] a[href="${path}#registration"]`,
+      },
+    );
+
+    expectLanded(followed, ALL_PARTS, { cardHeight: true });
+  });
+
+  for (const { width, project } of [NAMED_WIDTHS[0], NAMED_WIDTHS[1]]) {
+    test(`at ${width}px the held skeleton with registration dates has no link and no heading, is heard as Loading the season. only, keeps focus on main, and passes the axe helper and the reflow check`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== project, 'one Chromium project per pointer');
+      await page.setViewportSize({ width, height: 800 });
+      const [, middle] = NAMED_SEASONS;
+      const tenant = await seedNamedSeasons('open');
+
+      await followSeasonRow(page, consoleGuard, tenant, middle, async () => {
+        const skeleton = page.getByTestId('season-skeleton');
+        await expect(skeleton.getByTestId('season-skeleton-card')).toContainText(
+          'Registration open · closes',
+        );
+        const main = page.locator('main');
+        await expect(main.getByRole('heading')).toHaveCount(0);
+        await expect(main.getByRole('link')).toHaveCount(0);
+        const heard = await skeleton.ariaSnapshot();
+        expect(heard).toContain('Loading the season.');
+        expect(heard).not.toContain('Registration open');
+        expect(heard).not.toContain('Captains register');
+        await expect(page.locator('main[id="main"]')).toBeFocused();
+        expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+        expect((await checkReflow(page)).passed).toBe(true);
+      });
+    });
+  }
+
+  test.describe('See <next season> on a closed season page', () => {
+    const NEXT_FULL = {
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Fall Full',
+      slug: 'fall-full',
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(10),
+      maxTeams: 1,
+    };
+
+    async function followNext(
+      page: Page,
+      consoleGuard: { hydrated: boolean },
+      next: { name: string; slug: string },
+      extra: SeedBatch[],
+      measure: (page: Page) => Promise<void>,
+    ): Promise<Followed> {
+      const { tenant, path } = await seed(...extra);
+      const nextPath = `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${next.slug}`;
+      const held = await holdQueries(page, ['seasons:getPublicPage'], {
+        watchFromStart: false,
+        holdFromStart: false,
+      });
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1, name: SUMMER.name })).toBeVisible();
+      await hydrated(consoleGuard);
+      held.watchNewSubscriptions();
+      held.holdNextAnswer();
+
+      await page.getByRole('link', { name: `See ${next.name}` }).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page).toHaveURL(`${baseURL}${nextPath}`);
+      await expect(page.getByTestId('season-skeleton')).toBeVisible();
+      await measure(page);
+      const before = await skeletonTops(page);
+      const heightBefore = await heightOf(page.getByTestId('season-skeleton-card'));
+
+      held.release();
+      const h1 = page.getByRole('heading', {
+        level: 1,
+        name: `${LEAGUE} · ${next.name}`,
+      });
+      await expect(h1).toBeVisible();
+      await expect(page.getByTestId('season-skeleton')).toHaveCount(0);
+      return {
+        before,
+        after: await loadedTops(page, h1),
+        cardHeight: {
+          before: heightBefore,
+          after: await heightOf(page.locator('#registration > div')),
+        },
+      };
+    }
+
+    test('at 360px with a touch screen, an open next season draws the open card and lands within 4px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-mobile', 'one Chromium project per pointer');
+      await page.setViewportSize({ width: 360, height: 800 });
+
+      const followed = await followNext(page, consoleGuard, OPEN_SEASON, [], async (held) => {
+        await expect(held.getByTestId('season-skeleton-card')).toContainText(
+          'Registration open · closes',
+        );
+      });
+
+      expectLanded(followed, ALL_PARTS, { cardHeight: true });
+    });
+
+    test('at 360px with a touch screen, a full next season draws the full card and lands within 4px', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-mobile', 'one Chromium project per pointer');
+      await page.setViewportSize({ width: 360, height: 800 });
+      const captain = newUser('Captain');
+
+      const followed = await followNext(
+        page,
+        consoleGuard,
+        NEXT_FULL,
+        [
+          { seasons: [NEXT_FULL], accounts: [captain] },
+          {
+            teams: [
+              {
+                leagueSlug: LEAGUE_SLUG,
+                seasonSlug: NEXT_FULL.slug,
+                name: 'Sand Sharks',
+                captainEmail: captain.email,
+              },
+            ],
+          },
+        ],
+        async (held) => {
+          await expect(held.getByTestId('season-skeleton-card')).toContainText(
+            'This season is full',
+          );
+        },
+      );
+
+      expectLanded(followed, ALL_PARTS, { cardHeight: true });
+    });
+  });
 });
 
 test.describe('public season page: signed in and on a team', () => {

@@ -230,7 +230,11 @@ describe('the Registration open section', () => {
       const SEVEN_V_SEVEN_NAMES = {
         organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
         league: { slug: 'coed-7v7-rec', name: 'Coed 7v7 Rec', sportName: 'Soccer' },
-        season: { slug: 'summer-2027', name: 'Summer 2027' },
+        season: {
+          slug: 'summer-2027',
+          name: 'Summer 2027',
+          registration: { deadline: '2027-05-19', startDate: '2027-06-02', isFull: false },
+        },
       };
       const stateOf = (anchor: Element | null | undefined) =>
         routerLinkState(harness.fixture, anchor);
@@ -399,6 +403,20 @@ describe('the Registration open section', () => {
       expect(
         host(harness).querySelector('#league-1 a[href$="#registration"]')?.getAttribute('href'),
       ).toBe(`${SEASON_PATH}/summer-2027#registration`);
+    });
+
+    it('gives the league row’s Register link and the card’s links the full flag of the full season', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(fullPage([FULL_7V7_CARD])));
+      const flag = (anchor: Element | null | undefined) =>
+        (
+          routerLinkState(harness.fixture, anchor) as {
+            season: { registration: { isFull: boolean } };
+          }
+        ).season.registration.isFull;
+
+      expect(flag(host(harness).querySelector('#league-1 a[href$="#registration"]'))).toBe(true);
+      expect(flag(cards(harness)[0].querySelector('h3 a'))).toBe(true);
     });
 
     it('leads the row with the full season that closes first over a later open season with room, and lists both cards, soonest deadline first', async () => {

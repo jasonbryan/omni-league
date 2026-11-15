@@ -30,6 +30,46 @@ describe('publicPageNames', () => {
     expect(Object.keys(state.organization)).toEqual(['slug', 'name']);
     expect(Object.keys(state.league)).toEqual(['slug', 'name', 'sportName']);
   });
+
+  describe('given a season', () => {
+    const SEASON = {
+      slug: 'summer-2027',
+      name: 'Summer 2027',
+      startDate: '2027-06-06',
+      endDate: '2027-08-29',
+      registrationDeadline: '2027-05-23',
+      isFull: true,
+    };
+    const names = (season: Parameters<typeof publicPageNames>[0]['season']) =>
+      publicPageNames({ organization: NAMES.organization, league: NAMES.league, season });
+
+    it('carries the deadline, the start date, and whether it is full', () => {
+      expect(names(SEASON).season).toEqual({
+        slug: 'summer-2027',
+        name: 'Summer 2027',
+        registration: { deadline: '2027-05-23', startDate: '2027-06-06', isFull: true },
+      });
+    });
+
+    it('reads a season with no isFull as not full', () => {
+      const noIsFull = { ...SEASON, isFull: undefined };
+
+      expect(names(noIsFull).season?.registration?.isFull).toBe(false);
+    });
+
+    it('carries no registration for a season row with no deadline, such as a saved copy’s', () => {
+      const saved = { ...SEASON, registrationDeadline: undefined };
+
+      expect(names(saved).season).toEqual({ slug: 'summer-2027', name: 'Summer 2027' });
+    });
+
+    it('carries no registration for a season that gives only names', () => {
+      expect(names({ slug: 'summer-2027', name: 'Summer 2027' }).season).toEqual({
+        slug: 'summer-2027',
+        name: 'Summer 2027',
+      });
+    });
+  });
 });
 
 describe('readPublicPageNames', () => {
@@ -99,5 +139,52 @@ describe('readPublicPageNames for a season route', () => {
     ['the season is null', { ...SEASON_NAMES, season: null }],
   ])('returns nothing when %s', (_, state) => {
     expect(readPublicPageNames(state, SEASON_ROUTE)).toBeUndefined();
+  });
+});
+
+describe('readPublicPageNames given a registration', () => {
+  const REGISTRATION = { deadline: '2027-05-23', startDate: '2027-06-06', isFull: false };
+  const withRegistration = (registration: unknown) => ({
+    ...SEASON_NAMES,
+    season: { slug: 'summer-2027', name: 'Summer 2027', registration },
+  });
+
+  it('keeps the registration of a state that carries a valid one', () => {
+    const state = withRegistration(REGISTRATION);
+
+    expect(readPublicPageNames(state, SEASON_ROUTE)).toEqual(state);
+    expect(
+      readPublicPageNames(withRegistration({ ...REGISTRATION, isFull: true }), SEASON_ROUTE),
+    ).toEqual(withRegistration({ ...REGISTRATION, isFull: true }));
+  });
+
+  it.each<[string, unknown]>([
+    ['an empty deadline', { ...REGISTRATION, deadline: '' }],
+    ['a deadline written as words', { ...REGISTRATION, deadline: 'May 1' }],
+    ['a deadline that is a number', { ...REGISTRATION, deadline: 20270523 }],
+    ['a deadline with a time', { ...REGISTRATION, deadline: '2027-05-23T00:00:00Z' }],
+    ['an empty start date', { ...REGISTRATION, startDate: '' }],
+    ['a start date written as words', { ...REGISTRATION, startDate: 'June 6' }],
+    ['a start date that is a number', { ...REGISTRATION, startDate: 7 }],
+    ['an isFull that is text', { ...REGISTRATION, isFull: 'true' }],
+    ['an isFull that is a number', { ...REGISTRATION, isFull: 1 }],
+    ['no isFull', { deadline: '2027-05-23', startDate: '2027-06-06' }],
+    ['no deadline', { startDate: '2027-06-06', isFull: false }],
+    ['a registration that is text', 'open'],
+    ['a registration that is null', null],
+  ])('returns the names without the registration for %s', (_, registration) => {
+    expect(readPublicPageNames(withRegistration(registration), SEASON_ROUTE)).toEqual(SEASON_NAMES);
+  });
+
+  it('still returns nothing when the season slug is not the route’s', () => {
+    expect(
+      readPublicPageNames(withRegistration(REGISTRATION), { ...SEASON_ROUTE, seasonSlug: 'fall' }),
+    ).toBeUndefined();
+  });
+
+  it('keeps only the three registration fields', () => {
+    const state = withRegistration({ ...REGISTRATION, private: 'x' });
+
+    expect(readPublicPageNames(state, SEASON_ROUTE)?.season?.registration).toEqual(REGISTRATION);
   });
 });

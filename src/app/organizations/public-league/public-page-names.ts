@@ -1,7 +1,13 @@
+export interface SeasonRegistration {
+  deadline: string;
+  startDate: string;
+  isFull: boolean;
+}
+
 export interface PublicPageNames {
   organization: { slug: string; name: string };
   league: { slug: string; name: string; sportName: string };
-  season?: { slug: string; name: string };
+  season?: { slug: string; name: string; registration?: SeasonRegistration };
 }
 
 interface Named {
@@ -9,16 +15,33 @@ interface Named {
   name: string;
 }
 
+interface LinkedSeasonSource extends Named {
+  registrationDeadline?: string | undefined;
+  startDate?: string | undefined;
+  isFull?: boolean | undefined;
+}
+
+const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function registrationOf(season: LinkedSeasonSource): SeasonRegistration | undefined {
+  const { registrationDeadline, startDate, isFull } = season;
+  if (registrationDeadline === undefined || startDate === undefined) return undefined;
+  return { deadline: registrationDeadline, startDate, isFull: isFull === true };
+}
+
 export function publicPageNames(source: {
   organization: Named;
   league: Named & { sportName: string };
-  season?: Named;
+  season?: LinkedSeasonSource;
 }): PublicPageNames {
   const { organization, league, season } = source;
+  const registration = season && registrationOf(season);
   return {
     organization: { slug: organization.slug, name: organization.name },
     league: { slug: league.slug, name: league.name, sportName: league.sportName },
-    ...(season ? { season: { slug: season.slug, name: season.name } } : {}),
+    ...(season
+      ? { season: { slug: season.slug, name: season.name, ...(registration && { registration }) } }
+      : {}),
   };
 }
 
@@ -30,6 +53,19 @@ function readNamed(value: unknown): Named | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const { slug, name } = value as Record<string, unknown>;
   return isText(slug) && isText(name) ? { slug, name } : undefined;
+}
+
+function isCalendarDate(value: unknown): value is string {
+  return typeof value === 'string' && CALENDAR_DATE.test(value);
+}
+
+function readRegistration(value: unknown): SeasonRegistration | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { deadline, startDate, isFull } = value as Record<string, unknown>;
+  if (!isCalendarDate(deadline) || !isCalendarDate(startDate) || typeof isFull !== 'boolean') {
+    return undefined;
+  }
+  return { deadline, startDate, isFull };
 }
 
 /**
@@ -54,5 +90,9 @@ export function readPublicPageNames(
   if (!seasonNames || (route.seasonSlug !== undefined && seasonNames.slug !== route.seasonSlug)) {
     return undefined;
   }
-  return publicPageNames({ ...names, season: seasonNames });
+  const registration = readRegistration((season as { registration?: unknown }).registration);
+  return {
+    ...publicPageNames(names),
+    season: { ...seasonNames, ...(registration && { registration }) },
+  };
 }
