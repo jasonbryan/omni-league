@@ -392,3 +392,59 @@ test.describe('the register form on a phone and offline', () => {
     await expect(row(page, 'Week 1')).toContainText('11 places left');
   });
 });
+
+test.describe('the camp page rows when "You\'re registered" replaces Register', () => {
+  const WIDTHS = [360, 1280] as const;
+  const TOLERANCE = 0.5;
+
+  for (const width of WIDTHS) {
+    test(`keep their place and height at ${width}px`, async ({ page }, testInfo) => {
+      const coarse = testInfo.project.name === 'chromium-mobile';
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, adult } = await seed();
+      const ids = await sessionIds(tenant, ADULT.slug);
+      await signUp(page, newUser('Steady'));
+      await page.goto(adult);
+      const link = row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' });
+      await expect(link).toBeVisible();
+      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
+
+      const layout = () =>
+        page.evaluate(() => ({
+          page: document.documentElement.scrollHeight,
+          rows: [...document.querySelectorAll('#sessions li')].map((li) => {
+            const box = li.getBoundingClientRect();
+            return { top: box.top + window.scrollY, height: box.height };
+          }),
+        }));
+      const before = await layout();
+      const buttonHeight = (await link.boundingBox())!.height;
+
+      // Another tab of the same person registers, so this page changes in place.
+      const other = await page.context().newPage();
+      await other.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
+      await ageBox(other).click();
+      await registerButton(other).click();
+      await expect(other).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+      const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+      await expect(line).toHaveText("You're registered");
+      await expect(row(page, 'Week 1')).toContainText('11 places left');
+
+      const after = await layout();
+      expect(Math.abs(after.page - before.page)).toBeLessThanOrEqual(TOLERANCE);
+      expect(after.rows).toHaveLength(before.rows.length);
+      after.rows.forEach((box, index) => {
+        expect(Math.abs(box.top - before.rows[index].top), `row ${index} top`).toBeLessThanOrEqual(
+          TOLERANCE,
+        );
+        expect(
+          Math.abs(box.height - before.rows[index].height),
+          `row ${index} height`,
+        ).toBeLessThanOrEqual(TOLERANCE);
+      });
+      expect(Math.abs((await line.boundingBox())!.height - buttonHeight)).toBeLessThanOrEqual(
+        TOLERANCE,
+      );
+    });
+  }
+});
