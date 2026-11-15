@@ -164,7 +164,7 @@ describe('deleting an account removes its camp registrations', () => {
         participant: SELF,
         ageConfirmed: true,
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ data: { code: 'sessionFull' } });
     await deleteAccount(s, 'adult');
     expect((await ask())?.session?.placesLeft).toBe(1);
     await s.asNewcomer.mutation(api.campRegistrations.register, {
@@ -180,7 +180,7 @@ describe('deleting an account removes its camp registrations', () => {
     await register(s, s.sessions.s, s.users.adult);
     await expect(
       s.asAdmin.mutation(api.campSessions.remove, { campSessionId: s.sessions.s }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ data: { code: 'hasRegistrations' } });
     await deleteAccount(s, 'adult');
     await s.asAdmin.mutation(api.campSessions.remove, { campSessionId: s.sessions.s });
     expect(await s.t.run((ctx) => ctx.db.get('campSessions', s.sessions.s))).toBeNull();
@@ -188,11 +188,11 @@ describe('deleting an account removes its camp registrations', () => {
 
   test('deletes more than one batch of registrations across sessions and keeps every count right', async () => {
     const s = await setup();
-    const PER_SESSION = 40;
+    const PER_SESSION = 20;
     const sessionIds = await s.t.run(async (ctx) => {
       const camp = (await ctx.db.get('camps', s.campId))!;
       const ids: Id<'campSessions'>[] = [];
-      for (const name of ['Big 1', 'Big 2', 'Big 3']) {
+      for (const name of ['Big 1', 'Big 2', 'Big 3', 'Big 4', 'Big 5', 'Big 6']) {
         ids.push(await insertCampSession(ctx, camp, { name, ...WEEK, places: 100 }));
       }
       return ids;
@@ -203,11 +203,13 @@ describe('deleting an account removes its camp registrations', () => {
       }
       await register(s, sessionId, s.users.other);
     }
-    expect(await registrationsOf(s, s.users.guardian)).toHaveLength(PER_SESSION * 3);
+    expect(await registrationsOf(s, s.users.guardian)).toHaveLength(
+      PER_SESSION * sessionIds.length,
+    );
     await deleteAccount(s, 'guardian');
     expect(await registrationsOf(s, s.users.guardian)).toEqual([]);
     for (const sessionId of sessionIds) expect(await countOf(s, sessionId)).toBe(1);
-    expect(await registrationsOf(s, s.users.other)).toHaveLength(3);
+    expect(await registrationsOf(s, s.users.other)).toHaveLength(sessionIds.length);
   });
 
   test('completes when the session row is gone, and the registration and users rows are deleted', async () => {

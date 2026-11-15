@@ -28,7 +28,7 @@ export async function insertCampRegistration(
 
 const USER_REGISTRATIONS_BATCH = 100;
 
-/** A session that is already gone is skipped, so a stale row cannot block deleting the account. */
+/** Never throws on a gone session: it runs inside the account-deletion trigger, where a throw rolls back the deletion. */
 export async function deleteUserCampRegistrations(
   ctx: Pick<MutationCtx, 'db'>,
   userId: Id<'users'>,
