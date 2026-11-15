@@ -757,7 +757,7 @@ test.describe('public tournament page: pools', () => {
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => container.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expectNoSidewaysScroll(page);
-    // The arrow key scrolled the page too, and axe reads the target size of the sticky top bar's neighbours only once the page is back at the top.
+    // Back at the top for the screenshot; the steps above scrolled the page to the table.
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
     await screenshot(page, testInfo, 'public-pools-soccer-320');
