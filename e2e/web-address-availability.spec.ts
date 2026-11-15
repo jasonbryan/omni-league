@@ -2,9 +2,11 @@ import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
+import { chipLabel, chooseChip } from './support/chip';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
+import { PHONE, settleAfterFocusScroll } from './support/sticky-footer';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -24,6 +26,8 @@ interface Form {
   taken: string;
   nameForTaken: string;
   open(page: Page): Promise<void>;
+  complete(page: Page): Promise<void>;
+  create: string;
   container: string;
 }
 
@@ -56,6 +60,11 @@ const FORMS: Form[] = [
     taken: 'sand-4s',
     nameForTaken: 'Sand 4s',
     container: '#create-league',
+    create: 'leagues:create',
+    complete: async (page) => {
+      await chooseChip(chipLabel(page, 'Beach volleyball'));
+      await chooseChip(chipLabel(page, '4v4'));
+    },
     open: async (page) => {
       const { base } = await adminOfTenant(page);
       await page.goto(`${base}/leagues`);
@@ -66,6 +75,12 @@ const FORMS: Form[] = [
     taken: 'fall-2026',
     nameForTaken: 'Fall 2026',
     container: '#create-season',
+    create: 'seasons:create',
+    complete: async (page) => {
+      await page.locator('#start-date').fill('2027-03-01');
+      await page.locator('#end-date').fill('2027-05-15');
+      await page.locator('#registration-deadline').fill('2027-02-20');
+    },
     open: async (page) => {
       const { tenant, base } = await adminOfTenant(page);
       await seedSeasons(tenant, 'sand-4s', [
@@ -83,6 +98,37 @@ const slugGroup = (page: Page) => field(page).locator('xpath=ancestor::*[@data-s
 const nextGroup = (page: Page) => slugGroup(page).locator('xpath=following-sibling::*[1]');
 
 const STATUS_LINE = 20;
+
+// A focus scroll centres a control that is wholly out of view and only nudges one that is partly in.
+const SLUG_PEEK = 20;
+
+async function scrollSlugJustBelowViewport(page: Page) {
+  await expect(page.locator('#slug')).toBeVisible();
+  await page.evaluate((peek) => {
+    const slug = document.querySelector('#slug')!.getBoundingClientRect();
+    scrollBy(0, slug.top - (innerHeight - peek));
+  }, SLUG_PEEK);
+  const place = await page.evaluate(() => {
+    const name = document.querySelector('#name')!.getBoundingClientRect();
+    const slug = document.querySelector('#slug')!.getBoundingClientRect();
+    return {
+      nameOnScreen: name.top >= 0 && name.bottom <= innerHeight,
+      slugTop: slug.top,
+      height: innerHeight,
+    };
+  });
+  expect(place.nameOnScreen, '#name is on screen').toBe(true);
+  expect(place.slugTop, '#slug starts below the footer').toBeGreaterThan(place.height - 96);
+}
+
+// The raw rects, with no rounding, as `focusedPlace().aboveFooter` compares them.
+async function overlapWithFooter(page: Page, form: Form, shown: Locator): Promise<number> {
+  await settleAfterFocusScroll(page);
+  const footer = page.locator(`${form.container} form [data-slot="form-footer"]`);
+  const footerTop = await footer.evaluate((element) => element.getBoundingClientRect().top);
+  const shownBottom = await shown.evaluate((element) => element.getBoundingClientRect().bottom);
+  return shownBottom - footerTop;
+}
 
 async function top(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
@@ -136,6 +182,20 @@ for (const form of FORMS) {
       await expect(fieldError(page)).toHaveCount(0);
       await screenshot(page, testInfo, `208-${form.name}-available`);
       await expectAccessible(page);
+    });
+
+    test('keeps the Available status above the sticky footer when a phone keyboard moves to the field', async ({
+      page,
+      hasTouch,
+    }) => {
+      test.skip(!hasTouch, 'the sticky footer and the focus scroll are phone behaviour');
+      await form.open(page);
+      await page.setViewportSize(PHONE);
+      await scrollSlugJustBelowViewport(page);
+      await field(page).focus();
+      await field(page).pressSequentially('free-address');
+      await expect(availability(page)).toHaveText('Available');
+      expect(await overlapWithFooter(page, form, availability(page))).toBeLessThanOrEqual(0);
     });
 
     test('says a typed address is taken before any submit, and clears when it is changed', async ({
@@ -238,6 +298,28 @@ for (const form of FORMS) {
         await expect(fieldError(page)).toHaveText(FORMAT_MESSAGE);
       },
     );
+
+    test.describe('a refused Create on a phone', () => {
+      test.use({ expectedConvexErrors: [form.create] });
+
+      test('keeps the taken error above the sticky footer', async ({ page, hasTouch }) => {
+        test.skip(!hasTouch, 'the sticky footer and the focus scroll are phone behaviour');
+        await form.open(page);
+        await page.setViewportSize(PHONE);
+        await page.locator('#name').fill(form.nameForTaken);
+        await form.complete(page);
+        await expect(fieldError(page)).toHaveText(
+          `${form.taken} is already taken. Choose another web address.`,
+        );
+        await scrollSlugJustBelowViewport(page);
+        await page.locator(`${form.container} form button[type="submit"]`).click();
+        await expect(field(page)).toBeFocused();
+        await expect(fieldError(page)).toHaveText(
+          `${form.taken} is already taken. Choose another web address.`,
+        );
+        expect(await overlapWithFooter(page, form, fieldError(page))).toBeLessThanOrEqual(0);
+      });
+    });
 
     test(
       'never shows the word slug on the field in any state',

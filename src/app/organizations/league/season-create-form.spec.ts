@@ -4,9 +4,10 @@ import { MAX_SEASON_NAME_LENGTH, SEASON_MESSAGES } from '../../../../convex/lib/
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
-import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, WEB_ADDRESS_CLEARANCE } from '../admin/sticky-footer';
 import { expectStickyFooterWithFocusFix } from '../admin/testing/sticky-footer-check';
 import { openAdmin, text } from '../admin/testing/admin-harness';
+import { SeasonForm } from './season-form';
 import {
   COED,
   CREATE_SEASON,
@@ -104,6 +105,14 @@ describe('SeasonCreateForm', () => {
       const group = form().querySelector('[data-slot="field-group"]')!;
       expect(tokens(group.className)).toEqual(
         expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
+      );
+    });
+
+    it('keeps the web address status and error clear of the footer when the field takes focus', async () => {
+      await open();
+      const group = form().querySelector('[data-slot="field-group"]')!;
+      expect(tokens(group.className)).toEqual(
+        expect.arrayContaining(tokens(WEB_ADDRESS_CLEARANCE)),
       );
     });
 
@@ -275,7 +284,7 @@ describe('SeasonCreateForm', () => {
     }
 
     const expected = (errors: Errors = {}) => [
-      shapeOf('field-group', {}, STICKY_FOOTER_CLEARANCE),
+      shapeOf('field-group', {}, `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`),
       ...unit('name', errors, { type: 'text', name: 'form.name' }, 'name-description'),
       ...unit('slug', errors, { type: 'text', name: 'form.slug' }, 'slug-description'),
       ...unit('start-date', errors, { type: 'date', name: 'form.startDate' }, null),
@@ -1067,6 +1076,108 @@ describe('SeasonCreateForm', () => {
       latest().emit(false);
       await o.flush();
       expect(error('slug')).toBeNull();
+    });
+
+    it('keeps the taken message, the same element with the same text, through the flight and the refusal', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      const shown = page.querySelector('#slug-error');
+      const message = 'fall-2026 is already taken. Choose another web address.';
+      expect(error('slug')).toBe(message);
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: SEASON_MESSAGES.slugTaken('fall-2026'),
+        }),
+      );
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+    });
+
+    it('keeps Available through the flight', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      expect(text(availability())).toBe('Available');
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      expect(text(availability())).toBe('Available');
+    });
+
+    it('ignores an answer that turns taken in flight, in flight and after a success', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      expect(text(availability())).toBe('Available');
+      o.convex.calls[0].resolve({ seasonId: 'sn_new' });
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+    });
+
+    it('shows no taken message at the moment the page clears the form after a success', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      const clear = Object.getOwnPropertyDescriptor(SeasonForm.prototype, 'clear')!.value as (
+        this: SeasonForm,
+      ) => void;
+      const seen: (string | null)[] = [];
+      const spy = vi.spyOn(SeasonForm.prototype, 'clear').mockImplementation(function (
+        this: SeasonForm,
+      ) {
+        seen.push(this.errors.slug());
+        clear.call(this);
+      });
+      try {
+        o.convex.calls[0].resolve({ seasonId: 'sn_new' });
+        await o.flush();
+      } finally {
+        spy.mockRestore();
+      }
+      expect(seen).toEqual([null]);
+    });
+
+    it('shows the live answer again once a refusal other than the address ends the hold', async () => {
+      await open();
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'nameEmpty',
+          message: SEASON_MESSAGES.nameEmpty,
+        }),
+      );
+      await o.flush();
+      expect(error('slug')).toBe('fall-2026 is already taken. Choose another web address.');
     });
 
     it('does not use the word slug in any message on the field', async () => {

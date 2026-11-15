@@ -29,7 +29,7 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
-import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter, WEB_ADDRESS_CLEARANCE } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields } from './league-division-fields';
@@ -358,7 +358,7 @@ export class LeagueCreateForm {
   );
 
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
-  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly clearanceClass = `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
