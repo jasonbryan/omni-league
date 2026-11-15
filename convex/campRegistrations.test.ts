@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { CAMP_REGISTRATION_MESSAGES } from './lib/campRegistration';
+import { MAX_MINORS_PER_SESSION } from './lib/individualRegistration';
 import { insertCampSession, insertDraftCamp, insertTenant, publishCamp } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -98,6 +99,13 @@ async function setup() {
       'published',
       [{ name: 'Week 1', values: {} }],
     );
+    const mixed = await camp(
+      'Open Ages Camp',
+      'open-ages-camp',
+      { minimumAge: 14, maximumAge: 30 },
+      'published',
+      [{ name: 'Week 1', values: {} }],
+    );
     const draft = await camp(
       'Secret Draft Camp',
       'secret-draft-camp',
@@ -113,7 +121,7 @@ async function setup() {
         adultConfirmedAt: 1,
       });
     }
-    return { organization, otherOrganization, adult, youth, draft, users };
+    return { organization, otherOrganization, adult, youth, mixed, draft, users };
   });
   return {
     t,
@@ -136,6 +144,21 @@ const args = (sessionId: Id<'campSessions'>, over: { ageConfirmed?: boolean } = 
 });
 
 const week1 = (s: Setup) => s.adult.sessions['Week 1'];
+
+const MAYA = { kind: 'minor', minorName: 'Maya R.' } as const;
+
+const childArgs = (
+  sessionId: Id<'campSessions'>,
+  minorName = 'Maya R.',
+  over: { ageConfirmed?: boolean } = {},
+) => ({
+  sessionId,
+  participant: { kind: 'minor', minorName } as const,
+  ageConfirmed: true,
+  ...over,
+});
+
+const youthWeek1 = (s: Setup) => s.youth.sessions['Week 1'];
 
 async function refusal(call: Promise<unknown>) {
   const error = await call.then(
@@ -278,7 +301,7 @@ describe('campRegistrations.register', () => {
     const data = await refusal(s.alice.mutation(api.campRegistrations.register, args(week1(s))));
     expect(data).toEqual({
       code: 'alreadyRegistered',
-      message: CAMP_REGISTRATION_MESSAGES.alreadyRegistered,
+      message: CAMP_REGISTRATION_MESSAGES.alreadyRegistered(SELF),
     });
     expect((await rows(s)).registrations).toHaveLength(1);
     expect(await registeredCount(s, week1(s))).toBe(1);
@@ -323,17 +346,327 @@ describe('campRegistrations.register', () => {
     expect((await rows(s)).registrations).toEqual([]);
     expect(await registeredCount(s, week1(s))).toBe(0);
   });
+});
 
-  test('refuses a minor participant, which a later release accepts', async () => {
+describe('campRegistrations.register for a child', () => {
+  test('takes one place and writes the child under the guardian with nothing else about the child', async () => {
+    const s = await setup();
+    const { registrationId } = await s.alice.mutation(
+      api.campRegistrations.register,
+      childArgs(youthWeek1(s)),
+    );
+    const { registrations } = await rows(s);
+    expect(registrations).toEqual([
+      {
+        _id: registrationId,
+        _creationTime: registrations[0]._creationTime,
+        sessionId: youthWeek1(s),
+        campId: s.youth.campId,
+        organizationId: s.organization,
+        userId: s.users['alice'],
+        participant: MAYA,
+        participantKey: 'minor:maya r.',
+        ageConfirmedAt: NOW,
+        createdAt: NOW,
+      },
+    ]);
+    expect(Object.keys(registrations[0]).sort()).toEqual([
+      '_creationTime',
+      '_id',
+      'ageConfirmedAt',
+      'campId',
+      'createdAt',
+      'organizationId',
+      'participant',
+      'participantKey',
+      'sessionId',
+      'userId',
+    ]);
+    expect(Object.keys(registrations[0].participant).sort()).toEqual(['kind', 'minorName']);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+
+  test('stores the name trimmed and with inner spaces collapsed, keeping its case', async () => {
+    const s = await setup();
+    await s.alice.mutation(
+      api.campRegistrations.register,
+      childArgs(youthWeek1(s), '  Maya    Rivera '),
+    );
+    const { registrations } = await rows(s);
+    expect(registrations[0].participant).toEqual({ kind: 'minor', minorName: 'Maya Rivera' });
+    expect(registrations[0].participantKey).toBe('minor:maya rivera');
+  });
+
+  test('lets one guardian register several children, each taking a place', async () => {
+    const s = await setup();
+    for (const name of ['Maya R.', 'Leo R.', 'Zoe R.']) {
+      await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), name));
+    }
+    expect((await rows(s)).registrations).toHaveLength(3);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(3);
+  });
+
+  test('lets the same name register for another session and under another guardian', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    await s.alice.mutation(api.campRegistrations.register, childArgs(s.mixed.sessions['Week 1']));
+    await s.bob.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    expect(await registeredCount(s, youthWeek1(s))).toBe(2);
+    expect(await registeredCount(s, s.mixed.sessions['Week 1'])).toBe(1);
+  });
+
+  test('lets a guardian register themself and a child for a camp that admits both', async () => {
+    const s = await setup();
+    const session = s.mixed.sessions['Week 1'];
+    await s.alice.mutation(api.campRegistrations.register, args(session));
+    await s.alice.mutation(api.campRegistrations.register, childArgs(session));
+    expect(await registeredCount(s, session)).toBe(2);
+  });
+
+  test('refuses the same name again, also with another case or spacing, and writes nothing', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    for (const again of ['Maya R.', 'MAYA R.', 'maya r.', ' Maya   R. ']) {
+      const data = await refusal(
+        s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), again)),
+      );
+      expect(data).toEqual({
+        code: 'alreadyRegistered',
+        field: 'minorName',
+        message: 'Maya R. is already registered for this session.',
+      });
+    }
+    expect((await rows(s)).registrations).toHaveLength(1);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+
+  test('refuses an unticked age box under the box, naming the child, and writes nothing', async () => {
+    const s = await setup();
+    const data = await refusal(
+      s.alice.mutation(
+        api.campRegistrations.register,
+        childArgs(youthWeek1(s), 'Maya R.', { ageConfirmed: false }),
+      ),
+    );
+    expect(data).toEqual({
+      code: 'ageNotConfirmed',
+      field: 'ageConfirmed',
+      message: "Confirm Maya R.'s age to continue.",
+    });
+    expect((await rows(s)).registrations).toEqual([]);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(0);
+  });
+
+  test('refuses a child for a camp whose minimum age is 18 or more and writes nothing', async () => {
+    const s = await setup();
+    const data = await refusal(
+      s.alice.mutation(api.campRegistrations.register, childArgs(week1(s))),
+    );
+    expect(data).toEqual({
+      code: 'minorNotAllowed',
+      message: CAMP_REGISTRATION_MESSAGES.minorNotAllowed(18),
+    });
+    expect((await rows(s)).registrations).toEqual([]);
+    expect(await registeredCount(s, week1(s))).toBe(0);
+  });
+
+  test('refuses an unauthenticated caller and an identity with no users row, writing nothing', async () => {
     const s = await setup();
     await expect(
-      s.alice.mutation(api.campRegistrations.register, {
-        sessionId: week1(s),
-        participant: { kind: 'minor', minorName: 'Ava Lane' },
-        ageConfirmed: true,
-      } as never),
-    ).rejects.toThrow();
+      s.t.mutation(api.campRegistrations.register, childArgs(youthWeek1(s))),
+    ).rejects.toThrow('Sign in required');
+    await expect(
+      s.ghost.mutation(api.campRegistrations.register, childArgs(youthWeek1(s))),
+    ).rejects.toThrow('Sign in required');
     expect((await rows(s)).registrations).toEqual([]);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(0);
+  });
+
+  test('refuses an empty, an over-long, and a hidden-character name under the name and writes nothing', async () => {
+    const s = await setup();
+    const cases = [
+      ['   ', 'minorNameEmpty'],
+      ['x'.repeat(61), 'minorNameTooLong'],
+      ['Maya​R.', 'minorNameInvisible'],
+    ] as const;
+    for (const [name, code] of cases) {
+      const data = await refusal(
+        s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), name)),
+      );
+      expect(data).toMatchObject({ field: 'minorName', code });
+    }
+    expect((await rows(s)).registrations).toEqual([]);
+  });
+
+  test('accepts a name of 60 characters', async () => {
+    const s = await setup();
+    await s.alice.mutation(
+      api.campRegistrations.register,
+      childArgs(youthWeek1(s), 'x'.repeat(60)),
+    );
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+
+  test('refuses a closed, a full, and a draft session for a child and writes nothing', async () => {
+    const s = await setup();
+    const closed = s.mixed.sessions['Week 1'];
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', closed, { registrationDeadline: '2027-05-30' });
+      await ctx.db.patch('campSessions', youthWeek1(s), { places: 1, registeredCount: 1 });
+    });
+    const cases = [
+      [closed, 'registrationClosed'],
+      [youthWeek1(s), 'sessionFull'],
+      [s.draft.sessions['Week 1'], 'campNotFound'],
+    ] as const;
+    for (const [sessionId, code] of cases) {
+      expect(
+        await refusal(s.alice.mutation(api.campRegistrations.register, childArgs(sessionId))),
+      ).toMatchObject({ code });
+    }
+    expect((await rows(s)).registrations).toEqual([]);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+
+  test('refuses the 21st child of one guardian in a session', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', youthWeek1(s), { places: 50 });
+    });
+    for (let i = 1; i <= MAX_MINORS_PER_SESSION; i++) {
+      await s.alice.mutation(
+        api.campRegistrations.register,
+        childArgs(youthWeek1(s), `Child ${i}`),
+      );
+    }
+    const data = await refusal(
+      s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'One more')),
+    );
+    expect(data).toEqual({
+      code: 'minorLimit',
+      field: 'minorName',
+      message: CAMP_REGISTRATION_MESSAGES.minorLimit,
+    });
+    expect(await registeredCount(s, youthWeek1(s))).toBe(MAX_MINORS_PER_SESSION);
+    await s.bob.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'Bob child'));
+    expect(await registeredCount(s, youthWeek1(s))).toBe(MAX_MINORS_PER_SESSION + 1);
+  });
+
+  test('does not overbook when one guardian registers several children at once for the last places', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', youthWeek1(s), { places: 2 });
+    });
+    const results = await Promise.allSettled(
+      ['Maya R.', 'Leo R.', 'Zoe R.', 'Ian R.'].map((name) =>
+        s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), name)),
+      ),
+    );
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
+    expect((await rows(s)).registrations).toHaveLength(2);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(2);
+  });
+
+  test('registers the same child once when the form is pressed twice at once', async () => {
+    const s = await setup();
+    const results = await Promise.allSettled([
+      s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s))),
+      s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'maya  r.')),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect((await rows(s)).registrations).toHaveLength(1);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+
+  test('a child and a stranger racing for the last place leave one registration', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', youthWeek1(s), { places: 1 });
+    });
+    const results = await Promise.allSettled([
+      s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s))),
+      s.bob.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'Sam T.')),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(await registeredCount(s, youthWeek1(s))).toBe(1);
+  });
+});
+
+describe('campRegistrations.listMyMinorsForCamp', () => {
+  const list = (caller: Caller | Setup['t'], campSlug = 'youth-camp') =>
+    caller.query(api.campRegistrations.listMyMinorsForCamp, { orgSlug: 'org-a', campSlug });
+
+  test('lists the caller own children by session and no one else', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'Leo R.'));
+    await s.bob.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), 'Sam T.'));
+    const mine = await list(s.alice);
+    expect(mine).toHaveLength(2);
+    expect(mine).toEqual(
+      expect.arrayContaining([
+        { sessionId: youthWeek1(s), minorName: 'Maya R.' },
+        { sessionId: youthWeek1(s), minorName: 'Leo R.' },
+      ]),
+    );
+    expect(await list(s.bob)).toEqual([{ sessionId: youthWeek1(s), minorName: 'Sam T.' }]);
+    expect(await list(s.carol)).toEqual([]);
+  });
+
+  test('lists a session’s children in the order they were registered, not by name', async () => {
+    const s = await setup();
+    for (const name of ['Maya R.', 'Leo R.', 'Ana R.']) {
+      await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s), name));
+    }
+    const names = (await list(s.alice)).map((row) => row.minorName);
+    expect(names).toEqual(['Maya R.', 'Leo R.', 'Ana R.']);
+  });
+
+  test('leaves out the guardian own registration', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, args(s.mixed.sessions['Week 1']));
+    expect(await list(s.alice, 'open-ages-camp')).toEqual([]);
+  });
+
+  test('is empty for a signed-out caller, an unknown camp, and a draft camp', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    expect(await list(s.t)).toEqual([]);
+    expect(await list(s.alice, 'no-such-camp')).toEqual([]);
+    expect(await list(s.alice, 'secret-draft-camp')).toEqual([]);
+  });
+});
+
+describe('a registered child on the public reads', () => {
+  test('the public camp page and the register query carry no child name or guardian', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(youthWeek1(s)));
+    const page = await s.t.query(api.camps.getPublicPage, {
+      orgSlug: 'org-a',
+      campSlug: 'youth-camp',
+    });
+    const asked = await s.bob.query(api.campRegistrations.getForRegistration, {
+      orgSlug: 'org-a',
+      campSlug: 'youth-camp',
+      sessionId: youthWeek1(s),
+    });
+    for (const body of [JSON.stringify(page), JSON.stringify(asked)]) {
+      for (const secret of ['Maya', s.users['alice'], 'minor', 'participant']) {
+        expect(body).not.toContain(secret);
+      }
+    }
+    expect(page?.sessions[0].placesLeft).toBe(11);
+  });
+
+  test('the register query does not say a guardian who registered only a child is registered', async () => {
+    const s = await setup();
+    await s.alice.mutation(api.campRegistrations.register, childArgs(s.mixed.sessions['Week 1']));
+    const asked = await s.alice.query(api.campRegistrations.getForRegistration, {
+      orgSlug: 'org-a',
+      campSlug: 'open-ages-camp',
+      sessionId: s.mixed.sessions['Week 1'],
+    });
+    expect(asked?.registered).toBe(false);
   });
 });
 

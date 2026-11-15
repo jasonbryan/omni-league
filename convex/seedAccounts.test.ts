@@ -311,7 +311,7 @@ describe('seed:demo accounts: a new deployment', () => {
         teams: 28,
         teamInvites: 4,
         freeAgents: 6,
-        campRegistrations: 1,
+        campRegistrations: 2,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -977,21 +977,23 @@ describe('seed:demo accounts: the demo free agents', () => {
 
 describe('seed:demo accounts: camp registration', () => {
   const ADULT_CAMP = { orgSlug: GULF_COAST, campSlug: 'adult-beach-skills-camp' };
+  const JUNIOR_CAMP = { orgSlug: GULF_COAST, campSlug: 'junior-beach-volleyball-camp' };
 
   test(
-    'player@ holds one place in Week 1 of the Adult Beach Skills Camp, which the camp page lists for player@ only, and a rerun adds none',
+    'player@ holds one place in Week 1 of the Adult Beach Skills Camp and guardian@ holds Maya R. in Week 1 of the Junior Beach Volleyball Camp, each listed for that account only, and a rerun adds none',
     async () => {
       const t = setup();
-      expect((await run(t)).campRegistrations).toBe(1);
-      const { rows, sessions } = await t.run(async (ctx) => ({
+      expect((await run(t)).campRegistrations).toBe(2);
+      const { rows, sessions, users } = await t.run(async (ctx) => ({
         rows: await ctx.db.query('campRegistrations').collect(),
         sessions: await ctx.db.query('campSessions').collect(),
+        users: await ctx.db.query('users').collect(),
       }));
+      expect(rows).toHaveLength(2);
+
       const week = sessions.find((session) => session.places === 12)!;
       expect(week).toMatchObject({ name: 'Week 1', registeredCount: 1 });
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        sessionId: week._id,
+      expect(rows.find((row) => row.sessionId === week._id)).toMatchObject({
         participant: { kind: 'self' },
         participantKey: 'self',
       });
@@ -1010,8 +1012,28 @@ describe('seed:demo accounts: camp registration', () => {
         )?.registered,
       ).toBe(true);
 
+      const junior = sessions.find(
+        (session) => session.name === 'Week 1' && session.places === 20,
+      )!;
+      const guardianRow = rows.find((row) => row.sessionId === junior._id)!;
+      expect(junior.registeredCount).toBe(1);
+      expect(guardianRow).toMatchObject({
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+        userId: users.find((user) => user.name === 'Demo Guardian')!._id,
+      });
+      expect(typeof guardianRow.ageConfirmedAt).toBe('number');
+      const guardian = await as(t, EMAILS.guardian);
+      expect(await guardian.query(api.campRegistrations.listMyMinorsForCamp, JUNIOR_CAMP)).toEqual([
+        { sessionId: junior._id, minorName: 'Maya R.' },
+      ]);
+      expect(await guardian.query(api.campRegistrations.listMineForCamp, JUNIOR_CAMP)).toEqual([]);
+      expect(await player.query(api.campRegistrations.listMyMinorsForCamp, JUNIOR_CAMP)).toEqual(
+        [],
+      );
+
       expect((await run(t)).campRegistrations).toBe(0);
-      expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(1);
+      expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(2);
     },
     SLOW,
   );

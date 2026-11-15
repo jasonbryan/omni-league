@@ -1,6 +1,6 @@
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../../convex/_generated/api';
-import { adultMayRegister } from '../../../../convex/lib/campRegistration';
+import { participantsOffered } from '../../../../convex/lib/individualRegistration';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 
@@ -17,11 +17,19 @@ export type RegisterCampState =
   | 'no-session'
   | 'registered'
   | 'adult-not-allowed'
+  | 'minor-not-allowed'
   | 'closed'
   | 'full'
   | 'form';
 
-/** "Registered" comes before the rest, so a person holding a place still sees it after the deadline or once the session is full. */
+/** Who the form offers: the guardian cannot register themself twice, so a held place leaves only the child. */
+export function registrationOptions(
+  answer: NonNullable<CampRegistrationAnswer>,
+): ('self' | 'minor')[] {
+  return participantsOffered(answer).filter((kind) => kind !== 'self' || !answer.registered);
+}
+
+/** "Registered" comes before the rest when nothing else can be registered, so a person holding a place still sees it after the deadline or once the session is full. */
 export function registerCampState({
   answer,
   signedIn,
@@ -36,8 +44,8 @@ export function registerCampState({
   if (!signedIn) return 'signed-out';
   const { session } = answer;
   if (session === null) return 'no-session';
-  if (answer.registered) return 'registered';
-  if (!adultMayRegister(answer.maximumAge)) return 'adult-not-allowed';
+  if (registrationOptions(answer).length === 0)
+    return answer.registered ? 'registered' : 'adult-not-allowed';
   if (!registrationIsOpen(session, nowMs)) return 'closed';
   return session.placesLeft === 0 ? 'full' : 'form';
 }

@@ -26,10 +26,11 @@ import {
 import { ConvexError } from 'convex/values';
 import { combineLatest, map } from 'rxjs';
 import {
-  CAMP_REGISTRATION_MESSAGES,
   SELF_PARTICIPANT,
   ageConfirmationLabel,
-} from '../../../../convex/lib/campRegistration';
+  ageNotConfirmedMessage,
+  type Participant,
+} from '../../../../convex/lib/individualRegistration';
 import { AuthService } from '../../core/auth/auth.service';
 import { SIGN_IN_PATH } from '../../core/auth/guards';
 import {
@@ -45,11 +46,14 @@ import { injectNow } from '../../core/now';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
 import { Shell } from '../../shell';
+import { MinorNameErrorText } from '../../teams/minor-name-error-text';
+import { MinorNameForm } from '../../teams/minor-name-form';
 import { RegisterSkeleton } from '../../teams/register-card';
 import { HlmAlertImports } from '../../ui/alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../../ui/button/button-classes';
 import { Checkbox } from '../../ui/checkbox';
 import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
+import { HlmInputImports } from '../../ui/input';
 import { HlmRadioGroupImports } from '../../ui/radio-group';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from '../admin/admin-alert';
@@ -59,7 +63,12 @@ import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { publicCampPath } from '../public-camp/public-camp-path';
 import { RegisterCampCard } from './register-camp-card';
 import { registerCampPath } from './register-camp-path';
-import { campClosedLine, registerCampState, type RegisterCampState } from './register-camp-state';
+import {
+  campClosedLine,
+  registerCampState,
+  registrationOptions,
+  type RegisterCampState,
+} from './register-camp-state';
 
 export const REGISTER_CAMP_MESSAGES = {
   failedTitle: 'You could not be registered.',
@@ -76,10 +85,18 @@ export const REGISTER_CAMP_MESSAGES = {
   adultNotAllowedTitle: (minimumAge: number, maximumAge: number) =>
     `This camp is for ages ${minimumAge} to ${maximumAge}.`,
   adultNotAllowedDescription: 'An adult cannot register themself for it.',
+  minorNotAllowedTitle: (minimumAge: number) => `This camp is for ages ${minimumAge} and over.`,
+  minorNotAllowedDescription: 'A child cannot be registered for it.',
+  childNameDescription: 'Only the name is stored. It is never shown on public pages.',
 } as const;
 
+type Attending = 'self' | 'minor';
+
+const ATTENDING_LABELS: Readonly<Record<Attending, string>> = { self: 'Me', minor: 'My child' };
+
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'full' | 'registered' | 'adult-not-allowed' | 'no-session';
+type Refusal =
+  'closed' | 'full' | 'registered' | 'adult-not-allowed' | 'minor-not-allowed' | 'no-session';
 
 type FormAlert = 'offline' | 'failed';
 
@@ -96,6 +113,7 @@ const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   sessionFull: 'full',
   alreadyRegistered: 'registered',
   adultNotAllowed: 'adult-not-allowed',
+  minorNotAllowed: 'minor-not-allowed',
   campNotFound: 'no-session',
 };
 
@@ -115,8 +133,10 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
     HlmAlertImports,
     HlmFieldImports,
     HlmFieldSetImports,
+    HlmInputImports,
     HlmRadioGroupImports,
     HlmSpinner,
+    MinorNameErrorText,
     NgIcon,
     NotFoundView,
     RegisterCampCard,
@@ -209,18 +229,62 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       <hlm-radio-group
                         name="participant"
                         aria-labelledby="participant-legend"
-                        value="self"
+                        [value]="attending()"
+                        (valueChange)="choose($event)"
                       >
-                        <div hlmField orientation="horizontal">
-                          <hlm-radio inputId="participant-self" value="self">
-                            <hlm-radio-indicator />
-                          </hlm-radio>
-                          <div hlmFieldContent>
-                            <label hlmFieldLabel for="participant-self">Me</label>
+                        @for (option of options(); track option) {
+                          <div hlmField orientation="horizontal">
+                            <hlm-radio [inputId]="'participant-' + option" [value]="option">
+                              <hlm-radio-indicator />
+                            </hlm-radio>
+                            <div hlmFieldContent>
+                              <label hlmFieldLabel [for]="'participant-' + option">{{
+                                attendingLabels[option]
+                              }}</label>
+                            </div>
                           </div>
-                        </div>
+                        }
                       </hlm-radio-group>
                     </fieldset>
+                    @if (attending() === 'minor') {
+                      <div
+                        hlmField
+                        [attr.data-matches-spartan-invalid]="child.error() ? 'true' : null"
+                        [attr.data-invalid]="child.error() ? 'true' : null"
+                      >
+                        <label hlmFieldLabel for="minor-name">Child's name</label>
+                        <input
+                          hlmInput
+                          #nameInput
+                          id="minor-name"
+                          type="text"
+                          autocomplete="off"
+                          [formField]="child.fields.name"
+                          (blur)="child.left()"
+                          [attr.aria-describedby]="
+                            child.error()
+                              ? 'minor-name-description minor-name-error'
+                              : 'minor-name-description'
+                          "
+                          [attr.aria-invalid]="child.error() ? 'true' : null"
+                          [attr.data-invalid]="child.error() ? 'true' : null"
+                          [attr.data-matches-spartan-invalid]="child.error() ? 'true' : null"
+                        />
+                        <p hlmFieldDescription id="minor-name-description">
+                          {{ messages.childNameDescription }}
+                        </p>
+                        @if (child.error(); as nameError) {
+                          <div hlmFieldError id="minor-name-error">
+                            <ng-icon
+                              name="lucideCircleAlert"
+                              class="mt-0.5 shrink-0 text-base"
+                              aria-hidden="true"
+                            />
+                            <app-minor-name-error-text [error]="nameError" />
+                          </div>
+                        }
+                      </div>
+                    }
                     <div
                       hlmField
                       orientation="horizontal"
@@ -281,9 +345,10 @@ export class RegisterCampPage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly title = inject(Title);
-  private readonly registerSelf = injectMutation(api.campRegistrations.register);
+  private readonly register = injectMutation(api.campRegistrations.register);
 
   protected readonly messages = REGISTER_CAMP_MESSAGES;
+  protected readonly attendingLabels = ATTENDING_LABELS;
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
@@ -369,6 +434,11 @@ export class RegisterCampPage {
         title: messages.adultNotAllowedTitle(camp.minimumAge, camp.maximumAge),
         description: messages.adultNotAllowedDescription,
       }),
+      'minor-not-allowed': () => ({
+        icon: 'lucideUsers',
+        title: messages.minorNotAllowedTitle(camp.minimumAge),
+        description: messages.minorNotAllowedDescription,
+      }),
       closed: () => ({
         icon: 'lucideCalendarX',
         title: messages.closedTitle,
@@ -383,20 +453,45 @@ export class RegisterCampPage {
     return state in byState ? byState[state as NoticeState]() : null;
   });
 
+  protected readonly options = computed<Attending[]>(() => {
+    const camp = this.camp();
+    return camp ? registrationOptions(camp) : [];
+  });
+  private readonly chosen = signal<Attending | null>(null);
+  /** The first offered option until the guardian chooses, so a camp with one option needs no choice. */
+  protected readonly attending = computed<Attending>(() => {
+    const chosen = this.chosen();
+    const options = this.options();
+    return chosen !== null && options.includes(chosen) ? chosen : (options[0] ?? 'self');
+  });
+  protected readonly child = new MinorNameForm();
+  private readonly participant = computed<Participant>(() =>
+    this.attending() === 'self'
+      ? SELF_PARTICIPANT
+      : { kind: 'minor', minorName: this.child.model().name },
+  );
+
   protected readonly ageLabel = computed(() => {
     const camp = this.camp();
     const session = this.session();
     return camp && session
-      ? ageConfirmationLabel(camp.minimumAge, camp.maximumAge, session.startDate)
+      ? ageConfirmationLabel(
+          this.participant(),
+          camp.minimumAge,
+          camp.maximumAge,
+          session.startDate,
+        )
       : '';
   });
 
   private readonly model = signal({ ageConfirmed: false });
   protected readonly fields = form(this.model, (path) => {
-    required(path.ageConfirmed, { message: CAMP_REGISTRATION_MESSAGES.ageNotConfirmed });
+    required(path.ageConfirmed);
   });
-  private readonly clientError = computed(
-    () => this.fields.ageConfirmed().errors()[0]?.message ?? null,
+  private readonly clientError = computed(() =>
+    this.fields.ageConfirmed().errors().length > 0
+      ? ageNotConfirmedMessage(this.participant())
+      : null,
   );
   protected readonly shown = new ShownUntilValid(
     () => this.clientError() !== null,
@@ -414,6 +509,7 @@ export class RegisterCampPage {
   protected readonly formAlert = signal<FormAlert | null>(null);
 
   private readonly ageBox = viewChild(Checkbox);
+  private readonly nameInput = viewChild<ElementRef<HTMLInputElement>>('nameInput');
   private readonly formAlertBox = viewChild<AdminAlert | AdminOfflineAlert>('formAlertBox');
   private readonly cardAlert = viewChild<ElementRef<HTMLElement>>('cardAlert');
   private readonly focusCardAlert = signal(false);
@@ -448,9 +544,15 @@ export class RegisterCampPage {
     const session = this.session();
     if (this.submitting() || !session) return;
     this.formAlert.set(null);
-    const invalid = this.clientError() !== null;
+    const participant = this.participant();
+    const minorName = participant.kind === 'minor' ? this.child.check() : null;
+    const invalidAge = this.clientError() !== null;
     this.shown.submitted();
-    if (invalid) {
+    if (participant.kind === 'minor' && minorName === null) {
+      this.focusNameAfterRender();
+      return;
+    }
+    if (invalidAge) {
       this.focusAgeBoxAfterRender();
       return;
     }
@@ -460,9 +562,9 @@ export class RegisterCampPage {
     }
     this.submitting.set(true);
     try {
-      await this.registerSelf.run({
+      await this.register.run({
         sessionId: session.sessionId,
-        participant: SELF_PARTICIPANT,
+        participant: minorName === null ? participant : { kind: 'minor', minorName },
         ageConfirmed: this.model().ageConfirmed,
       });
     } catch (failure) {
@@ -475,6 +577,14 @@ export class RegisterCampPage {
     this.submitting.set(false);
   }
 
+  protected choose(kind: string): void {
+    if (kind !== 'self' && kind !== 'minor') return;
+    this.chosen.set(kind);
+    // The ticked box confirmed the other participant's statement.
+    this.model.set({ ageConfirmed: false });
+    this.fields().reset();
+  }
+
   private showFailure(failure: unknown): void {
     if (failure instanceof ConvexOfflineError) {
       this.showAlert('offline');
@@ -484,6 +594,11 @@ export class RegisterCampPage {
     if (data?.['field'] === 'ageConfirmed' && typeof data['message'] === 'string') {
       this.serverError.set(data['message']);
       this.focusAgeBoxAfterRender();
+      return;
+    }
+    if (data?.['field'] === 'minorName' && typeof data['message'] === 'string') {
+      this.child.showRefusal({ kind: 'text', text: data['message'] });
+      this.focusNameAfterRender();
       return;
     }
     const code = data?.['code'];
@@ -499,6 +614,10 @@ export class RegisterCampPage {
   private showAlert(alert: FormAlert): void {
     this.formAlert.set(alert);
     afterNextRender(() => this.formAlertBox()?.focus(), { injector: this.injector });
+  }
+
+  private focusNameAfterRender(): void {
+    afterNextRender(() => this.nameInput()?.nativeElement.focus(), { injector: this.injector });
   }
 
   private focusAgeBoxAfterRender(): void {

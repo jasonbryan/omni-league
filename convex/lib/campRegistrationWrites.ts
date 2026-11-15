@@ -1,6 +1,6 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
-import { participantKey, type CampParticipant } from './campRegistration';
+import { participantKey, type Participant } from './individualRegistration';
 
 /** The caller has checked access, the rules, and that the session has a place; the counter moves with the row. */
 export async function insertCampRegistration(
@@ -8,7 +8,7 @@ export async function insertCampRegistration(
   session: Doc<'campSessions'>,
   registration: {
     userId: Id<'users'>;
-    participant: CampParticipant;
+    participant: Participant;
     ageConfirmedAt?: number;
   },
 ): Promise<Id<'campRegistrations'>> {

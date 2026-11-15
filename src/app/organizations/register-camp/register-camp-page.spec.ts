@@ -43,6 +43,7 @@ const OPEN = {
 const REGISTERED = { ...OPEN, registered: true };
 const FULL = { ...OPEN, session: { ...SESSION, placesLeft: 0 } };
 const YOUTH = { ...OPEN, minimumAge: 9, maximumAge: 17 };
+const BOTH = { ...OPEN, minimumAge: 14, maximumAge: 30 };
 
 const text = (element: Element | null | undefined) =>
   element?.textContent?.replace(/\s+/g, ' ').trim();
@@ -214,16 +215,6 @@ describe('RegisterCampPage', () => {
       expect(page.querySelector('form')).toBeNull();
     });
 
-    it('a camp whose maximum age is 17: says an adult cannot register themself, and no form', async () => {
-      await open();
-      await answer(YOUTH);
-      const alert = page.querySelector('[data-slot="alert"]');
-      expect(alertText(alert)).toBe(
-        'This camp is for ages 9 to 17. An adult cannot register themself for it.',
-      );
-      expect(page.querySelector('form')).toBeNull();
-    });
-
     it('a camp with one age labels the fact Age and gives the number', async () => {
       await open();
       await answer({ ...YOUTH, minimumAge: 12, maximumAge: 12 });
@@ -251,6 +242,257 @@ describe('RegisterCampPage', () => {
         ['Registration closes', 'Jun 28, 2027'],
       ]);
       expect(document.title).toBe('Register for Week 1 | Adult Beach Skills Camp | Omni League');
+    });
+  });
+
+  describe('registering a child', () => {
+    const radios = () => [...page.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    const nameInput = () => page.querySelector<HTMLInputElement>('#minor-name');
+    const nameError = () => text(page.querySelector('#minor-name-error'));
+    const ageLabel = () => text(page.querySelector('label[for="age-confirmed"]'));
+
+    async function typeName(value: string) {
+      const input = nameInput()!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await flush();
+    }
+
+    async function leaveName() {
+      nameInput()!.dispatchEvent(new Event('blur'));
+      await flush();
+    }
+
+    async function chooseChild() {
+      page.querySelector<HTMLInputElement>('#participant-minor')!.click();
+      await flush();
+    }
+
+    describe('on a camp for ages under 18', () => {
+      beforeEach(async () => {
+        await open();
+        await answer(YOUTH);
+      });
+
+      it('offers only My child, chosen, with the form for the child instead of the adult notice', () => {
+        expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([['minor', true]]);
+        expect(text(page.querySelector('label[for="participant-minor"]'))).toBe('My child');
+        expect(page.querySelector('label[for="participant-self"]')).toBeNull();
+        expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+        expect(nameInput()).not.toBeNull();
+      });
+
+      it('labels the name and says what is stored', () => {
+        expect(text(page.querySelector('label[for="minor-name"]'))).toBe("Child's name");
+        expect(text(page.querySelector('#minor-name-description'))).toBe(
+          'Only the name is stored. It is never shown on public pages.',
+        );
+        expect(nameInput()?.getAttribute('aria-describedby')).toBe('minor-name-description');
+      });
+
+      it('words the age box for the child, saying My child before a name is typed and the name after', async () => {
+        expect(ageLabel()).toBe('My child is 9 to 17 years old on Jul 5, 2027.');
+        await typeName('  Maya   R. ');
+        expect(ageLabel()).toBe('Maya R. is 9 to 17 years old on Jul 5, 2027.');
+      });
+
+      it('checks the name on leaving it, not on the first keystroke, then as it is typed', async () => {
+        await typeName('M');
+        expect(page.querySelector('#minor-name-error')).toBeNull();
+        await typeName('');
+        await leaveName();
+        expect(nameError()).toBe('Enter the minor’s name.');
+        expect(nameInput()?.getAttribute('aria-invalid')).toBe('true');
+        expect(nameInput()?.getAttribute('aria-describedby')).toBe(
+          'minor-name-description minor-name-error',
+        );
+        await typeName('Maya R.');
+        expect(page.querySelector('#minor-name-error')).toBeNull();
+      });
+
+      it('refuses a name over 60 characters under the name', async () => {
+        await typeName('x'.repeat(61));
+        await leaveName();
+        expect(nameError()).toBe('Use 60 characters or fewer. This name has 61.');
+      });
+
+      it('an empty submit shows both errors, focuses the name first, and sends nothing', async () => {
+        await submit();
+        expect(nameError()).toBe('Enter the minor’s name.');
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm your child's age to continue.",
+        );
+        expect(document.activeElement).toBe(nameInput());
+        expect(registers()).toEqual([]);
+      });
+
+      it('an unticked submit with a name shows "Confirm <name>\'s age to continue." under the box and focuses it', async () => {
+        await typeName('Maya R.');
+        await submit();
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm Maya R.'s age to continue.",
+        );
+        expect(document.activeElement).toBe(ageBox());
+        expect(registers()).toEqual([]);
+      });
+
+      it('leaving a ticked then cleared box names the child in the error', async () => {
+        await typeName('Maya R.');
+        await tick();
+        await tick();
+        ageBox()!.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm Maya R.'s age to continue.",
+        );
+      });
+
+      it('sends the child under the guardian, with the name trimmed and its spaces collapsed, then opens the camp page', async () => {
+        await typeName('  Maya   R. ');
+        await tick();
+        await submit();
+        expect(registers().map((call) => call.args)).toEqual([
+          {
+            sessionId: SESSION_ID,
+            participant: { kind: 'minor', minorName: 'Maya R.' },
+            ageConfirmed: true,
+          },
+        ]);
+        expect(text(page.querySelector('button[type="submit"]'))).toBe('Registering…');
+        registers()[0].resolve({ registrationId: 'reg_1' });
+        await flush();
+        expect(url()).toBe(CAMP_PATH);
+      });
+
+      it.each([
+        [
+          'the name is already registered',
+          {
+            code: 'alreadyRegistered',
+            field: 'minorName',
+            message: 'Maya R. is already registered for this session.',
+          },
+        ],
+        [
+          'the guardian has registered the most children',
+          { code: 'minorLimit', field: 'minorName', message: 'You have registered 20 children.' },
+        ],
+      ])(
+        'the server refusing because %s shows under the name, focuses it, and keeps the input',
+        async (_label, data) => {
+          await typeName('Maya R.');
+          await tick();
+          await submit();
+          registers()[0].reject(new ConvexError(data));
+          await flush();
+          expect(nameError()).toBe(data.message);
+          expect(document.activeElement).toBe(nameInput());
+          expect(nameInput()?.value).toBe('Maya R.');
+          expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+          expect(page.querySelector('form')).not.toBeNull();
+        },
+      );
+
+      it('the server’s age refusal names the child under the box', async () => {
+        await typeName('Maya R.');
+        await tick();
+        await submit();
+        registers()[0].reject(
+          new ConvexError({
+            code: 'ageNotConfirmed',
+            field: 'ageConfirmed',
+            message: "Confirm Maya R.'s age to continue.",
+          }),
+        );
+        await flush();
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm Maya R.'s age to continue.",
+        );
+        expect(document.activeElement).toBe(ageBox());
+      });
+
+      it('a camp that turned out to be for adults shows its card when the server refuses the child', async () => {
+        await typeName('Maya R.');
+        await tick();
+        await submit();
+        registers()[0].reject(new ConvexError({ code: 'minorNotAllowed', message: 'x' }));
+        await flush();
+        const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+        expect(alert?.getAttribute('role')).toBe('alert');
+        expect(alertText(alert)).toBe(
+          'This camp is for ages 9 and over. A child cannot be registered for it.',
+        );
+        expect(page.querySelector('form')).toBeNull();
+        expect(document.activeElement).toBe(alert);
+      });
+
+      it('any other failure keeps the name and the ticked box', async () => {
+        await typeName('Maya R.');
+        await tick();
+        await submit();
+        registers()[0].reject(new Error('network'));
+        await flush();
+        expect(text(page.querySelector('form [data-slot="alert"]'))).toContain(
+          'You could not be registered.',
+        );
+        expect(nameInput()?.value).toBe('Maya R.');
+        expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      });
+    });
+
+    describe('on a camp that admits an adult and a child', () => {
+      beforeEach(async () => {
+        await open();
+        await answer(BOTH);
+      });
+
+      it('offers Me and My child, with Me chosen and no name field', () => {
+        expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([
+          ['self', true],
+          ['minor', false],
+        ]);
+        expect(nameInput()).toBeNull();
+        expect(ageLabel()).toBe('I am 14 to 30 years old on Jul 5, 2027');
+      });
+
+      it('choosing My child shows the name and rewords the box, and choosing Me takes them away', async () => {
+        await chooseChild();
+        expect(nameInput()).not.toBeNull();
+        expect(ageLabel()).toBe('My child is 14 to 30 years old on Jul 5, 2027.');
+        page.querySelector<HTMLInputElement>('#participant-self')!.click();
+        await flush();
+        expect(nameInput()).toBeNull();
+        expect(ageLabel()).toBe('I am 14 to 30 years old on Jul 5, 2027');
+      });
+
+      it('changing who is attending clears the ticked box, which confirmed another statement', async () => {
+        await tick();
+        expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+        await chooseChild();
+        expect(ageBox()?.getAttribute('aria-checked')).toBe('false');
+        expect(page.querySelector('#age-confirmed-error')).toBeNull();
+      });
+
+      it('sending Me sends the self participant without a name', async () => {
+        await chooseChild();
+        page.querySelector<HTMLInputElement>('#participant-self')!.click();
+        await flush();
+        await tick();
+        await submit();
+        expect(registers().map((call) => call.args)).toEqual([
+          { sessionId: SESSION_ID, participant: { kind: 'self' }, ageConfirmed: true },
+        ]);
+      });
+    });
+
+    describe('for a guardian who already holds their own place', () => {
+      it('offers only My child, chosen', async () => {
+        await open();
+        await answer({ ...BOTH, registered: true });
+        expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([['minor', true]]);
+        expect(nameInput()).not.toBeNull();
+        expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+      });
     });
   });
 

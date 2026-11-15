@@ -11,6 +11,7 @@ import {
 } from '@ng-icons/lucide';
 import { campAgesLabel } from '../../../../convex/lib/campInput';
 import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
+import { minorMayRegister } from '../../../../convex/lib/individualRegistration';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
@@ -130,7 +131,7 @@ type PublicCampSession = PublicCampData['sessions'][number];
                       }}</time></span
                     >
                   </p>
-                  @if (session.registered) {
+                  @for (line of session.registeredLines; track line) {
                     <p
                       data-slot="session-registered"
                       class="mt-3 flex h-9 items-center gap-1.5 text-sm font-medium pointer-coarse:min-h-11"
@@ -139,18 +140,17 @@ type PublicCampSession = PublicCampData['sessions'][number];
                         name="lucideCircleCheck"
                         class="shrink-0 text-base"
                         aria-hidden="true"
-                      />You're registered
+                      />{{ line }}
                     </p>
-                  } @else if (session.sessionId; as sessionId) {
-                    @if (session.open) {
-                      <a
-                        [routerLink]="registerPath()"
-                        [queryParams]="{ session: sessionId }"
-                        data-slot="button"
-                        [class]="registerButton + ' mt-3'"
-                        >Register<span class="sr-only"> for {{ session.name }}</span></a
-                      >
-                    }
+                  }
+                  @if (session.canRegister; as sessionId) {
+                    <a
+                      [routerLink]="registerPath()"
+                      [queryParams]="{ session: sessionId }"
+                      data-slot="button"
+                      [class]="registerButton + ' mt-3'"
+                      >Register<span class="sr-only"> for {{ session.name }}</span></a
+                    >
                   }
                 </li>
               }
@@ -198,6 +198,7 @@ export class PublicCampContent {
   /** The viewer's clock, so each session's status follows its deadline after hydration. */
   readonly now = input.required<number>();
   readonly registeredSessionIds = input<readonly string[]>([]);
+  readonly registeredMinors = input<readonly { sessionId: string; minorName: string }[]>([]);
 
   protected readonly registerButton = OUTLINE_BUTTON;
   protected readonly fact = FACT;
@@ -206,18 +207,31 @@ export class PublicCampContent {
   protected readonly ages = computed(() =>
     campAgesLabel(this.camp().minimumAge, this.camp().maximumAge),
   );
-  protected readonly sessions = computed(() =>
-    this.camp().sessions.map((session: PublicCampSession) => ({
-      ...session,
-      status: campSessionStatus(session, this.now()),
-      dates: seasonDateParts(session.startDate, session.endDate),
-      times: campSessionTimes(session.dailyStartTime, session.dailyEndTime),
-      closes: formatCalendarDate(session.registrationDeadline),
-      registered:
-        session.sessionId !== undefined && this.registeredSessionIds().includes(session.sessionId),
-      open: session.placesLeft > 0 && registrationIsOpen(session, this.now()),
-    })),
-  );
+  protected readonly sessions = computed(() => {
+    const childrenMayRegister = minorMayRegister(this.camp().minimumAge);
+    return this.camp().sessions.map((session: PublicCampSession) => {
+      const { sessionId } = session;
+      const registered = sessionId !== undefined && this.registeredSessionIds().includes(sessionId);
+      const children = this.registeredMinors().filter((minor) => minor.sessionId === sessionId);
+      const open = session.placesLeft > 0 && registrationIsOpen(session, this.now());
+      return {
+        ...session,
+        status: campSessionStatus(session, this.now()),
+        dates: seasonDateParts(session.startDate, session.endDate),
+        times: campSessionTimes(session.dailyStartTime, session.dailyEndTime),
+        closes: formatCalendarDate(session.registrationDeadline),
+        registeredLines: [
+          ...(registered ? ["You're registered"] : []),
+          ...children.map((minor) => `${minor.minorName} is registered`),
+        ],
+        // A held place takes away only the guardian's own registration, so the link stays where a child may still be added.
+        canRegister:
+          open && sessionId !== undefined && (!registered || childrenMayRegister)
+            ? sessionId
+            : null,
+      };
+    });
+  });
   protected readonly registerPath = computed(() =>
     registerCampPath(this.camp().organization.slug, this.camp().slug),
   );

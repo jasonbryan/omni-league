@@ -50,6 +50,7 @@ function description(camp: PublicCampData): string {
           [savedAt]="savedAt()"
           [now]="now()"
           [registeredSessionIds]="registeredSessionIds()"
+          [registeredMinors]="registeredMinors()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -94,6 +95,12 @@ export class PublicCampPage {
       : skipToken,
   );
   protected readonly registeredSessionIds = computed(() => this.registrations.value() ?? []);
+  private readonly minors = injectQuery(api.campRegistrations.listMyMinorsForCamp, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
+      : skipToken,
+  );
+  protected readonly registeredMinors = computed(() => this.minors.value() ?? []);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

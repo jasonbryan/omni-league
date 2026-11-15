@@ -27,6 +27,14 @@ const YOUTH = {
   maximumAge: 17,
 };
 
+const MIXED = {
+  name: 'Open Ages Camp',
+  slug: 'open-ages-camp',
+  locations: [PLACE],
+  minimumAge: 14,
+  maximumAge: 30,
+};
+
 const week = (name: string, startInDays: number, deadlineInDays: number, places = 12) => ({
   name,
   startDate: dateFromToday(startInDays),
@@ -54,6 +62,10 @@ async function seed() {
     ...YOUTH,
     sessions: [week('Week 1', 30, 23)],
   });
+  const mixed = await seedPublishedCamp(tenant, {
+    ...MIXED,
+    sessions: [week('Week 1', 30, 23)],
+  });
   const draft = await seedPublishedCamp(tenant, {
     ...ADULT,
     name: 'Secret Draft Camp',
@@ -61,7 +73,7 @@ async function seed() {
     sessions: [week('Week 1', 30, 23)],
     status: 'draft',
   });
-  return { tenant, adult, youth, draft };
+  return { tenant, adult, youth, mixed, draft };
 }
 
 async function sessionIds(tenant: Tenant, campSlug: string): Promise<Record<string, string>> {
@@ -77,7 +89,9 @@ const registerPath = (tenant: Tenant, campSlug: string, sessionId: string) =>
 
 const row = (page: Page, name: string) =>
   page.locator('#sessions li').filter({ has: page.getByRole('heading', { name, exact: true }) });
-const ageBox = (page: Page) => page.getByRole('checkbox', { name: /^I am \d+ to \d+ years old/ });
+const ageBox = (page: Page) =>
+  page.getByRole('checkbox', { name: /^(I am|.+ is) \d+ to \d+ years old/ });
+const childName = (page: Page) => page.getByRole('textbox', { name: "Child's name" });
 const registerButton = (page: Page) => page.getByRole('button', { name: 'Register', exact: true });
 const alert = (page: Page) => page.locator('main [data-slot="alert"]');
 
@@ -199,20 +213,6 @@ test.describe('register for a camp session', () => {
     await screenshot(page, testInfo, '355-register-unknown-session');
   });
 
-  test('a camp whose oldest age is 17 tells an adult they cannot register themself', async ({
-    page,
-  }, testInfo) => {
-    const { tenant } = await seed();
-    const ids = await sessionIds(tenant, YOUTH.slug);
-    await signUp(page, newUser('Parent'));
-    await page.goto(registerPath(tenant, YOUTH.slug, ids['Week 1']));
-    await expect(alert(page)).toContainText('This camp is for ages 9 to 17.');
-    await expect(alert(page)).toContainText('An adult cannot register themself for it.');
-    await expect(ageBox(page)).toHaveCount(0);
-    await expectAccessible(page);
-    await screenshot(page, testInfo, '355-register-youth');
-  });
-
   test('an unknown camp, a draft, and another organization’s path show the not-found view', async ({
     page,
   }, testInfo) => {
@@ -230,6 +230,205 @@ test.describe('register for a camp session', () => {
     }
     await expectAccessible(page);
     await screenshot(page, testInfo, '355-register-not-found');
+  });
+});
+
+test.describe('a guardian registers a child', () => {
+  test('registers "Maya R." with the box ticked, which takes one place and reads "Maya R. is registered"', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(youth);
+    await row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
+    await expect(page).toHaveURL(`${baseURL}${registerPath(tenant, YOUTH.slug, ids['Week 1'])}`);
+
+    await expect(page.getByRole('radio', { name: 'My child' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Me' })).toHaveCount(0);
+    await expect(childName(page)).toBeVisible();
+    await expect(ageBox(page)).toHaveAccessibleName(/^My child is 9 to 17 years old on /);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-child-form');
+
+    await childName(page).fill('Maya R.');
+    await expect(ageBox(page)).toHaveAccessibleName(/^Maya R\. is 9 to 17 years old on .+\.$/);
+    await registerButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toHaveText(
+      "Confirm Maya R.'s age to continue.",
+    );
+    await expect(ageBox(page)).toBeFocused();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-child-age-error');
+
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    await expect(row(page, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText(
+      'Maya R. is registered',
+    );
+    await expect(row(page, 'Week 1')).toContainText('11 places left');
+    await expect(
+      row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }),
+    ).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-camp-child-registered');
+  });
+
+  test('registers a second child, each reading "<name> is registered" in the order registered', async ({
+    page,
+  }) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Guardian'));
+    for (const name of ['Maya R.', 'Leo R.']) {
+      await page.goto(registerPath(tenant, YOUTH.slug, ids['Week 1']));
+      await childName(page).fill(name);
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    }
+    const lines = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+    await expect(lines).toHaveText(['Maya R. is registered', 'Leo R. is registered']);
+    await expect(row(page, 'Week 1')).toContainText('10 places left');
+  });
+
+  test('checks the name on leaving it and on submit, and keeps what was typed', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(registerPath(tenant, YOUTH.slug, ids['Week 1']));
+    await childName(page).fill('x'.repeat(61));
+    await ageBox(page).focus();
+    await expect(page.locator('#minor-name-error')).toHaveText(
+      'Use 60 characters or fewer. This name has 61.',
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-child-name-error');
+    await childName(page).fill('');
+    await registerButton(page).click();
+    await expect(page.locator('#minor-name-error')).toHaveText('Enter the minor’s name.');
+    await expect(childName(page)).toBeFocused();
+    await childName(page).fill('Maya R.');
+    await expect(page.locator('#minor-name-error')).toHaveCount(0);
+  });
+
+  test('a camp whose youngest age is 18 offers only Me and no child', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    await signUp(page, newUser('Adult'));
+    await page.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
+    await expect(page.getByRole('radio', { name: 'Me' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'My child' })).toHaveCount(0);
+    await expect(childName(page)).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-adults-only');
+  });
+
+  test('a camp that admits both offers Me and My child, and My child asks for the name', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, mixed } = await seed();
+    const ids = await sessionIds(tenant, MIXED.slug);
+    await signUp(page, newUser('Both'));
+    await page.goto(registerPath(tenant, MIXED.slug, ids['Week 1']));
+    await expect(page.getByRole('radio', { name: 'Me' })).toBeChecked();
+    await expect(childName(page)).toHaveCount(0);
+    await page.getByRole('radio', { name: 'My child' }).check();
+    await expect(childName(page)).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-both-child');
+
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
+
+    await row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
+    await expect(page.getByRole('radio', { name: 'Me' })).toBeChecked();
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
+    await expect(row(page, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText([
+      "You're registered",
+      'Maya R. is registered',
+    ]);
+
+    // Holding their own place leaves only the child to register.
+    await row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
+    await expect(page.getByRole('radio', { name: 'My child' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Me' })).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-both-self-held');
+  });
+
+  test('another account sees neither the child’s name nor the place as its own', async ({
+    page,
+    browser,
+  }) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(registerPath(tenant, YOUTH.slug, ids['Week 1']));
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+
+    const other = await otherUser(browser, newUser('Other'));
+    try {
+      await other.goto(youth);
+      await expect(row(other, 'Week 1')).toContainText('11 places left');
+      await expect(other.locator('main')).not.toContainText('Maya');
+      await expect(row(other, 'Week 1').locator('[data-slot="session-registered"]')).toHaveCount(0);
+    } finally {
+      await other.context().close();
+    }
+    const signedOut = await browser.newContext();
+    try {
+      const visitor = await signedOut.newPage();
+      await visitor.goto(youth);
+      await expect(visitor.locator('main')).not.toContainText('Maya');
+    } finally {
+      await signedOut.close();
+    }
+  });
+});
+
+test.describe('a guardian registers the same child again', () => {
+  test.use({ expectedConvexErrors: ['campRegistrations:register'] });
+
+  test('with another case or spacing, the server refuses it under the name and takes no place', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    const path = registerPath(tenant, YOUTH.slug, ids['Week 1']);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(path);
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+
+    await page.goto(path);
+    await childName(page).fill('  maya   r. ');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page.locator('#minor-name-error')).toHaveText(
+      'Maya R. is already registered for this session.',
+    );
+    await expect(childName(page)).toBeFocused();
+    await expect(childName(page)).toHaveValue('  maya   r. ');
+    await expect(ageBox(page)).toBeChecked();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '356-register-child-duplicate');
+    await page.goto(youth);
+    await expect(row(page, 'Week 1')).toContainText('11 places left');
   });
 });
 
