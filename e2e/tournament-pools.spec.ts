@@ -588,11 +588,15 @@ const PUBLIC_RESULTS: [readonly [string, string], { a: number; b: number }][] = 
   [['Ace', 'Eddy'], { a: 21, b: 10 }],
 ];
 
-async function seedPublicPools(played: boolean): Promise<{ tenant: Tenant; path: string }> {
+async function seedPublicPools(
+  played: boolean,
+  { sport = 'beachVolleyball', names = SIX }: { sport?: Sport; names?: readonly string[] } = {},
+): Promise<{ tenant: Tenant; path: string }> {
   const tenant = await seedTenant({ name: 'E2E Public Pools', locations: [LOCATION] });
   const path = await seedTournament(tenant, {
     name: 'Fall Pool Play Open',
     slug: SLUG,
+    sport,
     locations: [LOCATION.name],
     startDate: dateFromToday(30),
     endDate: dateFromToday(31),
@@ -603,10 +607,10 @@ async function seedPublicPools(played: boolean): Promise<{ tenant: Tenant; path:
   await convexRun('testing:seedTournamentRosters', {
     organizationSlug: tenant.slug,
     tournamentSlug: SLUG,
-    teams: full(SIX),
+    teams: full(names),
   });
   await seedPoolPlay(tenant, SLUG, 2);
-  if (played) {
+  if (played && sport === 'beachVolleyball') {
     for (const [teams, { a, b }] of PUBLIC_RESULTS) {
       await seedPoolResult(tenant, SLUG, teams, { score: { kind: 'sets', sets: [{ a, b }] } });
     }
@@ -704,5 +708,44 @@ test.describe('public tournament page: pools', () => {
     });
     await expect(section.locator('table')).toHaveCount(1);
     await expect(section.locator('tbody th').first()).toHaveText('Dune');
+  });
+
+  test('a soccer standings table with long team names scrolls inside itself at 320px, and the page does not scroll sideways', async ({
+    page,
+  }, testInfo) => {
+    // The snake split puts seeds 1, 4, and 5 in Pool A.
+    const names = [
+      'Intergalactic Wanderers',
+      'Wolverhampton Rovers',
+      'Llanfairpwllgwyngyll',
+    ] as const;
+    const { tenant, path } = await seedPublicPools(false, {
+      sport: 'soccer',
+      names: [names[0], 'Dune', 'Eddy', names[1], names[2], 'Flow'],
+    });
+    await seedPoolResult(tenant, SLUG, [names[0], names[1]], {
+      score: { kind: 'goals', a: 2, b: 2 },
+    });
+    await seedPoolResult(tenant, SLUG, [names[0], names[2]], {
+      score: { kind: 'goals', a: 3, b: 0 },
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(path);
+    const table = page.locator('section#pools [data-testid="standings"]').first();
+    await expect(table.locator('tbody th').first()).toHaveText('Intergalactic Wanderers');
+    await expect(table.locator('tbody tr:first-child td').last()).toHaveText('4');
+    const container = table.locator('xpath=..');
+    const { scrollWidth, clientWidth } = await container.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+    await expectNoSidewaysScroll(page);
+    await container.scrollIntoViewIfNeeded();
+    await container.evaluate((element) => element.scrollTo({ left: element.scrollWidth }));
+    await expect(table.locator('thead th').last()).toBeInViewport();
+    await expectNoSidewaysScroll(page);
+    await screenshot(page, testInfo, 'public-pools-soccer-320');
+    await expectAccessible(page);
   });
 });
