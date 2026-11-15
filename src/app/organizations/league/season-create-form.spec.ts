@@ -246,7 +246,12 @@ describe('SeasonCreateForm', () => {
       description: string | null,
     ): FormShape[] {
       const invalid = !!errors[id];
-      const described = [description, invalid ? `${id}-error` : null].filter(Boolean).join(' ');
+      const errorFirst = id === 'slug';
+      const ids = errorFirst
+        ? [invalid ? `${id}-error` : null, description]
+        : [description, invalid ? `${id}-error` : null];
+      const described = ids.filter(Boolean).join(' ');
+      const errorShape = invalid ? [shapeOf('field-error', { id: `${id}-error` })] : [];
       return [
         shapeOf(
           'field',
@@ -263,8 +268,9 @@ describe('SeasonCreateForm', () => {
           },
           invalid,
         ),
+        ...(errorFirst ? errorShape : []),
         ...(description ? [shapeOf('field-description', { id: description })] : []),
-        ...(invalid ? [shapeOf('field-error', { id: `${id}-error` })] : []),
+        ...(errorFirst ? [] : errorShape),
       ];
     }
 
@@ -354,7 +360,7 @@ describe('SeasonCreateForm', () => {
       expect(formShapes(form())).toEqual(expected({ slug: true }));
     });
 
-    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+    it('keeps the Web address children in the order label, input, status, error, description', async () => {
       await open();
       await submit();
       const field = input('slug').closest('[data-slot="field"]')!;
@@ -362,18 +368,18 @@ describe('SeasonCreateForm', () => {
         [...field.children].map(
           (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
         ),
-      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      ).toEqual(['field-label', 'input', 'field-status', 'field-error', 'field-description']);
       expect(
         field.querySelector('[data-slot="field-description"] app-web-address-preview'),
       ).not.toBeNull();
       expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
     });
 
-    it('describes the Web address by its description, and by its error once one shows', async () => {
+    it('describes the Web address by its error first, then its description, once an error shows', async () => {
       await open();
       expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description');
       await submit();
-      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
     });
   });
 
@@ -386,10 +392,12 @@ describe('SeasonCreateForm', () => {
       expect(error('start-date')).toBe('Enter the start date.');
       expect(error('end-date')).toBe('Enter the end date.');
       expect(error('registration-deadline')).toBe('Enter the registration deadline.');
-      for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
+      for (const id of ['name', 'start-date', 'end-date', 'registration-deadline']) {
         expect(input(id).getAttribute('aria-invalid'), id).toBe('true');
         expect(input(id).getAttribute('aria-describedby'), id).toMatch(new RegExp(`${id}-error$`));
       }
+      expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
       expect(input('start-date').getAttribute('aria-describedby')).toBe('start-date-error');
       expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
       expect(document.activeElement).toBe(input('name'));

@@ -8,6 +8,7 @@ import { signUp } from './support/session';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { expectDescriptionHeightHeldWhileTyping } from './support/web-address-description';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -81,6 +82,8 @@ const fieldError = (page: Page) => page.locator('#slug-error');
 const slugGroup = (page: Page) => field(page).locator('xpath=ancestor::*[@data-slot="field"][1]');
 const nextGroup = (page: Page) => slugGroup(page).locator('xpath=following-sibling::*[1]');
 
+const STATUS_LINE = 20;
+
 async function top(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (!box) throw new Error('element has no box');
@@ -114,12 +117,19 @@ for (const form of FORMS) {
       await expectAccessible(page);
     });
 
+    test('keeps the description as tall as for the empty field while the address is typed', async ({
+      page,
+    }) => {
+      await form.open(page);
+      await expectDescriptionHeightHeldWhileTyping(page, 'free-address');
+    });
+
     test('says Available for a free address without moving the form below it', async ({
       page,
     }, testInfo) => {
       await form.open(page);
       await field(page).pressSequentially('free-address');
-      await expect(availability(page)).toHaveClass(/min-h-5/);
+      await expect(page.locator('#slug-description strong')).toHaveText('free-address');
       const before = await top(nextGroup(page));
       await expect(availability(page)).toHaveText('Available');
       expect(await top(nextGroup(page))).toBe(before);
@@ -155,6 +165,24 @@ for (const form of FORMS) {
       await expect(fieldError(page)).toHaveText(
         `${form.taken} is already taken. Choose another web address.`,
       );
+    });
+
+    test('moves the form below it by the error height minus the 20px status line when the address is taken', async ({
+      page,
+    }) => {
+      await form.open(page);
+      const free = `${form.taken.slice(0, -1)}x`;
+      await field(page).fill(free);
+      await expect(availability(page)).toHaveText('Available');
+      const before = await top(nextGroup(page));
+      await field(page).fill(form.taken);
+      await expect(fieldError(page)).toHaveText(
+        `${form.taken} is already taken. Choose another web address.`,
+      );
+      const errorHeight = (await fieldError(page).boundingBox())?.height ?? 0;
+      expect(
+        Math.abs((await top(nextGroup(page))) - before - (errorHeight - STATUS_LINE)),
+      ).toBeLessThanOrEqual(1);
     });
 
     test('shows an answer for a keyboard user who tabs out of the field', async ({

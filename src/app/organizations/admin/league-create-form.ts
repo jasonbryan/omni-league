@@ -157,16 +157,11 @@ export interface LeagueLocationChoice {
             [formField]="form.fields.slug"
             (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
-            [attr.aria-describedby]="describedBy('slug', 'slug-description')"
+            [attr.aria-describedby]="slugDescribedBy()"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           />
-          <p hlmFieldDescription id="slug-description">
-            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ organizationName() }}. Its public page will be at
-            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
-          </p>
           <app-web-address-status
             [available]="form.slugAvailable()"
             [reserveRoom]="form.slugStatusReservesRoom()"
@@ -193,6 +188,11 @@ export interface LeagueLocationChoice {
               }
             </div>
           }
+          <p hlmFieldDescription id="slug-description">
+            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
+            {{ organizationName() }}. Its public page will be at
+            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
+          </p>
         </div>
         <app-chip-radio-group
           #sportGroup
@@ -387,8 +387,12 @@ export class LeagueCreateForm {
     this.form.chooseSport(sport);
   }
 
-  protected describedBy(field: 'name' | 'slug', description: string): string {
+  protected describedBy(field: 'name', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
+  }
+
+  protected slugDescribedBy(): string {
+    return this.form.errors.slug() ? 'slug-error slug-description' : 'slug-description';
   }
 
   protected edited(): void {
