@@ -946,8 +946,9 @@ describe('AdminLeagues', () => {
       expect(error('locations')).toBe('Choose at least one location.');
       for (const id of ['name', 'slug']) {
         expect(input(id).getAttribute('aria-invalid')).toBe('true');
-        expect(input(id).getAttribute('aria-describedby')).toBe(`${id}-description ${id}-error`);
       }
+      expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
       expect(page.querySelector('fieldset#sport')?.getAttribute('aria-describedby')).toBe(
         'sport-description sport-error',
       );
@@ -1551,12 +1552,12 @@ describe('AdminLeagues', () => {
         {
           type: 'text',
           autocomplete: 'off',
-          'aria-describedby': errors.slug ? 'slug-description slug-error' : 'slug-description',
+          'aria-describedby': errors.slug ? 'slug-error slug-description' : 'slug-description',
         },
         !!errors.slug,
       ),
-      shapeOf('field-description', { id: 'slug-description' }),
       ...(errors.slug ? [shapeOf('field-error', { id: 'slug-error' })] : []),
+      shapeOf('field-description', { id: 'slug-description' }),
       ...(errors.sport ? [shapeOf('field-error', { id: 'sport-error' }, 'mt-2')] : []),
       {
         tag: 'fieldset',
@@ -1629,7 +1630,7 @@ describe('AdminLeagues', () => {
       );
     });
 
-    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+    it('keeps the Web address children in the order label, input, status, error, description', async () => {
       await open([]);
       await submit();
       const field = input('slug').closest('[data-slot="field"]')!;
@@ -1637,7 +1638,7 @@ describe('AdminLeagues', () => {
         [...field.children].map(
           (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
         ),
-      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      ).toEqual(['field-label', 'input', 'field-status', 'field-error', 'field-description']);
       expect(
         field.querySelector('[data-slot="field-description"] app-web-address-preview'),
       ).not.toBeNull();

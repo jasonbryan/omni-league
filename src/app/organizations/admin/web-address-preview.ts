@@ -12,7 +12,7 @@ import {
   selector: 'app-web-address-preview',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block break-words text-foreground' },
-  template: `{{ host }}/<wbr />{{ parentPath() }}<wbr /><strong class="font-semibold">{{
+  template: `{{ host }}/<wbr />{{ parentPath() }}<wbr /><strong class="block font-semibold">{{
       slug()
     }}</strong>`,
 })
