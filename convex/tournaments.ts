@@ -26,6 +26,7 @@ import {
   type DivisionFilters,
 } from './lib/leagueFilters';
 import { BRACKET_MESSAGES } from './lib/bracket';
+import { POOL_MESSAGES } from './lib/pools';
 import { programStatusValidator } from './lib/programs';
 import { publicBracket } from './lib/publicBracket';
 import { leagueLocations } from './lib/publicLeague';
@@ -54,7 +55,9 @@ import {
   DEFAULT_SETS_PER_GAME,
   setsPerGameIsChosen,
   setsPerGameValidator,
+  structureValidator,
   tournamentEditableValidator,
+  type Structure,
   type TournamentEditable,
 } from './lib/tournamentEdit';
 import {
@@ -65,7 +68,7 @@ import {
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
-import { bracketExists, refuseBracket } from './lib/tournamentBracket';
+import { firstGameStage, refuseBracket } from './lib/tournamentBracket';
 import {
   insertDraftTournament,
   leagueSlugTaken,
@@ -114,6 +117,7 @@ export const create = mutation({
     endDate: v.optional(v.string()),
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
+    structure: v.optional(structureValidator),
   },
   returns: v.object({ tournamentId: v.id('tournaments') }),
   handler: async (ctx, args) => {
@@ -174,6 +178,7 @@ export const create = mutation({
       endDate: endDate === '' ? args.startDate : endDate,
       registrationDeadline: args.registrationDeadline,
       maximumTeams: args.maximumTeams,
+      ...(args.structure && { structure: args.structure }),
     });
     return { tournamentId };
   },
@@ -267,6 +272,8 @@ export const updateDetails = mutation({
     maximumTeams: v.number(),
     // Absent keeps the sets per game the tournament holds.
     setsPerGame: v.optional(setsPerGameValidator),
+    // Absent keeps the structure the tournament holds.
+    structure: v.optional(structureValidator),
     // What the form last showed, so a save made from out-of-date details is refused.
     expected: tournamentEditableValidator,
   },
@@ -292,8 +299,9 @@ export const updateDetails = mutation({
     ) {
       throw new Error('Not allowed');
     }
-    await refuseBracketLockedChanges(ctx, tournament, {
+    await refuseLockedChanges(ctx, tournament, {
       setsPerGame: input.setsPerGame,
+      structure: input.structure,
       startDate: input.startDate,
       registrationDeadline: input.registrationDeadline,
     });
@@ -303,6 +311,7 @@ export const updateDetails = mutation({
       registrationDeadline: input.registrationDeadline,
       maximumTeams: input.maximumTeams,
       setsPerGame: input.setsPerGame ?? held.setsPerGame,
+      structure: input.structure ?? held.structure,
     });
   },
 });
@@ -327,7 +336,7 @@ export const undoUpdateDetails = mutation({
     if (!setsPerGameFitsSport(program.sport, earlier.setsPerGame) || earlier.endDate === '') {
       throw new Error('Not allowed');
     }
-    await refuseBracketLockedChanges(ctx, tournament, earlier);
+    await refuseLockedChanges(ctx, tournament, earlier);
     checkedDetails(tournament, earlier, (error) =>
       error.code === 'maximumTeamsBelowTeams'
         ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
@@ -341,31 +350,48 @@ export const undoUpdateDetails = mutation({
   },
 });
 
-// The Structure has no input here, so the sets per game is the one detail a bracket locks besides the deadline.
-async function refuseBracketLockedChanges(
+// A bracket locks Sets per game and the registration deadline; either kind of game locks the Structure and Sets per game.
+async function refuseLockedChanges(
   ctx: QueryCtx,
   tournament: Doc<'tournaments'>,
   next: Pick<TournamentEditable, 'startDate' | 'registrationDeadline'> & {
     setsPerGame: TournamentEditable['setsPerGame'] | undefined;
+    structure?: Structure | undefined;
   },
 ): Promise<void> {
   const changesSets =
     next.setsPerGame !== undefined && next.setsPerGame !== editableOf(tournament).setsPerGame;
+  const changesStructure = next.structure !== undefined && next.structure !== tournament.structure;
   // A save that leaves registration as it was is not a reopening, so a tournament already open for another reason still saves.
   const reopens =
     registrationIsOpen(next, Date.now()) && !registrationIsOpen(tournament, Date.now());
-  if (!changesSets && !reopens) return;
-  if (!(await bracketExists(ctx, tournament._id))) return;
+  if (!changesSets && !changesStructure && !reopens) return;
+  const stage = await firstGameStage(ctx, tournament._id);
+  if (stage === null) return;
+  if (changesStructure) {
+    refuseBracket(
+      { code: 'structureLocked', message: POOL_MESSAGES.structureLocked },
+      { field: 'structure' },
+    );
+  }
   if (changesSets) {
     refuseBracket(
-      { code: 'setsPerGameLocked', message: BRACKET_MESSAGES.setsPerGameLocked },
+      {
+        code: 'setsPerGameLocked',
+        message:
+          stage === 'bracket'
+            ? BRACKET_MESSAGES.setsPerGameLocked
+            : POOL_MESSAGES.setsPerGameLocked,
+      },
       { field: 'setsPerGame' },
     );
   }
-  refuseBracket(
-    { code: 'registrationReopened', message: BRACKET_MESSAGES.registrationReopened },
-    { field: 'registrationDeadline' },
-  );
+  if (stage === 'bracket') {
+    refuseBracket(
+      { code: 'registrationReopened', message: BRACKET_MESSAGES.registrationReopened },
+      { field: 'registrationDeadline' },
+    );
+  }
 }
 
 function setsPerGameFitsSport(
@@ -400,6 +426,9 @@ export const getForManagement = query({
       setsPerGame: setsPerGameValidator,
       /** Registration, the waitlist, and Sets per game are locked while one exists. */
       bracketCreated: v.boolean(),
+      structure: structureValidator,
+      /** The Structure and Sets per game are locked while pool games exist. */
+      poolGamesCreated: v.boolean(),
       ...tournamentDetailsValidator.fields,
     }),
   ),
@@ -414,6 +443,7 @@ export const getForManagement = query({
       return null;
     }
     const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
+    const stage = await firstGameStage(ctx, found.tournament._id);
     return {
       tournamentId: found.tournament._id,
       organizationId: organization._id,
@@ -422,7 +452,9 @@ export const getForManagement = query({
       sport: found.program.sport,
       teamCount: found.tournament.teamCount ?? 0,
       setsPerGame: editableOf(found.tournament).setsPerGame,
-      bracketCreated: await bracketExists(ctx, found.tournament._id),
+      bracketCreated: stage === 'bracket',
+      structure: found.tournament.structure,
+      poolGamesCreated: stage === 'pool',
       ...(await tournamentDetails(ctx, organization, found)),
     };
   },

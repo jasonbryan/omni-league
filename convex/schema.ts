@@ -4,12 +4,13 @@ import { ageGroupValidator, genderValidator, standardLevelValidator } from './li
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { poolValidator } from './lib/pools';
 import { programStatusValidator, programTypeValidator } from './lib/programs';
 import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { scoreValidator, sportCountsValidator, sportValidator } from './lib/sports';
-import { setsPerGameValidator } from './lib/tournamentEdit';
+import { setsPerGameValidator, structureValidator } from './lib/tournamentEdit';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
@@ -179,7 +180,8 @@ export default defineSchema({
     waitlistCount: v.optional(v.number()),
     /** The division's players per side. */
     minimumRosterSize: v.number(),
-    structure: v.literal('bracket'),
+    /** Pools play a round robin in each pool before the bracket; changes only while no game exists. */
+    structure: structureValidator,
     bracketType: v.literal('single'),
     /** Chosen only for beach volleyball; absent reads as 1. */
     setsPerGame: v.optional(setsPerGameValidator),
@@ -202,7 +204,9 @@ export default defineSchema({
   // Written only through `convex/lib/tournamentBracket.ts`. A bye is a round 1 game with one team, already its winner.
   tournamentGames: defineTable({
     tournamentId: v.id('tournaments'),
-    stage: v.literal('bracket'),
+    stage: v.union(v.literal('bracket'), v.literal('pool')),
+    /** The pool of a `pool` game; absent on a bracket game. */
+    pool: v.optional(poolValidator),
     /** From 1, the first round played. */
     round: v.number(),
     /** From 1, top to bottom within the round. */
@@ -334,6 +338,8 @@ export default defineSchema({
     createdAt: v.number(),
     /** A tournament team's place in the bracket, 1 being the top seed; absent until an organizer orders the seeds. */
     seed: v.optional(v.number()),
+    /** A tournament team's pool, set when an organizer splits a Pools, then bracket tournament into pools. */
+    pool: v.optional(poolValidator),
   })
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
     .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName'])

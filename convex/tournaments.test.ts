@@ -153,6 +153,20 @@ async function refusal(call: Promise<unknown>) {
 }
 
 describe('tournaments.create', () => {
+  test.each(['bracket', 'pools'] as const)(
+    'keeps the structure %s that a copy sends',
+    async (structure) => {
+      const s = await setup();
+      const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+        ...valid(s),
+        structure,
+      });
+      expect((await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId)))!.structure).toBe(
+        structure,
+      );
+    },
+  );
+
   test('writes a draft tournament and its program of type tournament, in the right organization', async () => {
     const s = await setup();
     const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
@@ -836,6 +850,8 @@ describe('tournaments.getForManagement', () => {
       teamCount: 0,
       setsPerGame: 1,
       bracketCreated: false,
+      structure: 'bracket',
+      poolGamesCreated: false,
     });
   });
 
@@ -1669,6 +1685,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     registrationDeadline: '2027-01-09',
     maximumTeams: 16,
     setsPerGame: 1,
+    structure: 'bracket',
   };
 
   const changed: TournamentEditable = {
@@ -1677,6 +1694,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     registrationDeadline: '2027-01-30',
     maximumTeams: 24,
     setsPerGame: 3,
+    structure: 'bracket',
   };
 
   const edit = (

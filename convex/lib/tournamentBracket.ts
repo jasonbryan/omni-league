@@ -1,4 +1,4 @@
-// The only writer of `tournamentGames` and `teams.seed`.
+// With `tournamentPools.ts`, the only writer of `tournamentGames`; the only writer of `teams.seed`.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
@@ -31,6 +31,20 @@ export function bracketGames(
       q.eq('tournamentId', tournamentId).eq('stage', STAGE),
     )
     .take(BRACKET_GAMES_READ_LIMIT);
+}
+
+/** The stage of the tournament's first game: the index sorts by stage, so a bracket game comes before a pool game. */
+export async function firstGameStage(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<Doc<'tournamentGames'>['stage'] | null> {
+  const first = await ctx.db
+    .query('tournamentGames')
+    .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
+      q.eq('tournamentId', tournamentId),
+    )
+    .first();
+  return first?.stage ?? null;
 }
 
 export async function bracketExists(
@@ -82,7 +96,10 @@ export function reportsOfGame(
     .take(REPORTS_PER_GAME);
 }
 
-async function deleteReportsOfGame(ctx: MutationCtx, gameId: Id<'tournamentGames'>): Promise<void> {
+export async function deleteReportsOfGame(
+  ctx: MutationCtx,
+  gameId: Id<'tournamentGames'>,
+): Promise<void> {
   for (const report of await reportsOfGame(ctx, gameId)) {
     await ctx.db.delete('scoreReports', report._id);
   }
@@ -135,7 +152,7 @@ export async function clearResult(ctx: MutationCtx, game: Doc<'tournamentGames'>
 
 export interface TournamentTeams {
   seeds: Doc<'teams'>[];
-  unconfirmedCount: number;
+  unconfirmed: Doc<'teams'>[];
 }
 
 export async function tournamentTeams(
@@ -149,7 +166,7 @@ export async function tournamentTeams(
   const confirmed = teams.filter((team) => isConfirmedTeam(team, tournament.minimumRosterSize));
   return {
     seeds: inSeedOrder(confirmed),
-    unconfirmedCount: teams.length - confirmed.length,
+    unconfirmed: teams.filter((team) => !confirmed.includes(team)),
   };
 }
 

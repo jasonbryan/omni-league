@@ -18,7 +18,12 @@ import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
-import { editableOf, type TournamentEditable } from './tournamentEdit';
+import {
+  DEFAULT_STRUCTURE,
+  editableOf,
+  type Structure,
+  type TournamentEditable,
+} from './tournamentEdit';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX, sportValidator, type Sport, type SportCounts } from './sports';
@@ -440,6 +445,7 @@ export interface NewTournament {
   endDate: string;
   registrationDeadline: string;
   maximumTeams: number;
+  structure?: Structure;
 }
 
 // The caller has checked access, the input, and that the slug is free. The minimum roster size is the division's players per side, which a tournament cannot raise.
@@ -471,7 +477,7 @@ export async function insertDraftTournament(
     registrationDeadline: tournament.registrationDeadline,
     maximumTeams: tournament.maximumTeams,
     minimumRosterSize: division.playersPerSide,
-    structure: 'bracket',
+    structure: tournament.structure ?? DEFAULT_STRUCTURE,
     bracketType: 'single',
   });
 }
@@ -592,8 +598,10 @@ export async function updateTournamentDetails(
   change: TournamentEditable,
 ): Promise<{ earlier: TournamentEditable; written: TournamentEditable }> {
   const earlier = editableOf(tournament);
-  await ctx.db.patch('tournaments', tournament._id, change);
-  return { earlier, written: change };
+  // A patch with an undefined field removes it, which the required structure cannot lose.
+  const written = { ...change, structure: change.structure ?? earlier.structure };
+  await ctx.db.patch('tournaments', tournament._id, written);
+  return { earlier, written };
 }
 
 export const MAX_DRAFT_SEASONS_UPDATED = 200;

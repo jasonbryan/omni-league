@@ -35,8 +35,8 @@ const FICTIONAL_FREE_AGENTS = [
 ] as const;
 const PLACED_FREE_AGENT = `nia.brooks@${DOMAIN}`;
 const REMOVED_PLAYER = `rio.santos@${DOMAIN}`;
-/** The five demo accounts, the three fictional captains, the four fictional free agents, the removed player, and the four partners of the Labor Day Sand Slam teams. */
-const USERS = 17;
+/** The five demo accounts, the three fictional captains, the four fictional free agents, the removed player, the four partners of the Labor Day Sand Slam teams, and the four more partners of the Fall Pool Play Open teams. */
+const USERS = 21;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -279,7 +279,7 @@ const DATA = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 4,
+  tournaments: 5,
   camps: 2,
   campSessions: 3,
 };
@@ -307,7 +307,7 @@ describe('seed:demo accounts: a new deployment', () => {
         backfilled: NO_BACKFILL,
         memberships: 5,
         invites: 1,
-        teams: 20,
+        teams: 28,
         teamInvites: 4,
         freeAgents: 6,
         accounts: ALL('created'),
@@ -692,7 +692,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(20);
+      expect(first.teams).toBe(28);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -859,7 +859,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(19);
+      expect(result.teams).toBe(27);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -963,7 +963,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(31);
+      expect(rosterEntries).toHaveLength(47);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -1102,8 +1102,8 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      // One per sign-up: four demo accounts, the three fictional captains, the four fictional free agents, the removed player, and the four bracket partners.
-      expect(await authRows(t, 'session')).toHaveLength(16);
+      // One per sign-up: four demo accounts, the three fictional captains, the four fictional free agents, the removed player, the four bracket partners, and the four pool partners.
+      expect(await authRows(t, 'session')).toHaveLength(20);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,

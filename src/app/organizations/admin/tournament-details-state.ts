@@ -4,7 +4,9 @@ import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import {
   DEFAULT_SETS_PER_GAME,
+  DEFAULT_STRUCTURE,
   type SetsPerGame,
+  type Structure,
   type TournamentEditable,
 } from '../../../../convex/lib/tournamentEdit';
 import { checkTournamentDetails } from '../../../../convex/lib/tournamentInput';
@@ -38,6 +40,8 @@ export interface DetailsValues {
   maximumTeams: number;
   /** Left out for a sport that has no choice. */
   setsPerGame?: SetsPerGame;
+  /** Left out once games exist. */
+  structure?: Structure;
 }
 
 export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
@@ -77,10 +81,8 @@ function currentOf(failure: unknown): TournamentEditable | null {
   if (typeof data !== 'object' || data === null) return null;
   const current = (data as Record<string, unknown>)['current'];
   if (typeof current !== 'object' || current === null) return null;
-  const { startDate, endDate, registrationDeadline, maximumTeams, setsPerGame } = current as Record<
-    string,
-    unknown
-  >;
+  const { startDate, endDate, registrationDeadline, maximumTeams, setsPerGame, structure } =
+    current as Record<string, unknown>;
   if (
     typeof startDate !== 'string' ||
     typeof endDate !== 'string' ||
@@ -90,7 +92,14 @@ function currentOf(failure: unknown): TournamentEditable | null {
   ) {
     return null;
   }
-  return { startDate, endDate, registrationDeadline, maximumTeams, setsPerGame };
+  return {
+    startDate,
+    endDate,
+    registrationDeadline,
+    maximumTeams,
+    setsPerGame,
+    structure: structure === 'pools' ? 'pools' : DEFAULT_STRUCTURE,
+  };
 }
 
 /** The rules and messages are `convex/lib/tournamentInput.ts`, which `tournaments.updateDetails` applies again. */
@@ -103,6 +112,7 @@ export class TournamentDetails {
   });
   readonly fields: FieldTree<DetailsText>;
   readonly setsPerGame = signal<SetsPerGame>(DEFAULT_SETS_PER_GAME);
+  readonly structure = signal<Structure>(DEFAULT_STRUCTURE);
   readonly submitting = signal(false);
   readonly alert = signal<DetailsAlertKind | null>(null);
   readonly errors: Record<DetailsField, Signal<string | null>>;
@@ -120,7 +130,8 @@ export class TournamentDetails {
     const now = this.model();
     return (
       DETAILS_FIELDS.some((field) => now[field] !== was[field]) ||
-      this.setsPerGame() !== baseline.setsPerGame
+      this.setsPerGame() !== baseline.setsPerGame ||
+      this.structure() !== (baseline.structure ?? DEFAULT_STRUCTURE)
     );
   });
 
@@ -180,6 +191,7 @@ export class TournamentDetails {
     this.baseline.set(held);
     this.model.set(textOf(held));
     this.setsPerGame.set(held.setsPerGame);
+    this.structure.set(held.structure ?? DEFAULT_STRUCTURE);
     this.fields().reset();
     this.alert.set(null);
     for (const field of DETAILS_FIELDS) this.shown[field].hide();
@@ -201,6 +213,7 @@ export class TournamentDetails {
       registrationDeadline: now.registrationDeadline === was.registrationDeadline,
       maximumTeams: now.maximumTeams === was.maximumTeams,
       setsPerGame: this.setsPerGame() === baseline.setsPerGame,
+      structure: this.structure() === (baseline.structure ?? DEFAULT_STRUCTURE),
     };
     const pick = <Key extends keyof TournamentEditable>(key: Key) =>
       untouched[key] ? newer[key] : baseline[key];
@@ -213,12 +226,14 @@ export class TournamentDetails {
       maximumTeams: untouched.maximumTeams ? next.maximumTeams : now.maximumTeams,
     });
     if (untouched.setsPerGame) this.setsPerGame.set(newer.setsPerGame);
+    if (untouched.structure) this.structure.set(newer.structure ?? DEFAULT_STRUCTURE);
     this.baseline.set({
       startDate: pick('startDate'),
       endDate: pick('endDate'),
       registrationDeadline: pick('registrationDeadline'),
       maximumTeams: pick('maximumTeams'),
       setsPerGame: pick('setsPerGame'),
+      structure: pick('structure'),
     });
   }
 
@@ -228,7 +243,7 @@ export class TournamentDetails {
 
   async submit<Result>(
     online: boolean,
-    hasSetsPerGame: boolean,
+    sends: { setsPerGame: boolean; structure: boolean },
     send: (values: DetailsValues, expected: TournamentEditable) => Promise<Result>,
   ): Promise<DetailsSubmitOutcome<Result>> {
     const expected = this.baseline();
@@ -249,7 +264,8 @@ export class TournamentDetails {
       ...(model.endDate !== '' && { endDate: model.endDate }),
       registrationDeadline: model.registrationDeadline,
       maximumTeams: limitFromText(model.maximumTeams)!,
-      ...(hasSetsPerGame && { setsPerGame: this.setsPerGame() }),
+      ...(sends.setsPerGame && { setsPerGame: this.setsPerGame() }),
+      ...(sends.structure && { structure: this.structure() }),
     };
     this.submitting.set(true);
     try {
