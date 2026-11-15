@@ -281,7 +281,7 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                               class="mt-0.5 shrink-0 text-base"
                               aria-hidden="true"
                             />
-                            <span class="min-w-0 break-words"
+                            <span class="min-w-0 wrap-anywhere"
                               ><app-minor-name-error-text [error]="nameError"
                             /></span>
                           </div>
@@ -302,7 +302,7 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                         [showInvalid]="!!error()"
                       />
                       <div hlmFieldContent class="min-w-0">
-                        <label hlmFieldLabel for="age-confirmed" class="break-words">{{
+                        <label hlmFieldLabel for="age-confirmed" class="wrap-anywhere">{{
                           ageLabel()
                         }}</label>
                         @if (error(); as error) {
@@ -312,7 +312,7 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                               class="mt-0.5 shrink-0 text-base"
                               aria-hidden="true"
                             />
-                            <span class="min-w-0 break-words">{{ error }}</span>
+                            <span class="min-w-0 wrap-anywhere">{{ error }}</span>
                           </div>
                         }
                       </div>
