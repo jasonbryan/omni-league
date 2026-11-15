@@ -278,6 +278,52 @@ describe('a tied pool game', () => {
   });
 });
 
+describe('the locks after a tied pool game', () => {
+  const lockedBy = async (attempt: Promise<unknown>) =>
+    (await attempt.catch(refusalOf)) as { code?: string };
+
+  test('refuse a seed move, a pool move, a split, and a Recreate, and the last Undo lifts them', async () => {
+    const { s, teamIds } = await world('soccer');
+    const game = await gameOf(s, teamIds, 1, 4);
+    const saved = await enter(s, game, { score: goals(2, 2) });
+    const as = s.as(s.admin);
+    const split = { tournamentId: s.gulf, poolCount: 2 };
+    expect(
+      await lockedBy(
+        as.mutation(api.tournamentGames.moveSeed, {
+          tournamentId: s.gulf,
+          teamId: teamIds[1],
+          direction: 'up',
+        }),
+      ),
+    ).toMatchObject({ code: 'seedsLocked' });
+    expect(
+      await lockedBy(
+        as.mutation(api.tournamentGames.movePoolTeam, {
+          tournamentId: s.gulf,
+          teamId: teamIds[0],
+          pool: 'B',
+        }),
+      ),
+    ).toMatchObject({ code: 'poolResultEntered' });
+    expect(await lockedBy(as.mutation(api.tournamentGames.splitPools, split))).toMatchObject({
+      code: 'poolResultEntered',
+    });
+    expect(
+      await lockedBy(
+        as.mutation(api.tournamentGames.createPoolGames, { tournamentId: s.gulf, replace: true }),
+      ),
+    ).toMatchObject({ code: 'poolResultEntered' });
+    await undo(s, game, { expected: saved.resultEnteredAt });
+    await as.mutation(api.tournamentGames.moveSeed, {
+      tournamentId: s.gulf,
+      teamId: teamIds[1],
+      direction: 'up',
+    });
+    await as.mutation(api.tournamentGames.splitPools, split);
+  });
+});
+
 describe('correcting, clearing, and undoing a pool result', () => {
   test('a correction turns a tie into a win, and the answer holds the tie as the earlier result', async () => {
     const { s, teamIds } = await world('soccer');
