@@ -65,6 +65,7 @@ describe('classify: PR into main', () => {
     ['.github/workflows/clean-previews.yml'],
     ['.github/workflows/staging-rebuild.yml'],
     ['.github/dependabot.yml', 'docs/process/ci.md'],
+    ['docs/conventions/angular.md'],
     ['design/icons/any.svg'],
     ['design/mockup-kit/mockup-kit.css'],
     ['design/mockups/80-app-icon.html'],

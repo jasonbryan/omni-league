@@ -15,8 +15,9 @@ const CI_FILES = ['.github/workflows/ci.yml', 'scripts/ci-scope.mjs', 'scripts/e
 // Docs that Convex and Angular tests read: a change to one must run those tests.
 export const APP_TEST_INPUTS = ['docs/glossary.md', 'docs/process/hosting.md'];
 
-// Design files that script tests read: a change to one must run `test:scripts`.
+// Docs and design files that script tests read: a change to one must run `test:scripts`.
 export const TOOLING_TEST_INPUTS = [
+  'docs/conventions/angular.md',
   'design/icons/',
   'design/mockup-kit/',
   'design/mockups/80-app-icon.html',
