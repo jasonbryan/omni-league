@@ -278,87 +278,87 @@ test.describe('places and refusals between people', () => {
     }
   });
 
-  test.describe('a second press from another tab', () => {
-    test.use({ expectedConvexErrors: ['campRegistrations:register'] });
+  test('a second tab of the same person follows the registration to "You\'re registered" and takes no second place', async ({
+    page,
+  }) => {
+    const { tenant, adult } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    await signUp(page, newUser('Twice'));
+    const path = registerPath(tenant, ADULT.slug, ids['Week 1']);
+    const other = await page.context().newPage();
+    await page.goto(path);
+    await other.goto(path);
+    await ageBox(other).click();
 
-    test('is refused as already registered and takes no second place', async ({ page }) => {
-      const { tenant, adult } = await seed();
-      const ids = await sessionIds(tenant, ADULT.slug);
-      await signUp(page, newUser('Twice'));
-      const path = registerPath(tenant, ADULT.slug, ids['Week 1']);
-      const other = await page.context().newPage();
-      await page.goto(path);
-      await other.goto(path);
-      await ageBox(page).click();
-      await ageBox(other).click();
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
 
-      await registerButton(page).click();
-      await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
-      await registerButton(other).click();
-
-      await expect(alert(other)).toContainText("You're registered for Week 1.");
-      await expect(ageBox(other)).toHaveCount(0);
-      await page.goto(adult);
-      await expect(row(page, 'Week 1')).toContainText('11 places left');
-    });
+    await expect(alert(other)).toContainText("You're registered for Week 1.");
+    await expect(ageBox(other)).toHaveCount(0);
+    await expect(registerButton(other)).toHaveCount(0);
+    await page.goto(adult);
+    await expect(row(page, 'Week 1')).toContainText('11 places left');
   });
 
-  test.describe('the last place taken while another form is open', () => {
-    test.use({ expectedConvexErrors: ['campRegistrations:register'] });
-
-    test('refuses the later press as full and takes nothing', async ({ page, browser }) => {
-      const tenant = await seedTenant({
-        name: 'E2E Camp Last Place',
-        locations: [{ name: PLACE, address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' }],
-      });
-      const camp = await seedPublishedCamp(tenant, onePlace);
-      const ids = await sessionIds(tenant, onePlace.slug);
-      const path = registerPath(tenant, onePlace.slug, ids['Only week']);
-      await signUp(page, newUser('Early'));
-      const late = await otherUser(browser, newUser('Late'));
-      try {
-        await late.goto(path);
-        await ageBox(late).click();
-        await page.goto(path);
-        await ageBox(page).click();
-        await registerButton(page).click();
-        await expect(page).toHaveURL(`${baseURL}${camp}`, { timeout: 20_000 });
-
-        await registerButton(late).click();
-        await expect(alert(late)).toContainText('This session is full.');
-        await expect(ageBox(late)).toHaveCount(0);
-        await expect(late.getByRole('link', { name: 'Back to the camp page' })).toHaveAttribute(
-          'href',
-          camp,
-        );
-        await late.goto(camp);
-        await expect(row(late, 'Only week')).toContainText('Full');
-        await expect(
-          row(late, 'Only week').locator('[data-slot="session-registered"]'),
-        ).toHaveCount(0);
-      } finally {
-        await late.context().close();
-      }
+  test('a form left open while the last place goes turns into "This session is full." and takes nothing', async ({
+    page,
+    browser,
+  }) => {
+    const tenant = await seedTenant({
+      name: 'E2E Camp Last Place',
+      locations: [{ name: PLACE, address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' }],
     });
+    const camp = await seedPublishedCamp(tenant, onePlace);
+    const ids = await sessionIds(tenant, onePlace.slug);
+    const path = registerPath(tenant, onePlace.slug, ids['Only week']);
+    await signUp(page, newUser('Early'));
+    const late = await otherUser(browser, newUser('Late'));
+    try {
+      await late.goto(path);
+      await ageBox(late).click();
+      await page.goto(path);
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${camp}`, { timeout: 20_000 });
+
+      await expect(alert(late)).toContainText('This session is full.');
+      await expect(ageBox(late)).toHaveCount(0);
+      await expect(late.getByRole('link', { name: 'Back to the camp page' })).toHaveAttribute(
+        'href',
+        camp,
+      );
+      await late.goto(camp);
+      await expect(row(late, 'Only week')).toContainText('Full');
+      await expect(row(late, 'Only week').locator('[data-slot="session-registered"]')).toHaveCount(
+        0,
+      );
+    } finally {
+      await late.context().close();
+    }
   });
 });
 
 test.describe('the register form on a phone and offline', () => {
-  test('keeps Register at the bottom edge of a short phone screen, and in the flow at 1280px', async ({
+  test('keeps Register at the bottom edge once the form shows on a short phone screen, and in the flow at 1280px', async ({
     page,
   }, testInfo) => {
     const { tenant } = await seed();
     const ids = await sessionIds(tenant, ADULT.slug);
     await signUp(page, newUser('Phone'));
     const phone = testInfo.project.name === 'chromium-mobile';
-    await page.setViewportSize(phone ? { width: 360, height: 400 } : { width: 1280, height: 720 });
     await page.goto(registerPath(tenant, ADULT.slug, ids['Week 1']));
     const footer = page.locator('[data-slot="form-footer"]');
     await expect(footer).toHaveCSS('position', phone ? 'sticky' : 'static');
-    await expect(registerButton(page)).toBeInViewport({ ratio: 1 });
     if (phone) {
+      // A screen that ends 120px below the top of the form, so the form's own end is off screen.
+      const formTop = (await page.locator('form').boundingBox())!.y;
+      await page.setViewportSize({ width: 360, height: Math.round(formTop) + 120 });
+      const form = (await page.locator('form').boundingBox())!;
+      expect(form.y + form.height).toBeGreaterThan(page.viewportSize()!.height);
+      await expect(registerButton(page)).toBeInViewport({ ratio: 1 });
       expect((await registerButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    } else {
       await expect(registerButton(page)).toBeInViewport({ ratio: 1 });
     }
     await expectAccessible(page);
