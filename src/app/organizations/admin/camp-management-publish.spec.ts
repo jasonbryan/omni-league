@@ -54,6 +54,11 @@ describe('CampManagement publishing', () => {
   const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
   const badge = () => text(main().querySelector('[data-slot="badge"]'));
 
+  const deleteButtons = (within: ParentNode) =>
+    [...within.querySelectorAll<HTMLButtonElement>('button')].filter((button) =>
+      text(button)?.startsWith('Delete'),
+    );
+
   async function pressPublish() {
     publishButton()!.click();
     await o.flush();
@@ -163,18 +168,14 @@ describe('CampManagement publishing', () => {
       o.subscription(LIST_SESSIONS)!.emit([session()]);
       await o.flush();
       const row = page.querySelector<HTMLElement>('#sessions-list > li')!;
-      expect(row.querySelector('button')).toBeNull();
+      expect(deleteButtons(row)).toEqual([]);
       expect(text(row.querySelector('[data-slot="session-required"]'))).toBe(
         'Required while published',
       );
     });
 
     it('keeps Delete on every session while there is more than one', () => {
-      const buttons = page.querySelectorAll('#sessions-list > li button');
-      expect([...buttons].map((button) => text(button)?.startsWith('Delete'))).toEqual([
-        true,
-        true,
-      ]);
+      expect(deleteButtons(page).map(text)).toEqual(['Delete Week 1', 'Delete Week 3']);
     });
 
     it('shows a refusal of the last session’s delete in the sessions alert', async () => {
@@ -182,7 +183,7 @@ describe('CampManagement publishing', () => {
         SESSIONS.slice(0, 2).map((row) => ({ ...row, registeredCount: 0 })),
       );
       await o.flush();
-      page.querySelector<HTMLButtonElement>('#sessions-list > li button')!.click();
+      deleteButtons(page)[0].click();
       await o.flush();
       o.convex.calls[0].reject(
         new ConvexError({ code: 'lastSession', message: CAMP_SESSION_MESSAGES.lastSession }),

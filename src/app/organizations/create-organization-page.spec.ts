@@ -194,11 +194,10 @@ describe('CreateOrganizationPage', () => {
       expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugEmpty);
       for (const id of ['name', 'slug']) {
         expect(input(id).getAttribute('aria-invalid'), id).toBe('true');
-        expect(input(id).getAttribute('aria-describedby'), id).toBe(
-          `${id}-description ${id}-error`,
-        );
         expect(page.querySelector(`#${id}-error`)?.getAttribute('role')).toBe('alert');
       }
+      expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
       expect(document.activeElement).toBe(input('name'));
       expect(convex.calls).toEqual([]);
     });
@@ -294,7 +293,7 @@ describe('CreateOrganizationPage', () => {
       await leave('slug');
       expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
-      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
 
       await type('name', 'n'.repeat(108));
       await leave('name');
@@ -428,7 +427,7 @@ describe('CreateOrganizationPage', () => {
       expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
       expect(page.querySelector('#slug-error strong')?.textContent).toBe(SLUG);
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
-      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
       expect(document.activeElement).toBe(input('slug'));
       expect(input('slug').value).toBe(SLUG);
       expect(input('name').value).toBe(NAME);
@@ -717,7 +716,7 @@ describe('CreateOrganizationPage', () => {
       expect(page.querySelector('#slug-error strong')?.textContent).toBe('coastal-bend');
       expect(page.querySelector('#slug-error')?.getAttribute('role')).toBe('alert');
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
-      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
       expect(availability()?.textContent?.trim()).toBe('');
       expect(convex.calls).toEqual([]);
     });
@@ -852,6 +851,9 @@ describe('CreateOrganizationPage', () => {
     const describedBy = (id: string, error: boolean) => ({
       'aria-describedby': error ? `${id}-description ${id}-error` : `${id}-description`,
     });
+    const slugDescribedBy = (error: boolean) => ({
+      'aria-describedby': error ? 'slug-error slug-description' : 'slug-description',
+    });
 
     const form = (errors: { name?: boolean; cityState?: boolean; slug?: boolean }) => [
       shapeOf('field-group'),
@@ -877,11 +879,11 @@ describe('CreateOrganizationPage', () => {
       shapeOf('field-label', { for: 'slug' }),
       inputShape(
         'slug',
-        { type: 'text', autocomplete: 'off', ...describedBy('slug', !!errors.slug) },
+        { type: 'text', autocomplete: 'off', ...slugDescribedBy(!!errors.slug) },
         !!errors.slug,
       ),
-      shapeOf('field-description', { id: 'slug-description' }),
       ...(errors.slug ? [shapeOf('field-error', { id: 'slug-error' })] : []),
+      shapeOf('field-description', { id: 'slug-description' }),
     ];
 
     it('draws the same elements, class sets, and attributes when valid', async () => {
@@ -910,7 +912,7 @@ describe('CreateOrganizationPage', () => {
       expect(formShapes(page)).toEqual(form({ slug: true }));
     });
 
-    it('keeps the Web address children in the order label, input, description, status, error', async () => {
+    it('keeps the Web address children in the order label, input, status, error, description', async () => {
       await open();
       await submit();
       const field = page.querySelector('#slug')!.closest('[data-slot="field"]')!;
@@ -918,7 +920,7 @@ describe('CreateOrganizationPage', () => {
         [...field.children].map(
           (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
         ),
-      ).toEqual(['field-label', 'input', 'field-description', 'field-status', 'field-error']);
+      ).toEqual(['field-label', 'input', 'field-status', 'field-error', 'field-description']);
       expect(
         field.querySelector('[data-slot="field-description"] app-web-address-preview'),
       ).not.toBeNull();

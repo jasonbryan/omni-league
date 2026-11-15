@@ -237,16 +237,11 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     [formField]="fields.slug"
                     (blur)="left('slug')"
                     (input)="slugEdited.set(true)"
-                    [attr.aria-describedby]="describedBy('slug', 'slug-description')"
+                    [attr.aria-describedby]="slugDescribedBy()"
                     [attr.aria-invalid]="errors.slug() ? 'true' : null"
                     [attr.data-invalid]="errors.slug() ? 'true' : null"
                     [attr.data-matches-spartan-invalid]="errors.slug() ? 'true' : null"
                   />
-                  <p hlmFieldDescription id="slug-description">
-                    3 to 60 lowercase letters and digits, with single hyphens between them. Your
-                    public page will be at
-                    <app-web-address-preview parent="/organizations" [slug]="addressSlug()" />
-                  </p>
                   <app-web-address-status
                     [available]="slugAvailable()"
                     [reserveRoom]="slugStatusReservesRoom()"
@@ -273,6 +268,11 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                       }
                     </div>
                   }
+                  <p hlmFieldDescription id="slug-description">
+                    3 to 60 lowercase letters and digits, with single hyphens between them. Your
+                    public page will be at
+                    <app-web-address-preview parent="/organizations" [slug]="addressSlug()" />
+                  </p>
                 </div>
               </div>
               <button
@@ -399,6 +399,10 @@ export class CreateOrganizationPage {
 
   protected describedBy(field: FieldName, description: string): string {
     return this.errors[field]() ? `${description} ${field}-error` : description;
+  }
+
+  protected slugDescribedBy(): string {
+    return this.errors.slug() ? 'slug-error slug-description' : 'slug-description';
   }
 
   protected left(field: FieldName): void {

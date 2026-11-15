@@ -17,6 +17,8 @@ import {
   lucideCalendarClock,
   lucideCalendarDays,
   lucideCheck,
+  lucideChevronDown,
+  lucideChevronUp,
   lucideCircleCheck,
   lucideCircleDashed,
   lucideClock,
@@ -54,6 +56,7 @@ import { ADD_SESSION_FRAGMENT, CampAddSessionLanding } from './camp-add-session-
 import { CampBreadcrumb } from './camp-breadcrumb';
 import { CampContext, type CampSessionRow } from './camp-context';
 import { CampNoAccess } from './camp-no-access';
+import { CampRegistrants } from './camp-registrants';
 import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
 import { PublishCampDialog, type PublishCampOutcome } from './publish-camp-dialog';
@@ -70,6 +73,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
     AdminAlert,
     CampBreadcrumb,
     CampNoAccess,
+    CampRegistrants,
     CampSessionForm,
     HlmBadge,
     HlmCard,
@@ -85,6 +89,8 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
       lucideCalendarClock,
       lucideCalendarDays,
       lucideCheck,
+      lucideChevronDown,
+      lucideChevronUp,
       lucideCircleCheck,
       lucideCircleDashed,
       lucideClock,
@@ -338,37 +344,60 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                               /><span>Registration closes {{ closes(row) }}</span>
                             </p>
                           </div>
-                          @if (row.registeredCount === 0 && keepsCampPublished(rows().length)) {
-                            <span data-slot="session-required" class="text-sm text-muted-foreground"
-                              >Required while published</span
-                            >
-                          } @else if (row.registeredCount === 0) {
+                          <div class="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               data-slot="button"
                               [class]="outlineButton"
-                              [class.opacity-50]="!online() && deleting() !== row.campSessionId"
-                              [attr.aria-disabled]="
-                                deleting() === row.campSessionId || !online() ? 'true' : null
-                              "
-                              (click)="remove(row)"
+                              [attr.aria-expanded]="isOpen(row) ? 'true' : 'false'"
+                              [attr.aria-controls]="isOpen(row) ? registrantsId(row) : null"
+                              (click)="toggleRegistrants(row)"
                             >
-                              @if (deleting() === row.campSessionId) {
-                                Deleting {{ row.name }}…
-                              } @else {
-                                <ng-icon
-                                  name="lucideTrash2"
-                                  data-icon="inline-start"
-                                  aria-hidden="true"
-                                />Delete<span class="sr-only"> {{ row.name }}</span>
-                              }
+                              <ng-icon
+                                [name]="isOpen(row) ? 'lucideChevronUp' : 'lucideChevronDown'"
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                              /><span data-slot="session-registered"
+                                >{{ row.registeredCount }} of {{ row.places }} registered</span
+                              ><span class="sr-only"> in {{ row.name }}</span>
                             </button>
-                          } @else {
-                            <span
-                              data-slot="session-registered"
-                              class="text-sm text-muted-foreground"
-                              >{{ row.registeredCount }} registered</span
-                            >
+                            @if (row.registeredCount === 0 && keepsCampPublished(rows().length)) {
+                              <span
+                                data-slot="session-required"
+                                class="text-sm text-muted-foreground"
+                                >Required while published</span
+                              >
+                            } @else if (row.registeredCount === 0) {
+                              <button
+                                type="button"
+                                data-slot="button"
+                                [class]="outlineButton"
+                                [class.opacity-50]="!online() && deleting() !== row.campSessionId"
+                                [attr.aria-disabled]="
+                                  deleting() === row.campSessionId || !online() ? 'true' : null
+                                "
+                                (click)="remove(row)"
+                              >
+                                @if (deleting() === row.campSessionId) {
+                                  Deleting {{ row.name }}…
+                                } @else {
+                                  <ng-icon
+                                    name="lucideTrash2"
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                  />Delete<span class="sr-only"> {{ row.name }}</span>
+                                }
+                              </button>
+                            }
+                          </div>
+                          @if (isOpen(row)) {
+                            <div [id]="registrantsId(row)" class="basis-full min-w-0">
+                              <app-camp-registrants
+                                [sessionId]="row.campSessionId"
+                                [sessionName]="row.name"
+                                [retryHref]="retryHref()"
+                              />
+                            </div>
                           }
                         </li>
                       }
@@ -520,6 +549,7 @@ export class CampManagement {
   protected readonly undoing = signal(false);
   protected readonly undoNote = signal<string | null>(null);
   protected readonly outcome = signal<Outcome | null>(null);
+  private readonly openSessions = signal<ReadonlySet<string>>(new Set());
   protected readonly failure = signal<{ title: string; description: string } | null>(null);
 
   private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
@@ -541,6 +571,22 @@ export class CampManagement {
     effect(() => {
       const camp = this.camp();
       if (camp) this.title.setTitle(`${camp.name} | ${camp.organization.name} | Omni League`);
+    });
+  }
+
+  protected isOpen(row: CampSessionRow): boolean {
+    return this.openSessions().has(row.campSessionId);
+  }
+
+  protected registrantsId(row: CampSessionRow): string {
+    return `registrants-${row.campSessionId}`;
+  }
+
+  protected toggleRegistrants(row: CampSessionRow): void {
+    this.openSessions.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(row.campSessionId)) next.add(row.campSessionId);
+      return next;
     });
   }
 

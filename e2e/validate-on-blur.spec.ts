@@ -121,7 +121,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(fieldError(page, 'slug')).toHaveCount(0);
     await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'slug')).toHaveText(SLUG_MESSAGE);
-    await expectLinked(page, 'slug', 'slug-description slug-error');
+    await expectLinked(page, 'slug', 'slug-error slug-description');
 
     await expect(page.locator('#sport input[type="radio"]').first()).toBeFocused();
     await expect(fieldError(page, 'sport')).toHaveCount(0);
@@ -163,7 +163,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(fieldError(page, 'slug')).toHaveCount(0);
     await field(page, 'start-date').focus();
     await expect(fieldError(page, 'slug')).toHaveText(SLUG_MESSAGE);
-    await expectLinked(page, 'slug', 'slug-description slug-error');
+    await expectLinked(page, 'slug', 'slug-error slug-description');
 
     await field(page, 'start-date').fill('2026-09-01');
     await field(page, 'end-date').fill('2026-08-01');

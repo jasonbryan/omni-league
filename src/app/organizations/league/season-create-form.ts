@@ -179,16 +179,11 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [formField]="form.fields.slug"
             (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
-            [attr.aria-describedby]="describedBy('slug', 'slug-description')"
+            [attr.aria-describedby]="slugDescribedBy()"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           />
-          <p hlmFieldDescription id="slug-description">
-            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ leagueName() }}. Its public page will be at
-            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
-          </p>
           <app-web-address-status
             [available]="form.slugAvailable()"
             [reserveRoom]="form.slugStatusReservesRoom()"
@@ -215,6 +210,11 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               }
             </div>
           }
+          <p hlmFieldDescription id="slug-description">
+            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
+            {{ leagueName() }}. Its public page will be at
+            <app-web-address-preview [parent]="addressParent()" [slug]="addressSlug()" />
+          </p>
         </div>
         <div class="grid gap-6 sm:max-lg:grid-cols-2">
           @for (date of dateFields; track date.field) {
@@ -500,6 +500,10 @@ export class SeasonCreateForm {
     const ids = [description, this.form.errors[field]() ? `${errorId}-error` : null];
     const described = ids.filter((id): id is string => id !== null).join(' ');
     return described === '' ? null : described;
+  }
+
+  protected slugDescribedBy(): string {
+    return this.form.errors.slug() ? 'slug-error slug-description' : 'slug-description';
   }
 
   protected seasonHref(slug: string): string {

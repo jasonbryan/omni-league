@@ -152,6 +152,7 @@ describe('convex/testing.ts exports', () => {
       'seedBatch',
       'seedBatchRows',
       'seedCamp',
+      'seedCampRegistration',
       'seedCampSession',
       'seedFreeAgent',
       'seedLeague',

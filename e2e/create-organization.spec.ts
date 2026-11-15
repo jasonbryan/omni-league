@@ -7,6 +7,7 @@ import { seedTenant } from './support/tenant';
 import { newUser } from './support/users';
 import { screenshot } from './support/screenshot';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { expectDescriptionHeightHeldWhileTyping } from './support/web-address-description';
 import { randomBytes } from 'node:crypto';
 
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
@@ -153,11 +154,15 @@ test.describe('create an organization', () => {
     await expect(fieldError(page, 'slug')).toHaveText('Enter a web address for your public page.');
     for (const id of ['name', 'slug']) {
       await expect(field(page, id)).toHaveAttribute('aria-invalid', 'true');
-      await expect(field(page, id)).toHaveAttribute(
-        'aria-describedby',
-        `${id}-description ${id}-error`,
-      );
     }
+    await expect(field(page, 'name')).toHaveAttribute(
+      'aria-describedby',
+      'name-description name-error',
+    );
+    await expect(field(page, 'slug')).toHaveAttribute(
+      'aria-describedby',
+      'slug-error slug-description',
+    );
     await expect(field(page, 'name')).toBeFocused();
     await screenshot(page, testInfo, '64-new-errors-required');
     await expectAccessible(page, { expectedOrder: formOrder() });
@@ -185,7 +190,7 @@ test.describe('create an organization', () => {
     await expect(field(page, 'slug')).toHaveAttribute('aria-invalid', 'true');
     await expect(field(page, 'slug')).toHaveAttribute(
       'aria-describedby',
-      'slug-description slug-error',
+      'slug-error slug-description',
     );
     await expectAccessible(page, { expectedOrder: formOrder() });
 
@@ -305,6 +310,34 @@ test.describe('create an organization', () => {
       await expect(fieldError(page, 'slug')).toHaveCount(0);
       await screenshot(page, testInfo, '208-new-available');
       await expectAccessible(page, { expectedOrder: formOrder() });
+    });
+
+    test('keeps the description as tall as for the empty field while the address is typed', async ({
+      page,
+    }) => {
+      await signUp(page, newUser('Prefix'));
+      await openForm(page);
+      await expectDescriptionHeightHeldWhileTyping(page, 'free-address');
+    });
+
+    test('moves the button below by the error height minus the 20px status line when the address is taken', async ({
+      page,
+    }) => {
+      test.skip(!!remoteBaseUrl, NO_SEED);
+      const taken = await seedTenant({ name: 'E2E Shift' });
+      await signUp(page, newUser('Shift'));
+      await openForm(page);
+      const free = `${taken.slug.slice(0, -1)}${taken.slug.endsWith('z') ? 'y' : 'z'}`;
+      await field(page, 'slug').fill(free);
+      await expect(availability(page)).toHaveText('Available');
+      const before = (await createButton(page).boundingBox())?.y ?? 0;
+      await field(page, 'slug').fill(taken.slug);
+      await expect(fieldError(page, 'slug')).toHaveText(
+        `${taken.slug} is already taken. Choose another web address.`,
+      );
+      const errorHeight = (await fieldError(page, 'slug').boundingBox())?.height ?? 0;
+      const moved = ((await createButton(page).boundingBox())?.y ?? 0) - before;
+      expect(Math.abs(moved - (errorHeight - 20))).toBeLessThanOrEqual(1);
     });
 
     test('a typed address that is taken says so before any submit', async ({ page }, testInfo) => {
