@@ -8,8 +8,6 @@ import {
   type StandingsTiebreaker,
 } from './sports';
 
-// Imports only `./sports`, so a page can render the cells and notes without the server code.
-
 export interface StandingsGame {
   /** `score.a` is the first team's. */
   teamIds: readonly [string, string];

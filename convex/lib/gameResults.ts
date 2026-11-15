@@ -48,7 +48,6 @@ export interface ResultInput {
 export const setsPerGameOf = (tournament: Doc<'tournaments'>) =>
   tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
 
-/** A pool game may end level in the sports that allow it; a bracket game needs a winner. */
 export const tiesAllowedIn = (game: Doc<'tournamentGames'>, sport: Sport) =>
   game.stage === 'pool' && POOL_PLAY_TIES[sport];
 

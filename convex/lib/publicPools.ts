@@ -61,6 +61,7 @@ export async function publicPools(
   });
 }
 
+/** A forfeit is a side and never its stored score, which the page would otherwise show as a played game. */
 function gameView(game: Game, nameOf: (teamId: Id<'teams'> | null) => string): PublicGame {
   const base = { round: game.round, teams: game.teamIds.map(nameOf) };
   if (!gameHasResult(game)) return base;
@@ -71,7 +72,6 @@ function gameView(game: Game, nameOf: (teamId: Id<'teams'> | null) => string): P
   return { ...base, ...(game.score && { score: game.score }), ...winnerOf(game) };
 }
 
-/** A forfeit is a side and never its stored score, which the page would otherwise show as a played game. */
 function winnerOf(game: Game): Pick<PublicGame, 'winner'> {
   const side = game.winnerTeamId === undefined ? -1 : game.teamIds.indexOf(game.winnerTeamId);
   return side === 0 || side === 1 ? { winner: side } : {};

@@ -21,7 +21,7 @@ export type BracketGameView = NonNullable<
   BracketSetup['bracket']
 >['rounds'][number]['games'][number];
 
-/** What the result form needs of a game: a pool game has no next game to lock it and no score reports yet. */
+/** What the result form needs of a game: a pool game has no next game to lock it and no score reports. */
 export type ResultGameView = Pick<
   BracketGameView,
   'gameId' | 'slot' | 'teams' | 'winnerTeamId' | 'result'
