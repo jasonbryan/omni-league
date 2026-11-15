@@ -753,7 +753,7 @@ test.describe('public tournament page: pools', () => {
     expect(await container.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
       'none',
     );
-    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowRight');
     await expect.poll(() => container.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expectNoSidewaysScroll(page);
     await screenshot(page, testInfo, 'public-pools-soccer-320');
