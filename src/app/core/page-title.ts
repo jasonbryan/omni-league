@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import {
   PRIMARY_OUTLET,
@@ -17,13 +17,30 @@ export class PageTitle {
   private readonly title = inject(Title);
   private readonly bar = signal(SITE_NAME);
 
-  /** `bar` when given, else the first part. The admin Overview passes the organization's name as `bar`. */
   readonly barText = this.bar.asReadonly();
+
+  private readonly routeTitlesApplied = signal(0);
+  /** Changes when a route title replaces the title, so a view that stays on screen through the navigation can set its own again. */
+  readonly routeTitles = this.routeTitlesApplied.asReadonly();
 
   set(parts: readonly string[], options: { readonly bar?: string } = {}): void {
     this.title.setTitle([...parts, SITE_NAME].join(SEPARATOR));
     this.bar.set(options.bar ?? parts[0] ?? SITE_NAME);
   }
+
+  setFromRoute(parts: readonly string[]): void {
+    this.set(parts);
+    this.routeTitlesApplied.update((count) => count + 1);
+  }
+}
+
+/** Sets the title of a view that replaces a page's content, and again after a route title applies while the view stays on screen. */
+export function bindViewTitle(part: string): void {
+  const pageTitle = inject(PageTitle);
+  effect(() => {
+    pageTitle.routeTitles();
+    pageTitle.set([part]);
+  });
 }
 
 interface RouteIdentity {
@@ -31,19 +48,14 @@ interface RouteIdentity {
   readonly params: Params;
 }
 
-/** The deepest primary route and the params of every route down to it, since a reused child keeps its own params when only its parent's change. */
 function identityOf(snapshot: RouterStateSnapshot): RouteIdentity {
   let route = snapshot.root;
-  let params: Params = {};
-  for (
-    let child = route.children.find((c) => c.outlet === PRIMARY_OUTLET);
-    child;
-    child = route.children.find((c) => c.outlet === PRIMARY_OUTLET)
-  ) {
+  let child = route.children.find((c) => c.outlet === PRIMARY_OUTLET);
+  while (child) {
     route = child;
-    params = { ...params, ...route.params };
+    child = route.children.find((c) => c.outlet === PRIMARY_OUTLET);
   }
-  return { config: route.routeConfig, params };
+  return { config: route.routeConfig, params: route.params };
 }
 
 function sameParams(a: Params, b: Params): boolean {
@@ -51,7 +63,7 @@ function sameParams(a: Params, b: Params): boolean {
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 }
 
-/** Hands a route's `title` to `PageTitle`. A route without one changes nothing, so the public pages' own titles stay. */
+/** A route without a `title` changes nothing, so the public pages' own titles stay. */
 @Injectable()
 export class PageTitleStrategy extends TitleStrategy {
   private readonly pageTitle = inject(PageTitle);
@@ -67,6 +79,6 @@ export class PageTitleStrategy extends TitleStrategy {
     if (title === undefined) return;
     const parts = title.split(SEPARATOR);
     if (parts.at(-1) === SITE_NAME) parts.pop();
-    this.pageTitle.set(parts);
+    this.pageTitle.setFromRoute(parts);
   }
 }

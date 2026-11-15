@@ -1,14 +1,22 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { provideRouter, Router, TitleStrategy } from '@angular/router';
+import { provideRouter, Router, RouterOutlet, TitleStrategy } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { PageTitle, PageTitleStrategy } from './page-title';
 
 @Component({ template: 'page' })
 class BlankPage {}
 
+@Component({ imports: [RouterOutlet], template: '<router-outlet />' })
+class Frame {}
+
 const routes = [
+  {
+    path: 'o/:org',
+    component: Frame,
+    children: [{ path: 'items', title: 'Org items | Omni League', component: BlankPage }],
+  },
   { path: 'items/:id', title: 'Item | Omni League', component: BlankPage },
   { path: 'other', title: 'Other | Omni League', component: BlankPage },
   { path: 'bare', title: 'Omni League', component: BlankPage },
@@ -116,6 +124,26 @@ describe('PageTitleStrategy', () => {
     await TestBed.inject(Router).navigateByUrl('/items/1?season=2#top');
     expect(TestBed.inject(Title).getTitle()).toBe('Loaded item | Organization | Omni League');
     expect(TestBed.inject(PageTitle).barText()).toBe('Loaded item');
+  });
+
+  it('applies the child route title when only a parent path parameter changes', async () => {
+    configure();
+    await RouterTestingHarness.create('/o/1/items');
+    TestBed.inject(PageTitle).set(['Loaded for org 1']);
+    await TestBed.inject(Router).navigateByUrl('/o/2/items');
+    expect(TestBed.inject(Title).getTitle()).toBe('Org items | Omni League');
+    expect(TestBed.inject(PageTitle).barText()).toBe('Org items');
+  });
+
+  it('counts each route title it applies, and not a navigation that keeps the data title', async () => {
+    configure();
+    const pageTitle = TestBed.inject(PageTitle);
+    await RouterTestingHarness.create('/items/1');
+    const afterFirst = pageTitle.routeTitles();
+    await TestBed.inject(Router).navigateByUrl('/items/1#top');
+    expect(pageTitle.routeTitles()).toBe(afterFirst);
+    await TestBed.inject(Router).navigateByUrl('/items/2');
+    expect(pageTitle.routeTitles()).toBe(afterFirst + 1);
   });
 
   it('applies the route title when the route comes back after a route without a title', async () => {
