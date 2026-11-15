@@ -1293,6 +1293,42 @@ test.describe('public season page: the names a link carried in the skeleton', ()
     });
   }
 
+  for (const registration of ['open', 'full'] as const) {
+    for (const named of NAMED_SEASONS) {
+      test(`at 320px with a touch screen, a ${named.length} ${registration} season’s skeleton shows no horizontal scroll or axe violation and the page lands within ${LAND_TOLERANCE}px`, async ({
+        page,
+        consoleGuard,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== 'chromium-mobile', 'one Chromium project per pointer');
+        await page.setViewportSize({ width: 320, height: 800 });
+        const tenant = await seedNamedSeasons(registration);
+
+        const followed = await followSeasonRow(
+          page,
+          consoleGuard,
+          tenant,
+          named,
+          async (held) => {
+            await expect(held.getByTestId('season-skeleton-card')).toContainText(
+              registration === 'open' ? 'Registration open · closes' : 'This season is full',
+            );
+            const root = await held.evaluate(() => ({
+              scrollWidth: document.documentElement.scrollWidth,
+              clientWidth: document.documentElement.clientWidth,
+            }));
+            expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+            expect(describeViolations((await axeScan(held)).violations)).toEqual([]);
+          },
+          registration === 'full'
+            ? { link: (path) => `#registration-open h3 a[href="${path}"]` }
+            : undefined,
+        );
+
+        expectLanded(followed, ALL_PARTS, { cardHeight: true });
+      });
+    }
+  }
+
   test.describe('See <next season> on a closed season page', () => {
     const NEXT_FULL = {
       leagueSlug: LEAGUE_SLUG,
