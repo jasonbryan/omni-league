@@ -714,7 +714,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
     page: Page,
     camp: string,
     answers: string[],
-    lines: string[],
+    line: string,
   ): Promise<void> {
     const held = await holdQueries(page, answers);
     await page.goto(camp);
@@ -726,7 +726,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
 
     held.release();
     const registered = row(page, 'Week 1').locator('[data-slot="session-registered"]');
-    await expect(registered).toHaveText(lines);
+    await expect(registered).toHaveText(line);
     const after = await layout(page);
     expect(after.rows).toHaveLength(before.rows.length);
     expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
@@ -752,7 +752,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
         page,
         youth,
         ['campRegistrations:listMyMinorsForCamp'],
-        ['Maya R. is registered'],
+        'Maya R. is registered',
       );
       await expectAccessible(page);
       await screenshot(page, testInfo, `356-camp-children-arrived-${width}`);
@@ -776,7 +776,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
         page,
         mixed,
         ['campRegistrations:listMineForCamp', 'campRegistrations:listMyMinorsForCamp'],
-        ["You're registered", 'Maya R. is registered'],
+        'You and Maya R. are registered',
       );
     });
   }
