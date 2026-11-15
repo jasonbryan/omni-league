@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireUser } from './lib/access';
+import { requireCampSessionOrganizer, requireUser } from './lib/access';
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs, publishedCampOfSession } from './lib/campLookup';
 import {
   CAMP_NOT_FOUND_CODE,
@@ -8,6 +8,7 @@ import {
   type CampRegistrationRefusal,
 } from './lib/campRegistration';
 import { minorRegistrationsOf } from './lib/campRegistrationReads';
+import { campRegistrantsOf } from './lib/campRegistrants';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import {
   MAX_MINORS_PER_SESSION,
@@ -243,5 +244,21 @@ export const listMyMinorsForCamp = query({
       }
     }
     return held;
+  },
+});
+
+export const listForSession = query({
+  args: { sessionId: v.id('campSessions') },
+  returns: v.array(
+    v.object({
+      registrationId: v.id('campRegistrations'),
+      name: v.string(),
+      guardian: v.optional(v.object({ name: v.string(), email: v.string() })),
+      registeredAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, { sessionId }) => {
+    const { campSession } = await requireCampSessionOrganizer(ctx, sessionId);
+    return campRegistrantsOf(ctx, campSession);
   },
 });

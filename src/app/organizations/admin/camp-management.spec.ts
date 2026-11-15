@@ -55,9 +55,11 @@ describe('CampManagement', () => {
   const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
   const status = () => page.querySelector<HTMLElement>('[data-slot="session-status"]')!;
   const deleteButton = (name: string) =>
-    items()
-      .find((li) => text(li.querySelector('h3')) === name)!
-      .querySelector<HTMLButtonElement>('button')!;
+    [
+      ...items()
+        .find((li) => text(li.querySelector('h3')) === name)!
+        .querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => text(button)?.startsWith('Delet'))!;
   const undoButton = () =>
     [...status().querySelectorAll<HTMLButtonElement>('button')].find((b) => text(b) === 'Undo')!;
   const details = () =>
@@ -335,17 +337,19 @@ describe('CampManagement', () => {
       expect(items()).toHaveLength(3);
     });
 
-    it('offers Delete on a session with no registrations, and shows the count instead on one with some', async () => {
+    it('offers Delete on a session with no registrations, and only the count on one with some', async () => {
       await open(CAMP, SESSIONS);
       expect(
         items().map((li) => [
-          text(li.querySelector('button')) ?? null,
-          text(li.querySelector('[data-slot="session-registered"]')) ?? null,
+          text(li.querySelector('[data-slot="session-registered"]')),
+          [...li.querySelectorAll('button')]
+            .map((button) => text(button))
+            .filter((label) => label?.startsWith('Delete')),
         ]),
       ).toEqual([
-        ['Delete Week 1', null],
-        [null, '1 registered'],
-        ['Delete Week 3', null],
+        ['0 of 20 registered', ['Delete Week 1']],
+        ['1 of 1 registered', []],
+        ['0 of 20 registered', ['Delete Week 3']],
       ]);
       expect(deleteButton('Week 1').type).toBe('button');
       expect(deleteButton('Week 1').getAttribute('data-slot')).toBe('button');
