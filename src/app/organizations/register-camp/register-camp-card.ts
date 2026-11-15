@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft } from '@ng-icons/lucide';
-import { campAgesLabel } from '../../../../convex/lib/campInput';
 import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { HlmCard } from '../../ui/card';
@@ -67,7 +66,9 @@ export class RegisterCampCard {
       { label: 'Session', value: session.name },
       { label: 'Dates', value: seasonDates(session.startDate, session.endDate) },
       ...(times === null ? [] : [{ label: 'Hours', value: times }]),
-      { label: 'Ages', value: campAgesLabel(minimumAge, maximumAge) },
+      minimumAge === maximumAge
+        ? { label: 'Age', value: String(minimumAge) }
+        : { label: 'Ages', value: `${minimumAge} to ${maximumAge}` },
       {
         label: 'Places left',
         value:

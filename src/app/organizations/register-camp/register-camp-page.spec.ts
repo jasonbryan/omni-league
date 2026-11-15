@@ -224,6 +224,16 @@ describe('RegisterCampPage', () => {
       expect(page.querySelector('form')).toBeNull();
     });
 
+    it('a camp with one age labels the fact Age and gives the number', async () => {
+      await open();
+      await answer({ ...YOUTH, minimumAge: 12, maximumAge: 12 });
+      const facts = [...page.querySelectorAll('main dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+      expect(facts).toContainEqual(['Age', '12']);
+    });
+
     it('open: the form with the session’s facts and the title', async () => {
       await open();
       await answer(OPEN);
@@ -236,7 +246,7 @@ describe('RegisterCampPage', () => {
         ['Session', 'Week 1'],
         ['Dates', 'Jul 5 – Jul 9, 2027'],
         ['Hours', '9 AM to 12 PM'],
-        ['Ages', 'Ages 18 to 99'],
+        ['Ages', '18 to 99'],
         ['Places left', '12 places left'],
         ['Registration closes', 'Jun 28, 2027'],
       ]);
