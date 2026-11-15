@@ -79,6 +79,12 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },
   {
+    // The HTML holds nothing of the query string.
+    path: 'organizations/:orgSlug/camps/:campSlug',
+    renderMode: RenderMode.Server,
+    headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+  },
+  {
     path: '**',
     renderMode: RenderMode.Server,
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },

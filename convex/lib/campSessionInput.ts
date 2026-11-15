@@ -82,6 +82,7 @@ export const CAMP_SESSION_MESSAGES = {
   sessionLimit: `A camp takes up to ${MAX_CAMP_SESSIONS} sessions. Delete one before adding another.`,
   hasRegistrations: (registeredCount: number) =>
     `${registeredCount} ${registeredCount === 1 ? 'registration is' : 'registrations are'} in this session, so it cannot be deleted.`,
+  lastSession: 'A published camp keeps at least one session. Add another before deleting this one.',
 } as const;
 
 export interface CampSessionValues {

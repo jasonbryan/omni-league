@@ -14,6 +14,7 @@ import { NotFoundPage } from './not-found/not-found-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { PublicLeaguePage } from './organizations/public-league/public-league-page';
 import { PublicSeasonPage } from './organizations/public-season/public-season-page';
+import { PublicCampPage } from './organizations/public-camp/public-camp-page';
 import { PublicTournamentPage } from './organizations/public-tournament/public-tournament-page';
 
 @Component({ template: 'page' })
@@ -53,6 +54,12 @@ const PAGES: { url: string; path: string; page: unknown; params: Record<string, 
     page: PublicTournamentPage,
     params: { orgSlug: 'acme', tournamentSlug: 'open' },
   },
+  {
+    url: '/organizations/acme/camps/junior',
+    path: ':orgSlug/camps/:campSlug',
+    page: PublicCampPage,
+    params: { orgSlug: 'acme', campSlug: 'junior' },
+  },
 ];
 
 const organizationsParent = (): Route | undefined =>
@@ -85,7 +92,7 @@ describe('Public organization routes', () => {
     expect(await parent?.loadChildren?.()).toBe(organizationRoutes);
   });
 
-  it('the route file holds the not-found route for the bare path, then the five public paths without the organizations prefix', () => {
+  it('the route file holds the not-found route for the bare path, then the six public paths without the organizations prefix', () => {
     expect(organizationRoutes.map((route) => route.path)).toEqual([
       '',
       ...PAGES.map((p) => p.path),

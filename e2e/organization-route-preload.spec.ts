@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { seedPublishedCamp } from './support/camp';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
@@ -38,6 +39,7 @@ const COURTS = { name: 'Sand Courts', address: '1 Beach Rd, Corpus Christi, TX 7
 const LEAGUE_SLUG = 'coed-league';
 const SEASON_SLUG = 'summer-2027';
 const TOURNAMENT_SLUG = 'beach-open';
+const CAMP_SLUG = 'beach-camp';
 
 interface PublicPage {
   name: string;
@@ -77,6 +79,12 @@ const PUBLIC_PAGES: PublicPage[] = [
     pageClass: 'PublicTournamentPage',
     path: (organization) => `${organization}/tournaments/${TOURNAMENT_SLUG}`,
   },
+  {
+    name: 'camp page',
+    manifestRoute: '/organizations/*/camps/*',
+    pageClass: 'PublicCampPage',
+    path: (organization) => `${organization}/camps/${CAMP_SLUG}`,
+  },
 ];
 
 async function seedPublicPages(): Promise<string> {
@@ -94,6 +102,21 @@ async function seedPublicPages(): Promise<string> {
     locations: [COURTS.name],
     startDate: dateFromToday(30),
     endDate: dateFromToday(31),
+  });
+  await seedPublishedCamp(tenant, {
+    name: 'Beach Camp',
+    slug: CAMP_SLUG,
+    locations: [COURTS.name],
+    minimumAge: 9,
+    maximumAge: 14,
+    sessions: [
+      {
+        name: 'Week 1',
+        startDate: dateFromToday(30),
+        endDate: dateFromToday(34),
+        registrationDeadline: dateFromToday(20),
+      },
+    ],
   });
   return tenant.path;
 }

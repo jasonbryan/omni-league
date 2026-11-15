@@ -442,7 +442,7 @@ describe('seed:demo accounts: a new deployment', () => {
           .sort(),
       ).toEqual([
         ['Fall Break Camp', 'draft', 10, 16],
-        ['Junior Beach Volleyball Camp', 'draft', 9, 14],
+        ['Junior Beach Volleyball Camp', 'published', 9, 14],
       ]);
       const pending = await admin.query(api.invites.listPending, {
         organizationId: gulfCoast._id,

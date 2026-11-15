@@ -12,7 +12,7 @@ import {
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
-import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
+import { CAMP_SESSIONS_LIMIT, campSessionTotal, findCampBySlugs } from './lib/campLookup';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { backfillPendingInviteCounts, insertPendingInvite } from './lib/inviteWrites';
@@ -73,6 +73,7 @@ import {
   insertCampSession,
   insertDraftCamp,
   insertDraftTournament,
+  publishCamp,
   publishTournament,
   insertSeason,
   insertTenant,
@@ -737,6 +738,7 @@ interface DemoCamp {
   minimumAge: number;
   maximumAge: number;
   sessions: readonly DemoCampSession[];
+  published?: boolean;
 }
 
 interface DemoCampSession {
@@ -771,6 +773,7 @@ const DEMO_CAMPS: readonly DemoCamp[] = [
       { name: 'Week 2', startDaysFromRun: 21, ...WEEK_OF_MORNINGS },
       { name: 'Week 3', startDaysFromRun: 28, ...WEEK_OF_MORNINGS },
     ],
+    published: true,
   },
   {
     organizationSlug: 'gulf-coast-sport-social',
@@ -849,6 +852,15 @@ async function ensureCampSessions(
     inserted++;
   }
   return inserted;
+}
+
+async function ensureCampPublished(ctx: MutationCtx, demo: DemoCamp): Promise<void> {
+  if (!demo.published) return;
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization) return;
+  const found = await findCampBySlugs(ctx, organization, demo.slug);
+  if (!found || (await campSessionTotal(ctx, found.camp)) === 0) return;
+  await publishCamp(ctx, found.camp);
 }
 
 async function ensureTournament(
@@ -1032,6 +1044,7 @@ export const insertDemoData = internalMutation({
     for (const demo of DEMO_CAMPS) {
       if (await ensureCamp(ctx, demo)) inserted.camps++;
       inserted.campSessions += await ensureCampSessions(ctx, demo, today);
+      await ensureCampPublished(ctx, demo);
     }
     return { ...inserted, backfilled };
   },

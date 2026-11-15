@@ -6,7 +6,7 @@ import type { Doc } from './_generated/dataModel';
 import { formatLabel } from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { registrationIsOpen, seasonPhase } from './lib/registration';
+import { dateAtUtcMinus12, registrationIsOpen, seasonPhase } from './lib/registration';
 import { searchWords } from './lib/searchQuery';
 import { checkCampSessionFields } from './lib/campSessionInput';
 import { checkSeasonFields } from './lib/seasonInput';
@@ -1340,7 +1340,7 @@ describe('seed:demo camps', () => {
     });
   }
 
-  test('adds the draft Junior Beach Volleyball Camp, ages 9 to 14, and the draft Fall Break Camp to Gulf Coast Sport & Social, and a second run adds none', async () => {
+  test('adds the published Junior Beach Volleyball Camp, ages 9 to 14, and the draft Fall Break Camp to Gulf Coast Sport & Social, and a second run adds none', async () => {
     const t = setup();
     expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(2);
     expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(0);
@@ -1356,7 +1356,7 @@ describe('seed:demo camps', () => {
       type: 'camp',
       slug: 'junior-beach-volleyball-camp',
       sport: 'beachVolleyball',
-      status: 'draft',
+      status: 'published',
       locationIds: [location],
     });
     expect(junior.camp).toMatchObject({ organizationId, minimumAge: 9, maximumAge: 14 });
@@ -1433,6 +1433,46 @@ describe('seed:demo camp sessions', () => {
       ).toEqual({});
       expect(row.registrationDeadline < row.startDate).toBe(true);
     }
+  });
+
+  test('publishes the Junior Beach Volleyball Camp with registration open for all 3 sessions, and leaves the Fall Break Camp a draft', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { rows } = await sessionsOfJunior(t);
+    const today = dateAtUtcMinus12(Date.now());
+    for (const row of rows) {
+      expect(registrationIsOpen(row, Date.now()), row.name).toBe(true);
+      expect(row.registrationDeadline >= today, row.name).toBe(true);
+    }
+    const statuses = await t.run(async (ctx) =>
+      (await ctx.db.query('programs').collect())
+        .filter((program) => program.type === 'camp')
+        .map((program) => [program.slug, program.status]),
+    );
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        ['junior-beach-volleyball-camp', 'published'],
+        ['fall-break-camp', 'draft'],
+      ]),
+    );
+  });
+
+  test('publishes a Junior Beach Volleyball Camp that an earlier run left as a draft', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'junior-beach-volleyball-camp',
+      )!;
+      await ctx.db.patch('programs', program._id, { status: 'draft' });
+    });
+    await t.mutation(internal.seed.insertDemoData, {});
+    const program = await t.run(async (ctx) =>
+      (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'junior-beach-volleyball-camp',
+      ),
+    );
+    expect(program?.status).toBe('published');
   });
 
   test('puts no session on the Fall Break Camp, and a second run adds none', async () => {
