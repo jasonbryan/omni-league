@@ -375,6 +375,43 @@ describe('trainingClasses.schedule', () => {
     expect(await classesOf(s)).toHaveLength(1);
   });
 
+  test.each([
+    // 0026-11-17 is a Tuesday and 9999-12-01 a Wednesday in the proleptic Gregorian calendar.
+    ['year 0026', '0026-11-17', 2, 3, '0026-11-10'],
+    ['9999 with 51 weeks', '9999-12-01', 3, 51, '9999-11-20'],
+  ])(
+    'a first date in %s is refused with nothing written, or stored as real four-digit dates a week apart',
+    async (_label, firstDate, weekday, weeks, registrationDeadline) => {
+      const s = await setup();
+      const outcome = await s.adminA
+        .mutation(api.trainingClasses.schedule, {
+          ...valid(s),
+          weekday,
+          firstDate,
+          weeks,
+          registrationDeadline,
+        })
+        .then(
+          () => 'scheduled',
+          () => 'refused',
+        );
+      const rows = await classesOf(s);
+      if (outcome === 'refused') {
+        expect(rows).toEqual([]);
+        return;
+      }
+      expect(rows).toHaveLength(weeks);
+      const dates = rows.map((row) => row.date).sort();
+      expect(dates.every((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))).toBe(true);
+      expect(dates[0]).toBe(firstDate);
+      dates.slice(1).forEach((date, index) => {
+        expect(Date.parse(`${date}T00:00:00Z`) - Date.parse(`${dates[index]}T00:00:00Z`)).toBe(
+          7 * 86_400_000,
+        );
+      });
+    },
+  );
+
   test('two schedules at once leave one series and one refusal', async () => {
     const s = await setup();
     const results = await Promise.allSettled([

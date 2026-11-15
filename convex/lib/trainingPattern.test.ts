@@ -64,6 +64,66 @@ describe('weekdayOf and classDates', () => {
   });
 });
 
+describe('classDates across a clock change and the limits', () => {
+  const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000;
+
+  test('keeps the weekday through the US and EU clock changes, 7 days apart, for a full 52 weeks', () => {
+    const dates = classDates('2027-01-05', 52);
+    expect(dates).toHaveLength(52);
+    expect(dates.every((date) => weekdayOf(date) === 2)).toBe(true);
+    dates.slice(1).forEach((date, index) => {
+      expect(dayNumber(date) - dayNumber(dates[index])).toBe(7);
+    });
+    // US spring forward is 2027-03-14 and fall back 2027-11-07; EU is 2027-03-28 and 2027-10-31.
+    expect(dates).toContain('2027-03-09');
+    expect(dates).toContain('2027-03-30');
+    expect(dates).toContain('2027-11-02');
+    expect(dates[51]).toBe('2027-12-28');
+  });
+
+  test('is strictly increasing and unique across a leap day', () => {
+    const dates = classDates('2028-02-22', 4);
+    expect(dates).toEqual(['2028-02-22', '2028-02-29', '2028-03-07', '2028-03-14']);
+  });
+});
+
+describe('dates at the edge of the four-digit year range', () => {
+  const REAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // A pattern is either refused under its first date, or every class date is a real four-digit date a week apart.
+  function expectRefusedOrWholeSeries(
+    firstDate: string,
+    weekday: number,
+    weeks: number,
+    deadline: string,
+  ) {
+    const errors = errorsOf({ weekday, firstDate, weeks, registrationDeadline: deadline });
+    if (errors.firstDate) return;
+    expect(errors).toEqual({});
+    const dates = classDates(firstDate, weeks);
+    expect(dates).toHaveLength(weeks);
+    expect(dates.every((date) => REAL_DATE.test(date))).toBe(true);
+    expect(dates[0]).toBe(firstDate);
+    dates.slice(1).forEach((date, index) => {
+      expect(Date.parse(`${date}T00:00:00Z`) - Date.parse(`${dates[index]}T00:00:00Z`)).toBe(
+        7 * 86_400_000,
+      );
+    });
+  }
+
+  test('a first date in year 0026 is refused or gives classes in year 0026, never 1926', () => {
+    // 0026-11-17 is a Tuesday and 9999-12-01 a Wednesday in the proleptic Gregorian calendar.
+    expect(weekdayOf('0026-11-17')).toBe(2);
+    expectRefusedOrWholeSeries('0026-11-17', 2, 3, '0026-11-10');
+    expect(classDates('0026-11-17', 3).every((date) => date.startsWith('0026-'))).toBe(true);
+  });
+
+  test('a first date in 9999 with 51 weeks is refused, or gives only four-digit dates', () => {
+    expect(weekdayOf('9999-12-01')).toBe(3);
+    expectRefusedOrWholeSeries('9999-12-01', 3, 51, '9999-11-20');
+  });
+});
+
 describe('checkTrainingPattern', () => {
   test('accepts a valid pattern, the limits, and a deadline on the first class date', () => {
     expect(errorsOf({})).toEqual({});

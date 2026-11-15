@@ -725,3 +725,46 @@ test.describe('who may open a training program', () => {
     await expectAccessible(page);
   });
 });
+
+test.describe('Training: names with no break', () => {
+  const UNBROKEN = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(3).slice(0, 100);
+
+  test('a long program, coach, and location name wrap, and nothing scrolls sideways at 320px', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin', {
+      locations: [{ name: UNBROKEN, address: UNBROKEN }],
+    });
+    await seedTraining(tenant, {
+      name: UNBROKEN,
+      slug: 'long-names',
+      locations: [UNBROKEN],
+      coachName: UNBROKEN,
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(`${base}/training/long-names`);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(UNBROKEN);
+    await expect(page.getByText('No classes yet')).toBeVisible();
+    await screenshot(page, testInfo, 'training-page-long-names-empty');
+    await expectAccessible(page);
+
+    await page.locator('#weeks').fill('53');
+    await page.locator('#weeks').blur();
+    await expect(page.locator('#weeks-error')).toBeVisible();
+    await screenshot(page, testInfo, 'training-page-long-names-errors');
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+
+    await page.locator('#weeks').fill('');
+    await fillPattern(page, firstTuesday());
+    await scheduleSubmit(page).click();
+    await expect(classRows(page)).toHaveCount(8);
+    await classRows(page)
+      .first()
+      .getByRole('button', { name: /^Cancel/ })
+      .click();
+    await expect(classRows(page).first()).toHaveAttribute('data-status', 'cancelled');
+    await screenshot(page, testInfo, 'training-page-long-names-scheduled');
+    await expectAccessible(page);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+  });
+});
