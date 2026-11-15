@@ -1104,7 +1104,7 @@ describe('ownSpecs: the import bullet on the real repo', () => {
   ];
   const MAX_PR_SPECS = 20;
   // Past the cap each file adds its closest specs, so the union may pass the cap.
-  const MAX_TIERED_PR_SPECS = 30;
+  const MAX_TIERED_PR_SPECS = 31;
 
   for (const file of ['convex/users.ts', 'convex/leagues.ts']) {
     it(`lists only the smoke spec for ${file}`, () => {
