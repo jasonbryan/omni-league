@@ -1274,13 +1274,11 @@ barTest.describe('the slim bar names the page', () => {
     );
 
     barTest('reads the text the mockups draw at 360px', async ({ page, world }) => {
-      const barTextsOf = async (file: string, id: string): Promise<string[]> => {
+      // The frames sit in iframes' source documents, so the whole file is read for the bars it draws.
+      const barTextsOf = async (file: string): Promise<string[]> => {
         const html = await readFile(join(process.cwd(), 'design', 'mockups', file), 'utf8');
-        const start = html.indexOf(`<section id="${id}"`);
-        const end = html.indexOf('\n      <section id="', start + 1);
-        const section = html.slice(start, end === -1 ? undefined : end);
         return [
-          ...section.matchAll(
+          ...html.matchAll(
             /<p class="min-w-0 flex-1 truncate text-sm font-semibold">([^<]*)<\/p>/g,
           ),
         ].map((match) => match[1].replaceAll('&amp;', '&'));
@@ -1298,7 +1296,7 @@ barTest.describe('the slim bar names the page', () => {
         ['300-public-site-dashboard.html', 'admin-after', world.base, GULF],
       ];
       for (const [file, id, path, text] of drawn) {
-        expect(await barTextsOf(file, id), `${file} ${id}`).toContain(text);
+        expect(await barTextsOf(file), `${file} ${id}`).toContain(text);
         await page.goto(path);
         // The seeded organization's name carries a suffix that keeps its address unique.
         const shown = barText(page);
