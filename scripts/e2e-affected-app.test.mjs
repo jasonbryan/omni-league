@@ -469,6 +469,40 @@ describe('the admin area specs', () => {
   });
 });
 
+describe('the admin camp page specs', () => {
+  const CAMP_PAGE_FILES = [
+    'camp-add-session-landing',
+    'camp-breadcrumb',
+    'camp-context',
+    'camp-create-form',
+    'camp-form',
+    'camp-management',
+    'camp-no-access',
+    'camp-page',
+    'camp-path',
+    'camp-registrants',
+    'camp-session-form',
+    'camp-session-form-state',
+    'publish-camp-dialog',
+  ];
+
+  it('runs the camp page and organization camps specs for every file of the admin camp page', () => {
+    for (const name of CAMP_PAGE_FILES) {
+      const specs = specsFor([`src/app/organizations/admin/${name}.ts`]);
+      for (const spec of ['camp-page', 'organization-camps']) {
+        assert.ok(specs.includes(specFile(spec)), `${name}: ${spec}`);
+      }
+    }
+  });
+
+  it('runs the camp page spec that the route table lists for the camp management file', () => {
+    const file = 'src/app/organizations/admin/camp-management.ts';
+    const graph = buildImportGraph(repoRoot);
+    assert.ok(routeSpecsFor(file, { root: repoRoot, graph }).includes(specFile('camp-page')));
+    assert.ok(specsFor([file]).includes(specFile('camp-page')));
+  });
+});
+
 describe('the route tables', () => {
   /**
    * Written apart from the rule: the route file's text with each `loadChildren: () => import('./file').then((m) => m.name)`
