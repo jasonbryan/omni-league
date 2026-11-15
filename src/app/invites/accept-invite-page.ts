@@ -55,6 +55,7 @@ interface InviteSummary {
   leagueNames: string[];
   tournamentNames?: string[] | undefined;
   campNames?: string[] | undefined;
+  trainingNames?: string[] | undefined;
   expiresAt?: number;
 }
 
@@ -64,6 +65,7 @@ interface AcceptedInvite extends InviteSummary {
   leagues?: { name: string; slug: string }[];
   tournaments?: { name: string; slug: string }[] | undefined;
   camps?: { name: string; slug: string }[] | undefined;
+  trainings?: { name: string; slug: string }[] | undefined;
 }
 
 type View = 'checking' | 'loadFailed' | 'invalid' | 'signedOut' | 'ready' | 'accepted';
@@ -86,11 +88,12 @@ const REFUSALS = {
 
 const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
 
-function runsWhat(leagues: number, tournaments: number, camps: number): string {
+function runsWhat(leagues: number, tournaments: number, camps: number, trainings: number): string {
   const kinds = [
     { count: leagues, one: 'a league', many: 'leagues' },
     { count: tournaments, one: 'a tournament', many: 'tournaments' },
     { count: camps, one: 'a camp', many: 'camps' },
+    { count: trainings, one: 'a training program', many: 'training programs' },
   ].filter(({ count }) => count > 0);
   const [only] = kinds;
   if (kinds.length === 1 && only) return only.count > 1 ? only.many : only.one;
@@ -286,6 +289,16 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                           {{ campNames().length === 1 ? 'Camp' : 'Camps' }}
                         </dt>
                         <dd class="font-medium sm:text-end">{{ campList() }}</dd>
+                      </div>
+                    }
+                    @if (trainingNames().length > 0) {
+                      <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                        <dt class="text-muted-foreground">
+                          {{
+                            trainingNames().length === 1 ? 'Training program' : 'Training programs'
+                          }}
+                        </dt>
+                        <dd class="font-medium sm:text-end">{{ trainingList() }}</dd>
                       </div>
                     }
                     @if (expires(); as expires) {
@@ -492,6 +505,7 @@ export class AcceptInvitePage {
       invite?.leagueNames.length ?? 0,
       this.tournamentNames().length,
       this.campNames().length,
+      this.trainingNames().length,
     );
     return `You’re invited to run ${what} as a league organizer.`;
   });
@@ -500,6 +514,8 @@ export class AcceptInvitePage {
   protected readonly tournamentList = computed(() => LIST.format(this.tournamentNames()));
   protected readonly campNames = computed(() => this.summary()?.campNames ?? []);
   protected readonly campList = computed(() => LIST.format(this.campNames()));
+  protected readonly trainingNames = computed(() => this.summary()?.trainingNames ?? []);
+  protected readonly trainingList = computed(() => LIST.format(this.trainingNames()));
   protected readonly expires = computed(() => {
     const at = this.summary()?.expiresAt;
     return at === undefined ? null : formatDay(at);
@@ -511,6 +527,7 @@ export class AcceptInvitePage {
       ...(done?.leagueNames ?? []),
       ...(done?.tournaments ?? []).map((t) => t.name),
       ...(done?.camps ?? []).map((c) => c.name),
+      ...(done?.trainings ?? []).map((t) => t.name),
     ];
     return `You’re a league organizer for ${LIST.format(names)}.`;
   });
@@ -529,15 +546,28 @@ export class AcceptInvitePage {
       const leagues = done.leagues ?? [];
       const tournaments = done.tournaments ?? [];
       const camps = done.camps ?? [];
+      const trainings = done.trainings ?? [];
       const [league] = leagues;
       const [tournament] = tournaments;
-      if (league && leagues.length === 1 && tournaments.length === 0 && camps.length === 0) {
+      if (
+        league &&
+        leagues.length === 1 &&
+        tournaments.length === 0 &&
+        camps.length === 0 &&
+        trainings.length === 0
+      ) {
         return {
           label: `Open ${league.name}`,
           link: ['/app', 'organizations', organization, 'leagues', league.slug],
         };
       }
-      if (tournament && tournaments.length === 1 && leagues.length === 0 && camps.length === 0) {
+      if (
+        tournament &&
+        tournaments.length === 1 &&
+        leagues.length === 0 &&
+        camps.length === 0 &&
+        trainings.length === 0
+      ) {
         return {
           label: `Open ${tournament.name}`,
           link: ['/app', 'organizations', organization, 'tournaments', tournament.slug],

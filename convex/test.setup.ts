@@ -64,6 +64,19 @@ export function insertCampProgram(
   });
 }
 
+export function insertTrainingProgram(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  name: string,
+  slug: string,
+): Promise<Id<'programs'>> {
+  return ctx.db.insert('programs', {
+    ...tournamentProgramFields(organizationId, slug),
+    type: 'training',
+    name,
+  });
+}
+
 export async function insertLeagueWithProgram(
   ctx: Pick<MutationCtx, 'db'>,
   league: Omit<Doc<'leagues'>, '_id' | '_creationTime' | 'programId'>,

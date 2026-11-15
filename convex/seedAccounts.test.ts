@@ -283,6 +283,7 @@ const DATA = {
   tournaments: 5,
   camps: 3,
   campSessions: 4,
+  trainings: 1,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -447,6 +448,11 @@ describe('seed:demo accounts: a new deployment', () => {
         ['Fall Break Camp', 'draft', 10, 16],
         ['Junior Beach Volleyball Camp', 'published', 9, 14],
       ]);
+      expect(
+        await admin.query(api.trainings.listForOrganization, { organizationId: gulfCoast._id }),
+      ).toMatchObject([
+        { name: 'Tuesday Serving Clinic', coachName: 'Dana Ruiz', status: 'draft' },
+      ]);
       const pending = await admin.query(api.invites.listPending, {
         organizationId: gulfCoast._id,
       });
@@ -458,6 +464,11 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(
         await refused(() =>
           organizer.query(api.camps.listForOrganization, { organizationId: gulfCoast._id }),
+        ),
+      ).toBe(true);
+      expect(
+        await refused(() =>
+          organizer.query(api.trainings.listForOrganization, { organizationId: gulfCoast._id }),
         ),
       ).toBe(true);
       expect(await organizer.query(api.organizations.listMine, {})).toEqual([
@@ -1062,6 +1073,7 @@ describe('seed:demo accounts: a second run', () => {
         tournaments: 0,
         camps: 0,
         campSessions: 0,
+        trainings: 0,
         logos: 0,
         backfilled: NO_BACKFILL,
         memberships: 0,

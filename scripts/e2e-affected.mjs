@@ -32,6 +32,7 @@ const ADMIN = [
     'organization-leagues-mockup',
     'organization-tournaments',
     'organization-camps',
+    'organization-training',
     'shell-sheet',
     'navigation-focus',
   ]),
@@ -151,6 +152,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/leagues': ['organization-leagues'],
   'app/organizations/:slug/tournaments': ['organization-tournaments'],
   'app/organizations/:slug/camps': ['organization-camps'],
+  'app/organizations/:slug/training': ['organization-training'],
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
@@ -1175,6 +1177,12 @@ export const AREAS = [
         'individualRegistration',
       ])(file),
     specs: ['organization-camps', ...CAMP_PAGE],
+  },
+  {
+    name: 'convex training',
+    test: (file) =>
+      named('convex/', ['trainings'])(file) || named('convex/lib/', ['trainingInput'])(file),
+    specs: ['organization-training'],
   },
   {
     name: 'convex tournament bracket',

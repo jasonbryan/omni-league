@@ -725,6 +725,7 @@ test.describe('Staff: members and the Overview', () => {
         /^Leagues\d*$/,
         'Tournaments',
         'Camps',
+        'Training',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',

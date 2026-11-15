@@ -96,6 +96,7 @@ import type * as lib_tournamentEdit from "../lib/tournamentEdit.js";
 import type * as lib_tournamentInput from "../lib/tournamentInput.js";
 import type * as lib_tournamentLookup from "../lib/tournamentLookup.js";
 import type * as lib_tournamentPools from "../lib/tournamentPools.js";
+import type * as lib_trainingInput from "../lib/trainingInput.js";
 import type * as lib_userName from "../lib/userName.js";
 import type * as lib_users from "../lib/users.js";
 import type * as lib_waitlist from "../lib/waitlist.js";
@@ -117,6 +118,7 @@ import type * as teams from "../teams.js";
 import type * as testing from "../testing.js";
 import type * as tournamentGames from "../tournamentGames.js";
 import type * as tournaments from "../tournaments.js";
+import type * as trainings from "../trainings.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
 
@@ -215,6 +217,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tournamentInput": typeof lib_tournamentInput;
   "lib/tournamentLookup": typeof lib_tournamentLookup;
   "lib/tournamentPools": typeof lib_tournamentPools;
+  "lib/trainingInput": typeof lib_trainingInput;
   "lib/userName": typeof lib_userName;
   "lib/users": typeof lib_users;
   "lib/waitlist": typeof lib_waitlist;
@@ -236,6 +239,7 @@ declare const fullApi: ApiFromModules<{
   testing: typeof testing;
   tournamentGames: typeof tournamentGames;
   tournaments: typeof tournaments;
+  trainings: typeof trainings;
   users: typeof users;
   waitlist: typeof waitlist;
 }>;

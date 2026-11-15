@@ -89,7 +89,7 @@ describe('AdminSidebar', () => {
     expect(text(head.querySelector('.truncate'))).toBe('Coastal Bend Rec Club');
   });
 
-  it('lists Overview, a Programs group of Leagues, Tournaments, and Camps, then Locations, Staff, and Details, then View public page', async () => {
+  it('lists Overview, a Programs group of Leagues, Tournaments, Camps, and Training, then Locations, Staff, and Details, then View public page', async () => {
     const { host } = await render(BASE);
     const lists = [...host.querySelectorAll('nav ul')];
     expect(lists).toHaveLength(4);
@@ -99,6 +99,7 @@ describe('AdminSidebar', () => {
       ['Leagues', `${BASE}/leagues`],
       ['Tournaments', `${BASE}/tournaments`],
       ['Camps', `${BASE}/camps`],
+      ['Training', `${BASE}/training`],
     ]);
     expect(links(lists[2])).toEqual([
       ['Locations', `${BASE}/locations`],
@@ -158,6 +159,7 @@ describe('AdminSidebar', () => {
         ['Leagues', '5'],
         ['Tournaments', null],
         ['Camps', null],
+        ['Training', null],
         ['Locations', '3'],
         ['Staff', '4'],
         ['Details', null],
@@ -267,6 +269,14 @@ describe('AdminSidebar', () => {
     const current = host.querySelectorAll('[aria-current="page"]');
     expect(current).toHaveLength(1);
     expect(text(current[0])).toBe('Camps');
+    expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
+  });
+
+  it('marks Training current on the training path, and ignores a query string and a fragment', async () => {
+    const { host } = await render(`${BASE}/training?x=1#create-training`);
+    const current = host.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Training');
     expect(classes(current[0])).toEqual(tokens(SIDEBAR_ROW_CURRENT));
   });
 

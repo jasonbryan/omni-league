@@ -4,7 +4,12 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { internal } from './_generated/api';
 import schema from './schema';
-import { insertCampProgram, insertTournamentProgram, modules } from './test.setup';
+import {
+  insertCampProgram,
+  insertTournamentProgram,
+  insertTrainingProgram,
+  modules,
+} from './test.setup';
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -265,6 +270,53 @@ describe('testing:addLeagueOrganizer', () => {
     expect(await memberships(t)).toMatchObject([
       { leagueIds: [], programIds: [programIds[0], programIds[1]] },
     ]);
+  }, 30_000);
+
+  test('assigns training programs by web address, beside tournaments and camps', async () => {
+    const t = await seeded();
+    const programIds = await t.run(async (ctx) => {
+      const organization = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', TENANT.organization.slug))
+        .unique())!;
+      return [
+        await insertCampProgram(ctx, organization._id, 'Junior Camp', 'junior-camp'),
+        await insertTrainingProgram(ctx, organization._id, 'Serving Clinic', 'serving-clinic'),
+        await insertTrainingProgram(ctx, organization._id, 'Passing Clinic', 'passing-clinic'),
+      ];
+    });
+    await t.mutation(internal.testing.addLeagueOrganizer, {
+      ...ARGS,
+      leagueSlugs: [],
+      campSlugs: ['junior-camp'],
+      trainingSlugs: ['serving-clinic'],
+    });
+    expect(await memberships(t)).toMatchObject([
+      { leagueIds: [], programIds: [programIds[0], programIds[1]] },
+    ]);
+  }, 30_000);
+
+  test('throws, writing nothing, for a training program that is unknown, of another organization, a camp’s, or a league’s web address', async () => {
+    const t = await seeded();
+    await t.run(async (ctx) => {
+      const other = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', OTHER.organization.slug))
+        .unique())!;
+      await insertTrainingProgram(ctx, other._id, 'Other Clinic', 'other-clinic');
+      const own = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', TENANT.organization.slug))
+        .unique())!;
+      await insertCampProgram(ctx, own._id, 'Junior Camp', 'junior-camp');
+    });
+    for (const slug of ['nope', 'other-clinic', 'junior-camp', 'coed-7v7']) {
+      await expect(
+        t.mutation(internal.testing.addLeagueOrganizer, { ...ARGS, trainingSlugs: [slug] }),
+        slug,
+      ).rejects.toThrow(/No training has/);
+    }
+    expect(await memberships(t)).toEqual([]);
   }, 30_000);
 
   test('throws, writing nothing, for a camp that is unknown, of another organization, a tournament’s, or a league’s web address', async () => {

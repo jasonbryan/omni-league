@@ -81,20 +81,25 @@ export function checkInviteEmail(
 export interface ProgramOffers {
   tournaments: boolean;
   camps: boolean;
+  trainings: boolean;
 }
 
-export const NOTHING_OFFERED: ProgramOffers = { tournaments: false, camps: false };
+export const NOTHING_OFFERED: ProgramOffers = {
+  tournaments: false,
+  camps: false,
+  trainings: false,
+};
 
-const ASSIGNMENT_EMPTY = {
-  tournaments: 'Choose at least one league or tournament.',
-  camps: 'Choose at least one league or camp.',
-  both: 'Choose at least one league, tournament, or camp.',
-} as const;
+const OR = new Intl.ListFormat('en-US', { type: 'disjunction' });
 
-function emptyMessage({ tournaments, camps }: ProgramOffers): string {
-  if (tournaments && camps) return ASSIGNMENT_EMPTY.both;
-  if (tournaments) return ASSIGNMENT_EMPTY.tournaments;
-  return camps ? ASSIGNMENT_EMPTY.camps : INVITE_MESSAGES.leaguesEmpty;
+function emptyMessage({ tournaments, camps, trainings }: ProgramOffers): string {
+  const offered = [
+    tournaments ? 'tournament' : null,
+    camps ? 'camp' : null,
+    trainings ? 'training program' : null,
+  ].filter((kind) => kind !== null);
+  if (offered.length === 0) return INVITE_MESSAGES.leaguesEmpty;
+  return `Choose at least one ${OR.format(['league', ...offered])}.`;
 }
 
 export function checkInviteAssignments(

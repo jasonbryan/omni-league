@@ -360,14 +360,26 @@ async function assignedPrograms(
   ctx: QueryCtx,
   membership: Doc<'memberships'>,
   budget: number,
-): Promise<{ tournaments: NamedProgram[]; camps: NamedProgram[]; reads: number }> {
-  if (membership.role !== 'leagueOrganizer') return { tournaments: [], camps: [], reads: 0 };
+): Promise<{
+  tournaments: NamedProgram[];
+  camps: NamedProgram[];
+  trainings: NamedProgram[];
+  reads: number;
+}> {
+  if (membership.role !== 'leagueOrganizer') {
+    return { tournaments: [], camps: [], trainings: [], reads: 0 };
+  }
   const ids = [...new Set(membership.programIds ?? [])].slice(0, budget);
   const programs = await assignablePrograms(ctx, membership.organizationId, ids);
   programs.sort((x, y) => (x.sortName < y.sortName ? -1 : x.sortName > y.sortName ? 1 : 0));
   const named = (type: Doc<'programs'>['type']): NamedProgram[] =>
     programsOfType(programs, type).map(({ name, slug }) => ({ name, slug }));
-  return { tournaments: named('tournament'), camps: named('camp'), reads: ids.length };
+  return {
+    tournaments: named('tournament'),
+    camps: named('camp'),
+    trainings: named('training'),
+    reads: ids.length,
+  };
 }
 
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
@@ -381,6 +393,7 @@ export const listMine = query({
       leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
       tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
       camps: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
+      trainings: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
     }),
   ),
   handler: async (ctx) => {
@@ -409,6 +422,7 @@ export const listMine = query({
       const {
         tournaments,
         camps,
+        trainings,
         reads: programReads,
       } = await assignedPrograms(ctx, membership, budget);
       budget -= programReads;
@@ -419,6 +433,7 @@ export const listMine = query({
         leagues,
         ...(tournaments.length > 0 && { tournaments }),
         ...(camps.length > 0 && { camps }),
+        ...(trainings.length > 0 && { trainings }),
       });
     }
     return rows;

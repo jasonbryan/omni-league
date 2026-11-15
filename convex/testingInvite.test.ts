@@ -7,7 +7,12 @@ import { hashInviteToken } from './lib/inviteToken';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant, defaultDivision } from './lib/tenantWrites';
 import schema from './schema';
-import { insertCampProgram, insertTournamentProgram, modules } from './test.setup';
+import {
+  insertCampProgram,
+  insertTournamentProgram,
+  insertTrainingProgram,
+  modules,
+} from './test.setup';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -138,6 +143,38 @@ describe('testing:addInvite', () => {
     const answer = await t.query(api.invites.getByToken, { token });
     expect(answer).toMatchObject({ status: 'valid', campNames: ['Junior Beach Camp'] });
     expect('tournamentNames' in answer).toBe(false);
+  });
+
+  test('names training programs, which the invite then lists apart from tournaments and camps', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const programId = await t.run(async (ctx) => {
+      const organization = (await ctx.db.query('organizations').first())!;
+      return insertTrainingProgram(ctx, organization._id, 'Serving Clinic', 'serving-clinic');
+    });
+    const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    await t.mutation(internal.testing.addInvite, {
+      ...INVITE,
+      leagueNames: [],
+      trainingNames: ['Serving Clinic'],
+      expiresAt: Date.now() + 60_000,
+      token,
+    });
+    const [row] = await t.run((ctx) => ctx.db.query('invites').collect());
+    expect(row).toMatchObject({ leagueIds: [], programIds: [programId] });
+    const answer = await t.query(api.invites.getByToken, { token });
+    expect(answer).toMatchObject({ status: 'valid', trainingNames: ['Serving Clinic'] });
+    expect('tournamentNames' in answer).toBe(false);
+    expect('campNames' in answer).toBe(false);
+  });
+
+  test('refuses a training program that does not exist', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    await expect(
+      t.mutation(internal.testing.addInvite, { ...INVITE, trainingNames: ['Missing'] }),
+    ).rejects.toThrow(/No training named/);
+    expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
   });
 
   test('refuses a camp that does not exist', async () => {

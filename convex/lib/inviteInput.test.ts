@@ -55,12 +55,19 @@ describe('inviteInput', () => {
   });
 
   test('refuses a league organizer with nothing chosen, naming what the organization offers', () => {
-    const message = (tournaments: boolean, camps: boolean) =>
-      checkInviteAssignments(0, 0, { tournaments, camps })?.message;
+    const message = (tournaments: boolean, camps: boolean, trainings = false) =>
+      checkInviteAssignments(0, 0, { tournaments, camps, trainings })?.message;
     expect(message(false, false)).toBe('Choose at least one league.');
     expect(message(true, false)).toBe('Choose at least one league or tournament.');
     expect(message(false, true)).toBe('Choose at least one league or camp.');
     expect(message(true, true)).toBe('Choose at least one league, tournament, or camp.');
+    expect(message(false, false, true)).toBe('Choose at least one league or training program.');
+    expect(message(true, false, true)).toBe(
+      'Choose at least one league, tournament, or training program.',
+    );
+    expect(message(true, true, true)).toBe(
+      'Choose at least one league, tournament, camp, or training program.',
+    );
     expect(checkInviteAssignments(0, 0, NOTHING_OFFERED)).toEqual({
       field: 'leagues',
       code: 'leaguesEmpty',
@@ -70,9 +77,13 @@ describe('inviteInput', () => {
 
   test('accepts a league organizer with a league, a tournament, or both', () => {
     expect(checkInviteAssignments(1, 0, NOTHING_OFFERED)).toBeNull();
-    expect(checkInviteAssignments(0, 1, { tournaments: true, camps: false })).toBeNull();
-    expect(checkInviteAssignments(0, 1, { tournaments: false, camps: true })).toBeNull();
-    expect(checkInviteAssignments(2, 3, { tournaments: true, camps: true })).toBeNull();
+    const offers = { tournaments: false, camps: false, trainings: false };
+    expect(checkInviteAssignments(0, 1, { ...offers, tournaments: true })).toBeNull();
+    expect(checkInviteAssignments(0, 1, { ...offers, camps: true })).toBeNull();
+    expect(checkInviteAssignments(0, 1, { ...offers, trainings: true })).toBeNull();
+    expect(
+      checkInviteAssignments(2, 3, { tournaments: true, camps: true, trainings: true }),
+    ).toBeNull();
   });
 
   test('the server messages name the address', () => {
