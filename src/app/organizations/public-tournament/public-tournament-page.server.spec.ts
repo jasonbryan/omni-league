@@ -25,6 +25,7 @@ import {
   at,
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_POOLS,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
   tournamentQueryResults,
@@ -257,6 +258,31 @@ describe('PublicTournamentPage server render', () => {
     expect(lines).toEqual(['Score: 21–15, 18–21, 15–10', 'Net Results forfeited']);
     expect(html).toContain('>Score: </span>');
     expect(html).toContain('21–15, 18–21, 15–10');
+  });
+
+  it('writes each pool’s standings table and games into the raw HTML, after the details and before the bracket', async () => {
+    const { html, body } = await render(
+      TOURNAMENT_PATH,
+      answer({ ...BEACH_OPEN, pools: BEACH_OPEN_POOLS }),
+    );
+    const section = body.querySelector('main section#pools')!;
+    expect(text(section.querySelector('caption'))).toBe('Pool A standings');
+    expect([...section.querySelectorAll('thead th')].map((th) => th.getAttribute('scope'))).toEqual(
+      Array(7).fill('col'),
+    );
+    expect([...section.querySelectorAll('tbody tr')].map((row) => spacedText(row))).toEqual([
+      '1 Sand Crabs 1 1 0 100% +6',
+      '2 Net Results 0 0 0 0% 0',
+      '3 Dig Dogs 1 0 1 0% -6',
+    ]);
+    expect([...section.querySelectorAll('li')].map((game) => spacedText(game))).toEqual([
+      'Round 1 Sand Crabs v Dig Dogs 21–15. Sand Crabs won.',
+      'Round 2 Sand Crabs v Net Results',
+      'Round 3 Dig Dogs v Net Results',
+    ]);
+    const markup = html.slice(html.indexOf('<body'));
+    expect(markup.indexOf('id="details-heading"')).toBeLessThan(markup.indexOf('id="pools"'));
+    expect(markup.indexOf('id="pools"')).toBeLessThan(markup.indexOf('id="bracket"'));
   });
 
   it('writes the empty line into the raw HTML when there is no bracket', async () => {

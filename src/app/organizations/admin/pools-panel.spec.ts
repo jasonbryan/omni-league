@@ -88,6 +88,7 @@ function poolsOf(
         slot: index + 1,
         teams: [one, other].map((seed) => ({ teamId: `tm_${seed}`, name: teamName(seed) })),
         winnerTeamId: null,
+        result: null,
       })),
     })),
     seeds: poolSeeds
@@ -556,7 +557,9 @@ describe('PoolsPanel', () => {
       expect(document.activeElement).toBe(createButton());
       expect(text(createButton())).toBe('Recreate pool games');
       expect(
-        [...poolSection('A').querySelectorAll('[data-slot="pool-game"]')].map((game) => text(game)),
+        [
+          ...poolSection('A').querySelectorAll('[data-slot="pool-game"] [data-slot="game-label"]'),
+        ].map((label) => text(label)),
       ).toEqual(['Round 1: Team 01 v Team 12']);
       expect([...poolSection('B').querySelectorAll('h4')].map((h4) => text(h4))).toContain(
         'Games in Pool B',

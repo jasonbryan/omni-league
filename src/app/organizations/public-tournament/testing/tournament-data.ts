@@ -1,4 +1,4 @@
-import type { PublicBracket } from '../../../../../convex/lib/publicPage';
+import type { PublicBracket, PublicPool } from '../../../../../convex/lib/publicPage';
 import type { PublicTournamentData } from '../public-tournament-view';
 
 export const ORG_SLUG = 'gulf-coast-sport-social';
@@ -46,6 +46,36 @@ export const BEACH_OPEN_BRACKET: PublicBracket = {
     { name: 'Final', games: [{ teams: [{ name: 'Sand Crabs', seed: 1 }, null], bye: false }] },
   ],
 };
+
+export const BEACH_OPEN_POOLS: PublicPool[] = [
+  {
+    pool: 'A',
+    columns: [
+      { short: 'P', label: 'Played' },
+      { short: 'W', label: 'Won' },
+      { short: 'L', label: 'Lost' },
+      { short: 'Win %', label: 'Win percentage' },
+      { short: '+/-', label: 'Point differential' },
+    ],
+    standings: [
+      { place: 1, name: 'Sand Crabs', cells: ['1', '1', '0', '100%', '+6'] },
+      { place: 2, name: 'Net Results', cells: ['0', '0', '0', '0%', '0'] },
+      { place: 3, name: 'Dig Dogs', cells: ['1', '0', '1', '0%', '-6'] },
+    ],
+    tiebreakers:
+      'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential.',
+    games: [
+      {
+        round: 1,
+        teams: ['Sand Crabs', 'Dig Dogs'],
+        winner: 0,
+        score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+      },
+      { round: 2, teams: ['Sand Crabs', 'Net Results'] },
+      { round: 3, teams: ['Dig Dogs', 'Net Results'] },
+    ],
+  },
+];
 
 export const TOURNAMENT_ARGS = { orgSlug: ORG_SLUG, tournamentSlug: TOURNAMENT_SLUG };
 

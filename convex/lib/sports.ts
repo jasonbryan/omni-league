@@ -81,6 +81,65 @@ export const FORFEIT_SCORES = {
   softball: { winner: 7, loser: 0 },
 } as const satisfies Record<Sport, { winner: number; loser: number }>;
 
+/** Whether a pool game may end level. A bracket game never may; beach volleyball cannot, because its sets each need a winner. */
+export const POOL_PLAY_TIES = {
+  beachVolleyball: false,
+  soccer: true,
+  softball: true,
+} as const satisfies Record<Sport, boolean>;
+
+/** A run differential counts at most this many runs a game in softball's tiebreakers. */
+export const RUN_DIFFERENTIAL_CAP = 7;
+
+export type StandingsTiebreaker =
+  | 'headToHead'
+  | 'setWinPercentage'
+  | 'pointDifferential'
+  | 'goalDifference'
+  | 'goalsScored'
+  | 'cappedRunDifferential'
+  | 'fewestRunsAllowed';
+
+export type StandingsColumn =
+  | 'played'
+  | 'won'
+  | 'lost'
+  | 'tied'
+  | 'drawn'
+  | 'winPercentage'
+  | 'pointDifferential'
+  | 'goalDifference'
+  | 'points';
+
+export type StandingsRanking =
+  | { kind: 'winPercentage'; tieWorth: number }
+  | { kind: 'points'; win: number; draw: number; loss: number };
+
+export interface StandingsRules {
+  ranking: StandingsRanking;
+  tiebreakers: readonly StandingsTiebreaker[];
+  columns: readonly StandingsColumn[];
+}
+
+/** Per-sport defaults from the requirements (Schedule, scores, and standings): the owner may change them without restructuring. */
+export const STANDINGS_RULES = {
+  beachVolleyball: {
+    ranking: { kind: 'winPercentage', tieWorth: 0.5 },
+    tiebreakers: ['headToHead', 'setWinPercentage', 'pointDifferential'],
+    columns: ['played', 'won', 'lost', 'winPercentage', 'pointDifferential'],
+  },
+  soccer: {
+    ranking: { kind: 'points', win: 3, draw: 1, loss: 0 },
+    tiebreakers: ['goalDifference', 'goalsScored', 'headToHead'],
+    columns: ['played', 'won', 'drawn', 'lost', 'goalDifference', 'points'],
+  },
+  softball: {
+    ranking: { kind: 'winPercentage', tieWorth: 0.5 },
+    tiebreakers: ['headToHead', 'cappedRunDifferential', 'fewestRunsAllowed'],
+    columns: ['played', 'won', 'lost', 'tied', 'winPercentage'],
+  },
+} as const satisfies Record<Sport, StandingsRules>;
+
 export const SCORE_MESSAGES = {
   tied: 'A bracket game needs a winner, so the scores cannot be tied.',
   blank: 'Enter a score for both teams.',
@@ -167,13 +226,14 @@ export function checkScore(
   sport: Sport,
   setsPerGame: number,
   score: ScoreDraft,
+  { allowTie = false }: { allowTie?: boolean } = {},
 ): ScoreIssue | null {
   if (score.kind !== scoreKindOf(sport))
     return { field: 'score', message: SCORE_MESSAGES.wrongKind };
   if (score.kind === 'sets') return setsIssue(setsPerGame, score.sets);
   const bad = pairIssue(score.a, score.b, (side) => side);
   if (bad) return bad;
-  return score.a === score.b ? { field: 'score', message: SCORE_MESSAGES.tied } : null;
+  return score.a === score.b && !allowTie ? { field: 'score', message: SCORE_MESSAGES.tied } : null;
 }
 
 export function scoreWinnerSide(score: Score): BracketSide | null {

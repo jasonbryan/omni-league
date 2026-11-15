@@ -29,6 +29,7 @@ import { BRACKET_MESSAGES } from './lib/bracket';
 import { POOL_MESSAGES } from './lib/pools';
 import { programStatusValidator } from './lib/programs';
 import { publicBracket } from './lib/publicBracket';
+import { publicPools } from './lib/publicPools';
 import { leagueLocations } from './lib/publicLeague';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import {
@@ -516,10 +517,12 @@ export const getPublicPage = query({
     // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published') return null;
     const bracket = await publicBracket(ctx, found.tournament._id);
+    const pools = await publicPools(ctx, found.tournament, found.program.sport);
     return {
       ...(await tournamentDetails(ctx, organization, found)),
       isFull: tournamentIsFull(found.tournament),
       ...(bracket && { bracket }),
+      ...(pools && { pools }),
     };
   },
 });

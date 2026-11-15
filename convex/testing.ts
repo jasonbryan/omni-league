@@ -32,6 +32,7 @@ import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel, isPlayersPerSideOfSport } from './lib/divisions';
 import { programStatusValidator } from './lib/programs';
 import {
+  POOL_PLAY_TIES,
   checkScore,
   forfeitScore,
   scoreValidator,
@@ -64,7 +65,13 @@ import {
   setsPerGameValidator,
   structureValidator,
 } from './lib/tournamentEdit';
-import { moveToPool } from './lib/tournamentPools';
+import {
+  assignPools,
+  moveToPool,
+  poolGames,
+  poolSetup,
+  replacePoolGames,
+} from './lib/tournamentPools';
 import {
   bracketExists,
   gameHasResult,
@@ -765,6 +772,100 @@ export const seedTournamentBracket = internalMutation({
     return { gameCount: await replaceBracket(ctx, found.tournament._id, seeds, []) };
   },
 });
+
+/** The confirmed teams split into pools and their pool games, through the writers `tournamentGames.splitPools` and `createPoolGames` use. Skips the registration window and the organizer check. */
+export const seedTournamentPools = internalMutation({
+  args: { organizationSlug: v.string(), tournamentSlug: v.string(), poolCount: v.number() },
+  returns: v.object({ gameCount: v.number() }),
+  handler: async (ctx, { organizationSlug, tournamentSlug, poolCount }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const { tournament } = found;
+    if ((await poolGames(ctx, tournament._id)).length > 0) {
+      throw new Error(`The tournament ${JSON.stringify(tournamentSlug)} has pool games already`);
+    }
+    await assignPools(ctx, await poolSetup(ctx, tournament), poolCount);
+    const { pools } = await poolSetup(ctx, tournament);
+    return { gameCount: await replacePoolGames(ctx, tournament._id, pools, []) };
+  },
+});
+
+/**
+ * One pool result through the writer `tournamentGames.enterResult` uses, with its score rules; a tie is allowed in the sports
+ * that allow it in pool play. `teams` names the pair, and `score.a` is the first name's, whichever team the game lists first.
+ * Skips the organizer check.
+ */
+export const seedPoolResult = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    teams: v.array(v.string()),
+    score: v.optional(scoreValidator),
+    forfeitTeamName: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, tournamentSlug, teams, score, forfeitTeamName }) => {
+    assertTestDeployment();
+    if ((score === undefined) === (forfeitTeamName === undefined)) {
+      throw new Error('Give either a score or a forfeitTeamName');
+    }
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const { tournament } = found;
+    const teamNamed = async (name: string) => {
+      const team = await ctx.db
+        .query('teams')
+        .withIndex('by_tournamentId_and_sortName', (q) =>
+          q.eq('tournamentId', tournament._id).eq('sortName', teamSortName(name)),
+        )
+        .first();
+      if (!team) throw new Error(`No team is named ${JSON.stringify(name)}`);
+      return team;
+    };
+    const [first, second] = await Promise.all(teams.map(teamNamed));
+    if (teams.length !== 2 || !first || !second) throw new Error('Name the two teams of the game');
+    const game = (await poolGames(ctx, tournament._id)).find(
+      (row) => row.teamIds.includes(first._id) && row.teamIds.includes(second._id),
+    );
+    if (!game) throw new Error(`${teams.join(' and ')} do not play each other in a pool`);
+    if (gameHasResult(game)) throw new Error(`${teams.join(' v ')} has a result already`);
+    const reversed = game.teamIds[0] !== first._id;
+    const setsPerGame = tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
+    const forfeiting = forfeitTeamName === undefined ? null : await teamNamed(forfeitTeamName);
+    const played: Score = forfeiting
+      ? forfeitScore(tournament.sport, setsPerGame, game.teamIds[0] === forfeiting._id ? 0 : 1)
+      : reversed
+        ? swapSides(score!)
+        : score!;
+    const issue = checkScore(tournament.sport, setsPerGame, played, {
+      allowTie: POOL_PLAY_TIES[tournament.sport],
+    });
+    if (issue) throw new Error(issue.message);
+    const winnerSide = scoreWinnerSide(played);
+    const enteredBy = await ctx.db.insert('users', {
+      authUserId: `e2e-pool-result-${tournamentSlug}-${game._id}`,
+      name: 'E2E result',
+      adultConfirmedAt: 1,
+    });
+    await saveResult(ctx, game, {
+      score: played,
+      ...(forfeiting && { forfeitTeamId: forfeiting._id }),
+      ...(winnerSide !== null && { winnerTeamId: game.teamIds[winnerSide]! }),
+      enteredBy,
+    });
+    return null;
+  },
+});
+
+function swapSides(score: Score): Score {
+  if (score.kind === 'sets') {
+    return { kind: 'sets', sets: score.sets.map((set) => ({ a: set.b, b: set.a })) };
+  }
+  return { kind: score.kind, a: score.b, b: score.a };
+}
 
 /** One bracket result through the writer `tournamentGames.enterResult` uses, with its score rules. Skips the organizer check. */
 export const seedTournamentResult = internalMutation({

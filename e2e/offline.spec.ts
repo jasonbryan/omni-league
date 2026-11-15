@@ -12,6 +12,8 @@ import {
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedBracket } from './support/bracket';
 import { seedPublishedCamp } from './support/camp';
+import { convexRun } from './support/convex';
+import { seedPoolPlay, seedPoolResult, seedPoolsStructure } from './support/pools';
 import { seedTournament } from './support/tournament';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
@@ -432,6 +434,60 @@ test.describe('a tournament page offline', () => {
     await expect(page.locator('section#bracket h3')).toHaveText(['Semifinals', 'Final']);
     await expect(games).toHaveCount(3);
     await expect(games.first()).toContainText('(1) Alpha');
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('a pool tournament page offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('the Pools section viewed online opens from its saved copy, with the note', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Pools',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    });
+    const path = await seedTournament(tenant, {
+      name: 'Fall Pool Play Open',
+      slug: 'fall-pool-play-open',
+      locations: ['Alpha Field'],
+      startDate: dateFromToday(30),
+      endDate: dateFromToday(31),
+    });
+    await seedPoolsStructure(tenant, 'fall-pool-play-open');
+    await convexRun('testing:seedTournamentRosters', {
+      organizationSlug: tenant.slug,
+      tournamentSlug: 'fall-pool-play-open',
+      teams: ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'].map((name) => ({ name })),
+    });
+    await seedPoolPlay(tenant, 'fall-pool-play-open', 2);
+    await seedPoolResult(tenant, 'fall-pool-play-open', ['Delta', 'Echo'], {
+      score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+    });
+    const pools = page.locator('section#pools');
+
+    await page.goto(path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(pools.locator('h3')).toHaveText(['Pool A', 'Pool B']);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(path);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(pools.locator('h3')).toHaveText(['Pool A', 'Pool B']);
+    await expect(pools.locator('table caption')).toHaveText('Pool A standings');
+    await expect(pools.locator('tbody th')).toHaveText(['Delta', 'Alpha', 'Echo']);
+    await expect(pools.locator('[data-testid="pool-game"]')).toHaveCount(6);
     const results = await axeScan(page);
     expect(describeViolations(results.violations)).toEqual([]);
 

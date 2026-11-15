@@ -4,6 +4,7 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { requireGameOrganizer } from './access';
 import { BRACKET_MESSAGES, roundName } from './bracket';
 import {
+  POOL_PLAY_TIES,
   checkScore,
   forfeitScore,
   scoreValidator,
@@ -28,11 +29,12 @@ export const storedResultValidator = v.object({
 });
 
 export const savedValidator = v.object({
-  winnerTeamId: v.id('teams'),
-  winnerName: v.string(),
+  /** `null` for a tied pool game. */
+  winnerTeamId: v.union(v.null(), v.id('teams')),
+  winnerName: v.union(v.null(), v.string()),
   /** What Undo sends back, so it acts only on this result. */
   resultEnteredAt: v.number(),
-  /** The round the winner joins; `null` for the Final, whose winner wins the tournament. */
+  /** The round the winner joins; `null` for the Final, whose winner wins the tournament, and for a pool game. */
   advancesTo: v.union(v.null(), v.string()),
   /** What the game held before, so the page can offer to restore it; `null` for a first result. */
   previous: v.union(v.null(), storedResultValidator),
@@ -46,12 +48,18 @@ export interface ResultInput {
 export const setsPerGameOf = (tournament: Doc<'tournaments'>) =>
   tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
 
+export const tiesAllowedIn = (game: Doc<'tournamentGames'>, sport: Sport) =>
+  game.stage === 'pool' && POOL_PLAY_TIES[sport];
+
+export type CheckedResult = StoredResult & { winnerTeamId?: Id<'teams'> | undefined };
+
 export function refuseInvalidScore(
   tournament: Doc<'tournaments'>,
   sport: Sport,
   score: Score,
+  allowTie = false,
 ): void {
-  const issue = checkScore(sport, setsPerGameOf(tournament), score);
+  const issue = checkScore(sport, setsPerGameOf(tournament), score, { allowTie });
   if (issue)
     refuseBracket({ code: 'invalidScore', message: issue.message }, { field: issue.field });
 }
@@ -61,9 +69,10 @@ export function checkedResult(
   tournament: Doc<'tournaments'>,
   sport: Sport,
   result: StoredResult,
-): StoredResult & { winnerTeamId: Id<'teams'> } {
-  refuseInvalidScore(tournament, sport, result.score);
-  const winnerTeamId = game.teamIds[scoreWinnerSide(result.score)!]!;
+): CheckedResult {
+  refuseInvalidScore(tournament, sport, result.score, tiesAllowedIn(game, sport));
+  const side = scoreWinnerSide(result.score);
+  const winnerTeamId = side === null ? undefined : game.teamIds[side]!;
   const { forfeitTeamId } = result;
   if (
     forfeitTeamId !== undefined &&
@@ -79,7 +88,7 @@ export function resultFrom(
   tournament: Doc<'tournaments'>,
   sport: Sport,
   { score, forfeitTeamId }: ResultInput,
-): StoredResult & { winnerTeamId: Id<'teams'> } {
+): CheckedResult {
   // The page sends one or the other, so both or neither is a caller sending its own arguments.
   if ((score === undefined) === (forfeitTeamId === undefined)) throw new Error('Not allowed');
   if (forfeitTeamId === undefined) return checkedResult(game, tournament, sport, { score: score! });
@@ -122,13 +131,22 @@ export async function saveFor(
   const result = resultFrom(game, tournament, program.sport, input);
   const previous = storedResultOf(game);
   const resultEnteredAt = await saveResult(ctx, game, { ...result, enteredBy: user._id });
-  const games = await bracketGames(ctx, tournament._id);
-  const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
+  const { winnerTeamId } = result;
   return {
-    winnerTeamId: result.winnerTeamId,
-    winnerName: (await ctx.db.get('teams', result.winnerTeamId))?.name ?? '',
+    winnerTeamId: winnerTeamId ?? null,
+    winnerName: winnerTeamId ? ((await ctx.db.get('teams', winnerTeamId))?.name ?? '') : null,
     resultEnteredAt,
-    advancesTo: game.nextGameId ? roundName(game.round + 1, rounds) : null,
+    advancesTo: game.nextGameId ? await roundNameAfter(ctx, game, tournament) : null,
     previous: hadResult ? previous : null,
   };
+}
+
+async function roundNameAfter(
+  ctx: QueryCtx,
+  game: Doc<'tournamentGames'>,
+  tournament: Doc<'tournaments'>,
+): Promise<string> {
+  const games = await bracketGames(ctx, tournament._id);
+  const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
+  return roundName(game.round + 1, rounds);
 }

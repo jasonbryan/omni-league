@@ -1,3 +1,4 @@
+import type { Score } from '../../convex/lib/sports';
 import { convexRun } from './convex';
 import type { Tenant } from './tenant';
 
@@ -22,5 +23,35 @@ export async function seedTeamPool(
     tournamentSlug,
     teamName,
     pool,
+  });
+}
+
+/** Splits the confirmed teams into pools and creates their games, as the organizer's two buttons do. Local runs only. */
+export async function seedPoolPlay(
+  tenant: Tenant,
+  tournamentSlug: string,
+  poolCount: number,
+): Promise<void> {
+  await convexRun('testing:seedTournamentPools', {
+    organizationSlug: tenant.slug,
+    tournamentSlug,
+    poolCount,
+  });
+}
+
+export type SeededPoolResult = { score: Score } | { forfeitTeamName: string };
+
+/** One pool result through the writer the organizer's page uses; `score.a` is the first named team's. Local runs only. */
+export async function seedPoolResult(
+  tenant: Tenant,
+  tournamentSlug: string,
+  teams: readonly [string, string],
+  result: SeededPoolResult,
+): Promise<void> {
+  await convexRun('testing:seedPoolResult', {
+    organizationSlug: tenant.slug,
+    tournamentSlug,
+    teams: [...teams],
+    ...result,
   });
 }

@@ -1056,21 +1056,6 @@ describe('pool games and the readers of bracket games', () => {
     ).toBeNull();
   });
 
-  test('a bracket result is refused for a pool game, so no Final or next game is read from it', async () => {
-    const { s, game } = await withPoolGame();
-    const args = { gameId: game._id, score: { kind: 'sets' as const, sets: [{ a: 21, b: 15 }] } };
-    await expect(s.as(s.admin).mutation(api.tournamentGames.enterResult, args)).rejects.toThrow(
-      /Not allowed/,
-    );
-    await expect(s.as(s.admin).mutation(api.tournamentGames.correctResult, args)).rejects.toThrow(
-      /Not allowed/,
-    );
-    await expect(
-      s.as(s.admin).mutation(api.tournamentGames.undoResult, { gameId: game._id }),
-    ).rejects.toThrow(/Not allowed/);
-    expect((await poolGames(s)).every((row) => row.winnerTeamId === undefined)).toBe(true);
-  });
-
   test('a captain’s score report is refused for a pool game', async () => {
     const { s, game } = await withPoolGame();
     const captained = game.teamIds[0]!;

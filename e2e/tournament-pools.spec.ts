@@ -1,13 +1,15 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { seedPoolsStructure, seedTeamPool } from './support/pools';
+import { seedPoolPlay, seedPoolResult, seedPoolsStructure, seedTeamPool } from './support/pools';
+import { RAW_HTTP } from './support/raw-http';
+import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
+import { dateFromToday, seedTenant, type Sport, type Tenant } from './support/tenant';
 import { seedTournament } from './support/tournament';
 import { newUser } from './support/users';
 
@@ -42,10 +44,12 @@ async function adminOf(
     teams,
     registration = 'closed',
     structure = 'pools',
+    sport = 'beachVolleyball',
   }: {
     teams: readonly { name: string; players?: number }[];
     registration?: 'open' | 'closed';
     structure?: 'bracket' | 'pools';
+    sport?: Sport;
   },
 ): Promise<Seeded> {
   const user = newUser('Admin');
@@ -59,6 +63,7 @@ async function adminOf(
   await seedTournament(tenant, {
     name: 'Fall Pool Play Open',
     slug: SLUG,
+    sport,
     locations: [LOCATION.name],
     startDate: dateFromToday(30),
     endDate: dateFromToday(31),
@@ -255,7 +260,9 @@ test.describe('Tournaments: pools', () => {
     await expect(createButton(page)).toBeFocused();
     await expect(gamesIn(page, 'A')).toHaveCount(6);
     await expect(gamesIn(page, 'B')).toHaveCount(6);
-    await expect(gamesIn(page, 'A').first()).toHaveText('Round 1: Ace v Haze');
+    await expect(gamesIn(page, 'A').first().locator('[data-slot="game-label"]')).toHaveText(
+      'Round 1: Ace v Haze',
+    );
     await screenshot(page, testInfo, 'pools-games');
     await expectAccessible(page);
 
@@ -466,6 +473,296 @@ test.describe('Tournaments: the structure', () => {
     );
     await expect(editForm(page).getByRole('radio')).toHaveCount(0);
     await screenshot(page, testInfo, 'structure-locked');
+    await expectAccessible(page);
+  });
+});
+
+const poolGame = (page: Page, label: string) =>
+  panel(page)
+    .locator('[data-game]')
+    .filter({ has: page.locator('[data-slot="game-label"]', { hasText: label }) });
+const enterButton = (game: Locator) => game.getByRole('button', { name: /^Enter result/ });
+const correctButton = (game: Locator) => game.getByRole('button', { name: /^Correct result/ });
+const clearButton = (game: Locator) => game.getByRole('button', { name: /^Clear result/ });
+const undoButton = (game: Locator) => game.getByRole('button', { name: 'Undo' });
+const saveButton = (game: Locator) =>
+  game.getByRole('button', { name: /^Save (result|correction)/ });
+const savedStatus = (game: Locator, title: string) =>
+  game.getByRole('status').filter({ hasText: title });
+const scoreInput = (game: Locator, box: string) => game.locator(`input[id$="-${box}"]`);
+const gameResult = (game: Locator) => game.locator('[data-slot="game-result"]');
+
+/** Six teams in 2 pools: Pool A is Ace, Dune, and Eddy, who play Dune v Eddy, then Ace v Eddy, then Ace v Dune. */
+const ROUND_ONE_OF_A = 'Round 1: Dune v Eddy';
+const ROUND_TWO_OF_A = 'Round 2: Ace v Eddy';
+
+test.describe('Tournaments: pool results', () => {
+  test('enters a result for a pool game: the game shows it, the pools lock, and a reload keeps it', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await page.goto(managePath);
+    const game = poolGame(page, ROUND_ONE_OF_A);
+    await expect(game.locator('[data-slot="game-label"]')).toHaveText(ROUND_ONE_OF_A);
+    await enterButton(game).click();
+    await scoreInput(game, 'a1').fill('21');
+    await scoreInput(game, 'b1').fill('15');
+    await screenshot(page, testInfo, 'pool-result-form');
+    await expectAccessible(page);
+
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toContainText('Dune won.');
+    await expect(gameResult(game)).toHaveText('Dune 21–15 Eddy. Dune won.');
+    await expect(panel(page).locator('[data-slot="split-reason"]')).toHaveText(
+      'A pool result is entered, so the pools cannot change.',
+    );
+    await expect(moveTo(page, 'Ace', 'B')).toHaveCount(0);
+    await screenshot(page, testInfo, 'pool-result-saved');
+    await expectAccessible(page);
+
+    await page.reload();
+    await expect(gameResult(poolGame(page, ROUND_ONE_OF_A))).toHaveText(
+      'Dune 21–15 Eddy. Dune won.',
+    );
+    await expect(correctButton(poolGame(page, ROUND_ONE_OF_A))).toBeVisible();
+    await expect(clearButton(poolGame(page, ROUND_ONE_OF_A))).toBeVisible();
+  });
+
+  test('a tied set in beach volleyball shows its error under the set and sends nothing', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await page.goto(managePath);
+    const game = poolGame(page, ROUND_ONE_OF_A);
+    await enterButton(game).click();
+    await scoreInput(game, 'a1').fill('21');
+    await scoreInput(game, 'b1').fill('21');
+    await saveButton(game).click();
+    await expect(game.locator('[data-slot="field-error"]')).toHaveText(
+      'Set 1 is tied. A set needs a winner.',
+    );
+    await expect(scoreInput(game, 'a1')).toBeFocused();
+    await expect(gameResult(game)).toHaveCount(0);
+  });
+
+  test('a soccer pool game can end in a tie, which is corrected, cleared, and restored', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX), sport: 'soccer' });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await page.goto(managePath);
+    const game = poolGame(page, ROUND_TWO_OF_A);
+    await enterButton(game).click();
+    await scoreInput(game, 'a1').fill('2');
+    await scoreInput(game, 'b1').fill('2');
+    await saveButton(game).focus();
+    await expect(game.locator('[data-slot="field-error"]')).toHaveCount(0);
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result saved')).toContainText('The game ended in a tie.');
+    await expect(gameResult(game)).toHaveText('Ace 2–2 Eddy. The game was tied.');
+    await expect(panel(page).locator('[data-slot="split-reason"]')).toHaveText(
+      'A pool result is entered, so the pools cannot change.',
+    );
+    await screenshot(page, testInfo, 'pool-result-tied');
+    await expectAccessible(page);
+
+    await correctButton(game).click();
+    await scoreInput(game, 'a1').fill('3');
+    await saveButton(game).click();
+    await expect(savedStatus(game, 'Result corrected')).toContainText('Ace won.');
+    await expect(gameResult(game)).toHaveText('Ace 3–2 Eddy. Ace won.');
+
+    await clearButton(game).click();
+    await expect(savedStatus(game, 'Result cleared')).toBeVisible();
+    await expect(panel(page).locator('[data-slot="split-reason"]')).toHaveCount(0);
+    await undoButton(game).click();
+    await expect(savedStatus(game, 'Result restored')).toContainText('Ace won.');
+    await expect(gameResult(game)).toHaveText('Ace 3–2 Eddy. Ace won.');
+  });
+});
+
+const PUBLIC_RESULTS: [readonly [string, string], { a: number; b: number }][] = [
+  [['Dune', 'Eddy'], { a: 21, b: 15 }],
+  [['Ace', 'Eddy'], { a: 21, b: 10 }],
+];
+
+async function seedPublicPools(
+  played: boolean,
+  { sport = 'beachVolleyball', names = SIX }: { sport?: Sport; names?: readonly string[] } = {},
+): Promise<{ tenant: Tenant; path: string }> {
+  const tenant = await seedTenant({ name: 'E2E Public Pools', locations: [LOCATION] });
+  const path = await seedTournament(tenant, {
+    name: 'Fall Pool Play Open',
+    slug: SLUG,
+    sport,
+    locations: [LOCATION.name],
+    startDate: dateFromToday(30),
+    endDate: dateFromToday(31),
+    registrationDeadline: dateFromToday(-2),
+    maximumTeams: 16,
+  });
+  await seedPoolsStructure(tenant, SLUG);
+  await convexRun('testing:seedTournamentRosters', {
+    organizationSlug: tenant.slug,
+    tournamentSlug: SLUG,
+    teams: full(names),
+  });
+  await seedPoolPlay(tenant, SLUG, 2);
+  if (played && sport === 'beachVolleyball') {
+    for (const [teams, { a, b }] of PUBLIC_RESULTS) {
+      await seedPoolResult(tenant, SLUG, teams, { score: { kind: 'sets', sets: [{ a, b }] } });
+    }
+  }
+  return { tenant, path };
+}
+
+const textOf = (html: string | undefined) =>
+  (html ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+test.describe('public tournament page: pools', () => {
+  test(
+    'Fall Pool Play Open fetched without JavaScript has each pool’s standings table and games in the raw HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { path } = await seedPublicPools(true);
+      const { status, html } = await fetchRawHtml(request, path);
+      expect(status).toBe(200);
+      const pools = html.slice(html.indexOf('id="pools"'), html.indexOf('id="bracket"'));
+      expect(
+        [...pools.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, h3]) => textOf(h3)),
+      ).toEqual(['Pool A', 'Pool B']);
+      expect(pools).toContain('<caption');
+      expect(textOf(/<caption\b[^>]*>([\s\S]*?)<\/caption>/.exec(pools)?.[1])).toBe(
+        'Pool A standings',
+      );
+      expect(pools).toContain('scope="col"');
+      expect(pools).toContain('scope="row"');
+      expect(
+        [...pools.matchAll(/<tr\b[^>]*data-testid="standing"[\s\S]*?<\/tr>/g)].map(([row]) =>
+          textOf(row),
+        ),
+      ).toEqual(['1 Ace 1 1 0 100% +11', '2 Dune 1 1 0 100% +6', '3 Eddy 2 0 2 0% -17']);
+      expect(
+        [...pools.matchAll(/<li\b[^>]*data-testid="pool-game"[\s\S]*?<\/li>/g)].map(([game]) =>
+          textOf(game),
+        ),
+      ).toEqual([
+        'Round 1 Dune v Eddy 21–15. Dune won.',
+        'Round 2 Ace v Eddy 21–10. Ace won.',
+        'Round 3 Ace v Dune',
+        'Round 1 Cove v Flow',
+        'Round 2 Bay v Flow',
+        'Round 3 Bay v Cove',
+      ]);
+      expect(textOf(pools)).toContain('Standings appear after the first result.');
+      expect(html.indexOf('id="pools"')).toBeLessThan(html.indexOf('id="bracket"'));
+    },
+  );
+
+  test('shows the standings and games to a reader, accessible and without sideways scroll', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await seedPublicPools(true);
+    await page.goto(path);
+    const section = page.locator('section#pools');
+    await expect(section.locator('h3')).toHaveText(['Pool A', 'Pool B']);
+    await expect(section.locator('table')).toHaveCount(1);
+    await expect(section.locator('table caption')).toHaveText('Pool A standings');
+    await expect(section.locator('tbody th')).toHaveText(['Ace', 'Dune', 'Eddy']);
+    await expect(section.locator('[data-testid="no-standings"]')).toHaveText(
+      'Standings appear after the first result.',
+    );
+    await screenshot(page, testInfo, 'public-pools');
+    await expectAccessible(page);
+  });
+
+  test('says when standings appear while no game has a result, and lists the games', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await seedPublicPools(false);
+    await page.goto(path);
+    const section = page.locator('section#pools');
+    await expect(section.locator('[data-testid="no-standings"]')).toHaveText([
+      'Standings appear after the first result.',
+      'Standings appear after the first result.',
+    ]);
+    await expect(section.locator('table')).toHaveCount(0);
+    await expect(section.locator('[data-testid="pool-game"]')).toHaveCount(6);
+    await screenshot(page, testInfo, 'public-pools-empty');
+    await expectAccessible(page);
+  });
+
+  test('follows a result entered while the page is open', async ({ page }) => {
+    const { tenant, path } = await seedPublicPools(false);
+    await page.goto(path);
+    const section = page.locator('section#pools');
+    await expect(section.locator('table')).toHaveCount(0);
+    await seedPoolResult(tenant, SLUG, ['Dune', 'Eddy'], {
+      score: { kind: 'sets', sets: [{ a: 21, b: 15 }] },
+    });
+    await expect(section.locator('table')).toHaveCount(1);
+    await expect(section.locator('tbody th').first()).toHaveText('Dune');
+  });
+
+  test('a soccer standings table with long team names scrolls inside itself at 320px, and the page does not scroll sideways', async ({
+    page,
+  }, testInfo) => {
+    // The snake split puts seeds 1, 4, and 5 in Pool A.
+    const names = [
+      'Intergalactic Wanderers',
+      'Wolverhampton Rovers',
+      'Llanfairpwllgwyngyll',
+    ] as const;
+    const { tenant, path } = await seedPublicPools(false, {
+      sport: 'soccer',
+      names: [names[0], 'Dune', 'Eddy', names[1], names[2], 'Flow'],
+    });
+    await seedPoolResult(tenant, SLUG, [names[0], names[1]], {
+      score: { kind: 'goals', a: 2, b: 2 },
+    });
+    await seedPoolResult(tenant, SLUG, [names[0], names[2]], {
+      score: { kind: 'goals', a: 3, b: 0 },
+    });
+    const projectViewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(path);
+    const table = page.locator('section#pools [data-testid="standings"]').first();
+    await expect(table.locator('tbody th').first()).toHaveText('Intergalactic Wanderers');
+    await expect(table.locator('tbody tr:first-child td').last()).toHaveText('4');
+    const container = table.locator('xpath=..');
+    const { scrollWidth, clientWidth } = await container.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+    await expectNoSidewaysScroll(page);
+    await container.scrollIntoViewIfNeeded();
+    await container.evaluate((element) => element.scrollTo({ left: element.scrollWidth }));
+    await expect(table.locator('thead th').last()).toBeInViewport();
+    await expectNoSidewaysScroll(page);
+    await container.evaluate((element) => element.scrollTo({ left: 0 }));
+    await expect(container).toHaveAttribute('role', 'region');
+    await expect(container).toHaveAccessibleName('Pool A standings');
+    await container.focus();
+    await expect(container).toBeFocused();
+    expect(await container.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
+      'none',
+    );
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => container.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await expectNoSidewaysScroll(page);
+    // Back at the top for the screenshot; the steps above scrolled the page to the table.
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await screenshot(page, testInfo, 'public-pools-soccer-320');
+    // Axe at the project's own width: the breadcrumb's links sit closer than 24px at 320px for a pointer that is not coarse, which is not this table's.
+    await page.setViewportSize(projectViewport);
     await expectAccessible(page);
   });
 });

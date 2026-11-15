@@ -59,7 +59,13 @@ import {
   tournamentTeams as seededTeamsOf,
 } from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
-import { assignPools, poolGames, poolSetup, replacePoolGames } from './lib/tournamentPools';
+import {
+  assignPools,
+  poolGames,
+  poolHasResult,
+  poolSetup,
+  replacePoolGames,
+} from './lib/tournamentPools';
 import type { Structure } from './lib/tournamentEdit';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
@@ -1293,6 +1299,17 @@ const DEMO_BRACKET_RESULTS: readonly { slot: number; score: Score }[] = [
   { slot: 4, score: { kind: 'sets', sets: [{ a: 18, b: 21 }] } },
 ];
 
+/** Half of each pool's games are played: its first round and the first game of its second, scored from the game's first team. */
+const DEMO_POOL_RESULTS: readonly { pool: 'A' | 'B'; round: number; slot: number; score: Score }[] =
+  [
+    { pool: 'A', round: 1, slot: 1, score: { kind: 'sets', sets: [{ a: 21, b: 15 }] } },
+    { pool: 'A', round: 1, slot: 2, score: { kind: 'sets', sets: [{ a: 18, b: 21 }] } },
+    { pool: 'A', round: 2, slot: 1, score: { kind: 'sets', sets: [{ a: 21, b: 12 }] } },
+    { pool: 'B', round: 1, slot: 1, score: { kind: 'sets', sets: [{ a: 21, b: 19 }] } },
+    { pool: 'B', round: 1, slot: 2, score: { kind: 'sets', sets: [{ a: 15, b: 21 }] } },
+    { pool: 'B', round: 2, slot: 1, score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } },
+  ];
+
 /**
  * Shoreline Smash's captain has reported the score of the second semifinal, Shoreline Smash v Wave Riders, so it reads Reported
  * on the organizer's page. The first semifinal, which player@'s Sand Crabs plays, has no report.
@@ -1732,6 +1749,7 @@ export const insertDemoTeams = internalMutation({
     await insertDemoPartners(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
     await insertDemoPools(ctx);
+    await insertDemoPoolResults(ctx, captains);
     await insertDemoBracket(ctx);
     await insertDemoBracketResults(ctx, captains);
     await insertDemoBracketReport(ctx, captains);
@@ -1851,6 +1869,31 @@ async function insertDemoPools(ctx: MutationCtx): Promise<void> {
   if (setup.seeds.length < DEMO_POOL_TEAMS.length) return;
   await assignPools(ctx, setup, DEMO_POOL_COUNT);
   await replacePoolGames(ctx, tournament._id, (await poolSetup(ctx, tournament)).pools, []);
+}
+
+/** Entered by the demo admin, and only on pools with no result, so a result an organizer entered on a reused deployment is kept. */
+async function insertDemoPoolResults(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const tournament = await demoTournament(ctx, DEMO_POOL_TOURNAMENT);
+  const authUserId = people.find(
+    (person) => person.email === DEMO_ACCOUNTS.admin.email,
+  )?.authUserId;
+  if (!tournament || authUserId === undefined) return;
+  const admin = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  const games = await poolGames(ctx, tournament._id);
+  if (!admin || poolHasResult(games)) return;
+  for (const { pool, round, slot, score } of DEMO_POOL_RESULTS) {
+    const game = games.find((row) => row.pool === pool && row.round === round && row.slot === slot);
+    const side = scoreWinnerSide(score);
+    const winnerTeamId = side === null ? undefined : game?.teamIds[side];
+    if (!game || !winnerTeamId) continue;
+    await saveResult(ctx, game, { score, winnerTeamId, enteredBy: admin._id });
+  }
 }
 
 /** Entered by the demo admin, and only on a bracket with no result, so a result an organizer entered on a reused deployment is kept. */

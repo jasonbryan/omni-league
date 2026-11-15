@@ -3,6 +3,7 @@ import {
   checkScore,
   forfeitScore,
   MAX_SCORE,
+  POOL_PLAY_TIES,
   ROSTER_SIZE_INPUT_MAX,
   SCORE_MESSAGES,
   scoreKindOf,
@@ -297,5 +298,39 @@ describe('scoresEqual', () => {
     expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, { kind: 'goals', a: 1, b: 3 })).toBe(false);
     expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, { kind: 'runs', a: 3, b: 1 })).toBe(false);
     expect(scoresEqual({ kind: 'goals', a: 3, b: 1 }, sets([3, 1]))).toBe(false);
+  });
+});
+
+describe('checkScore: a tied pool game', () => {
+  const sets = (...scores: [number, number][]) => ({
+    kind: 'sets' as const,
+    sets: scores.map(([a, b]) => ({ a, b })),
+  });
+
+  test('is accepted in soccer and softball when ties are allowed, and refused when they are not', () => {
+    expect(checkScore('soccer', 1, { kind: 'goals', a: 2, b: 2 }, { allowTie: true })).toBeNull();
+    expect(checkScore('softball', 1, { kind: 'runs', a: 0, b: 0 }, { allowTie: true })).toBeNull();
+    expect(checkScore('soccer', 1, { kind: 'goals', a: 2, b: 2 })).toMatchObject({
+      message: SCORE_MESSAGES.tied,
+    });
+  });
+
+  test('allows ties in pool play for soccer and softball and not for beach volleyball', () => {
+    expect(POOL_PLAY_TIES).toEqual({ beachVolleyball: false, soccer: true, softball: true });
+  });
+
+  test('is still refused in beach volleyball, whichever way the sets tie', () => {
+    const tiedSet = checkScore('beachVolleyball', 1, sets([21, 21]), { allowTie: true });
+    expect(tiedSet).toEqual({ field: 'set1', message: SCORE_MESSAGES.setTied(1) });
+    const splitSets = checkScore('beachVolleyball', 3, sets([21, 15], [15, 21]), {
+      allowTie: true,
+    });
+    expect(splitSets).toEqual({ field: 'set3', message: SCORE_MESSAGES.setMissing(3) });
+  });
+
+  test('still names a blank side', () => {
+    expect(
+      checkScore('soccer', 1, { kind: 'goals', a: null, b: 2 }, { allowTie: true }),
+    ).toMatchObject({ field: 'a', message: SCORE_MESSAGES.blank });
   });
 });

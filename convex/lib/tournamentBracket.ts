@@ -60,9 +60,10 @@ export async function bracketExists(
   return first !== null;
 }
 
-/** A bye has a winner from the start, but only one team; a result is a winner between two. */
+/** A bye has a winner from the start, but only one team; a result is a winner between two, or the score of a tied pool game. */
 export function gameHasResult(game: Doc<'tournamentGames'>): boolean {
-  return game.winnerTeamId !== undefined && game.teamIds.every((teamId) => teamId !== null);
+  const decided = game.winnerTeamId !== undefined || game.score !== undefined;
+  return decided && game.teamIds.every((teamId) => teamId !== null);
 }
 
 export function bracketHasResult(games: readonly Doc<'tournamentGames'>[]): boolean {
@@ -124,7 +125,7 @@ async function placeInNextGame(
 export async function saveResult(
   ctx: MutationCtx,
   game: Doc<'tournamentGames'>,
-  result: StoredResult & { winnerTeamId: Id<'teams'>; enteredBy: Id<'users'> },
+  result: StoredResult & { winnerTeamId?: Id<'teams'> | undefined; enteredBy: Id<'users'> },
 ): Promise<number> {
   // Later than the result it replaces, even within one millisecond, so an Undo shown the earlier one is refused.
   const resultEnteredAt = Math.max(Date.now(), (game.resultEnteredAt ?? 0) + 1);
@@ -135,7 +136,7 @@ export async function saveResult(
     resultEnteredAt,
     resultEnteredBy: result.enteredBy,
   });
-  await placeInNextGame(ctx, game, result.winnerTeamId);
+  await placeInNextGame(ctx, game, result.winnerTeamId ?? null);
   return resultEnteredAt;
 }
 

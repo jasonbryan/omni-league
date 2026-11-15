@@ -18,6 +18,7 @@ import { PublicTournamentPage } from './public-tournament-page';
 import {
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_POOLS,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
   tournamentQueryResults,
@@ -160,6 +161,27 @@ describe('PublicTournamentPage offline', () => {
     expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual(['Semifinals', 'Final']);
     expect(section?.querySelectorAll('li')).toHaveLength(3);
     expect(note(harness)).not.toBeNull();
+  });
+
+  it('shows the pools from a saved copy opened offline, with the saved-copy note', async () => {
+    plant(tournamentQueryResults({ ...BEACH_OPEN, pools: BEACH_OPEN_POOLS }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    const section = host(harness).querySelector('main section#pools');
+    expect([...(section?.querySelectorAll('tbody th') ?? [])].map(text)).toEqual([
+      'Sand Crabs',
+      'Net Results',
+      'Dig Dogs',
+    ]);
+    expect(section?.querySelectorAll('li[data-testid="pool-game"]')).toHaveLength(3);
+    expect(note(harness)).not.toBeNull();
+  });
+
+  it('shows no Pools section for a copy saved before pools existed', async () => {
+    plant(tournamentQueryResults({ ...BEACH_OPEN, bracket: BEACH_OPEN_BRACKET }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    expect(host(harness).querySelector('main section#pools')).toBeNull();
   });
 
   it('shows the score lines from a saved copy opened offline, under the saved-copy note', async () => {
