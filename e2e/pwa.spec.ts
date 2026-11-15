@@ -1250,6 +1250,7 @@ test.describe('offline navigation inside the app (production build against the l
     await expect(page).toHaveTitle('Home | Omni League');
     await expect(page.locator('app-account-page')).toBeAttached();
     await expect(offlineNote(page)).toHaveText(OFFLINE_NOTE);
+    await expect(page.locator('header p')).toHaveText('Home');
     await expectAccountRowWithoutUser(page, user);
 
     const account = await context.newPage();
@@ -1259,6 +1260,7 @@ test.describe('offline navigation inside the app (production build against the l
       account.getByRole('heading', { level: 1, name: 'Account settings' }),
     ).toBeVisible();
     await expect(offlineNote(account)).toHaveText(OFFLINE_NOTE);
+    await expect(account.locator('header p')).toHaveText('Account settings');
     expect(siteRequests, 'requests to the Convex site while offline').toEqual([]);
 
     await setOffline(context, false);

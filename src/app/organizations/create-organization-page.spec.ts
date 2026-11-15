@@ -9,6 +9,8 @@ import { AVAILABILITY_PAUSE_MS } from '../core/forms/slug-availability';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT, ConvexConnection, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { expectBareCard } from '../ui/testing/card';
@@ -34,8 +36,13 @@ describe('CreateOrganizationPage', () => {
       providers: [
         provideFakeAuthClient(new FakeAuthClient()),
         { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
         provideRouter([
-          { path: 'app/organizations/new', component: CreateOrganizationPage },
+          {
+            path: 'app/organizations/new',
+            title: appRouteTitle('organizations/new'),
+            component: CreateOrganizationPage,
+          },
           { path: 'app', component: Elsewhere },
           { path: 'app/organizations/:slug', component: Elsewhere },
         ]),
@@ -1034,5 +1041,10 @@ describe('CreateOrganizationPage', () => {
       ).not.toBeNull();
       expect(field.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
     });
+  });
+
+  it('names the page in the slim bar from its route title, as the tab title does', async () => {
+    await open();
+    expectBar(page, 'Create an organization');
   });
 });

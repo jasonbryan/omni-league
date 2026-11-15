@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
+import { MAX_SEASON_NAME_LENGTH } from '../../../../convex/lib/seasonInput';
 import { Title } from '@angular/platform-browser';
 import type { Routes } from '@angular/router';
 import { ConvexOfflineError } from '../../core/data/convex';
@@ -18,6 +19,8 @@ import { expectBadge } from '../../ui/testing/badge';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { slotsOf } from '../../ui/testing/helm-slots';
+import { appRouteTitle } from '../../shell/testing/app-route-title';
+import { expectBar } from '../../shell/testing/bar-title';
 
 const GET_VIEW = 'seasons:getOrganizerView';
 const LIST_FREE_AGENTS = 'freeAgents:listForOrganizer';
@@ -29,6 +32,7 @@ const SLUGS = { orgSlug: GULF.slug, leagueSlug: COED.slug, seasonSlug: SEASON_SL
 const ROUTES: Routes = [
   {
     path: 'app/organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+    title: appRouteTitle('organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug'),
     component: SeasonPage,
   },
   { path: 'app/organizations/:orgSlug/leagues/:leagueSlug', component: Elsewhere },
@@ -1142,6 +1146,43 @@ describe('SeasonPage', () => {
       );
       expect(text(page.querySelector('[data-testid="waitlist-tile"]'))).toBe('–');
       expect(teamRows()).toHaveLength(3);
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Season" until its queries have answered, then the season name', async () => {
+      o = await openAdmin(ROUTES, URL);
+      expectBar(o.page, 'Season');
+      o.acceptToken();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      o.subscription(GET_VIEW)!.emit(VIEW);
+      await o.flush();
+      expectBar(o.page, 'Season');
+      o.subscription(LIST_WAITLIST)!.emit(NO_WAITLIST);
+      o.subscription(LIST_FREE_AGENTS)!.emit(FREE_AGENTS);
+      await o.flush();
+      expectBar(o.page, 'Summer 2027');
+      expect(TestBed.inject(Title).getTitle()).toBe('Summer 2027 | Coed 7v7 Rec | Omni League');
+    });
+
+    it('names the no-access, not-found and server-error views', async () => {
+      o = await openAdmin(ROUTES, URL);
+      o.acceptToken();
+      o.subscription(GET_VIEW)!.fail(forbiddenError());
+      await o.flush();
+      expectBar(o.page, 'No access');
+      o.subscription(GET_VIEW)!.emit(null);
+      await o.flush();
+      expectBar(o.page, 'Page not found');
+      o.subscription(GET_VIEW)!.fail(new Error('network'));
+      await o.flush();
+      expectBar(o.page, 'Temporarily unavailable');
+    });
+
+    it('keeps the bar to one truncated line for a season named at the limit', async () => {
+      await open(COED, { ...VIEW, name: 'S'.repeat(MAX_SEASON_NAME_LENGTH) }, FREE_AGENTS);
+      expectBar(page, 'S'.repeat(MAX_SEASON_NAME_LENGTH));
+      expect(page.querySelector('header p')?.classList).toContain('truncate');
     });
   });
 });

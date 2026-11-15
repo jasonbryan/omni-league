@@ -14,7 +14,7 @@ import { CampManagement } from './camp-management';
   template: `
     <app-shell [sidebarPending]="context.state() === 'loading'">
       @if (context.camp(); as camp) {
-        <ng-template appShellSidebar [appShellOrganizationName]="camp.organization.name">
+        <ng-template appShellSidebar>
           @if (camp.role === 'orgAdmin') {
             <app-admin-sidebar
               [organization]="{

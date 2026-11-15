@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
+import { PageTitle } from '../core/page-title';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
@@ -11,13 +12,7 @@ import { hlm } from '../ui/utils';
 import { LOAD_SHELL_SHEET, Shell } from './shell';
 import { skipLinkHref } from './skip-link';
 import { LOAD_PAGE } from './follow-link';
-import {
-  BarTitleSidebarTestPage,
-  BarTitleTestPage,
-  PendingTestPage,
-  PlainTestPage,
-  SidebarTestPage,
-} from './testing/test-pages';
+import { PendingTestPage, PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
 function emptyRouter(): Router {
   TestBed.configureTestingModule({ providers: [provideRouter([])] });
@@ -196,19 +191,40 @@ describe('Shell', () => {
       expect(header.querySelectorAll('a')).toHaveLength(0);
     });
 
-    it("names the page's organization", async () => {
+    it('shows the text PageTitle holds', async () => {
       const harness = await render(SidebarTestPage);
+      TestBed.inject(PageTitle).set(['Sunday Reverse Coed 4s', 'Test organization']);
+      harness.detectChanges();
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Sunday Reverse Coed 4s');
+    });
+
+    it('shows the bar option of PageTitle in place of the first part', async () => {
+      const harness = await render(PlainTestPage);
+      TestBed.inject(PageTitle).set(['Overview', 'Test organization'], {
+        bar: 'Test organization',
+      });
+      harness.detectChanges();
       expect(host(harness).querySelector('header p')?.textContent).toBe('Test organization');
     });
 
-    it('shows barTitle when the page gives one', async () => {
-      const harness = await render(BarTitleTestPage);
-      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
+    it('follows a later title of the same page', async () => {
+      const harness = await render(PlainTestPage);
+      const pageTitle = TestBed.inject(PageTitle);
+      pageTitle.set(['League']);
+      harness.detectChanges();
+      expect(host(harness).querySelector('header p')?.textContent).toBe('League');
+      pageTitle.set(['Sunday Reverse Coed 4s', 'Test organization']);
+      harness.detectChanges();
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Sunday Reverse Coed 4s');
     });
 
-    it("shows barTitle over the page's organization", async () => {
-      const harness = await render(BarTitleSidebarTestPage);
-      expect(host(harness).querySelector('header p')?.textContent).toBe('Bar title');
+    it('keeps one truncated line at the bar height whatever the text', async () => {
+      const harness = await render(PlainTestPage);
+      TestBed.inject(PageTitle).set(['x'.repeat(100)]);
+      harness.detectChanges();
+      const header = host(harness).querySelector('header')!;
+      expect(header.classList).toContain('h-14');
+      expect(header.querySelector('p')?.classList).toContain('truncate');
     });
 
     it('has no Sign in link and no link to the public home', async () => {

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { forbiddenError, ME, openAdmin, text } from '../admin/testing/admin-harness';
@@ -14,6 +15,7 @@ import {
   SEASONS,
 } from './testing/league-harness';
 import { LeagueLanding } from './league-landing';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBadgeSize } from '../../ui/testing/badge';
 import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
@@ -812,6 +814,49 @@ describe('LeaguePage', () => {
         await o.flush();
         expect(document.activeElement).toBe(seasonsHeading());
       });
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "League" while the query is held, then the league name', async () => {
+      o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
+      page = o.page;
+      expectBar(page, 'League');
+      o.acceptToken();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      await o.flush();
+      expectBar(page, 'Coed 7v7 Rec');
+    });
+
+    it('names the no-access, not-found and server-error views', async () => {
+      await open(COED);
+      o.subscription(GET_ORGANIZER_CONTEXT)!.fail(forbiddenError());
+      await o.flush();
+      expectBar(page, 'No access');
+
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(null);
+      await o.flush();
+      expectBar(page, 'Page not found');
+
+      o.subscription(GET_ORGANIZER_CONTEXT)!.fail(new Error('Server Error: secret detail'));
+      await o.flush();
+      expectBar(page, 'Temporarily unavailable');
+    });
+
+    it('keeps the league name through a navigation to the same path with a new fragment and query string', async () => {
+      await open(COED, []);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl(`${LEAGUE_URL}?season=2#create-season`);
+      await o.flush();
+      expectBar(page, 'Coed 7v7 Rec');
+      expect(TestBed.inject(Title).getTitle()).toBe(
+        'Coed 7v7 Rec | Gulf Coast Sport & Social | Omni League',
+      );
+    });
+
+    it('is hidden from 1024px', async () => {
+      await open(COED, []);
+      expect(page.querySelector('header')?.classList).toContain('lg:hidden');
     });
   });
 });

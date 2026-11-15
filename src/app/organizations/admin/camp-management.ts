@@ -10,7 +10,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -61,6 +60,7 @@ import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
 import { PublishCampDialog, type PublishCampOutcome } from './publish-camp-dialog';
 import { injectSectionJump } from './section-jump';
+import { PageTitle } from '../../core/page-title';
 
 const DELETE_FAILED = 'Check your connection and try again.';
 const RESTORE_FAILED = 'could not be restored. Try again.';
@@ -502,7 +502,7 @@ export class CampManagement {
   private readonly context = inject(CampContext);
   private readonly injector = inject(Injector);
   private readonly landing = inject(CampAddSessionLanding);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly removeCall = injectMutation(api.campSessions.remove);
   private readonly addCall = injectMutation(api.campSessions.add);
   private readonly cause = injectOfflineCause();
@@ -570,7 +570,7 @@ export class CampManagement {
     // The no-access and not-found views set their own title.
     effect(() => {
       const camp = this.camp();
-      if (camp) this.title.setTitle(`${camp.name} | ${camp.organization.name} | Omni League`);
+      if (camp) this.pageTitle.set([camp.name, camp.organization.name]);
     });
   }
 

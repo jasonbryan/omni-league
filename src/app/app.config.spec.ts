@@ -1,14 +1,16 @@
 import { Component, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NavigationError, Router, UrlSerializer } from '@angular/router';
+import { NavigationError, Router, TitleStrategy, UrlSerializer, type Route } from '@angular/router';
 import { SwRegistrationOptions, SwUpdate } from '@angular/service-worker';
 import { App } from './app';
 import { appConfig } from './app.config';
+import { appRoutes } from './app.routes.app';
 import { AUTH_CLIENT } from './core/auth/auth-client';
 import { AuthService } from './core/auth/auth.service';
 import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
 import { CONVEX_SERVER_QUERIES } from './core/data/convex/inject-query';
 import { AppUpdates } from './core/service-worker/app-updates';
+import { PageTitleStrategy } from './core/page-title';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { HlmSheet, HlmSheetContent, HlmSheetPortal } from './ui/sheet';
 import { overlayPanes, removePopoverApi, stubPopoverApi } from './ui/testing/overlay-panes';
@@ -91,6 +93,25 @@ describe('appConfig with no Convex URL', () => {
     await fixture.whenStable();
     expect(TestBed.inject(AppUpdates).start()).toBe(false);
     expect(document.body.querySelector('app-update-prompt')).toBeNull();
+  });
+
+  it('hands route titles to PageTitle', () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(TitleStrategy)).toBeInstanceOf(PageTitleStrategy);
+  });
+
+  it('gives every /app page, the admin sections and the catch-all included, a title', () => {
+    const withoutTitle = (routes: readonly Route[], parent = ''): string[] =>
+      routes.flatMap((route) => {
+        const path = `${parent}/${route.path}`;
+        if (route.children) return withoutTitle(route.children, path);
+        return route.loadComponent && !route.title ? [path] : [];
+      });
+
+    expect(withoutTitle(appRoutes)).toEqual([]);
+    expect(appRoutes.at(-1)?.path).toBe('**');
+    expect(appRoutes.at(-1)?.title).toBe('Page not found | Omni League');
   });
 
   it('provides no server query loader, so the browser build leaves out the Convex HTTP client', () => {
