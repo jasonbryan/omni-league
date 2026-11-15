@@ -1,12 +1,12 @@
 import { Injectable, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
 import { isForbidden } from '../../../../convex/lib/forbidden';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
+import { PageTitle } from '../../core/page-title';
 
 export type AdminOrganization = NonNullable<
   FunctionReturnType<typeof api.organizations.getAdminContext>
@@ -41,11 +41,14 @@ export class AdminContext {
   );
 }
 
-export function bindAdminTitle(section: string): void {
+export function bindAdminTitle(section: string, options: { bar?: 'organization' } = {}): void {
   const context = inject(AdminContext);
-  const title = inject(Title);
+  const pageTitle = inject(PageTitle);
   effect(() => {
     const organization = context.organization();
-    if (organization) title.setTitle(`${section} | ${organization.name} | Omni League`);
+    if (!organization) return;
+    pageTitle.set([section, organization.name], {
+      bar: options.bar === 'organization' ? organization.name : undefined,
+    });
   });
 }

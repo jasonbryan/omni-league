@@ -457,6 +457,7 @@ test.describe('not-found page', () => {
       expect(response?.status()).toBe(200);
       await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
       await expect(page).toHaveTitle(/Page not found/);
+      await expect(page.locator('header p')).toHaveText('Page not found');
       expect(await response?.text()).not.toContain('ref=1');
       await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
         'href',

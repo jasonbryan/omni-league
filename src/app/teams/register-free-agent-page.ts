@@ -12,7 +12,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -55,6 +54,7 @@ import {
 } from './register-team-state';
 import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
 import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
+import { PageTitle } from '../core/page-title';
 
 export const FREE_AGENT_MESSAGES = {
   failedTitle: 'You could not be registered.',
@@ -312,7 +312,7 @@ export class RegisterFreeAgentPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly register = injectMutation(api.freeAgents.register);
 
   protected readonly messages = FREE_AGENT_MESSAGES;
@@ -426,7 +426,7 @@ export class RegisterFreeAgentPage {
     effect(() => {
       const season = this.season();
       if (season) {
-        this.title.setTitle(`Register as a free agent | ${season.seasonName} | Omni League`);
+        this.pageTitle.set(['Register as a free agent', season.seasonName]);
       }
     });
     effect(() => {

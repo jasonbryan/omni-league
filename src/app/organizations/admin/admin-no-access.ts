@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Title } from '@angular/platform-browser';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
 import { HlmCard } from '../../ui/card';
+import { bindViewTitle } from '../../core/page-title';
 
 @Component({
   selector: 'app-admin-no-access',
@@ -42,6 +42,6 @@ import { HlmCard } from '../../ui/card';
 })
 export class AdminNoAccess {
   constructor() {
-    inject(Title).setTitle('You can’t manage this organization | Omni League');
+    bindViewTitle('You can’t manage this organization');
   }
 }

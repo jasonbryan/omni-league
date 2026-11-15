@@ -9,6 +9,8 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { RELOAD_PAGE } from '../core/service-worker/app-updates';
 import { expectSkeletonBoxes } from '../ui/testing/skeleton-boxes';
 import { NotificationsPage } from './notifications-page';
@@ -157,7 +159,14 @@ describe('NotificationsPage', () => {
         },
         { provide: RELOAD_PAGE, useValue: reloadPage },
         ...(realDevice ? [] : [{ provide: PUSH_DEVICE, useValue: device }]),
-        provideRouter([{ path: 'app/notifications', component: NotificationsPage }]),
+        BAR_TITLE_PROVIDER,
+        provideRouter([
+          {
+            path: 'app/notifications',
+            title: appRouteTitle('notifications'),
+            component: NotificationsPage,
+          },
+        ]),
       ],
     });
     auth.emitSession({ id: 's1' });
@@ -1298,5 +1307,10 @@ describe('NotificationsPage', () => {
     expect(text(alertBox()?.querySelector('[data-slot="alert-description"]'))).toBe(
       "Notifications are still off. Try again when you're connected.",
     );
+  });
+
+  it('names the page in the slim bar from its route title, as the tab title does', async () => {
+    await open();
+    expectBar(page, 'Notifications');
   });
 });

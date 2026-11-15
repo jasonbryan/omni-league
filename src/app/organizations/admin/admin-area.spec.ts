@@ -1,7 +1,9 @@
 import { Component } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { expectBareCards, MESSAGE_CARD_LAYOUT } from '../../ui/testing/card';
+import { expectBar } from '../../shell/testing/bar-title';
 import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { AdminArea } from './admin-area';
@@ -37,6 +39,16 @@ describe('AdminArea', () => {
       expect(convex.subscriptions).toEqual([]);
       expect(text(page.querySelector('main [role="status"]'))).toBe('Loading the admin area.');
       expect(page.querySelector('#child')).toBeNull();
+    });
+
+    it('names the section in the slim bar from its route title, as the tab title does', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      expectBar(page, 'Overview');
+    });
+
+    it('names another section in the slim bar from its route title', async () => {
+      const { page } = await openAdmin(ROUTES, `${OVERVIEW}/locations`);
+      expectBar(page, 'Locations');
     });
 
     it('asks organizations.getAdminContext with the slug, and nothing else but the account row’s users.me, once the token is accepted', async () => {
@@ -121,9 +133,9 @@ describe('AdminArea', () => {
       ]);
     });
 
-    it('names the slim bar after the organization, and has no top bar from 1024px', async () => {
+    it('keeps the section route title in the slim bar when the child sets none, and has no top bar from 1024px', async () => {
       const { page } = await ready();
-      expect(text(page.querySelector('header p'))).toBe('Coastal Bend Rec Club');
+      expectBar(page, 'Overview');
       expect(page.querySelector('header')?.classList).toContain('lg:hidden');
     });
 
@@ -175,11 +187,12 @@ describe('AdminArea', () => {
       expect(text(page.querySelector('h1'))).toBe('You can’t manage this organization');
     });
 
-    it('sets the page title', async () => {
-      await forbidden();
+    it('sets the page title, and the slim bar reads its first part', async () => {
+      const { page } = await forbidden();
       expect(TestBed.inject(Title).getTitle()).toBe(
         'You can’t manage this organization | Omni League',
       );
+      expectBar(page, 'You can’t manage this organization');
     });
   });
 
@@ -194,6 +207,7 @@ describe('AdminArea', () => {
       subscription(GET_ADMIN_CONTEXT)!.emit(null);
       await flush();
       expect(text(page.querySelector('h1'))).toBe('Page not found');
+      expectBar(page, 'Page not found');
       expect(text(page.querySelector('main a'))).toBe('Go to the home page');
       expect(page.querySelector('nav')?.getAttribute('aria-label')).toBe('Your account');
       expect(page.querySelector('#child')).toBeNull();
@@ -213,8 +227,43 @@ describe('AdminArea', () => {
       subscription(GET_ADMIN_CONTEXT)!.fail(new Error('Server Error: secret detail'));
       await flush();
       expect(text(page.querySelector('h1'))).toBe('This page is temporarily unavailable');
+      expectBar(page, 'Temporarily unavailable');
       expect(page.textContent).not.toContain('secret detail');
       expect(page.querySelector('#child')).toBeNull();
+    });
+  });
+
+  describe('a view that stays on screen through a navigation to another section', () => {
+    async function viewShown(answer: (opened: Awaited<ReturnType<typeof openAdmin>>) => void) {
+      const opened = await openAdmin(ROUTES, `${OVERVIEW}/locations`);
+      opened.acceptToken();
+      answer(opened);
+      await opened.flush();
+      await TestBed.inject(Router).navigateByUrl(OVERVIEW);
+      await opened.flush();
+      return opened;
+    }
+
+    it('keeps the no-access text in the bar and the tab', async () => {
+      const { page } = await viewShown((o) =>
+        o.subscription(GET_ADMIN_CONTEXT)!.fail(forbiddenError()),
+      );
+      expect(text(page.querySelector('h1'))).toBe('You can’t manage this organization');
+      expectBar(page, 'You can’t manage this organization');
+    });
+
+    it('keeps the not-found text in the bar and the tab', async () => {
+      const { page } = await viewShown((o) => o.subscription(GET_ADMIN_CONTEXT)!.emit(null));
+      expect(text(page.querySelector('h1'))).toBe('Page not found');
+      expectBar(page, 'Page not found');
+    });
+
+    it('keeps the server-error text in the bar and the tab', async () => {
+      const { page } = await viewShown((o) =>
+        o.subscription(GET_ADMIN_CONTEXT)!.fail(new Error('Server Error: secret detail')),
+      );
+      expect(text(page.querySelector('h1'))).toBe('This page is temporarily unavailable');
+      expectBar(page, 'Temporarily unavailable');
     });
   });
 });

@@ -14,7 +14,7 @@ import { TournamentManagement } from './tournament-management';
   template: `
     <app-shell [sidebarPending]="context.state() === 'loading'">
       @if (context.tournament(); as tournament) {
-        <ng-template appShellSidebar [appShellOrganizationName]="tournament.organization.name">
+        <ng-template appShellSidebar>
           @if (tournament.role === 'orgAdmin') {
             <app-admin-sidebar
               [organization]="{
