@@ -34,6 +34,7 @@ import {
   injectOnline,
 } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
+import { AnswerAtPress } from '../core/forms/answer-at-press';
 import { injectSlugAvailability } from '../core/forms/slug-availability';
 import { Shell } from '../shell';
 import { adminPath } from './admin/admin-path';
@@ -361,8 +362,10 @@ export class CreateOrganizationPage {
     slug: this.untilChanged(() => this.model().slug),
   };
 
+  private readonly slugAnswer = new AnswerAtPress(this.availability, () => this.model().slug);
+
   private readonly takenBeforeSubmit = computed(() =>
-    !this.submitting() && this.availability.answer() === 'taken' ? this.model().slug : null,
+    this.slugAnswer.answer() === 'taken' ? this.model().slug : null,
   );
 
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
@@ -376,10 +379,7 @@ export class CreateOrganizationPage {
   );
 
   protected readonly slugAvailable = computed(
-    () =>
-      !this.submitting() &&
-      this.availability.answer() === 'available' &&
-      this.errors.slug() === null,
+    () => this.slugAnswer.answer() === 'available' && this.errors.slug() === null,
   );
 
   protected readonly slugStatusReservesRoom = computed(() => this.errors.slug() === null);
@@ -441,6 +441,7 @@ export class CreateOrganizationPage {
 
     const { name, slug } = this.model();
     const cityState = checkCityState(this.model().cityState);
+    this.slugAnswer.hold();
     this.submitting.set(true);
     try {
       await this.create.run({
@@ -449,12 +450,17 @@ export class CreateOrganizationPage {
         ...(cityState.ok && cityState.value !== null && { cityState: cityState.value }),
       });
     } catch (failure) {
+      this.slugAnswer.release();
       this.submitting.set(false);
       this.showFailure(failure, slug);
       return;
     }
-    await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
-    this.submitting.set(false);
+    try {
+      await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
+    } finally {
+      this.slugAnswer.release();
+      this.submitting.set(false);
+    }
   }
 
   private showFailure(failure: unknown, slug: string): void {

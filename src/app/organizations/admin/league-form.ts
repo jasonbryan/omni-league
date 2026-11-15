@@ -18,6 +18,7 @@ import {
 import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { AnswerAtPress } from '../../core/forms/answer-at-press';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
@@ -107,6 +108,7 @@ export class LeagueForm {
   private readonly clientErrors: Record<LeagueField, Signal<string | null>>;
   private readonly shown: Record<LeagueField, ShownUntilValid>;
   private readonly locationsChanged = signal(false);
+  private readonly slugAnswer: AnswerAtPress;
   private readonly serverErrors: Record<LeagueField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<LeagueField, Signal<string | null>>;
@@ -123,6 +125,7 @@ export class LeagueForm {
     available: () => readonly Id<'locations'>[],
     private readonly webAddress: WebAddressCheck = NOT_CHECKED,
   ) {
+    this.slugAnswer = new AnswerAtPress(webAddress, () => this.model().slug);
     // `required` puts the attribute on both inputs; the messages are ours (`leagueInput.ts`), so
     // the form and `leagues.create` agree.
     this.fields = form(this.model, (path) => {
@@ -217,10 +220,7 @@ export class LeagueForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () =>
-        !this.submitting() &&
-        this.webAddress.answer() === 'available' &&
-        this.errors.slug() === null,
+      () => this.slugAnswer.answer() === 'available' && this.errors.slug() === null,
     );
     this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
@@ -261,6 +261,7 @@ export class LeagueForm {
     this.selected.set(this.defaultSelected());
     this.fields().reset();
     this.locationsChanged.set(false);
+    this.slugAnswer.release();
   }
 
   left(field: LeagueField): void {
@@ -305,10 +306,12 @@ export class LeagueForm {
       ageGroup: this.division.ageGroup(),
       ...(minimumRosterSize !== undefined && { minimumRosterSize }),
     };
+    this.slugAnswer.hold();
     this.submitting.set(true);
     try {
       await send(values);
     } catch (failure) {
+      this.slugAnswer.release();
       return this.failed(failure, slug);
     } finally {
       this.submitting.set(false);
@@ -339,7 +342,7 @@ export class LeagueForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return this.slugAnswer.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {

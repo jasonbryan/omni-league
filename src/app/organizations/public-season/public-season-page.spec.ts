@@ -189,7 +189,31 @@ describe('PublicSeasonPage skeleton names', () => {
     registrationDeadline: '2027-09-05',
   };
   const FALL_PATH = `${LEAGUE_PATH}/seasons/fall-2027`;
-  const FALL_NAMES = { ...NAMES, season: { slug: 'fall-2027', name: 'Fall 2027' } };
+  const FALL_NAMES = {
+    ...NAMES,
+    season: {
+      slug: 'fall-2027',
+      name: 'Fall 2027',
+      registration: { deadline: '2027-09-05', startDate: '2027-09-12', isFull: false },
+    },
+  };
+  const OPEN_STATE = {
+    ...NAMES,
+    season: {
+      ...NAMES.season,
+      registration: { deadline: '2027-05-23', startDate: '2027-06-06', isFull: false },
+    },
+  };
+  const FULL_STATE = {
+    ...OPEN_STATE,
+    season: {
+      ...OPEN_STATE.season,
+      registration: { ...OPEN_STATE.season.registration, isFull: true },
+    },
+  };
+  const CARD_BARS = '[data-testid="season-skeleton-card"] [data-slot="skeleton"]';
+  const cardTexts = (skeleton: Element) =>
+    [...skeleton.querySelectorAll(CARD_BARS)].map((bar) => text(bar));
 
   async function loading(state?: Record<string, unknown>): Promise<HTMLElement> {
     const harness = await open(PATH, state);
@@ -229,6 +253,41 @@ describe('PublicSeasonPage skeleton names', () => {
     expect(skeleton.querySelector(CRUMBS)).toBeNull();
     expect(text(skeleton.querySelector(HEADING))).toBe('');
     expect(skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]')).toHaveLength(2);
+  });
+
+  it('draws the open card’s title and note as bars when the link’s state says the season is open', async () => {
+    const skeleton = await loading(OPEN_STATE);
+
+    expect(cardTexts(skeleton)).toEqual([
+      'Registration open · closes May 23, 2027',
+      '',
+      '',
+      expect.stringContaining('Captains register a team'),
+    ]);
+  });
+
+  it('draws the full card when the link’s state says the season is full', async () => {
+    const skeleton = await loading(FULL_STATE);
+
+    expect(cardTexts(skeleton)[0]).toBe('This season is full');
+  });
+
+  it('draws the closed bars when the link said open and the page’s clock is past the deadline', async () => {
+    vi.setSystemTime(at('2027-05-30'));
+    const skeleton = await loading(OPEN_STATE);
+
+    expect(cardTexts(skeleton)).toEqual(['', '', '', '']);
+  });
+
+  it('draws the closed bars when the link’s state holds a bad registration', async () => {
+    const bad = {
+      ...OPEN_STATE,
+      season: { ...OPEN_STATE.season, registration: { deadline: 'May 1', startDate: 7 } },
+    };
+    const skeleton = await loading(bad);
+
+    expect(cardTexts(skeleton)).toEqual(['', '', '', '']);
+    expect(crumbTexts(skeleton)).toHaveLength(3);
   });
 
   it('shows the bars when the navigation carried no state', async () => {
@@ -329,6 +388,27 @@ describe('PublicSeasonPage skeleton names', () => {
       const skeleton = host(harness).querySelector<HTMLElement>(SKELETON);
       expect(skeleton?.querySelector(CRUMBS)).toBeNull();
       expect(skeleton?.querySelectorAll('[data-testid="skeleton-breadcrumb-row"]')).toHaveLength(2);
+    });
+
+    it('gives the link to a full next season the full flag in its state', async () => {
+      vi.setSystemTime(at('2027-07-01'));
+      const harness = await open();
+      emit(
+        seasonQueryResults({
+          season: {
+            ...SUMMER_2027,
+            league: { ...SUMMER_2027.league, upcomingSeasons: [{ ...FALL_2027, isFull: true }] },
+          },
+        }),
+      );
+      await settle(harness);
+      const link = harness.fixture.debugElement.query(
+        By.css(`#registration a[href="${FALL_PATH}"]`),
+      );
+
+      expect(link.injector.get(RouterLink).state).toMatchObject({
+        season: { slug: 'fall-2027', registration: { isFull: true } },
+      });
     });
 
     it('gives the link to the next season the three names and the next season as navigation state', async () => {

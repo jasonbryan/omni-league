@@ -10,6 +10,7 @@ import {
 } from '../../../../convex/lib/seasonInput';
 import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { AnswerAtPress } from '../../core/forms/answer-at-press';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from '../admin/alert-text';
@@ -108,12 +109,14 @@ export class SeasonForm {
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
   private readonly minimumRosterSize: () => number | undefined;
+  private readonly slugAnswer: AnswerAtPress;
 
   constructor(
     minimumRosterSize: () => number | undefined = () => undefined,
     private readonly webAddress: WebAddressCheck = NOT_CHECKED,
   ) {
     this.minimumRosterSize = minimumRosterSize;
+    this.slugAnswer = new AnswerAtPress(webAddress, () => this.model().slug);
     // `required` puts the attribute on the inputs; the messages are ours (`seasonInput.ts`), so the
     // form and `seasons.create` agree.
     this.fields = form(this.model, (path) => {
@@ -173,10 +176,7 @@ export class SeasonForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () =>
-        !this.submitting() &&
-        this.webAddress.answer() === 'available' &&
-        this.errors.slug() === null,
+      () => this.slugAnswer.answer() === 'available' && this.errors.slug() === null,
     );
     this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
@@ -197,6 +197,7 @@ export class SeasonForm {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
     this.fields().reset();
+    this.slugAnswer.release();
   }
 
   left(field: SeasonField): void {
@@ -232,10 +233,12 @@ export class SeasonForm {
       ...(maxTeams !== undefined && { maxTeams }),
       ...(maxRosterSize !== undefined && { maxRosterSize }),
     };
+    this.slugAnswer.hold();
     this.submitting.set(true);
     try {
       await send(values);
     } catch (failure) {
+      this.slugAnswer.release();
       return this.failed(failure, m.slug);
     } finally {
       this.submitting.set(false);
@@ -262,7 +265,7 @@ export class SeasonForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return this.slugAnswer.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {

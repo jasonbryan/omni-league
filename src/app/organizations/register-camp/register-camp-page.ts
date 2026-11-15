@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, required } from '@angular/forms/signals';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -70,6 +69,7 @@ import {
   registrationOptions,
   type RegisterCampState,
 } from './register-camp-state';
+import { PageTitle } from '../../core/page-title';
 
 export const REGISTER_CAMP_MESSAGES = {
   failedTitle: 'You could not be registered.',
@@ -349,7 +349,7 @@ export class RegisterCampPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly register = injectMutation(api.campRegistrations.register);
 
   protected readonly messages = REGISTER_CAMP_MESSAGES;
@@ -533,7 +533,7 @@ export class RegisterCampPage {
       const camp = this.camp();
       const session = this.session();
       if (camp && session) {
-        this.title.setTitle(`Register for ${session.name} | ${camp.name} | Omni League`);
+        this.pageTitle.set([`Register for ${session.name}`, camp.name]);
       }
     });
     effect(() => {

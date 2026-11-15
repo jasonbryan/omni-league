@@ -25,6 +25,7 @@ import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
+import { PageTitle } from '../core/page-title';
 import { MainFocusRecord } from '../core/replaced-focus';
 import { SKELETON_CLASSES } from '../ui/skeleton';
 import { AccountRow } from './account-row';
@@ -152,13 +153,8 @@ export class Shell {
   /** True while the page waits for the sidebar it will render, so the home sidebar does not show first. */
   readonly sidebarPending = input(false);
 
-  /** Not named `title`: a `title` attribute on the host element would show as a tooltip. */
-  readonly barTitle = input<string>();
-
   protected readonly sidebar = contentChild(ShellSidebar);
-  protected readonly title = computed(
-    () => this.barTitle() ?? this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
-  );
+  protected readonly title = inject(PageTitle).barText;
   protected readonly rowWidths = ['w-28', 'w-24', 'w-24', 'w-20'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');

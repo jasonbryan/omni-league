@@ -2,6 +2,8 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { ConvexError } from 'convex/values';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
@@ -66,9 +68,11 @@ describe('RegisterTournamentTeamPage', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
         provideRouter([
           {
             path: 'app/organizations/:orgSlug/tournaments/:tournamentSlug/register',
+            title: appRouteTitle('organizations/:orgSlug/tournaments/:tournamentSlug/register'),
             component: RegisterTournamentTeamPage,
           },
           { path: 'app/teams/:teamId', component: Elsewhere },
@@ -451,6 +455,24 @@ describe('RegisterTournamentTeamPage', () => {
       expect(document.activeElement).toBe(alert);
       expect(input()?.value).toBe('Sand Crabs');
       vi.restoreAllMocks();
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Register a team" while the query is held, then keeps it for the form', async () => {
+      await open();
+      expectBar(page, 'Register a team');
+      await answer(OPEN);
+      expectBar(page, 'Register a team');
+    });
+
+    it('names the not-found and server-error views', async () => {
+      await open();
+      await answer(null);
+      expectBar(page, 'Page not found');
+      registration()!.fail(new Error('Server Error: secret'));
+      await flush();
+      expectBar(page, 'Temporarily unavailable');
     });
   });
 });

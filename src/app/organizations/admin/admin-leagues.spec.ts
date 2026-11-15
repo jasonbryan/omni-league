@@ -7,11 +7,13 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
+import { LeagueForm } from './league-form';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses, radiusClasses } from '../../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
-import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, WEB_ADDRESS_CLEARANCE } from './sticky-footer';
 import {
   adminRoutes,
   COASTAL,
@@ -147,6 +149,7 @@ describe('AdminLeagues', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Leagues | Coastal Bend Rec Club | Omni League',
       );
+      expectBar(page, 'Leagues');
     });
 
     it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {
@@ -777,6 +780,14 @@ describe('AdminLeagues', () => {
       const group = form().querySelector('[data-slot="field-group"]')!;
       expect(tokens(group.className)).toEqual(
         expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
+      );
+    });
+
+    it('keeps the web address status and error clear of the footer when the field takes focus', async () => {
+      await open([]);
+      const group = form().querySelector('[data-slot="field-group"]')!;
+      expect(tokens(group.className)).toEqual(
+        expect.arrayContaining(tokens(WEB_ADDRESS_CLEARANCE)),
       );
     });
 
@@ -1472,6 +1483,127 @@ describe('AdminLeagues', () => {
       expect(error('slug')).toBeNull();
     });
 
+    it('keeps the taken message, the same element with the same text, through the flight and the refusal', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(false);
+      await o.flush();
+      const shown = page.querySelector('#slug-error');
+      const message = 'sunday-reverse-coed-4s is already taken. Choose another web address.';
+      expect(error('slug')).toBe(message);
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: LEAGUE_MESSAGES.slugTaken('sunday-reverse-coed-4s'),
+        }),
+      );
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBe(shown);
+      expect(error('slug')).toBe(message);
+    });
+
+    it('keeps Available through the flight', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      expect(text(availability())).toBe('Available');
+      await submit();
+      expect(o.convex.calls).toHaveLength(1);
+      expect(text(availability())).toBe('Available');
+    });
+
+    it('ignores an answer that turns taken in flight, in flight and after a success', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      expect(text(availability())).toBe('Available');
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+    });
+
+    it('shows no taken message at the moment the page clears the form after a success', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      const clear = Object.getOwnPropertyDescriptor(LeagueForm.prototype, 'clear')!.value as (
+        this: LeagueForm,
+      ) => void;
+      const seen: (string | null)[] = [];
+      const spy = vi.spyOn(LeagueForm.prototype, 'clear').mockImplementation(function (
+        this: LeagueForm,
+      ) {
+        seen.push(this.errors.slug());
+        clear.call(this);
+      });
+      try {
+        o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+        await o.flush();
+      } finally {
+        spy.mockRestore();
+      }
+      expect(seen).toEqual([null]);
+    });
+
+    it('shows the live answer again once the create is refused as offline', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(error('slug')).toBe(
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
+      );
+    });
+
+    it('shows the live answer again once a refusal other than the address ends the hold', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      latest().emit(true);
+      await o.flush();
+      await submit();
+      latest().emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'nameEmpty',
+          message: LEAGUE_MESSAGES.nameEmpty,
+        }),
+      );
+      await o.flush();
+      expect(error('slug')).toBe(
+        'sunday-reverse-coed-4s is already taken. Choose another web address.',
+      );
+    });
+
     it('does not use the word slug in any message on the field', async () => {
       await open([]);
       await submit();
@@ -1531,7 +1663,7 @@ describe('AdminLeagues', () => {
       sport?: boolean;
       locations?: boolean;
     }) => [
-      shapeOf('field-group', {}, STICKY_FOOTER_CLEARANCE),
+      shapeOf('field-group', {}, `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`),
       fieldShape(!!errors.name),
       shapeOf('field-label', { for: 'name' }),
       inputShape(

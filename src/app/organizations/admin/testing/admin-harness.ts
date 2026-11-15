@@ -4,6 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { ConvexError } from 'convex/values';
+import { appRouteTitle } from '../../../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER } from '../../../shell/testing/bar-title';
 import { AuthService } from '../../../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../../../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../../../core/data/convex';
@@ -54,6 +56,7 @@ export async function openAdmin(routes: Routes, url: string) {
     providers: [
       provideFakeAuthClient(auth),
       { provide: CONVEX_CLIENT, useValue: convex },
+      BAR_TITLE_PROVIDER,
       provideRouter(routes),
     ],
   });
@@ -76,7 +79,16 @@ export async function openAdmin(routes: Routes, url: string) {
 
 export function adminRoutes(AdminArea: Type<unknown>, children: Routes): Routes {
   return [
-    { path: 'app/organizations/:slug', component: AdminArea, children },
+    {
+      path: 'app/organizations/:slug',
+      component: AdminArea,
+      children: children.map((child) => ({
+        ...child,
+        title:
+          child.title ??
+          appRouteTitle(['organizations/:slug', child.path].filter(Boolean).join('/')),
+      })),
+    },
     { path: 'app', component: Elsewhere },
     { path: 'organizations/:orgSlug', component: Elsewhere },
   ];
