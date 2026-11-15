@@ -728,7 +728,7 @@ test.describe('the camp page rows when the viewer’s places arrive', () => {
 });
 
 test.describe('the camp page rows when a guardian’s children answer after sign-in', () => {
-  const WIDTHS = [360, 1280] as const;
+  const WIDTHS = [320, 360, 1280] as const;
   const TOLERANCE = 0.5;
 
   async function registerChild(
@@ -799,6 +799,42 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       );
       await expectAccessible(page);
       await screenshot(page, testInfo, `356-camp-children-arrived-${width}`);
+    });
+
+    test(`three children, one with a 60-character name, share one row with Register and move nothing at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, youth } = await seed();
+      const ids = await sessionIds(tenant, YOUTH.slug);
+      const path = registerPath(tenant, YOUTH.slug, ids['Week 1']);
+      await signUp(page, newUser('Guardian'));
+      for (const name of ['Maya R.', 'W'.repeat(60), 'Zoe R.']) {
+        await registerChild(page, path, youth, name);
+      }
+
+      const answers = ['campRegistrations:listMyMinorsForCamp'];
+      await expectRowsStay(
+        page,
+        youth,
+        answers,
+        `Maya R., ${'W'.repeat(60)}, and Zoe R. are registered`,
+      );
+      const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+      const register = row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' });
+      const [lineBox, registerBox, rowBox] = [
+        (await line.boundingBox())!,
+        (await register.boundingBox())!,
+        (await row(page, 'Week 1').boundingBox())!,
+      ];
+      expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(registerBox.x + TOLERANCE);
+      expect(registerBox.x + registerBox.width).toBeLessThanOrEqual(
+        rowBox.x + rowBox.width + TOLERANCE,
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
+      await expectAccessible(page);
     });
 
     test(`on a camp that admits both, the sessions below stay where they were when the guardian’s lines arrive at ${width}px`, async ({
