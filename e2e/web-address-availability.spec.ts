@@ -102,26 +102,24 @@ const STATUS_LINE = 20;
 // A focus scroll centres a control that is wholly out of view and only nudges one that is partly in.
 const SLUG_PEEK = 20;
 
-async function scrollSlugJustBelowViewport(page: Page) {
+async function scrollSlugJustBelowViewport(page: Page, form: Form) {
   await expect(page.locator('#slug')).toBeVisible();
   await page.evaluate((peek) => {
     const slug = document.querySelector('#slug')!.getBoundingClientRect();
     scrollBy(0, slug.top - (innerHeight - peek));
   }, SLUG_PEEK);
+  const footer = page.locator(`${form.container} form [data-slot="form-footer"]`);
+  const footerTop = await footer.evaluate((element) => element.getBoundingClientRect().top);
   const place = await page.evaluate(() => {
     const name = document.querySelector('#name')!.getBoundingClientRect();
     const slug = document.querySelector('#slug')!.getBoundingClientRect();
-    return {
-      nameOnScreen: name.top >= 0 && name.bottom <= innerHeight,
-      slugTop: slug.top,
-      height: innerHeight,
-    };
+    return { nameOnScreen: name.top >= 0 && name.bottom <= innerHeight, slugTop: slug.top };
   });
   expect(place.nameOnScreen, '#name is on screen').toBe(true);
-  expect(place.slugTop, '#slug starts below the footer').toBeGreaterThan(place.height - 96);
+  expect(place.slugTop, '#slug starts below the footer').toBeGreaterThan(footerTop);
 }
 
-// The raw rects, with no rounding, as `focusedPlace().aboveFooter` compares them.
+// A missing clearance shows as a 0.5px overlap, which rounding as `top()` does would hide.
 async function overlapWithFooter(page: Page, form: Form, shown: Locator): Promise<number> {
   await settleAfterFocusScroll(page);
   const footer = page.locator(`${form.container} form [data-slot="form-footer"]`);
@@ -191,7 +189,7 @@ for (const form of FORMS) {
       test.skip(!hasTouch, 'the sticky footer and the focus scroll are phone behaviour');
       await form.open(page);
       await page.setViewportSize(PHONE);
-      await scrollSlugJustBelowViewport(page);
+      await scrollSlugJustBelowViewport(page, form);
       await field(page).focus();
       await field(page).pressSequentially('free-address');
       await expect(availability(page)).toHaveText('Available');
@@ -311,7 +309,7 @@ for (const form of FORMS) {
         await expect(fieldError(page)).toHaveText(
           `${form.taken} is already taken. Choose another web address.`,
         );
-        await scrollSlugJustBelowViewport(page);
+        await scrollSlugJustBelowViewport(page, form);
         await page.locator(`${form.container} form button[type="submit"]`).click();
         await expect(field(page)).toBeFocused();
         await expect(fieldError(page)).toHaveText(

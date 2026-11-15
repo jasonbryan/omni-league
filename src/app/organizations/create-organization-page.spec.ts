@@ -855,6 +855,27 @@ describe('CreateOrganizationPage', () => {
       await flush();
     });
 
+    it('ends the hold and the pending state when the navigation fails', async () => {
+      vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockRejectedValue(new Error('chunk'));
+      await typeValue('name', NAME);
+      await pause();
+      latest().emit(true);
+      await stable();
+      const component = harness.routeDebugElement!.componentInstance as {
+        submit(event: Event): Promise<void>;
+      };
+      const sent = component.submit(new Event('submit'));
+      await flush();
+      latest().emit(false);
+      await stable();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      convex.calls[0]?.resolve({ slug: SLUG });
+      await expect(sent).rejects.toThrow('chunk');
+      await stable();
+      expect(submitButton().getAttribute('aria-disabled')).toBeNull();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another web address.`);
+    });
+
     it('shows the live answer again once a refusal other than the address ends the hold', async () => {
       await pressWith(true);
       latest().emit(false);

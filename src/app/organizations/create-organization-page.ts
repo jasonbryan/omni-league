@@ -455,9 +455,12 @@ export class CreateOrganizationPage {
       this.showFailure(failure, slug);
       return;
     }
-    await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
-    this.slugAnswer.release();
-    this.submitting.set(false);
+    try {
+      await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
+    } finally {
+      this.slugAnswer.release();
+      this.submitting.set(false);
+    }
   }
 
   private showFailure(failure: unknown, slug: string): void {
