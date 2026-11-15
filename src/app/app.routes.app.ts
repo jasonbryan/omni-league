@@ -67,6 +67,13 @@ export const appRoutes: Routes = [
       import('./organizations/register-camp/register-camp-page').then((m) => m.RegisterCampPage),
   },
   {
+    // Outside the admin area, which is for org admins only: an organizer assigned to the training program opens it too.
+    path: 'organizations/:orgSlug/training/:trainingSlug',
+    title: 'Training program | Omni League',
+    canActivate: [requireSignedIn],
+    loadComponent: () => import('./organizations/admin/training-page').then((m) => m.TrainingPage),
+  },
+  {
     // Outside the admin area, which is for org admins only: an organizer assigned to the camp opens it too.
     path: 'organizations/:orgSlug/camps/:campSlug',
     title: 'Camp | Omni League',

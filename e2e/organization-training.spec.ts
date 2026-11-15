@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Page } from '@playwright/test';
-import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp } from './support/camp';
 import { chipLabel, chooseChip } from './support/chip';
@@ -12,7 +12,7 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant, type TenantSeed } from './support/tenant';
+import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
 import { seedTraining } from './support/training';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -74,7 +74,7 @@ test.describe('Training: creating a draft', () => {
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created' });
-    await expect(status).toHaveText('Tuesday Serving Clinic created.');
+    await expect(status).toHaveText('Tuesday Serving Clinic created.Schedule classes');
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#coach-name')).toHaveValue('');
     await expect(submit(page)).toBeFocused();
@@ -82,6 +82,10 @@ test.describe('Training: creating a draft', () => {
     await expect(rows(page)).toHaveCount(1);
     const row = rows(page).first();
     await expect(row.locator('h3')).toHaveText('Tuesday Serving Clinic');
+    await expect(row.locator('h3 a')).toHaveAttribute(
+      'href',
+      `${base}/training/tuesday-serving-clinic`,
+    );
     await expect(row.locator('[data-slot="badge"]')).toHaveText('Draft');
     await expect(row.locator('[data-slot="ages"]')).toHaveText('All ages');
     await expect(row.locator('[data-slot="coach"]')).toHaveText('Coach: Dana Ruiz');
@@ -382,7 +386,7 @@ async function signInWith(page: Page, user: TestUser) {
 }
 
 test.describe('Training: an invited league organizer', () => {
-  test('accepts an invite naming a league and a training program, and the program is listed in the organizer sidebar', async ({
+  test('accepts an invite naming a league and a training program, and the program is linked in the organizer sidebar', async ({
     page,
     isMobile,
   }, testInfo) => {
@@ -439,9 +443,285 @@ test.describe('Training: an invited league organizer', () => {
     const programs = nav.getByRole('list', { name: 'Your training programs' });
     await expect(programs).toBeVisible();
     await expect(programs.getByRole('listitem')).toHaveText([SERVING.name]);
-    await expect(programs.getByRole('link')).toHaveCount(0);
+    await expect(programs.getByRole('link')).toHaveAttribute(
+      'href',
+      `/app/organizations/${tenant.slug}/training/${SERVING.slug}`,
+    );
     await expect(programs.locator('ng-icon[name="lucideDumbbell"]')).toHaveCount(1);
     await screenshot(page, testInfo, 'training-sidebar-rows');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+});
+
+// The first Tuesday on or after two weeks from today, so the registration deadline can be earlier.
+function firstTuesday(): string {
+  for (let days = 14; ; days++) {
+    const date = dateFromToday(days);
+    if (new Date(`${date}T00:00:00Z`).getUTCDay() === 2) return date;
+  }
+}
+
+async function fillPattern(page: Page, first: string) {
+  await chipLabel(page, 'Tuesday').click();
+  await page.locator('#start-time').fill('18:00');
+  await page.locator('#end-time').fill('19:00');
+  await page.locator('#first-date').fill(first);
+  await page.locator('#weeks').fill('8');
+  await page.locator('#places-per-class').fill('12');
+  await page.locator('#registration-deadline').fill(dateFromToday(7));
+}
+
+const classRows = (page: Page) => page.locator('#classes-list > li');
+const scheduleSubmit = (page: Page) =>
+  page.locator('#schedule form').getByRole('button', { name: /^Schedule classes/ });
+
+async function openTraining(page: Page, role: Role | null = 'orgAdmin') {
+  const member = await memberOf(page, role);
+  await seedTraining(member.tenant, {
+    ...SERVING,
+    locations: [PELICAN],
+    coachName: 'Dana Ruiz',
+  });
+  return { ...member, path: `${member.base}/training/${SERVING.slug}` };
+}
+
+test.describe('Training: scheduling the classes', () => {
+  test('the success status links to the management page, and an org admin schedules 8 classes on consecutive Tuesdays', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/training`);
+    await fillValid(page, 'Tuesday Serving Clinic');
+    await submit(page).click();
+    const next = form(page).getByRole('link', { name: 'Schedule classes' });
+    await expect(next).toHaveAttribute('href', `${base}/training/tuesday-serving-clinic#schedule`);
+    await next.click();
+
+    await expect(page).toHaveURL(new RegExp(`/training/tuesday-serving-clinic#schedule$`));
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'Tuesday Serving Clinic',
+    );
+    await expect(page).toHaveTitle(`Tuesday Serving Clinic | ${tenant.name} | Omni League`);
+    await expect(page.getByText('No classes yet')).toBeVisible();
+    await expect(page.locator('#schedule #weekday input').first()).toBeFocused();
+    await screenshot(page, testInfo, 'training-page-empty');
+    await expectAccessible(page);
+
+    const first = firstTuesday();
+    await fillPattern(page, first);
+    await screenshot(page, testInfo, 'training-page-filled');
+    await scheduleSubmit(page).click();
+
+    await expect(page.locator('[data-slot="class-status"]')).toHaveText('8 classes scheduled.');
+    await expect(classRows(page)).toHaveCount(8);
+    const dates = await classRows(page).locator('[data-slot="class-date"]').allTextContents();
+    expect(dates).toEqual(
+      Array.from({ length: 8 }, (_, week) => {
+        const date = new Date(`${dateFromToday(0)}T00:00:00Z`);
+        const offset = (new Date(`${first}T00:00:00Z`).getTime() - date.getTime()) / 86_400_000;
+        const classDate = new Date(date.getTime() + (offset + week * 7) * 86_400_000);
+        return classDate.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: 'UTC',
+        });
+      }),
+    );
+    await expect(classRows(page).first().locator('[data-slot="class-times"]')).toHaveText(
+      '6 PM to 7 PM',
+    );
+    await expect(classRows(page).first().locator('[data-slot="class-registered"]')).toHaveText(
+      '0 of 12 registered',
+    );
+    await expect(page.locator('#schedule')).toHaveCount(0);
+    await expect(page.locator('[data-slot="pattern"]')).toContainText('Tuesdays, 6 PM to 7 PM');
+    await screenshot(page, testInfo, 'training-page-scheduled');
+    await expectAccessible(page);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+
+    await page.reload();
+    await expect(classRows(page)).toHaveCount(8);
+    await expect(page.locator('#schedule')).toHaveCount(0);
+  });
+
+  test('a first date off the weekday and a deadline after the first class show under their fields, and the pattern is not sent', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await page.goto(path);
+    await chipLabel(page, 'Tuesday').click();
+    await page.locator('#first-date').fill(dateFromToday(15));
+    await page.locator('#first-date').blur();
+    const offWeekday = page.locator('#first-date-error');
+    await expect(offWeekday).toContainText('The first class must be on a Tuesday.');
+    await page.locator('#start-time').fill('19:00');
+    await page.locator('#end-time').fill('18:00');
+    await page.locator('#end-time').blur();
+    await expect(page.locator('#end-time-error')).toContainText('The end time must be after');
+    await page.locator('#weeks').fill('53');
+    await page.locator('#weeks').blur();
+    await expect(page.locator('#weeks-error')).toContainText('from 1 to 52');
+    await page.locator('#places-per-class').fill('201');
+    await page.locator('#places-per-class').blur();
+    await expect(page.locator('#places-per-class-error')).toContainText('from 1 to 200');
+    await screenshot(page, testInfo, 'training-page-errors');
+    await expectAccessible(page);
+    await scheduleSubmit(page).click();
+    await expect(classRows(page)).toHaveCount(0);
+    await expect(page.getByText('No classes yet')).toBeVisible();
+  });
+
+  test('cancelling a class strikes it through with Undo, which brings it back', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await page.goto(path);
+    await fillPattern(page, firstTuesday());
+    await scheduleSubmit(page).click();
+    await expect(classRows(page)).toHaveCount(8);
+
+    const first = classRows(page).first();
+    await first.getByRole('button', { name: /^Cancel/ }).click();
+    const status = page.locator('[data-slot="class-status"]');
+    await expect(status).toContainText('cancelled.');
+    await expect(first).toHaveAttribute('data-status', 'cancelled');
+    await expect(first.locator('[data-slot="badge"]')).toHaveText('Cancelled');
+    await screenshot(page, testInfo, 'training-page-cancelled');
+    await expectAccessible(page);
+
+    await status.getByRole('button', { name: 'Undo' }).click();
+    await expect(status).toContainText('restored.');
+    await expect(first).toHaveAttribute('data-status', 'scheduled');
+    await expect(first.getByRole('button', { name: /^Cancel/ })).toBeVisible();
+  });
+});
+
+test.describe('Training: the management page states', () => {
+  test('the classes and the form show skeletons while their answers are held, and the state passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    const held = await holdQueries(page, ['trainingClasses:listForTraining']);
+    await page.goto(path);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the classes.' }),
+    ).toBeAttached();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading the schedule.' }),
+    ).toBeAttached();
+    await expect(page.getByText('No classes yet')).toHaveCount(0);
+    await screenshot(page, testInfo, 'training-page-loading');
+    await expectAccessible(page);
+
+    held.release();
+    await expect(page.getByText('No classes yet')).toBeVisible();
+    await expect(page.locator('#schedule form')).toBeVisible();
+  });
+
+  test('a class list that fails to load shows the alert and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await failFirstAnswer(page, 'trainingClasses:listForTraining');
+    await page.goto(path);
+    await expect(
+      page
+        .locator('#classes [role="alert"]')
+        .filter({ hasText: 'The classes could not be loaded.' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, 'training-page-load-error');
+    await expectAccessible(page);
+  });
+
+  test('pressing Schedule classes offline shows the offline alert, keeps the input, and passes the axe helper', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await page.goto(path);
+    await fillPattern(page, firstTuesday());
+    await context.setOffline(true);
+    await expect(scheduleSubmit(page)).toHaveAttribute('aria-disabled', 'true');
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
+    await scheduleSubmit(page).click({ force: true });
+    await expect(page.locator('#schedule form').getByRole('alert')).toContainText(
+      "You're offline. Nothing was sent.",
+    );
+    await expect(page.locator('#weeks')).toHaveValue('8');
+    await screenshot(page, testInfo, 'training-page-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+});
+
+test.describe('Training: a schedule the server fails', () => {
+  test.use({ expectedConvexErrors: ['trainingClasses:schedule'] });
+
+  test('a schedule the server fails keeps the input, and the alert passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await failMutation(page, 'trainingClasses:schedule');
+    await page.goto(path);
+    await fillPattern(page, firstTuesday());
+    await scheduleSubmit(page).click();
+    await expect(page.locator('#schedule form').getByRole('alert')).toContainText(
+      'The classes could not be scheduled.',
+    );
+    await expect(page.locator('#weeks')).toHaveValue('8');
+    await screenshot(page, testInfo, 'training-page-schedule-error');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('who may open a training program', () => {
+  test(
+    'a league organizer not assigned to it sees the no-access view',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { path } = await openTraining(page, 'leagueOrganizer');
+      await page.goto(path);
+      await expect(
+        main(page).getByRole('heading', {
+          level: 1,
+          name: 'You can’t manage this training program',
+        }),
+      ).toBeVisible();
+    },
+  );
+
+  test('a league organizer assigned to it manages it, and the sidebar lists it as a link', async ({
+    page,
+    isMobile,
+  }) => {
+    const { tenant, user, path } = await openTraining(page, null);
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      leagueSlugs: [],
+      trainingSlugs: [SERVING.slug],
+    });
+    await page.goto(path);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(SERVING.name);
+    await expect(page.locator('#schedule form')).toBeVisible();
+    if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
+    const programs = page
+      .getByRole('navigation', { name: `${tenant.name} training programs` })
+      .getByRole('list', { name: 'Your training programs' });
+    await expect(programs.getByRole('link')).toHaveText([SERVING.name]);
+    await expect(programs.getByRole('link')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the no-access view passes the axe helper', async ({ page }, testInfo) => {
+    const { path } = await openTraining(page, 'leagueOrganizer');
+    await page.goto(path);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this training program' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, 'training-page-no-access');
+    await expectAccessible(page);
   });
 });

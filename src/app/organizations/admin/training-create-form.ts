@@ -11,6 +11,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCircleAlert, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -28,6 +29,8 @@ import { PRIMARY_BUTTON } from './button-classes';
 import { TRAINING_FORM_ALERTS, TrainingForm, type TrainingField } from './training-form';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
+import { SCHEDULE_FRAGMENT } from './training-schedule-landing';
+import { trainingPath } from './training-path';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { WebAddressStatus } from './web-address-status';
@@ -66,6 +69,7 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
     HlmFieldSetImports,
     HlmInputImports,
     NgIcon,
+    RouterLink,
     StickyFooter,
     StickyFooterFocus,
     WebAddressStatus,
@@ -330,6 +334,12 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
                   style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere"
                   >{{ created.name }} created.</span
                 >
+                <a
+                  [routerLink]="trainingHref(created.slug)"
+                  [fragment]="scheduleFragment"
+                  class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  >Schedule classes</a
+                >
               </div>
             </div>
           }
@@ -364,6 +374,7 @@ export class TrainingCreateForm {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
+  readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly { locationId: Id<'locations'>; name: string }[]>();
 
   protected readonly online = injectOnline();
@@ -387,7 +398,9 @@ export class TrainingCreateForm {
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
-  protected readonly created = signal<{ name: string } | null>(null);
+  protected readonly created = signal<{ name: string; slug: string } | null>(null);
+  protected readonly scheduleFragment = SCHEDULE_FRAGMENT;
+  protected readonly trainingHref = (slug: string) => trainingPath(this.organizationSlug(), slug);
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
@@ -435,7 +448,7 @@ export class TrainingCreateForm {
       this.create.run({ organizationId, ...values }),
     );
     if (outcome.sent) {
-      this.created.set({ name: outcome.values.name });
+      this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {
