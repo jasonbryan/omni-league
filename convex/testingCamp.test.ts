@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { internal } from './_generated/api';
+import { components, internal } from './_generated/api';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -162,6 +163,94 @@ describe('testing:publishSeededCamp', () => {
     ).rejects.toThrow(/No organization/);
     await expect(
       t.mutation(internal.testing.publishSeededCamp, { ...PUBLISH, campSlug: 'nowhere' }),
+    ).rejects.toThrow(/No camp/);
+  });
+});
+
+describe('testing:seedCampRegistration', () => {
+  const EMAIL = 'guardian@example.test';
+  const REGISTRATION = {
+    organizationSlug: 'e2e-org-c4m9',
+    campSlug: 'junior-beach-volleyball-camp',
+    sessionName: 'Week 1',
+    email: EMAIL,
+    participant: { kind: 'minor', minorName: 'Maya R.' } as const,
+  };
+
+  async function withSession() {
+    const t = await seeded();
+    betterAuthTest.register(t, 'betterAuth');
+    await t.mutation(internal.testing.seedCamp, CAMP);
+    await t.mutation(internal.testing.seedCampSession, {
+      organizationSlug: CAMP.organizationSlug,
+      campSlug: CAMP.slug,
+      name: 'Week 1',
+      startDate: '2027-07-05',
+      endDate: '2027-07-09',
+      places: 20,
+      registrationDeadline: '2027-07-01',
+    });
+    await t.run(async (ctx) => {
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name: 'Demo Guardian',
+            email: EMAIL,
+            emailVerified: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      } as never)) as { _id: string };
+      await ctx.db.insert('users', {
+        authUserId: account._id,
+        name: 'Demo Guardian',
+        adultConfirmedAt: 1,
+      });
+    });
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await withSession();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.seedCampRegistration, REGISTRATION)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toEqual([]);
+  });
+
+  test('registers the account in the session and counts the place', async () => {
+    const t = await withSession();
+    await t.mutation(internal.testing.seedCampRegistration, REGISTRATION);
+    expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toEqual([
+      expect.objectContaining({
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+      }),
+    ]);
+    expect(
+      await t.run(async (ctx) => (await ctx.db.query('campSessions').first())!.registeredCount),
+    ).toBe(1);
+  });
+
+  test('refuses an unknown account, a session the camp does not have, and a camp it does not have', async () => {
+    const t = await withSession();
+    await expect(
+      t.mutation(internal.testing.seedCampRegistration, {
+        ...REGISTRATION,
+        email: 'no@example.test',
+      }),
+    ).rejects.toThrow(/No account/);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistration, { ...REGISTRATION, sessionName: 'Week 9' }),
+    ).rejects.toThrow(/No session/);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistration, { ...REGISTRATION, campSlug: 'nowhere' }),
     ).rejects.toThrow(/No camp/);
   });
 });
