@@ -3,7 +3,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { campAgesLabel } from '../../../../convex/lib/campInput';
-import { api, injectOnline, injectQuery } from '../../core/data/convex';
+import { AuthService } from '../../core/auth/auth.service';
+import { api, injectOnline, injectQuery, skipToken } from '../../core/data/convex';
 import { injectNow } from '../../core/now';
 import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
@@ -44,7 +45,12 @@ function description(camp: PublicCampData): string {
   template: `
     <app-public-layout>
       @if (camp(); as camp) {
-        <app-public-camp-content [camp]="camp" [savedAt]="savedAt()" [now]="now()" />
+        <app-public-camp-content
+          [camp]="camp"
+          [savedAt]="savedAt()"
+          [now]="now()"
+          [registeredSessionIds]="registeredSessionIds()"
+        />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
@@ -81,6 +87,13 @@ export class PublicCampPage {
     orgSlug: this.orgSlug(),
     campSlug: this.campSlug(),
   }));
+  private readonly auth = inject(AuthService);
+  private readonly registrations = injectQuery(api.campRegistrations.listMineForCamp, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
+      : skipToken,
+  );
+  protected readonly registeredSessionIds = computed(() => this.registrations.value() ?? []);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

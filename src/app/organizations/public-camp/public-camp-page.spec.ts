@@ -223,7 +223,7 @@ describe('PublicCampPage populated', () => {
       'Week 3',
     ]);
     expect(spaced(rows[0])).toBe(
-      'Week 1 Registration open Jul 5 – Jul 9, 2027 9 AM to 12 PM 15 places left Registration closes Jul 1, 2027',
+      'Week 1 Registration open Jul 5 – Jul 9, 2027 9 AM to 12 PM 15 places left Registration closes Jul 1, 2027 Register for Week 1',
     );
     expect(spaced(rows[1])).toContain('1 place left');
     expect(spaced(rows[2])).toBe(
@@ -275,9 +275,10 @@ describe('PublicCampPage populated', () => {
     expect(text(host(harness).querySelector('main h1')?.nextElementSibling)).toBe('Age 10');
   });
 
-  it('offers no way to register and shows no price', () => {
-    expect(host(harness).querySelector('main a[href*="register"]')).toBeNull();
-    expect(text(host(harness).querySelector('main'))).not.toMatch(/\$|price|fee|register for/i);
+  it('offers Register only for the sessions that are open with places, and shows no price', () => {
+    const links = [...host(harness).querySelectorAll('main a[href*="/register"]')];
+    expect(links.map((link) => text(link))).toEqual(['Register for Week 1', 'Register for Week 2']);
+    expect(text(host(harness).querySelector('main'))).not.toMatch(/\$|price|fee/i);
   });
 
   it('sets the title and the Open Graph tags from the result, with the camp’s path as canonical', () => {

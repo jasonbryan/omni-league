@@ -1,3 +1,4 @@
+import type { Id } from '../../../../../convex/_generated/dataModel';
 import type { PublicCampData } from '../public-camp-view';
 
 export const ORG_SLUG = 'gulf-coast-sport-social';
@@ -16,6 +17,7 @@ export const JUNIOR_CAMP: PublicCampData = {
   ],
   sessions: [
     {
+      sessionId: 'session_week1' as Id<'campSessions'>,
       name: 'Week 1',
       startDate: '2027-07-05',
       endDate: '2027-07-09',
@@ -25,6 +27,7 @@ export const JUNIOR_CAMP: PublicCampData = {
       registrationDeadline: '2027-07-01',
     },
     {
+      sessionId: 'session_week2' as Id<'campSessions'>,
       name: 'Week 2',
       startDate: '2027-07-12',
       endDate: '2027-07-16',
@@ -34,6 +37,7 @@ export const JUNIOR_CAMP: PublicCampData = {
       registrationDeadline: '2027-07-08',
     },
     {
+      sessionId: 'session_week3' as Id<'campSessions'>,
       name: 'Week 3',
       startDate: '2027-07-19',
       endDate: '2027-07-23',
@@ -42,6 +46,10 @@ export const JUNIOR_CAMP: PublicCampData = {
     },
   ],
 };
+
+export const WEEK_1 = 'session_week1';
+export const WEEK_2 = 'session_week2';
+export const WEEK_3 = 'session_week3';
 
 export const CAMP_ARGS = { orgSlug: ORG_SLUG, campSlug: CAMP_SLUG };
 

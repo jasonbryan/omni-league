@@ -160,6 +160,7 @@ async function appRows(t: T) {
     teams: await ctx.db.query('teams').collect(),
     rosterEntries: await ctx.db.query('rosterEntries').collect(),
     freeAgents: await ctx.db.query('freeAgents').collect(),
+    campRegistrations: await ctx.db.query('campRegistrations').collect(),
   }));
 }
 
@@ -280,8 +281,8 @@ const DATA = {
   leagues: 46,
   seasons: 8,
   tournaments: 5,
-  camps: 2,
-  campSessions: 3,
+  camps: 3,
+  campSessions: 4,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -310,6 +311,7 @@ describe('seed:demo accounts: a new deployment', () => {
         teams: 28,
         teamInvites: 4,
         freeAgents: 6,
+        campRegistrations: 1,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -441,6 +443,7 @@ describe('seed:demo accounts: a new deployment', () => {
           .map(({ name, status, minimumAge, maximumAge }) => [name, status, minimumAge, maximumAge])
           .sort(),
       ).toEqual([
+        ['Adult Beach Skills Camp', 'published', 18, 99],
         ['Fall Break Camp', 'draft', 10, 16],
         ['Junior Beach Volleyball Camp', 'published', 9, 14],
       ]);
@@ -972,6 +975,48 @@ describe('seed:demo accounts: the demo free agents', () => {
   );
 });
 
+describe('seed:demo accounts: camp registration', () => {
+  const ADULT_CAMP = { orgSlug: GULF_COAST, campSlug: 'adult-beach-skills-camp' };
+
+  test(
+    'player@ holds one place in Week 1 of the Adult Beach Skills Camp, which the camp page lists for player@ only, and a rerun adds none',
+    async () => {
+      const t = setup();
+      expect((await run(t)).campRegistrations).toBe(1);
+      const { rows, sessions } = await t.run(async (ctx) => ({
+        rows: await ctx.db.query('campRegistrations').collect(),
+        sessions: await ctx.db.query('campSessions').collect(),
+      }));
+      const week = sessions.find((session) => session.places === 12)!;
+      expect(week).toMatchObject({ name: 'Week 1', registeredCount: 1 });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        sessionId: week._id,
+        participant: { kind: 'self' },
+        participantKey: 'self',
+      });
+      const player = await as(t, EMAILS.player);
+      expect(await player.query(api.campRegistrations.listMineForCamp, ADULT_CAMP)).toEqual([
+        week._id,
+      ]);
+      const captain = await as(t, EMAILS.captain);
+      expect(await captain.query(api.campRegistrations.listMineForCamp, ADULT_CAMP)).toEqual([]);
+      expect(
+        (
+          await player.query(api.campRegistrations.getForRegistration, {
+            ...ADULT_CAMP,
+            sessionId: week._id,
+          })
+        )?.registered,
+      ).toBe(true);
+
+      expect((await run(t)).campRegistrations).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(1);
+    },
+    SLOW,
+  );
+});
+
 describe('seed:demo accounts: a second run', () => {
   test(
     'returns exists for all, duplicates nothing, makes no breach call and no session',
@@ -1002,6 +1047,7 @@ describe('seed:demo accounts: a second run', () => {
         teams: 0,
         teamInvites: 0,
         freeAgents: 0,
+        campRegistrations: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -1129,6 +1175,7 @@ describe('seed:demo accounts: the password', () => {
         teams: 0,
         teamInvites: 0,
         freeAgents: 0,
+        campRegistrations: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -1203,6 +1250,7 @@ describe('seed:demo accounts: the password', () => {
         teams: 0,
         teamInvites: 0,
         freeAgents: 0,
+        campRegistrations: 0,
       });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);

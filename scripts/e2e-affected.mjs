@@ -61,8 +61,8 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-s
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the tournament route.
 const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
-// cache-key samples the camp route.
-const CAMP_PAGE = ['camp-page', 'cache-key'];
+// cache-key samples the camp route. The camp page's session rows link to the register route and read "You're registered".
+const CAMP_PAGE = ['camp-page', 'camp-registration', 'cache-key'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
@@ -139,6 +139,7 @@ export const ROUTE_SPECS = {
     'tournament-pools',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/camps/:campSlug/register': ['camp-registration'],
   'app/organizations/:orgSlug/camps/:campSlug': [
     'organization-camps',
     'camp-page',
@@ -884,6 +885,11 @@ export const AREAS = [
     specs: CAMP_PAGE,
   },
   {
+    name: 'camp register page',
+    test: inDir('src/app/organizations/register-camp/'),
+    specs: CAMP_PAGE,
+  },
+  {
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
@@ -1158,8 +1164,14 @@ export const AREAS = [
   {
     name: 'convex camps',
     test: (file) =>
-      named('convex/', ['camps', 'campSessions'])(file) ||
-      named('convex/lib/', ['campInput', 'campLookup', 'campSessionInput'])(file),
+      named('convex/', ['camps', 'campSessions', 'campRegistrations'])(file) ||
+      named('convex/lib/', [
+        'campInput',
+        'campLookup',
+        'campSessionInput',
+        'campRegistration',
+        'campRegistrationWrites',
+      ])(file),
     specs: ['organization-camps', ...CAMP_PAGE],
   },
   {
