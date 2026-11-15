@@ -525,7 +525,7 @@ export const seedCampSession = internalMutation({
   },
 });
 
-/** Skips the deadline, the age range, and the places check of `campRegistrations.register`. */
+/** Skips every rule of `campRegistrations.register`: publication, the deadline, the minor name rule and limit, a repeat, the ages, and the places. */
 export const seedCampRegistration = internalMutation({
   args: {
     organizationSlug: v.string(),
