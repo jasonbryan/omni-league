@@ -186,12 +186,14 @@ export async function replaceBracket(
   tournamentId: Id<'tournaments'>,
   seeds: readonly Doc<'teams'>[],
   replaced: readonly Doc<'tournamentGames'>[],
+  /** Saved with the seeds after the bracket's, so no two teams of the tournament share one. */
+  others: readonly Doc<'teams'>[] = [],
 ): Promise<number> {
   for (const game of replaced) {
     await deleteReportsOfGame(ctx, game._id);
     await ctx.db.delete('tournamentGames', game._id);
   }
-  await saveSeeds(ctx, seeds);
+  await saveSeeds(ctx, [...seeds, ...others]);
   const teamOf = (seed: number | null): Id<'teams'> | null =>
     seed === null ? null : seeds[seed - 1]._id;
   const ids = new Map<string, Id<'tournamentGames'>>();

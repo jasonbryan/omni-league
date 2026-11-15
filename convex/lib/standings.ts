@@ -135,6 +135,25 @@ function bandsBestFirst(group: readonly string[], valueOf: (teamId: string) => n
   return bands;
 }
 
+/**
+ * What compares a team with one of another pool, best first: the ranking value, then the tiebreakers that need no head-to-head.
+ * Totals are per game played, because pools differ in size.
+ */
+export function crossPoolValues(sport: Sport, row: StandingsRow): number[] {
+  const { ranking, tiebreakers } = STANDINGS_RULES[sport];
+  const perGame = (total: number) => share(total, row.played);
+  const ranked = rankingValue(ranking, row);
+  return [
+    ranking.kind === 'points' ? perGame(ranked) : ranked,
+    ...tiebreakers
+      .filter((tiebreaker) => tiebreaker !== 'headToHead')
+      .map((tiebreaker) => {
+        const value = TIEBREAKER_VALUES[tiebreaker](row, row, ranking);
+        return tiebreaker === 'setWinPercentage' ? value : perGame(value);
+      }),
+  ];
+}
+
 export function standingsOf(
   sport: Sport,
   teamIds: readonly string[],

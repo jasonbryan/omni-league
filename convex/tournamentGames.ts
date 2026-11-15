@@ -25,11 +25,13 @@ import {
   savedValidator,
   storedResultValidator,
 } from './lib/gameResults';
+import { checkAdvance } from './lib/poolBracket';
 import { registrationIsOpen } from './lib/registration';
 import { reportViewsByGame, reportViewValidator } from './lib/scoreReports';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { scoreValidator } from './lib/sports';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
+import { poolResults, replaceBracketFromPools } from './lib/tournamentPoolBracket';
 import {
   assignPools,
   moveToPool,
@@ -563,5 +565,114 @@ export const createPoolGames = mutation({
     }
     const gameCount = await replacePoolGames(ctx, tournament._id, setup.pools, existing);
     return { gameCount, replaced: existing.length > 0 };
+  },
+});
+
+const rankedTeamValidator = v.object({
+  teamId: v.id('teams'),
+  name: v.string(),
+  pool: poolValidator,
+  /** The team's place in its pool, from 1. */
+  place: v.number(),
+});
+
+export const getPoolBracket = query({
+  args: tournamentSlugsValidator.fields,
+  returns: v.union(
+    v.null(),
+    v.object({
+      poolCount: v.number(),
+      smallestPool: v.number(),
+      gamesCreated: v.boolean(),
+      gamesWithoutResult: v.number(),
+      /** The seeds when every pool game has a confirmed result, else empty: the pool winners, then the runners-up, and so on, up to the smallest pool's size from each pool. */
+      ranked: v.array(rankedTeamValidator),
+      bracket: setupValidator.fields.bracket,
+    }),
+  ),
+  handler: async (ctx, { orgSlug, tournamentSlug }) => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    // Null for any caller: the public page already shows whether the organization exists.
+    if (!organization) return null;
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) {
+      // Only staff learn that a web address is unused.
+      await requireStaffOrForbidden(ctx, organization._id);
+      return null;
+    }
+    await requireProgramOrganizerOrForbidden(ctx, found.program);
+    const { tournament, program } = found;
+    const results = await poolResults(ctx, tournament, program.sport);
+    const smallestPool = results.poolSizes.length > 0 ? Math.min(...results.poolSizes) : 0;
+    const ready = results.gameCount > 0 && results.withoutResult === 0;
+    const games = await bracketGames(ctx, tournament._id);
+    return {
+      poolCount: results.poolSizes.length,
+      smallestPool,
+      gamesCreated: results.gameCount > 0,
+      gamesWithoutResult: results.withoutResult,
+      ranked: ready
+        ? results.ranked.slice(0, smallestPool * results.poolSizes.length).map((seed) => ({
+            teamId: seed.team._id,
+            name: seed.team.name,
+            pool: seed.pool,
+            place: seed.place,
+          }))
+        : [],
+      bracket:
+        games.length === 0
+          ? null
+          : await bracketView(
+              ctx,
+              games,
+              new Map(results.ranked.map(({ team }) => [team._id, team.name])),
+            ),
+    };
+  },
+});
+
+/** An existing bracket is replaced only when the caller says so, after the page has asked the organizer to confirm. */
+export const createBracketFromPools = mutation({
+  args: {
+    tournamentId: v.id('tournaments'),
+    advancePerPool: v.number(),
+    /** The advancing teams in the order the organizer chose; absent takes the pool results' order. */
+    seedOrder: v.optional(v.array(v.id('teams'))),
+    replace: v.optional(v.boolean()),
+  },
+  returns: v.object({ gameCount: v.number(), replaced: v.boolean(), teamCount: v.number() }),
+  handler: async (ctx, { tournamentId, advancePerPool, seedOrder, replace }) => {
+    const { tournament, program } = await requireTournamentOrganizer(ctx, tournamentId);
+    if (tournament.structure !== 'pools') {
+      refusePool({ code: 'notPools', message: POOL_MESSAGES.notPools });
+    }
+    const results = await poolResults(ctx, tournament, program.sport);
+    if (results.gameCount === 0) {
+      refusePool({ code: 'noPoolGames', message: POOL_MESSAGES.noPoolGames });
+    }
+    if (results.withoutResult > 0) {
+      refusePool({
+        code: 'poolGamesPending',
+        message: POOL_MESSAGES.poolGamesPending(results.withoutResult),
+      });
+    }
+    const issue = checkAdvance(results.poolSizes, advancePerPool);
+    if (issue) refusePool(issue);
+    const existing = await bracketGames(ctx, tournament._id);
+    if (bracketHasResult(existing)) {
+      refuseBracket({ code: 'resultEntered', message: BRACKET_MESSAGES.resultEntered });
+    }
+    if (existing.length > 0 && replace !== true) {
+      refuseBracket({ code: 'bracketExists', message: BRACKET_MESSAGES.bracketExists });
+    }
+    const created = await replaceBracketFromPools(
+      ctx,
+      tournament,
+      results,
+      advancePerPool,
+      existing,
+      seedOrder,
+    );
+    return { ...created, replaced: existing.length > 0 };
   },
 });

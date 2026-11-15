@@ -9,6 +9,7 @@ export const MIN_POOL_SIZE = 3;
 export const MAX_POOL_SIZE = 8;
 export const MIN_POOL_PLAY_TEAMS = MIN_POOLS * MIN_POOL_SIZE;
 export const MAX_POOL_PLAY_TEAMS = MAX_POOLS * MAX_POOL_SIZE;
+export const MIN_ADVANCING_TEAMS = 2;
 
 export const poolValidator = v.union(
   v.literal('A'),
@@ -51,6 +52,11 @@ export const POOL_REFUSAL_CODES = [
   'poolsFirst',
   'structureLocked',
   'poolsChanged',
+  'advanceCount',
+  'advanceTotal',
+  'poolGamesPending',
+  'seedsChanged',
+  'poolsFrozen',
 ] as const;
 
 export type PoolRefusalCode = (typeof POOL_REFUSAL_CODES)[number];
@@ -81,6 +87,13 @@ export const POOL_MESSAGES = {
   poolsFirst: 'This tournament plays pools first. Its bracket is created after pool play.',
   structureLocked: 'Games are created, so the structure cannot change.',
   setsPerGameLocked: 'Sets per game cannot change once the pool games are created.',
+  advanceCount: (smallestPool: number) =>
+    `Choose 1 to ${smallestPool} teams from each pool. The smallest pool has ${smallestPool}.`,
+  advanceTotal: `At least ${MIN_ADVANCING_TEAMS} teams must advance in total.`,
+  poolGamesPending: (count: number) =>
+    `${count} pool ${count === 1 ? 'game still needs' : 'games still need'} a confirmed result.`,
+  seedsChanged: 'The pool results changed since. Check the seeds and try again.',
+  poolsFrozen: 'The bracket is created, so pool results cannot change.',
 } as const;
 
 /** Seeds from 1, in the order the pools take them: one row at a time, each row running the other way from the last. */

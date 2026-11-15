@@ -59,6 +59,7 @@ import {
   tournamentTeams as seededTeamsOf,
 } from './lib/tournamentBracket';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
+import { poolResults, replaceBracketFromPools } from './lib/tournamentPoolBracket';
 import {
   assignPools,
   poolGames,
@@ -736,6 +737,20 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     structure: 'pools',
     status: 'published',
   },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Harvest Pools Classic',
+    slug: 'harvest-pools-classic',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 8,
+    endDaysFromRun: 9,
+    deadlineDaysFromRun: -3,
+    maximumTeams: 8,
+    structure: 'pools',
+    status: 'published',
+  },
 ];
 
 interface DemoCamp {
@@ -1363,6 +1378,17 @@ const DEMO_BRACKET_REPORT = {
   score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
 } as const;
 
+/** Every pool game of the Harvest Pools Classic has a confirmed result, scored for the winner and the loser by name. */
+const DEMO_HARVEST_RESULTS: readonly { winner: string; loser: string; points: [number, number] }[] =
+  [
+    { winner: 'Pelican Point', loser: 'Low Tide', points: [21, 12] },
+    { winner: 'Pelican Point', loser: 'Salt Marsh', points: [21, 15] },
+    { winner: 'Low Tide', loser: 'Salt Marsh', points: [21, 9] },
+    { winner: 'Sea Oats', loser: 'Boardwalk Bumps', points: [21, 18] },
+    { winner: 'Sea Oats', loser: 'Sunset Sets', points: [21, 14] },
+    { winner: 'Sunset Sets', loser: 'Boardwalk Bumps', points: [21, 19] },
+  ];
+
 /**
  * Reef Breakers' captain has reported the score of the last game of Pool A, Reef Breakers v Shell Shock, so it reads Reported
  * on the organizer's page and the standings do not count it. player@'s Sandbar Six does not play it.
@@ -1470,6 +1496,55 @@ export const DEMO_POOL_TEAMS: readonly {
     name: 'Shell Shock',
     captainEmail: DEMO_REMOVED_PLAYER.email,
     partnerEmail: DEMO_POOL_PARTNERS[3].email,
+  },
+];
+
+/** Registration is closed and every pool game has a confirmed result, so its bracket is created from the pools. */
+export const DEMO_HARVEST_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'harvest-pools-classic',
+} as const;
+
+const DEMO_HARVEST_ADVANCE = 2;
+
+/**
+ * Each team is inserted by name in `DEMO_HARVEST_TOURNAMENT`, in seed order, once both players' accounts exist.
+ * The people are those of `DEMO_POOL_TEAMS` beyond player@, so player@'s team page lists the Fall Pool Play Open games only.
+ */
+export const DEMO_HARVEST_TEAMS: readonly {
+  name: string;
+  captainEmail: string;
+  partnerEmail: string;
+}[] = [
+  {
+    name: 'Pelican Point',
+    captainEmail: DEMO_CAPTAINS[0].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[0].email,
+  },
+  {
+    name: 'Sea Oats',
+    captainEmail: DEMO_CAPTAINS[1].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[1].email,
+  },
+  {
+    name: 'Boardwalk Bumps',
+    captainEmail: DEMO_CAPTAINS[2].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[2].email,
+  },
+  {
+    name: 'Low Tide',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[1].email,
+    partnerEmail: DEMO_BRACKET_PARTNERS[3].email,
+  },
+  {
+    name: 'Salt Marsh',
+    captainEmail: DEMO_FREE_AGENT_PEOPLE[2].email,
+    partnerEmail: DEMO_POOL_PARTNERS[0].email,
+  },
+  {
+    name: 'Sunset Sets',
+    captainEmail: DEMO_PLACED_FREE_AGENT.email,
+    partnerEmail: DEMO_POOL_PARTNERS[1].email,
   },
 ];
 
@@ -1819,11 +1894,16 @@ export const insertDemoTeams = internalMutation({
         captains,
       )) +
       (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains)) +
-      (await insertTournamentTeams(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains));
+      (await insertTournamentTeams(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains)) +
+      (await insertTournamentTeams(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains));
     await insertDemoPartners(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
-    await insertDemoPools(ctx);
+    await insertDemoPartners(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains);
+    await insertDemoPools(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS);
+    await insertDemoPools(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS);
     await insertDemoPoolResults(ctx, captains);
+    await insertDemoHarvestResults(ctx, captains);
+    await insertDemoHarvestBracket(ctx);
     await insertDemoPoolReport(ctx, captains);
     await insertDemoBracket(ctx);
     await insertDemoBracketResults(ctx, captains);
@@ -1937,11 +2017,15 @@ async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
 }
 
 /** Once, and only with every demo team confirmed, so the pools are never made from some of them and left out of date. */
-async function insertDemoPools(ctx: MutationCtx): Promise<void> {
-  const tournament = await demoTournament(ctx, DEMO_POOL_TOURNAMENT);
+async function insertDemoPools(
+  ctx: MutationCtx,
+  slugs: { orgSlug: string; tournamentSlug: string },
+  teams: readonly unknown[],
+): Promise<void> {
+  const tournament = await demoTournament(ctx, slugs);
   if (!tournament || (await poolGames(ctx, tournament._id)).length > 0) return;
   const setup = await poolSetup(ctx, tournament);
-  if (setup.seeds.length < DEMO_POOL_TEAMS.length) return;
+  if (setup.seeds.length < teams.length) return;
   await assignPools(ctx, setup, DEMO_POOL_COUNT);
   await replacePoolGames(ctx, tournament._id, (await poolSetup(ctx, tournament)).pools, []);
 }
@@ -1969,6 +2053,60 @@ async function insertDemoPoolResults(
     if (!game || !winnerTeamId) continue;
     await saveResult(ctx, game, { score, winnerTeamId, enteredBy: admin._id });
   }
+}
+
+/** Entered by the demo admin, and only on pools with no result, so a result an organizer entered on a reused deployment is kept. */
+async function insertDemoHarvestResults(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const tournament = await demoTournament(ctx, DEMO_HARVEST_TOURNAMENT);
+  const authUserId = people.find(
+    (person) => person.email === DEMO_ACCOUNTS.admin.email,
+  )?.authUserId;
+  if (!tournament || authUserId === undefined) return;
+  const admin = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  const games = await poolGames(ctx, tournament._id);
+  if (!admin || games.length === 0 || poolHasResult(games)) return;
+  const teamIdOf = async (name: string) =>
+    (
+      await ctx.db
+        .query('teams')
+        .withIndex('by_tournamentId_and_sortName', (q) =>
+          q.eq('tournamentId', tournament._id).eq('sortName', teamSortName(name)),
+        )
+        .first()
+    )?._id;
+  for (const { winner, loser, points } of DEMO_HARVEST_RESULTS) {
+    const winnerTeamId = await teamIdOf(winner);
+    const loserTeamId = await teamIdOf(loser);
+    const game = games.find(
+      (row) =>
+        row.teamIds.includes(winnerTeamId ?? null) && row.teamIds.includes(loserTeamId ?? null),
+    );
+    if (!game || !winnerTeamId) continue;
+    const [won, lost] = points;
+    const winnerFirst = game.teamIds[0] === winnerTeamId;
+    const score: Score = {
+      kind: 'sets',
+      sets: [winnerFirst ? { a: won, b: lost } : { a: lost, b: won }],
+    };
+    await saveResult(ctx, game, { score, winnerTeamId, enteredBy: admin._id });
+  }
+}
+
+/** Once, and only when every pool game has a confirmed result, so the bracket is never made from standings that can still change. */
+async function insertDemoHarvestBracket(ctx: MutationCtx): Promise<void> {
+  const tournament = await demoTournament(ctx, DEMO_HARVEST_TOURNAMENT);
+  if (!tournament || (await bracketExists(ctx, tournament._id))) return;
+  const program = await ctx.db.get('programs', tournament.programId);
+  if (!program) return;
+  const results = await poolResults(ctx, tournament, program.sport);
+  if (results.gameCount === 0 || results.withoutResult > 0) return;
+  await replaceBracketFromPools(ctx, tournament, results, DEMO_HARVEST_ADVANCE, []);
 }
 
 /** Entered by the demo admin, and only on a bracket with no result, so a result an organizer entered on a reused deployment is kept. */
