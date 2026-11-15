@@ -10,6 +10,10 @@ const STICKY_FOOTER =
 export const STICKY_FOOTER_CLEARANCE =
   '[&_:is(input,button,select,textarea,a)]:scroll-mb-24 md:[&_:is(input,button,select,textarea,a)]:scroll-mb-0';
 
+// 120px: the web address status and a refused Create's two-line error sit below `#slug`, and
+// together with the 69px footer they need 117px. A class on `#slug` alone loses to the rule above.
+export const WEB_ADDRESS_CLEARANCE = '[&_#slug]:scroll-mb-30 md:[&_#slug]:scroll-mb-0';
+
 @Directive({
   selector: '[appStickyFooter]',
   host: { 'data-slot': 'form-footer', class: STICKY_FOOTER },

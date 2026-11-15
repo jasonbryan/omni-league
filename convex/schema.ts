@@ -272,7 +272,7 @@ export default defineSchema({
     registeredCount: v.number(),
   }).index('by_campId_and_startDate', ['campId', 'startDate']),
 
-  // One row per participant in a camp session, written only by `convex/lib/campRegistrationWrites.ts`, which keeps `campSessions.registeredCount`.
+  // One row per participant in a camp session, written only by `convex/lib/campRegistrationWrites.ts`, which keeps `campSessions.registeredCount`. Deleting the account deletes its rows and frees their places.
   campRegistrations: defineTable({
     sessionId: v.id('campSessions'),
     campId: v.id('camps'),
@@ -284,7 +284,9 @@ export default defineSchema({
     participantKey: v.string(),
     ageConfirmedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey']),
+  })
+    .index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey'])
+    .index('by_userId', ['userId']),
 
   // The training part of a program of type `training`; `programs` holds its name, slug, sport, status, and locations. Written only by `convex/lib/tenantWrites.ts`.
   trainings: defineTable({
