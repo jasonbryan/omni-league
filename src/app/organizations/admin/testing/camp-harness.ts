@@ -1,9 +1,14 @@
 import type { Routes } from '@angular/router';
+import { appRouteTitle } from '../../../shell/testing/app-route-title';
 import { CampPage } from '../camp-page';
 import { COASTAL, Elsewhere } from './admin-harness';
 
 export const CAMP_ROUTES: Routes = [
-  { path: 'app/organizations/:orgSlug/camps/:campSlug', component: CampPage },
+  {
+    path: 'app/organizations/:orgSlug/camps/:campSlug',
+    title: appRouteTitle('organizations/:orgSlug/camps/:campSlug'),
+    component: CampPage,
+  },
   { path: 'app/organizations/:slug', component: Elsewhere },
   { path: 'app', component: Elsewhere },
   { path: 'organizations/:orgSlug', component: Elsewhere },

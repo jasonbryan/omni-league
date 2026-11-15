@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { CITY_STATE_HINT } from '../../../../convex/lib/organizationInput';
+import { expectBar } from '../../shell/testing/bar-title';
 import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { PRIMARY_BUTTON } from './button-classes';
@@ -85,6 +86,7 @@ describe('AdminDetails', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Details | Coastal Bend Rec Club | Omni League',
       );
+      expectBar(page, 'Details');
     });
 
     it('draws the details panel in a bare helm card whose overflow clips the sticky footer', async () => {

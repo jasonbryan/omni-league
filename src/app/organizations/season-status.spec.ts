@@ -1,6 +1,7 @@
 import {
   closesText,
   leagueSeasonStatus,
+  linkedSeason,
   nextSeason,
   openSeasonsBySoonestDeadline,
   soonestClosingOpenSeason,
@@ -17,6 +18,14 @@ const season = (slug: string, start: string, end: string, deadline: string): Lea
 
 // 18:00 UTC is 06:00 on the date at UTC-12.
 const noon = (date: string) => Date.parse(`${date}T18:00:00Z`);
+
+const linked = (row: LeagueRowSeason) => ({
+  name: row.name,
+  slug: row.slug,
+  registrationDeadline: row.registrationDeadline,
+  startDate: row.startDate,
+  isFull: row.isFull === true,
+});
 
 const ENDED = season('ended', '2026-01-01', '2026-03-01', '2025-12-15');
 const CURRENT = season('current', '2026-09-01', '2026-12-01', '2026-08-15');
@@ -42,7 +51,7 @@ describe('leagueSeasonStatus', () => {
       badgeVariant: 'secondary',
       registrationOpen: true,
       text: 'NEXT · closes May 19',
-      season: { name: 'NEXT', slug: 'next' },
+      season: linked(NEXT),
     });
   });
 
@@ -52,7 +61,7 @@ describe('leagueSeasonStatus', () => {
       badgeVariant: 'muted',
       registrationOpen: false,
       text: 'NEXT',
-      season: { name: 'NEXT', slug: 'next' },
+      season: linked(NEXT),
     });
   });
 
@@ -62,7 +71,7 @@ describe('leagueSeasonStatus', () => {
       badgeVariant: 'muted',
       registrationOpen: false,
       text: 'CURRENT',
-      season: { name: 'CURRENT', slug: 'current' },
+      season: linked(CURRENT),
     });
   });
 
@@ -84,7 +93,7 @@ describe('leagueSeasonStatus', () => {
       badgeVariant: 'secondary',
       registrationOpen: true,
       text: 'LATER · closes Aug 29',
-      season: { name: 'LATER', slug: 'later' },
+      season: linked(LATER),
     });
   });
 
@@ -122,7 +131,7 @@ describe('leagueSeasonStatus', () => {
       badgeVariant: 'outline',
       registrationOpen: true,
       text: 'NEXT · waitlist open',
-      season: { name: 'NEXT', slug: 'next' },
+      season: { ...linked(NEXT), isFull: true },
     });
   });
 
@@ -158,9 +167,46 @@ describe('leagueSeasonStatus', () => {
     );
   });
 
+  it.each<[string, LeagueRowSeason[], number, string]>([
+    ['open', [NEXT], noon('2027-03-01'), 'next'],
+    ['open and full', [{ ...NEXT, isFull: true }], noon('2027-03-01'), 'next'],
+    ['registration closed before the start', [NEXT], noon('2027-05-25'), 'next'],
+    ['in progress', [CURRENT, ENDED], noon('2026-10-27'), 'current'],
+  ])(
+    'holds the name, slug, deadline, start date, and full flag of a %s season',
+    (_, rows, now, slug) => {
+      const row = rows.find((candidate) => candidate.slug === slug)!;
+
+      expect(leagueSeasonStatus(rows, now)?.season).toEqual({
+        name: row.name,
+        slug: row.slug,
+        registrationDeadline: row.registrationDeadline,
+        startDate: row.startDate,
+        isFull: row.isFull === true,
+      });
+    },
+  );
+
+  it('holds isFull false for a row that has none', () => {
+    expect(leagueSeasonStatus([NEXT], noon('2027-03-01'))?.season?.isFull).toBe(false);
+  });
+
   it('moves a season from open to closed as the clock passes its deadline', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-05-19'))?.badge).toBe('Registration open');
     expect(leagueSeasonStatus([NEXT], noon('2027-05-20'))?.badge).toBe('Registration closed');
+  });
+});
+
+describe('linkedSeason', () => {
+  it('keeps the five fields a link to the season carries, with isFull false when the row has none', () => {
+    expect(linkedSeason({ ...NEXT, endDate: '2027-08-30', extra: 1 } as LeagueRowSeason)).toEqual({
+      name: 'NEXT',
+      slug: 'next',
+      registrationDeadline: '2027-05-19',
+      startDate: '2027-06-01',
+      isFull: false,
+    });
+    expect(linkedSeason({ ...NEXT, isFull: true }).isFull).toBe(true);
   });
 });
 

@@ -190,6 +190,7 @@ export const publicSeasonPageValidator = v.object({
           slug: v.string(),
           startDate: v.string(),
           registrationDeadline: v.string(),
+          isFull: v.optional(v.boolean()),
         }),
       ),
     ),

@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormField, form, required } from '@angular/forms/signals';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -59,6 +58,7 @@ import {
 } from './register-tournament-state';
 import { registerTournamentTeamPath, teamPath } from './team-paths';
 import { type WaitlistPlace, waitlistPlaceOf } from './waitlist-place';
+import { PageTitle } from '../core/page-title';
 
 export const REGISTER_TOURNAMENT_MESSAGES = {
   failedTitle: 'The team could not be registered.',
@@ -338,7 +338,7 @@ export class RegisterTournamentTeamPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly registerTeam = injectMutation(api.teams.registerForTournamentOrWaitlist);
 
   protected readonly messages = REGISTER_TOURNAMENT_MESSAGES;
@@ -466,7 +466,7 @@ export class RegisterTournamentTeamPage {
     // The not-found and server-error views set their own title.
     effect(() => {
       const tournament = this.tournament();
-      if (tournament) this.title.setTitle(`Register a team | ${tournament.name} | Omni League`);
+      if (tournament) this.pageTitle.set(['Register a team', tournament.name]);
     });
     effect(() => {
       const alert = this.cardAlert();

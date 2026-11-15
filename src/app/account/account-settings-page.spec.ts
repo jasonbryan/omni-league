@@ -6,6 +6,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
@@ -27,8 +28,13 @@ describe('AccountSettingsPage', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
         provideRouter([
-          { path: 'app/account', component: AccountSettingsPage },
+          {
+            path: 'app/account',
+            title: 'Account settings | Omni League',
+            component: AccountSettingsPage,
+          },
           { path: '', component: Home },
         ]),
       ],
@@ -225,5 +231,12 @@ describe('AccountSettingsPage', () => {
     expect(auth.signOuts).toBe(1);
     expect(TestBed.inject(AuthService).signedIn()).toBe(false);
     expect(TestBed.inject(Router).url).toBe('/');
+  });
+
+  it('names the page in the slim bar from its route title, as the tab title does', async () => {
+    const page = await open();
+    accepted();
+    await settle();
+    expectBar(page, 'Account settings');
   });
 });

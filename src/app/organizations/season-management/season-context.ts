@@ -1,6 +1,5 @@
 import { Injectable, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
@@ -8,6 +7,7 @@ import { isForbidden } from '../../../../convex/lib/forbidden';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 import type { OrganizerLeague } from '../league/league-context';
+import { PageTitle } from '../../core/page-title';
 
 export type OrganizerSeason = NonNullable<FunctionReturnType<typeof api.seasons.getOrganizerView>>;
 
@@ -99,11 +99,11 @@ export class SeasonContext {
 
   constructor() {
     // The no-access and not-found views set their own title.
-    const title = inject(Title);
+    const pageTitle = inject(PageTitle);
     effect(() => {
       const league = this.league();
       const season = this.season();
-      if (league && season) title.setTitle(`${season.name} | ${league.name} | Omni League`);
+      if (league && season) pageTitle.set([season.name, league.name]);
     });
   }
 }

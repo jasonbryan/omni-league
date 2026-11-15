@@ -1,5 +1,6 @@
 import type { Doc } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
+import { seasonIsFull } from './seasonInput';
 
 export const UPCOMING_SEASONS_LIMIT = 3;
 
@@ -23,5 +24,6 @@ export async function leagueUpcomingSeasons(ctx: Pick<QueryCtx, 'db'>, league: D
       slug: season.slug,
       startDate: season.startDate,
       registrationDeadline: season.registrationDeadline,
+      isFull: seasonIsFull(season),
     }));
 }

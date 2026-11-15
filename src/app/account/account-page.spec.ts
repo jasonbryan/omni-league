@@ -8,6 +8,8 @@ import { ChangesInFlight } from '../core/changes-in-flight';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { appRouteTitle } from '../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { expectBadge } from '../ui/testing/badge';
 import { expectBareCard } from '../ui/testing/card';
@@ -98,8 +100,9 @@ describe('AccountPage', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
         provideRouter([
-          { path: 'app', component: AccountPage },
+          { path: 'app', title: appRouteTitle(''), component: AccountPage },
           { path: '', component: Home },
         ]),
       ],
@@ -640,6 +643,11 @@ describe('AccountPage', () => {
     it('reads "Home" for a user with no team yet', async () => {
       await show([]);
       expect(barTitle()).toBe('Home');
+    });
+
+    it('is the first part of the tab title', async () => {
+      await show([SAND_SHARKS]);
+      expectBar(page, 'Home');
     });
   });
 

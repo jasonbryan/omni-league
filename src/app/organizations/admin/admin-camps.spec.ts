@@ -5,6 +5,7 @@ import { CAMP_MESSAGES } from '../../../../convex/lib/campInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { expectBadgeSize } from '../../ui/testing/badge';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
@@ -158,6 +159,7 @@ describe('AdminCamps', () => {
         'A camp is run in dated sessions, for an age range. Drafts are visible only to your staff.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe('Camps | Coastal Bend Rec Club | Omni League');
+      expectBar(page, 'Camps');
     });
 
     it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {

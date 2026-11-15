@@ -8,6 +8,7 @@ import { AVAILABILITY_PAUSE_MS } from '../../core/forms/slug-availability';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { expectBar } from '../../shell/testing/bar-title';
 import { expectBareCards } from '../../ui/testing/card';
 import { allRadiusClasses, radiusClasses } from '../../ui/testing/radius-classes';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
@@ -147,6 +148,7 @@ describe('AdminLeagues', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Leagues | Coastal Bend Rec Club | Omni League',
       );
+      expectBar(page, 'Leagues');
     });
 
     it('draws the list and the create panel as bare helm cards, the create panel still focusable and outline-free', async () => {

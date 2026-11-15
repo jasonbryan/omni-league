@@ -1,5 +1,11 @@
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { registrationCard, teamCard, type ViewerTeam } from './public-season-registration';
+import {
+  registrationCard,
+  registrationKind,
+  registrationLines,
+  teamCard,
+  type ViewerTeam,
+} from './public-season-registration';
 import { SUMMER_2027, without } from './testing/season-data';
 
 const at = (iso: string) => Date.parse(iso);
@@ -98,6 +104,45 @@ describe('registrationCard', () => {
     expect(card).toMatchObject({ kind: 'closed', next: { name: 'Fall 2027', slug: 'fall-2027' } });
   });
 
+  it('links the open season with its name, slug, deadline, start date, and full flag, for the skeleton the link opens', () => {
+    const league = (...upcomingSeasons: (typeof FALL & { isFull?: boolean })[]) => ({
+      ...SUMMER,
+      league: { ...SUMMER.league, upcomingSeasons },
+    });
+    const now = at('2027-06-10T00:00:00Z');
+    const fall = { ...FALL, isFull: false };
+    expect(registrationCard(league(fall), now)).toMatchObject({
+      next: {
+        name: 'Fall 2027',
+        slug: 'fall-2027',
+        registrationDeadline: '2027-09-05',
+        startDate: '2027-09-12',
+        isFull: false,
+      },
+    });
+    expect(registrationCard(league({ ...fall, isFull: true }), now)).toMatchObject({
+      next: { slug: 'fall-2027', isFull: true },
+    });
+    expect(registrationCard(league(FALL), now)).toMatchObject({ next: { isFull: false } });
+  });
+
+  it('picks the same next season whatever the full flags', () => {
+    const closing = { ...FALL, name: 'Soon', slug: 'soon', registrationDeadline: '2027-08-01' };
+    const league = {
+      ...SUMMER,
+      league: {
+        ...SUMMER.league,
+        upcomingSeasons: [
+          { ...FALL, isFull: false },
+          { ...closing, isFull: true },
+        ],
+      },
+    };
+    expect(registrationCard(league, at('2027-06-10T00:00:00Z'))).toMatchObject({
+      next: { slug: 'soon', isFull: true },
+    });
+  });
+
   it('links the open season that starts first when two share a deadline, then the lower slug', () => {
     const upcoming = (...seasons: (typeof FALL)[]) => ({
       ...SUMMER,
@@ -138,6 +183,52 @@ describe('registrationCard', () => {
   it('has no card for a saved copy that holds no deadline', () => {
     const saved = without(SUMMER, 'registrationDeadline');
     expect(registrationCard(saved, at('2027-05-01T00:00:00Z'))).toBeUndefined();
+  });
+});
+
+describe('registrationLines', () => {
+  const open = registrationCard(SUMMER, at('2027-05-01T00:00:00Z'));
+  const full = registrationCard({ ...SUMMER, isFull: true }, at('2027-05-01T00:00:00Z'));
+
+  it('gives an open card the closing date as its title and the captain note under its buttons', () => {
+    if (open?.kind !== 'open') throw new Error('expected an open card');
+
+    expect(registrationLines(open)).toEqual({
+      title: 'Registration open · closes May 23, 2027',
+      note: 'Captains register a team, then invite their players. Without a team? Register as a free agent, and an organizer places you on one.',
+    });
+  });
+
+  it('gives a full card its title and the waitlist note the card holds', () => {
+    if (full?.kind !== 'full') throw new Error('expected a full card');
+
+    expect(registrationLines(full)).toEqual({ title: 'This season is full', note: full.note });
+    expect(full.note).toContain('Registration closes May 23, 2027.');
+  });
+});
+
+describe('registrationKind', () => {
+  const registration = { deadline: '2027-05-23', startDate: '2027-06-06' };
+
+  it.each([
+    ['2027-05-01T00:00:00Z', false, 'open'],
+    ['2027-05-01T00:00:00Z', true, 'full'],
+    ['2027-05-24T11:59:59Z', false, 'open'],
+    ['2027-05-24T12:00:00Z', false, 'closed'],
+    ['2027-05-24T12:00:00Z', true, 'closed'],
+    ['2027-07-01T00:00:00Z', true, 'closed'],
+  ] as const)('at %s with isFull %s the kind is %s', (when, isFull, kind) => {
+    expect(registrationKind({ ...registration, isFull }, at(when))).toBe(kind);
+  });
+
+  it('is the kind the card draws at every day from before the deadline to after the season', () => {
+    for (const isFull of [false, true]) {
+      for (let day = Date.UTC(2027, 3, 20); day < Date.UTC(2027, 9, 1); day += 6 * 3_600_000) {
+        const card = registrationCard({ ...SUMMER, isFull }, day);
+
+        expect(registrationKind({ ...registration, isFull }, day)).toBe(card?.kind);
+      }
+    }
   });
 });
 

@@ -10,7 +10,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -48,6 +47,7 @@ import { TournamentContext } from './tournament-context';
 import { TournamentNoAccess } from './tournament-no-access';
 import { tournamentPath } from './tournament-path';
 import { WaitlistPanel } from './waitlist-panel';
+import { PageTitle } from '../../core/page-title';
 
 @Component({
   selector: 'app-tournament-management',
@@ -325,7 +325,7 @@ import { WaitlistPanel } from './waitlist-panel';
 export class TournamentManagement {
   private readonly context = inject(TournamentContext);
   private readonly injector = inject(Injector);
-  private readonly title = inject(Title);
+  private readonly pageTitle = inject(PageTitle);
   private readonly landing = inject(TournamentEditLanding);
 
   protected readonly primaryButton = PRIMARY_BUTTON;
@@ -383,7 +383,7 @@ export class TournamentManagement {
     effect(() => {
       const tournament = this.tournament();
       if (tournament) {
-        this.title.setTitle(`${tournament.name} | ${tournament.organization.name} | Omni League`);
+        this.pageTitle.set([tournament.name, tournament.organization.name]);
       }
     });
   }

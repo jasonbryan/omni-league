@@ -14,12 +14,21 @@ export interface LeagueRowSeason extends SeasonDates {
   isFull?: boolean | undefined;
 }
 
+/** What a link to a season page carries, so the page's skeleton can draw the card the page will. */
+export interface LinkedSeason {
+  name: string;
+  slug: string;
+  registrationDeadline: string;
+  startDate: string;
+  isFull: boolean;
+}
+
 export interface SeasonStatusLine {
   badge: string | null;
   badgeVariant: HlmBadgeVariant | null;
   registrationOpen: boolean;
   text: string;
-  season: { name: string; slug: string } | null;
+  season: LinkedSeason | null;
 }
 
 export const FULL_BADGE_TEXT = 'Full';
@@ -35,6 +44,13 @@ export const BADGE_TEXT: Record<SeasonPhase, string> = {
 };
 
 export const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+export function linkedSeason(
+  season: Pick<LeagueRowSeason, 'name' | 'slug' | 'registrationDeadline' | 'startDate' | 'isFull'>,
+): LinkedSeason {
+  const { name, slug, registrationDeadline, startDate, isFull } = season;
+  return { name, slug, registrationDeadline, startDate, isFull: isFull === true };
+}
 
 /** Full only while registration is open: once it closes, the waitlist takes no entries and the phase says more. */
 export function isOpenAndFull(
@@ -91,7 +107,7 @@ export function leagueSeasonStatus(
     };
   }
   const phase = seasonPhase(next, nowMs);
-  const season = { name: next.name, slug: next.slug };
+  const season = linkedSeason(next);
   if (isOpenAndFull(phase, next)) {
     const text = `${next.name} · waitlist open`;
     return {
