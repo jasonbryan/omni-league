@@ -1,5 +1,6 @@
 // Tests sign a user up and seed an organization, so they need the local Convex backend.
 import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
@@ -810,10 +811,11 @@ const SUNDAY = 'Sunday Reverse Coed 4s';
 const SUNDAY_SLUG = 'sunday-reverse-coed-4s';
 const SUMMER = 'Summer 2027';
 const SUMMER_SLUG = 'summer-2027';
-const LONG_SEASON = 'S'.repeat(100);
+// Words, so that the page's own text wraps at 320px; only the bar truncates.
+const LONG_SEASON = 'Sunset '.repeat(15).slice(0, 100);
 const LONG_SEASON_SLUG = 'long-season';
-const LONG_TEAM = 'T'.repeat(60);
-const LONG_SESSION = 'W'.repeat(100);
+const LONG_TEAM = 'Sunset '.repeat(9).slice(0, 60);
+const LONG_SESSION = 'Sunset '.repeat(15).slice(0, 100);
 const BEACH = 'Alpha Beach';
 const CAMP = 'Adult Beach Skills Camp';
 const CAMP_SLUG = 'adult-beach-skills-camp';
@@ -906,12 +908,20 @@ async function signUpAs(page: Page, world: BarWorld, role: Role | null): Promise
   return user;
 }
 
+interface BarTeam {
+  teamId: string;
+  name: string;
+}
+
+/** The world is shared by the tests of a worker, and a team name is taken once per season. */
+const sharks = () => `Sand Sharks ${randomBytes(3).toString('hex')}`;
+
 async function seedBarTeam(
   world: BarWorld,
   user: TestUser,
   name: string,
   season: string,
-): Promise<string> {
+): Promise<BarTeam> {
   const { teamId } = (await convexRun('testing:seedTeam', {
     organizationSlug: world.tenant.slug,
     leagueSlug: SUNDAY_SLUG,
@@ -919,7 +929,7 @@ async function seedBarTeam(
     name,
     captainEmail: user.email,
   })) as { teamId: string };
-  return teamId;
+  return { teamId, name };
 }
 
 interface BarPage {
@@ -934,8 +944,9 @@ interface BarPage {
   failingQuery?: string;
 }
 
-function barPages(world: BarWorld, teamId: string): BarPage[] {
+function barPages(world: BarWorld, team: BarTeam): BarPage[] {
   const { base, tenant } = world;
+  const ORG = tenant.name;
   const registerSeason = `/app/register/${tenant.slug}/${SUNDAY_SLUG}/${SUMMER_SLUG}`;
   const ADMIN_QUERY = 'organizations:getAdminContext';
   const section = (name: string, path: string): BarPage => ({
@@ -943,7 +954,7 @@ function barPages(world: BarWorld, teamId: string): BarPage[] {
     path: `${base}/${path}`,
     loading: name,
     loaded: name,
-    tab: `${name} | ${GULF} | ${SITE}`,
+    tab: `${name} | ${ORG} | ${SITE}`,
     held: [ADMIN_QUERY],
     unknown: `/app/organizations/no-such-org/${path}`,
     noAccessBar: 'You can’t manage this organization',
@@ -991,7 +1002,7 @@ function barPages(world: BarWorld, teamId: string): BarPage[] {
       path: `${base}/leagues/${SUNDAY_SLUG}`,
       loading: 'League',
       loaded: SUNDAY,
-      tab: `${SUNDAY} | ${GULF} | ${SITE}`,
+      tab: `${SUNDAY} | ${ORG} | ${SITE}`,
       held: ['leagues:getOrganizerContext'],
       unknown: `${base}/leagues/no-such-league`,
       noAccessBar: 'No access',
@@ -1013,7 +1024,7 @@ function barPages(world: BarWorld, teamId: string): BarPage[] {
       path: `${base}/camps/${CAMP_SLUG}`,
       loading: 'Camp',
       loaded: CAMP,
-      tab: `${CAMP} | ${GULF} | ${SITE}`,
+      tab: `${CAMP} | ${ORG} | ${SITE}`,
       held: ['camps:getForManagement'],
       unknown: `${base}/camps/no-such-camp`,
       noAccessBar: 'No access',
@@ -1024,7 +1035,7 @@ function barPages(world: BarWorld, teamId: string): BarPage[] {
       path: `${base}/tournaments/${OPEN_SLUG}`,
       loading: 'Tournament',
       loaded: OPEN,
-      tab: `${OPEN} | ${GULF} | ${SITE}`,
+      tab: `${OPEN} | ${ORG} | ${SITE}`,
       held: ['tournaments:getForManagement'],
       unknown: `${base}/tournaments/no-such-tournament`,
       noAccessBar: 'No access',
@@ -1032,10 +1043,10 @@ function barPages(world: BarWorld, teamId: string): BarPage[] {
     },
     {
       name: 'team',
-      path: `/app/teams/${teamId}`,
+      path: `/app/teams/${team.teamId}`,
       loading: 'Team',
-      loaded: 'Sand Sharks',
-      tab: `Sand Sharks | ${SITE}`,
+      loaded: team.name,
+      tab: `${team.name} | ${SITE}`,
       held: ['teams:getForMember'],
       unknown: '/app/teams/no-such-team',
       noAccessBar: 'No access',
@@ -1107,8 +1118,8 @@ barTest.describe('the slim bar names the page', () => {
 
     barTest('each loaded page shows the first part of its tab title', async ({ page, world }) => {
       const user = await signUpAs(page, world, 'orgAdmin');
-      const teamId = await seedBarTeam(world, user, 'Sand Sharks', SUMMER_SLUG);
-      for (const row of barPages(world, teamId)) {
+      const team = await seedBarTeam(world, user, sharks(), SUMMER_SLUG);
+      for (const row of barPages(world, team)) {
         await page.goto(row.path);
         await expect(page, row.name).toHaveTitle(row.tab);
         await expect(slimBar(page), row.name).toBeVisible();
@@ -1121,8 +1132,8 @@ barTest.describe('the slim bar names the page', () => {
       async ({ page, world }) => {
         await signUpAs(page, world, 'orgAdmin');
         await page.goto(world.base);
-        await expect(page).toHaveTitle(`Overview | ${GULF} | ${SITE}`);
-        await expect(barText(page)).toHaveText(GULF);
+        await expect(page).toHaveTitle(`Overview | ${world.tenant.name} | ${SITE}`);
+        await expect(barText(page)).toHaveText(world.tenant.name);
       },
     );
 
@@ -1130,15 +1141,15 @@ barTest.describe('the slim bar names the page', () => {
       'each page shows its route title while its query is held, and nothing moves when it answers',
       async ({ page, world }) => {
         const user = await signUpAs(page, world, 'orgAdmin');
-        const teamId = await seedBarTeam(world, user, 'Sand Sharks', SUMMER_SLUG);
+        const team = await seedBarTeam(world, user, sharks(), SUMMER_SLUG);
         const rows = [
-          ...barPages(world, teamId).filter((row) => row.held),
+          ...barPages(world, team).filter((row) => row.held),
           {
             name: 'admin Overview',
             path: world.base,
             loading: 'Overview',
-            loaded: GULF,
-            tab: `Overview | ${GULF} | ${SITE}`,
+            loaded: world.tenant.name,
+            tab: `Overview | ${world.tenant.name} | ${SITE}`,
             held: ['organizations:getAdminContext'],
           },
         ];
@@ -1172,7 +1183,9 @@ barTest.describe('the slim bar names the page', () => {
       'an unknown address shows "Page not found" in the bar, on every page that has the view',
       async ({ page, world }) => {
         await signUpAs(page, world, 'orgAdmin');
-        for (const row of barPages(world, 'unused').filter((r) => r.unknown)) {
+        for (const row of barPages(world, { teamId: 'unused', name: '' }).filter(
+          (r) => r.unknown,
+        )) {
           await page.goto(row.unknown!);
           await expect(
             page.getByRole('heading', { level: 1, name: 'Page not found' }),
@@ -1188,8 +1201,8 @@ barTest.describe('the slim bar names the page', () => {
       async ({ page, world }) => {
         await signUpAs(page, world, null);
         const captain = await seedUser(newUser('Captain'));
-        const teamId = await seedBarTeam(world, captain, 'Sand Sharks', SUMMER_SLUG);
-        for (const row of barPages(world, teamId).filter((r) => r.noAccessBar)) {
+        const team = await seedBarTeam(world, captain, sharks(), SUMMER_SLUG);
+        for (const row of barPages(world, team).filter((r) => r.noAccessBar)) {
           await page.goto(row.path);
           await expect(page, row.name).toHaveTitle(`${row.noAccessBar} | ${SITE}`);
           await expectBarToMatchTab(page, row.noAccessBar!, row.name);
@@ -1201,8 +1214,8 @@ barTest.describe('the slim bar names the page', () => {
       'a failed query shows "Temporarily unavailable" in the bar',
       async ({ page, world }) => {
         const user = await signUpAs(page, world, 'orgAdmin');
-        const teamId = await seedBarTeam(world, user, 'Sand Sharks', SUMMER_SLUG);
-        for (const row of barPages(world, teamId).filter((r) => r.failingQuery)) {
+        const team = await seedBarTeam(world, user, sharks(), SUMMER_SLUG);
+        for (const row of barPages(world, team).filter((r) => r.failingQuery)) {
           const failing = await page.context().newPage();
           await failFirstAnswer(failing, row.failingQuery!);
           await failing.goto(row.path);
@@ -1233,10 +1246,10 @@ barTest.describe('the slim bar names the page', () => {
       'names that reach the length limits stay on one line in a 56px bar, and the page does not scroll sideways at 320px',
       async ({ page, world }) => {
         const user = await signUpAs(page, world, 'orgAdmin');
-        const teamId = await seedBarTeam(world, user, LONG_TEAM, LONG_SEASON_SLUG);
+        const longTeam = await seedBarTeam(world, user, LONG_TEAM, LONG_SEASON_SLUG);
         const longs: [string, string][] = [
           [`${world.base}/leagues/${SUNDAY_SLUG}/seasons/${LONG_SEASON_SLUG}`, LONG_SEASON],
-          [`/app/teams/${teamId}`, LONG_TEAM],
+          [`/app/teams/${longTeam.teamId}`, LONG_TEAM],
           [
             `${world.base}/camps/${CAMP_SLUG}/register?session=${world.sessionIds[LONG_SESSION]}`,
             `Register for ${LONG_SESSION}`,
@@ -1261,25 +1274,36 @@ barTest.describe('the slim bar names the page', () => {
     );
 
     barTest('reads the text the mockups draw at 360px', async ({ page, world }) => {
-      const mockup = async (file: string, id: string): Promise<string> => {
+      const barTextsOf = async (file: string, id: string): Promise<string[]> => {
         const html = await readFile(join(process.cwd(), 'design', 'mockups', file), 'utf8');
         const start = html.indexOf(`<section id="${id}"`);
-        const rest = html.slice(start);
-        const bar = /<p class="min-w-0 flex-1 truncate text-sm font-semibold">([^<]*)<\/p>/.exec(
-          rest,
-        );
-        return (bar?.[1] ?? '').replaceAll('&amp;', '&');
+        const end = html.indexOf('\n      <section id="', start + 1);
+        const section = html.slice(start, end === -1 ? undefined : end);
+        return [
+          ...section.matchAll(
+            /<p class="min-w-0 flex-1 truncate text-sm font-semibold">([^<]*)<\/p>/g,
+          ),
+        ].map((match) => match[1].replaceAll('&amp;', '&'));
       };
       await signUpAs(page, world, 'orgAdmin');
-      const drawn: [string, string, string][] = [
-        ['300-public-site-league-form.html', 'create', `${world.base}/leagues`],
-        ['300-public-site-league-form.html', 'edit', `${world.base}/leagues/${SUNDAY_SLUG}`],
-        ['300-public-site-dashboard.html', 'home-after', '/app'],
-        ['300-public-site-dashboard.html', 'admin-after', world.base],
+      const drawn: [file: string, id: string, path: string, text: string][] = [
+        ['300-public-site-league-form.html', 'create', `${world.base}/leagues`, 'Leagues'],
+        [
+          '300-public-site-league-form.html',
+          'edit',
+          `${world.base}/leagues/${SUNDAY_SLUG}`,
+          SUNDAY,
+        ],
+        ['300-public-site-dashboard.html', 'home-after', '/app', 'Home'],
+        ['300-public-site-dashboard.html', 'admin-after', world.base, GULF],
       ];
-      for (const [file, id, path] of drawn) {
+      for (const [file, id, path, text] of drawn) {
+        expect(await barTextsOf(file, id), `${file} ${id}`).toContain(text);
         await page.goto(path);
-        await expect(barText(page), `${file} ${id}`).toHaveText(await mockup(file, id));
+        // The seeded organization's name carries a suffix that keeps its address unique.
+        const shown = barText(page);
+        if (text === GULF) await expect(shown, `${file} ${id}`).toContainText(text);
+        else await expect(shown, `${file} ${id}`).toHaveText(text);
       }
     });
   });
@@ -1292,15 +1316,15 @@ barTest.describe('the slim bar names the page', () => {
       'the slim bar is hidden and the tab title is as drawn on every page',
       async ({ page, world }) => {
         const user = await signUpAs(page, world, 'orgAdmin');
-        const teamId = await seedBarTeam(world, user, 'Sand Sharks', SUMMER_SLUG);
-        for (const row of barPages(world, teamId)) {
+        const team = await seedBarTeam(world, user, sharks(), SUMMER_SLUG);
+        for (const row of barPages(world, team)) {
           await page.goto(row.path);
           await expect(page, row.name).toHaveTitle(row.tab);
           await expect(slimBar(page), row.name).toBeHidden();
           await expect(slimBar(page), row.name).toHaveClass(/lg:hidden/);
         }
         await page.goto(world.base);
-        await expect(page).toHaveTitle(`Overview | ${GULF} | ${SITE}`);
+        await expect(page).toHaveTitle(`Overview | ${world.tenant.name} | ${SITE}`);
       },
     );
   });
