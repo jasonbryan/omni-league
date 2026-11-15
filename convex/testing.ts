@@ -79,7 +79,9 @@ import {
   saveResult,
   tournamentTeams,
 } from './lib/tournamentBracket';
-import { findCampBySlugs } from './lib/campLookup';
+import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
+import { insertCampRegistration } from './lib/campRegistrationWrites';
+import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
@@ -519,6 +521,34 @@ export const seedCampSession = internalMutation({
     if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
     const id = await insertCampSession(ctx, found.camp, session);
     if (registeredCount !== undefined) await ctx.db.patch('campSessions', id, { registeredCount });
+    return null;
+  },
+});
+
+/** Skips the deadline, the age range, and the places check of `campRegistrations.register`. */
+export const seedCampRegistration = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    campSlug: v.string(),
+    sessionName: v.string(),
+    email: v.string(),
+    participant: participantValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, campSlug, sessionName, email, participant }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
+    const session = (
+      await ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+        .take(CAMP_SESSIONS_LIMIT)
+    ).find((row) => row.name === sessionName);
+    if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
+    const user = await userByEmail(ctx, email);
+    await insertCampRegistration(ctx, session, { userId: user._id, participant });
     return null;
   },
 });

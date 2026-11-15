@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp, seedCampSession } from './support/camp';
+import { seedCampRegistration } from './support/camp-registrations';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -767,13 +768,174 @@ test.describe('Camp sessions: Delete and Undo', () => {
     });
     await page.goto(campPage(tenant));
     const first = sessionRows(page).first();
-    await expect(first.locator('[data-slot="session-registered"]')).toHaveText('4 registered');
-    await expect(first.getByRole('button')).toHaveCount(0);
+    await expect(first.locator('[data-slot="session-registered"]')).toHaveText(
+      '4 of 20 registered',
+    );
+    await expect(first.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
     await expect(
       sessionRows(page).nth(1).getByRole('button', { name: 'Delete Week 2' }),
     ).toBeVisible();
     await screenshot(page, testInfo, 'camp-session-registered');
     await expectAccessible(page);
+  });
+});
+
+const ADULT_CAMP = { name: 'Adult Beach Skills Camp', slug: 'adult-beach-skills-camp' };
+const MAYA = { kind: 'minor', minorName: 'Maya R.' } as const;
+const registered = (name: string) => ({ name: new RegExp(`registered in ${name}$`) });
+const DAY_TEXT = /[A-Z][a-z]{2} \d{1,2}, \d{4}/;
+
+test.describe('Camp sessions: who registered', () => {
+  const registrantsOf = (page: Page) => sessionRows(page).first().locator('app-camp-registrants');
+
+  async function sessionWith(page: Page, places = 20) {
+    const admin = await adminWithCamp(page);
+    await seedCampSession(admin.tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+      places,
+    });
+    return admin;
+  }
+
+  async function openList(page: Page) {
+    await sessionRows(page).first().getByRole('button', registered('Week 1')).click();
+  }
+
+  test('a minor shows with the guardian’s name and email and the date, and the list passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, camp } = await sessionWith(page);
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedCampRegistration(tenant, JUNIOR.slug, 'Week 1', guardian, MAYA);
+    await page.goto(camp);
+    const toggle = sessionRows(page).first().getByRole('button', registered('Week 1'));
+    await expect(toggle).toHaveText('1 of 20 registered in Week 1');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const row = registrantsOf(page).getByRole('row', { name: /Maya R\./ });
+    await expect(row.getByRole('rowheader')).toContainText('Maya R.');
+    await expect(row.getByRole('rowheader')).toContainText(
+      `Guardian: ${guardian.name}, ${guardian.email}`,
+    );
+    await expect(row.getByRole('cell')).toHaveText(DAY_TEXT);
+    await expect(toggle).toBeFocused();
+    await screenshot(page, testInfo, 'camp-registrants');
+    await expectAccessible(page);
+    await toggle.click();
+    await expect(registrantsOf(page)).toHaveCount(0);
+  });
+
+  test('an adult shows with no guardian line, beside a minor, sorted by name', async ({
+    page,
+  }, testInfo) => {
+    const admin = await memberOf(page, 'orgAdmin');
+    await seedCamp(admin.tenant, {
+      ...ADULT_CAMP,
+      locations: [PELICAN],
+      minimumAge: 14,
+      maximumAge: 99,
+    });
+    await seedCampSession(admin.tenant, ADULT_CAMP.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+    });
+    const player = await seedUser(newUser('Player'));
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedCampRegistration(admin.tenant, ADULT_CAMP.slug, 'Week 1', player, { kind: 'self' });
+    await seedCampRegistration(admin.tenant, ADULT_CAMP.slug, 'Week 1', guardian, MAYA);
+    await page.goto(campPage(admin.tenant, ADULT_CAMP.slug));
+    await openList(page);
+    const rows = registrantsOf(page).locator('tbody tr');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).getByRole('rowheader')).toHaveText(player.name);
+    await expect(rows.nth(0)).not.toContainText('Guardian');
+    await expect(rows.nth(1).getByRole('rowheader')).toContainText('Maya R.');
+    await expect(rows.nth(1).getByRole('rowheader')).toContainText(guardian.email);
+    await screenshot(page, testInfo, 'camp-registrants-adult');
+    await expectAccessible(page);
+  });
+
+  test('a long guardian email wraps inside the list and the page does not scroll sideways', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, camp } = await sessionWith(page);
+    const base = newUser('Guardian');
+    const guardian = await seedUser({
+      ...base,
+      email: `e2e-a-very-long-guardian-address-${base.email}`,
+    });
+    await seedCampRegistration(tenant, JUNIOR.slug, 'Week 1', guardian, MAYA);
+    await page.goto(camp);
+    await openList(page);
+    await expect(registrantsOf(page)).toContainText(guardian.email);
+    await screenshot(page, testInfo, 'camp-registrants-long-email');
+    await expectAccessible(page);
+  });
+
+  test('a session no one registered for says so', async ({ page }, testInfo) => {
+    const { camp } = await sessionWith(page);
+    await page.goto(camp);
+    await openList(page);
+    await expect(registrantsOf(page)).toHaveText('No one has registered yet.');
+    await screenshot(page, testInfo, 'camp-registrants-empty');
+    await expectAccessible(page);
+  });
+
+  test('the list shows a skeleton while its answer is held', async ({ page }, testInfo) => {
+    const { camp } = await sessionWith(page);
+    await page.goto(camp);
+    await expect(sessionRows(page)).toHaveCount(1);
+    const held = await holdQueries(page, ['campRegistrations:listForSession']);
+    await openList(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      registrantsOf(page).getByRole('status').filter({ hasText: 'Loading the registrants.' }),
+    ).toBeAttached();
+    await screenshot(page, testInfo, 'camp-registrants-loading');
+    await expectAccessible(page);
+    held.release();
+    await expect(registrantsOf(page)).toHaveText('No one has registered yet.');
+  });
+
+  test.describe('a list the server fails', () => {
+    test.use({ expectedConvexErrors: ['campRegistrations:listForSession'] });
+
+    test('shows the alert with Try again and the rest of the page stays', async ({
+      page,
+    }, testInfo) => {
+      const { camp } = await sessionWith(page);
+      await failFirstAnswer(page, 'campRegistrations:listForSession');
+      await page.goto(camp);
+      await openList(page);
+      await expect(registrantsOf(page).getByRole('alert')).toContainText(
+        'The registrants could not be loaded.',
+      );
+      await expect(registrantsOf(page).getByRole('link', { name: 'Try again' })).toBeVisible();
+      await expect(addForm(page)).toBeVisible();
+      await screenshot(page, testInfo, 'camp-registrants-error');
+      await expectAccessible(page);
+    });
+  });
+
+  test('opened offline, the list says it will load when connected', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { camp } = await sessionWith(page);
+    await page.goto(camp);
+    await expect(sessionRows(page)).toHaveCount(1);
+    await context.setOffline(true);
+    await openList(page);
+    await expect(registrantsOf(page).getByRole('status')).toHaveText(
+      "You're offline. The registrants will load when you’re connected.",
+    );
+    await screenshot(page, testInfo, 'camp-registrants-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
   });
 });
 
