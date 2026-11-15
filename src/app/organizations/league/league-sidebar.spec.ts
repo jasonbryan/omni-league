@@ -290,6 +290,60 @@ describe('LeagueSidebar', () => {
       );
     });
 
+    describe('training programs', () => {
+      const WITH_TRAINING = [
+        {
+          ...MINE_AS_ORGANIZER[0],
+          camps: [{ name: 'Fall Break Camp', slug: 'fall-break-camp' }],
+          trainings: [
+            { name: 'Adult Passing Clinic', slug: 'adult-passing-clinic' },
+            { name: 'Tuesday Serving Clinic', slug: 'tuesday-serving-clinic' },
+          ],
+        },
+      ];
+      const rows = () => [
+        ...page.querySelectorAll<HTMLElement>('nav ul[aria-label="Your training programs"] li'),
+      ];
+
+      it('lists the assigned training programs after the camps as text rows with the dumbbell icon and no link', async () => {
+        await open(COED_AS_ORGANIZER);
+        await answer(WITH_TRAINING);
+        expect(rows().map((li) => text(li))).toEqual([
+          'Adult Passing Clinic',
+          'Tuesday Serving Clinic',
+        ]);
+        expect(page.querySelectorAll('nav ul[aria-label="Your training programs"] a')).toHaveLength(
+          0,
+        );
+        for (const li of rows()) {
+          expect(li.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideDumbbell');
+        }
+        const lists = [...page.querySelectorAll('nav ul[aria-label]')].map((ul) =>
+          ul.getAttribute('aria-label'),
+        );
+        expect(lists).toEqual(['Your leagues', 'Your camps', 'Your training programs']);
+        expect(page.querySelector('nav')!.getAttribute('aria-label')).toBe(
+          `${GULF.name} leagues, camps, and training programs`,
+        );
+      });
+
+      it('draws no group without training programs, and none of another organization', async () => {
+        await open(COED_AS_ORGANIZER);
+        await answer([
+          ...MINE_AS_ORGANIZER,
+          {
+            name: 'Lakeside Softball',
+            slug: 'lakeside-softball',
+            role: 'leagueOrganizer',
+            leagues: [],
+            trainings: [{ name: 'Lakeside Clinic', slug: 'lakeside-clinic' }],
+          },
+        ]);
+        expect(page.querySelector('nav ul[aria-label="Your training programs"]')).toBeNull();
+        expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Clinic');
+      });
+    });
+
     it('lists no camp of another organization', async () => {
       await open(COED_AS_ORGANIZER);
       await answer([

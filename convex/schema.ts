@@ -288,6 +288,18 @@ export default defineSchema({
     .index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey'])
     .index('by_userId', ['userId']),
 
+  // The training part of a program of type `training`; `programs` holds its name, slug, sport, status, and locations. Written only by `convex/lib/tenantWrites.ts`.
+  trainings: defineTable({
+    programId: v.id('programs'),
+    organizationId: v.id('organizations'),
+    coachName: v.string(),
+    /** Whole years, `MIN_TRAINING_AGE` to `MAX_TRAINING_AGE`; either bound may be absent, and `minimumAge` is no higher than `maximumAge` when both are set. */
+    minimumAge: v.optional(v.number()),
+    maximumAge: v.optional(v.number()),
+  })
+    .index('by_programId', ['programId'])
+    .index('by_organizationId', ['organizationId']),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.

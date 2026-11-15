@@ -1095,6 +1095,7 @@ test.describe('Overview: the league count and the checklist', () => {
         /^Leagues\d*$/,
         'Tournaments',
         'Camps',
+        'Training',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',

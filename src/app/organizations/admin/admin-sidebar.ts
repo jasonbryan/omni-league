@@ -6,6 +6,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBuilding2,
   lucideChevronsUpDown,
+  lucideDumbbell,
   lucideGlobe,
   lucideLayoutDashboard,
   lucideMapPin,
@@ -39,6 +40,7 @@ import { adminPath } from './admin-path';
       lucideBuilding2,
       lucideChevronsUpDown,
       lucideGlobe,
+      lucideDumbbell,
       lucideLayoutDashboard,
       lucideMapPin,
       lucideSwords,
@@ -157,6 +159,7 @@ export class AdminSidebar {
         link('Leagues', 'lucideTrophy', 'leagues', this.counts.leagues(), true),
         link('Tournaments', 'lucideSwords', 'tournaments', null, true),
         link('Camps', 'lucideTent', 'camps', null, true),
+        link('Training', 'lucideDumbbell', 'training', null, true),
       ],
       settings: [
         link('Locations', 'lucideMapPin', 'locations', this.counts.locations()),

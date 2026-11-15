@@ -143,6 +143,18 @@ const FORMS: Record<string, Parts> = {
     horizontal: 1,
     handWritten: [],
   },
+  'src/app/organizations/admin/training-create-form.ts': {
+    inputs: 4,
+    fields: 5,
+    labels: 5,
+    descriptions: 5,
+    errors: 5,
+    contents: 1,
+    fieldSets: 1,
+    legends: 1,
+    horizontal: 1,
+    handWritten: [],
+  },
   'src/app/organizations/admin/camp-session-form.ts': {
     inputs: 4,
     fields: 4,

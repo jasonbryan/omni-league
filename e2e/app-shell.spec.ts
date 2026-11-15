@@ -100,12 +100,13 @@ test.describe('the app shell', () => {
         /^Leagues\s*2$/,
         'Tournaments',
         'Camps',
+        'Training',
         /^Locations\s*2$/,
         /^Staff\s*1$/,
         'Details',
         'View public page',
       ]);
-      const [head, overview, , , , , , , publicPage] = await nav.getByRole('link').all();
+      const [head, overview, , , , , , , , publicPage] = await nav.getByRole('link').all();
       await expect(head).toHaveAttribute('href', '/app');
       await expect(head).toContainText(tenant.name);
       await expect(overview).toHaveAttribute('aria-current', 'page');

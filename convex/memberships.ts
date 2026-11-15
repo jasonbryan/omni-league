@@ -30,6 +30,7 @@ export const listForOrganization = query({
       leagueNames: v.array(v.string()),
       tournamentNames: v.optional(v.array(v.string())),
       campNames: v.optional(v.array(v.string())),
+      trainingNames: v.optional(v.array(v.string())),
       isYou: v.boolean(),
     }),
   ),
@@ -66,6 +67,7 @@ export const listForOrganization = query({
       const programs = await assignablePrograms(ctx, organizationId, membership.programIds);
       const tournamentNames = programsOfType(programs, 'tournament').map(({ name }) => name);
       const campNames = programsOfType(programs, 'camp').map(({ name }) => name);
+      const trainingNames = programsOfType(programs, 'training').map(({ name }) => name);
       rows.push({
         membershipId: membership._id,
         name: user.name,
@@ -74,6 +76,7 @@ export const listForOrganization = query({
         leagueNames,
         ...(tournamentNames.length > 0 && { tournamentNames }),
         ...(campNames.length > 0 && { campNames }),
+        ...(trainingNames.length > 0 && { trainingNames }),
         isYou: user._id === caller._id,
       });
     }

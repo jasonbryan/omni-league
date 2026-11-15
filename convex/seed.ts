@@ -80,6 +80,7 @@ import {
   insertLocation,
   insertCampSession,
   insertDraftCamp,
+  insertDraftTraining,
   insertDraftTournament,
   publishCamp,
   publishTournament,
@@ -833,6 +834,41 @@ async function locationIdsNamed(
   return ids;
 }
 
+interface DemoTraining {
+  organizationSlug: string;
+  name: string;
+  slug: string;
+  sport: Sport;
+  locations: readonly string[];
+  coachName: string;
+}
+
+const DEMO_TRAININGS: readonly DemoTraining[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Tuesday Serving Clinic',
+    slug: 'tuesday-serving-clinic',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    coachName: 'Dana Ruiz',
+  },
+];
+
+async function ensureTraining(ctx: MutationCtx, demo: DemoTraining): Promise<boolean> {
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization || (await programSlugTaken(ctx, organization._id, demo.slug))) return false;
+  const locationIds = await locationIdsNamed(ctx, organization._id, demo.locations);
+  if (!locationIds) return false;
+  await insertDraftTraining(ctx, organization._id, {
+    name: demo.name,
+    slug: demo.slug,
+    sport: demo.sport,
+    locationIds,
+    coachName: demo.coachName,
+  });
+  return true;
+}
+
 async function ensureCamp(ctx: MutationCtx, demo: DemoCamp): Promise<boolean> {
   const organization = await organizationBySlug(ctx, demo.organizationSlug);
   if (!organization || (await programSlugTaken(ctx, organization._id, demo.slug))) return false;
@@ -926,6 +962,7 @@ const resultValidator = v.object({
   tournaments: v.number(),
   camps: v.number(),
   campSessions: v.number(),
+  trainings: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
     teamCounts: v.number(),
@@ -1006,6 +1043,7 @@ export const insertDemoData = internalMutation({
       tournaments: 0,
       camps: 0,
       campSessions: 0,
+      trainings: 0,
     };
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
@@ -1072,6 +1110,9 @@ export const insertDemoData = internalMutation({
       if (await ensureCamp(ctx, demo)) inserted.camps++;
       inserted.campSessions += await ensureCampSessions(ctx, demo, today);
       await ensureCampPublished(ctx, demo);
+    }
+    for (const demo of DEMO_TRAININGS) {
+      if (await ensureTraining(ctx, demo)) inserted.trainings++;
     }
     return { ...inserted, backfilled };
   },

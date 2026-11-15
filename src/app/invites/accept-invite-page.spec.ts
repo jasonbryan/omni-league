@@ -718,6 +718,74 @@ describe('AcceptInvitePage', () => {
     });
   });
 
+  describe('training programs', () => {
+    const SERVING = { name: 'Tuesday Serving Clinic', slug: 'tuesday-serving-clinic' };
+    const rowsOf = (page: HTMLElement) =>
+      [...page.querySelectorAll('dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+
+    it('a training-only invite names the program under "Training program", and leads with it', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({ ...ORGANIZER, leagueNames: [], trainingNames: [SERVING.name] });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run a training program as a league organizer.',
+      );
+      expect(rowsOf(page)).toEqual([
+        ['Organization', 'Coastal Bend Rec Club'],
+        ['Role', 'League organizer'],
+        ['Training program', SERVING.name],
+        ['Expires', 'Oct 23, 2026'],
+      ]);
+    });
+
+    it('several read "Training programs", after the leagues, the tournaments, and the camps', async () => {
+      const { page, emitInvite } = await open();
+      await emitInvite({
+        ...ORGANIZER,
+        campNames: ['Fall Break Camp'],
+        trainingNames: [SERVING.name, 'Adult Passing Clinic'],
+      });
+      expect(text(page.querySelector('main p:nth-of-type(2)'))).toBe(
+        'You’re invited to run leagues, camps, and training programs as a league organizer.',
+      );
+      expect(rowsOf(page).map(([label]) => label)).toEqual([
+        'Organization',
+        'Role',
+        'League',
+        'Camp',
+        'Training programs',
+        'Expires',
+      ]);
+      expect(rowsOf(page)[4][1]).toBe('Tuesday Serving Clinic and Adult Passing Clinic');
+    });
+
+    it('after accepting, the line names the program and the button goes to /app', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite({ ...ORGANIZER, leagueNames: [], trainingNames: [SERVING.name] });
+      await ctx.signIn();
+      ctx.accept()?.click();
+      await ctx.flush();
+      ctx.call()?.resolve({
+        organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
+        role: 'leagueOrganizer',
+        leagueNames: [],
+        leagues: [],
+        trainingNames: [SERVING.name],
+        trainings: [SERVING],
+      });
+      await ctx.flush();
+      expect(text(ctx.page.querySelector('main p'))).toBe(
+        'You’re a league organizer for Tuesday Serving Clinic.',
+      );
+      expect(
+        [...ctx.page.querySelectorAll('main a')].map((a) => [text(a), a.getAttribute('href')]),
+      ).toEqual([['Go to your organizations', '/app']]);
+    });
+  });
+
   describe('refusals', () => {
     async function refuse(failure: Error) {
       const ctx = await open({ signedIn: true });

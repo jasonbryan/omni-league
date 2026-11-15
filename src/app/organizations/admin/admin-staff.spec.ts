@@ -34,6 +34,7 @@ const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const LIST_TOURNAMENTS = 'tournaments:listForOrganization';
 const LIST_CAMPS = 'camps:listForOrganization';
+const LIST_TRAINING = 'trainings:listForOrganization';
 const STAFF_COUNT = 'memberships:staffCount';
 const PENDING_COUNT = 'invites:pendingCount';
 const CREATE = 'invites:create';
@@ -165,6 +166,26 @@ const CAMPS = [
   },
 ];
 
+const TRAINING = [
+  {
+    trainingId: 'tr_serving',
+    programId: 'pg_serving',
+    name: 'Tuesday Serving Clinic',
+    slug: 'tuesday-serving-clinic',
+    coachName: 'Dana Ruiz',
+    status: 'draft',
+  },
+  {
+    trainingId: 'tr_passing',
+    programId: 'pg_passing',
+    name: 'Adult Passing Clinic',
+    slug: 'adult-passing-clinic',
+    coachName: 'Lee Park',
+    minimumAge: 16,
+    status: 'draft',
+  },
+];
+
 const TOKEN = 'vT3kq9Xo-PwGYsFI6eyKfmW2cGdPZEabYr7_hN1uLcA';
 
 describe('AdminStaff', () => {
@@ -191,6 +212,7 @@ describe('AdminStaff', () => {
       leagues?: unknown[];
       tournaments?: unknown[] | 'pending';
       camps?: unknown[] | 'pending';
+      training?: unknown[] | 'pending';
     } = {},
   ) {
     o = await openAdmin(ROUTES, URL);
@@ -213,6 +235,7 @@ describe('AdminStaff', () => {
       o.subscription(LIST_TOURNAMENTS)!.emit(lists.tournaments ?? []);
     }
     if (lists.camps !== 'pending') o.subscription(LIST_CAMPS)!.emit(lists.camps ?? []);
+    if (lists.training !== 'pending') o.subscription(LIST_TRAINING)!.emit(lists.training ?? []);
     await o.flush();
   }
   const main = () => document.querySelector<HTMLElement>('main#main')!;
@@ -288,6 +311,7 @@ describe('AdminStaff', () => {
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
         [LIST_TOURNAMENTS, { organizationId: COASTAL.organizationId }],
         [LIST_CAMPS, { organizationId: COASTAL.organizationId }],
+        [LIST_TRAINING, { organizationId: COASTAL.organizationId }],
         [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
         [PENDING_COUNT, { organizationId: COASTAL.organizationId }],
       ]);
@@ -300,7 +324,7 @@ describe('AdminStaff', () => {
       expect(page.querySelectorAll('h1')).toHaveLength(1);
       expect(text(main.querySelector('h1'))).toBe('Staff');
       expect(text(main.querySelector('h1 + p'))).toBe(
-        'Org admins manage everything here. League organizers run the leagues, tournaments, and camps you assign them.',
+        'Org admins manage everything here. League organizers run the leagues, tournaments, camps, and training programs you assign them.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe('Staff | Coastal Bend Rec Club | Omni League');
       expectBar(page, 'Staff');
@@ -1662,6 +1686,174 @@ describe('AdminStaff', () => {
       );
       expect(text(pending()[1].querySelectorAll('p')[0])).toBe(
         'League organizer for Fall Break Camp',
+      );
+    });
+  });
+
+  describe('training programs', () => {
+    const training = (n: number) => page.querySelector<HTMLButtonElement>(`#training-${n}`)!;
+    const camp = (n: number) => page.querySelector<HTMLButtonElement>(`#camp-${n}`)!;
+    const openWithTraining = (
+      programs: unknown[] = TRAINING,
+      extra: { tournaments?: unknown[]; camps?: unknown[] } = {},
+    ) =>
+      open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, ...extra, training: programs });
+    const labels = (group: Element) => [...group.querySelectorAll('label')].map((l) => text(l));
+
+    it('lists the training programs under their own heading in name order, after the leagues, tournaments, and camps', async () => {
+      await openWithTraining(TRAINING, { tournaments: TOURNAMENTS, camps: CAMPS });
+      const group = page.querySelector('fieldset#training')!;
+      expect(text(group.querySelector('legend'))).toBe('Training programs');
+      expect(labels(group)).toEqual(['Adult Passing Clinic', 'Tuesday Serving Clinic']);
+      expect(
+        page.querySelector('fieldset#camps')!.compareDocumentPosition(group) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues, tournaments, camps, and training programs you choose.',
+      );
+      expect(text(page.querySelector('#leagues-description'))).toBe(
+        'Choose one or more leagues, tournaments, camps, or training programs.',
+      );
+      expect(training(1).getAttribute('role')).toBe('checkbox');
+      expect(training(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('draws no Training programs group, and keeps the earlier wording, when the organization has none', async () => {
+      await openWithTraining([], { tournaments: TOURNAMENTS });
+      expect(page.querySelector('fieldset#training')).toBeNull();
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the leagues and tournaments you choose.',
+      );
+    });
+
+    it('draws the group alone, with the League organizer role available, when there is no league', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: [], training: TRAINING });
+      expect(page.querySelector('fieldset#leagues')).toBeNull();
+      expect(input('role-organizer').disabled).toBe(false);
+      expect(input('role-organizer').checked).toBe(true);
+      expect(text(page.querySelector('#role-organizer-description'))).toBe(
+        'Runs only the training programs you choose.',
+      );
+    });
+
+    it('waits for the training programs before it draws the form, so nothing moves when they arrive', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, training: 'pending' });
+      expect(page.querySelector('#invite form')).toBeNull();
+      o.subscription(LIST_TRAINING)!.emit(TRAINING);
+      await o.flush();
+      expect(page.querySelector('#invite form')).not.toBeNull();
+    });
+
+    it('a failed list shows its own alert in place of the form', async () => {
+      await open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES, training: 'pending' });
+      o.subscription(LIST_TRAINING)!.fail(new Error('Server Error: secret'));
+      await o.flush();
+      expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+        'The training programs could not be loaded. Check your connection and try again.',
+      );
+      expect(page.querySelector('#email')).toBeNull();
+    });
+
+    it('sends the chosen programs together as programIds, tournaments, then camps, then training, each in list order', async () => {
+      await openWithTraining(TRAINING, { tournaments: TOURNAMENTS, camps: CAMPS });
+      await type('email', 'jordan@example.com');
+      training(2).click();
+      training(1).click();
+      camp(1).click();
+      page.querySelector<HTMLButtonElement>('#tournament-1')!.click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()).toEqual([
+        [
+          CREATE,
+          {
+            organizationId: COASTAL.organizationId,
+            email: 'jordan@example.com',
+            role: 'leagueOrganizer',
+            leagueIds: [],
+            programIds: ['pg_gulf', 'pg_fall', 'pg_passing', 'pg_serving'],
+          },
+        ],
+      ]);
+    });
+
+    it('a training program alone is a valid choice, and sends no league', async () => {
+      await openWithTraining();
+      await type('email', 'jordan@example.com');
+      training(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      expect(calls()[0][1]).toMatchObject({ leagueIds: [], programIds: ['pg_passing'] });
+    });
+
+    it('with nothing chosen, names the leagues and training programs on offer', async () => {
+      await openWithTraining();
+      await type('email', 'dana@example.com');
+      await submit();
+      expect(error('leagues')).toBe('Choose at least one league or training program.');
+      expect(page.querySelector('fieldset#training #leagues-error')).not.toBeNull();
+      expect(calls()).toEqual([]);
+    });
+
+    it('an org admin invite sends no training programs, whatever was checked before', async () => {
+      await openWithTraining();
+      training(1).click();
+      await chooseRole('role-admin');
+      await type('email', 'boss@example.com');
+      await submit();
+      expect(calls()[0][1]).toEqual({
+        organizationId: COASTAL.organizationId,
+        email: 'boss@example.com',
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+    });
+
+    it('"Invite someone else" returns the form with no training program chosen', async () => {
+      await openWithTraining();
+      await type('email', 'jordan@example.com');
+      training(1).click();
+      await o.harness.fixture.whenStable();
+      await submit();
+      o.convex.calls[0].resolve({ inviteId: 'inv_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
+      await o.flush();
+      [...page.querySelectorAll<HTMLButtonElement>('#invite button')]
+        .find((b) => b.textContent?.includes('Invite someone else'))!
+        .click();
+      await o.flush();
+      expect(training(1).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('names a member’s and a pending invite’s training programs after their other programs', async () => {
+      await open({
+        members: [
+          ...MEMBERS,
+          {
+            membershipId: 'mem_4',
+            name: 'Tomas Rivera',
+            email: 'tomas@example.com',
+            role: 'leagueOrganizer',
+            leagueNames: [],
+            campNames: ['Fall Break Camp'],
+            trainingNames: ['Tuesday Serving Clinic'],
+            isYou: false,
+          },
+        ],
+        pending: [
+          {
+            ...PENDING[0],
+            leagueNames: ['Wednesday Coed Slow-Pitch'],
+            trainingNames: ['Adult Passing Clinic'],
+          },
+        ],
+        leagues: LEAGUES,
+      });
+      expect(text(members()[3].querySelectorAll('p')[1])).toBe(
+        'League organizer for Fall Break Camp, Tuesday Serving Clinic',
+      );
+      expect(text(pending()[0].querySelectorAll('p')[0])).toBe(
+        'League organizer for Wednesday Coed Slow-Pitch, Adult Passing Clinic',
       );
     });
   });

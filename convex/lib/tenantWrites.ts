@@ -516,6 +516,42 @@ export async function insertDraftCamp(
   });
 }
 
+export interface NewTraining {
+  name: string;
+  slug: string;
+  sport: Sport;
+  locationIds: Id<'locations'>[];
+  coachName: string;
+  minimumAge?: number;
+  maximumAge?: number;
+}
+
+// The caller has checked access, the input, and that the slug is free. `programs` requires a division, which a training program has none of, so its row holds the sport's default and nothing reads it for a training program.
+export async function insertDraftTraining(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  training: NewTraining,
+): Promise<Id<'trainings'>> {
+  const programId = await ctx.db.insert('programs', {
+    organizationId,
+    type: 'training',
+    name: training.name,
+    sortName: sortName(training.name),
+    slug: training.slug,
+    sport: training.sport,
+    status: 'draft',
+    locationIds: training.locationIds,
+    ...defaultDivision(training.sport),
+  });
+  return ctx.db.insert('trainings', {
+    programId,
+    organizationId,
+    coachName: training.coachName,
+    ...(training.minimumAge !== undefined && { minimumAge: training.minimumAge }),
+    ...(training.maximumAge !== undefined && { maximumAge: training.maximumAge }),
+  });
+}
+
 export interface NewCampSession {
   name: string;
   startDate: string;

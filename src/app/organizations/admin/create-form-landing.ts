@@ -7,6 +7,7 @@ const CREATE_FORM_FRAGMENTS: Readonly<Record<string, string>> = {
   leagues: 'create-league',
   tournaments: 'create-tournament',
   camps: 'create-camp',
+  training: 'create-training',
 };
 
 /**

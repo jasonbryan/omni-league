@@ -36,14 +36,18 @@ async function programsOffered(
   ctx: Pick<QueryCtx, 'db'>,
   organizationId: Id<'organizations'>,
 ): Promise<ProgramOffers> {
-  const has = async (type: 'tournament' | 'camp') =>
+  const has = async (type: 'tournament' | 'camp' | 'training') =>
     (await ctx.db
       .query('programs')
       .withIndex('by_organizationId_and_type_and_status_and_sortName', (q) =>
         q.eq('organizationId', organizationId).eq('type', type),
       )
       .first()) !== null;
-  return { tournaments: await has('tournament'), camps: await has('camp') };
+  return {
+    tournaments: await has('tournament'),
+    camps: await has('camp'),
+    trainings: await has('training'),
+  };
 }
 
 function refuse(error: InviteInputError): never {
@@ -272,6 +276,7 @@ export const listPending = query({
       leagueNames: v.array(v.string()),
       tournamentNames: v.optional(v.array(v.string())),
       campNames: v.optional(v.array(v.string())),
+      trainingNames: v.optional(v.array(v.string())),
       expiresAt: v.number(),
     }),
   ),
@@ -301,6 +306,7 @@ export const listPending = query({
       const programs = await assignablePrograms(ctx, organizationId, invite.programIds);
       const tournamentNames = programsOfType(programs, 'tournament').map(({ name }) => name);
       const campNames = programsOfType(programs, 'camp').map(({ name }) => name);
+      const trainingNames = programsOfType(programs, 'training').map(({ name }) => name);
       rows.push({
         inviteId: invite._id,
         email: invite.email,
@@ -308,6 +314,7 @@ export const listPending = query({
         leagueNames,
         ...(tournamentNames.length > 0 && { tournamentNames }),
         ...(campNames.length > 0 && { campNames }),
+        ...(trainingNames.length > 0 && { trainingNames }),
         expiresAt: invite.expiresAt,
       });
     }
@@ -322,6 +329,7 @@ const inviteSummaryFields = {
   leagueNames: v.array(v.string()),
   tournamentNames: v.optional(v.array(v.string())),
   campNames: v.optional(v.array(v.string())),
+  trainingNames: v.optional(v.array(v.string())),
 };
 
 // `invalid` does not tell an unknown, revoked, expired, or accepted token apart.
@@ -343,6 +351,7 @@ async function summarise(
   programIds: Id<'programs'>[];
   tournaments: { name: string; slug: string }[];
   camps: { name: string; slug: string }[];
+  trainings: { name: string; slug: string }[];
 }> {
   const organization = await ctx.db.get('organizations', invite.organizationId);
   const leagueIds: Id<'leagues'>[] = [];
@@ -366,6 +375,7 @@ async function summarise(
     programIds: programs.map((program) => program._id),
     tournaments: programsOfType(programs, 'tournament').map(({ name, slug }) => ({ name, slug })),
     camps: programsOfType(programs, 'camp').map(({ name, slug }) => ({ name, slug })),
+    trainings: programsOfType(programs, 'training').map(({ name, slug }) => ({ name, slug })),
   };
 }
 
@@ -380,7 +390,10 @@ export const getByToken = query({
   handler: async (ctx, { token }) => {
     const invite = await findUsableInvite(ctx, token, Date.now());
     if (!invite) return { status: 'invalid' as const };
-    const { organizationName, leagueNames, tournaments, camps } = await summarise(ctx, invite);
+    const { organizationName, leagueNames, tournaments, camps, trainings } = await summarise(
+      ctx,
+      invite,
+    );
     return {
       status: 'valid' as const,
       organizationName,
@@ -388,6 +401,7 @@ export const getByToken = query({
       leagueNames,
       ...(tournaments.length > 0 && { tournamentNames: tournaments.map(({ name }) => name) }),
       ...(camps.length > 0 && { campNames: camps.map(({ name }) => name) }),
+      ...(trainings.length > 0 && { trainingNames: trainings.map(({ name }) => name) }),
       expiresAt: invite.expiresAt,
     };
   },
@@ -401,6 +415,7 @@ export const accept = mutation({
     leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
     tournaments: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
     camps: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
+    trainings: v.optional(v.array(v.object({ name: v.string(), slug: v.string() }))),
   }),
   handler: async (ctx, { token }) => {
     const user = await requireUser(ctx);
@@ -429,6 +444,7 @@ export const accept = mutation({
       programIds,
       tournaments,
       camps,
+      trainings,
     } = await summarise(ctx, invite);
     const isOrgAdmin = invite.role === 'orgAdmin';
     await insertMembership(
@@ -451,6 +467,10 @@ export const accept = mutation({
         tournaments,
       }),
       ...(camps.length > 0 && { campNames: camps.map(({ name }) => name), camps }),
+      ...(trainings.length > 0 && {
+        trainingNames: trainings.map(({ name }) => name),
+        trainings,
+      }),
     };
   },
 });

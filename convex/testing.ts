@@ -44,6 +44,7 @@ import {
   divisionSeedValidator,
   insertCampSession,
   insertDraftCamp,
+  insertDraftTraining,
   publishCamp,
   insertDraftTournament,
   insertLeague,
@@ -300,11 +301,19 @@ export const addLeagueOrganizer = internalMutation({
     leagueSlugs: v.array(v.string()),
     tournamentSlugs: v.optional(v.array(v.string())),
     campSlugs: v.optional(v.array(v.string())),
+    trainingSlugs: v.optional(v.array(v.string())),
   },
   returns: v.null(),
   handler: async (
     ctx,
-    { organizationSlug, email, leagueSlugs, tournamentSlugs = [], campSlugs = [] },
+    {
+      organizationSlug,
+      email,
+      leagueSlugs,
+      tournamentSlugs = [],
+      campSlugs = [],
+      trainingSlugs = [],
+    },
   ) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
@@ -325,6 +334,7 @@ export const addLeagueOrganizer = internalMutation({
     for (const [type, slugs] of [
       ['tournament', tournamentSlugs],
       ['camp', campSlugs],
+      ['training', trainingSlugs],
     ] as const) {
       for (const slug of slugs) {
         const program = await ctx.db
@@ -564,6 +574,40 @@ export const publishSeededCamp = internalMutation({
     if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
     await publishCamp(ctx, found.camp);
     return null;
+  },
+});
+
+export const seedTraining = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    sport: sportValidator,
+    locationNames: v.array(v.string()),
+    coachName: v.string(),
+    minimumAge: v.optional(v.number()),
+    maximumAge: v.optional(v.number()),
+  },
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, { organizationSlug, locationNames, ...training }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    if (await programSlugTaken(ctx, organization._id, training.slug)) {
+      throw new Error(`The web address ${JSON.stringify(training.slug)} is taken`);
+    }
+    const locationIds: Id<'locations'>[] = [];
+    for (const name of locationNames) {
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization._id).eq('name', name),
+        )
+        .first();
+      if (!location) throw new Error(`No location is named ${JSON.stringify(name)}`);
+      locationIds.push(location._id);
+    }
+    await insertDraftTraining(ctx, organization._id, { ...training, locationIds });
+    return { slug: training.slug };
   },
 });
 
@@ -1484,6 +1528,7 @@ export const addInvite = internalMutation({
     leagueNames: v.optional(v.array(v.string())),
     tournamentNames: v.optional(v.array(v.string())),
     campNames: v.optional(v.array(v.string())),
+    trainingNames: v.optional(v.array(v.string())),
     expiresAt: v.number(),
     token: v.optional(v.string()),
   },
@@ -1497,6 +1542,7 @@ export const addInvite = internalMutation({
       leagueNames = [],
       tournamentNames = [],
       campNames = [],
+      trainingNames = [],
       expiresAt,
       token,
     },
@@ -1524,6 +1570,7 @@ export const addInvite = internalMutation({
     for (const [type, names] of [
       ['tournament', tournamentNames],
       ['camp', campNames],
+      ['training', trainingNames],
     ] as const) {
       for (const name of names) {
         const program = (

@@ -109,6 +109,12 @@ export const appRoutes: Routes = [
         loadComponent: () => import('./organizations/admin/admin-camps').then((m) => m.AdminCamps),
       },
       {
+        path: 'training',
+        title: 'Training | Omni League',
+        loadComponent: () =>
+          import('./organizations/admin/admin-training').then((m) => m.AdminTraining),
+      },
+      {
         path: 'staff',
         title: 'Staff | Omni League',
         loadComponent: () => import('./organizations/admin/admin-staff').then((m) => m.AdminStaff),

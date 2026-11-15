@@ -42,6 +42,7 @@ const ROWS = {
   tournaments: 5,
   camps: 3,
   campSessions: 4,
+  trainings: 1,
 };
 const NONE = {
   organizations: 0,
@@ -63,6 +64,7 @@ const NO_ROWS = {
   tournaments: 0,
   camps: 0,
   campSessions: 0,
+  trainings: 0,
 };
 const FULL = { ...ROWS, backfilled: NONE };
 
@@ -76,6 +78,7 @@ async function counts(t: T) {
     tournaments: (await ctx.db.query('tournaments').collect()).length,
     camps: (await ctx.db.query('camps').collect()).length,
     campSessions: (await ctx.db.query('campSessions').collect()).length,
+    trainings: (await ctx.db.query('trainings').collect()).length,
   }));
 }
 
@@ -688,6 +691,7 @@ describe('seed:demo', () => {
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
+      trainings: ROWS.trainings,
       backfilled: NONE,
     });
 
@@ -823,6 +827,7 @@ describe('seed:demo', () => {
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
+      trainings: ROWS.trainings,
     });
   });
 
@@ -851,6 +856,7 @@ describe('seed:demo', () => {
       tournaments: ROWS.tournaments,
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
+      trainings: ROWS.trainings,
       backfilled: {
         organizations: 2,
         locations: 3,
@@ -1400,6 +1406,70 @@ describe('seed:demo camps', () => {
     expect((await t.mutation(internal.seed.insertDemoData, {})).camps).toBe(2);
     const { camps } = await campRows(t);
     expect(camps).toHaveLength(2);
+  });
+});
+
+describe('seed:demo training', () => {
+  async function trainingRows(t: T) {
+    return t.run(async (ctx) => {
+      const organization = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'gulf-coast-sport-social'))
+        .unique();
+      const location = await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization!._id).eq('name', 'North Beach Sand Courts'),
+        )
+        .unique();
+      const trainings = await ctx.db.query('trainings').collect();
+      const programs = [];
+      for (const row of trainings) programs.push((await ctx.db.get('programs', row.programId))!);
+      return { organizationId: organization!._id, location: location!._id, trainings, programs };
+    });
+  }
+
+  test('adds the draft Tuesday Serving Clinic, coached by Dana Ruiz with no ages, to Gulf Coast Sport & Social, and a second run adds none', async () => {
+    const t = setup();
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(1);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
+    const { organizationId, location, trainings, programs } = await trainingRows(t);
+    expect(trainings).toHaveLength(1);
+    expect(programs[0]).toMatchObject({
+      organizationId,
+      type: 'training',
+      name: 'Tuesday Serving Clinic',
+      slug: 'tuesday-serving-clinic',
+      sport: 'beachVolleyball',
+      status: 'draft',
+      locationIds: [location],
+    });
+    expect(trainings[0]).toMatchObject({
+      organizationId,
+      programId: programs[0]?._id,
+      coachName: 'Dana Ruiz',
+    });
+    expect(trainings[0]).not.toHaveProperty('minimumAge');
+    expect(trainings[0]).not.toHaveProperty('maximumAge');
+  });
+
+  test('adds none where a program already holds the web address', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
+        locations: [{ name: 'North Beach Sand Courts', address: '1 Sand Ln' }],
+        leagues: [
+          {
+            name: 'Tuesday Serving Clinic',
+            sport: 'beachVolleyball',
+            locations: ['North Beach Sand Courts'],
+            division: defaultDivision('beachVolleyball'),
+          },
+        ],
+      });
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
   });
 });
 

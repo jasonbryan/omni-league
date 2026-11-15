@@ -139,6 +139,7 @@ test.describe('the admin area: entry and navigation', () => {
         /^Leagues\d*$/,
         'Tournaments',
         'Camps',
+        'Training',
         /^Locations\d*$/,
         /^Staff\d*$/,
         'Details',
