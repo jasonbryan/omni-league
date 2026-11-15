@@ -403,14 +403,27 @@ describe('PublicLeaguePage populated', () => {
   });
 
   describe('the links to a season page', () => {
-    const namesOf = (season: { slug: string; name: string }) => ({
+    const namesOf = (season: {
+      slug: string;
+      name: string;
+      startDate: string;
+      registrationDeadline: string;
+    }) => ({
       organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
       league: {
         slug: 'sunday-reverse-coed-4s',
         name: 'Sunday Reverse Coed 4s',
         sportName: 'Beach volleyball',
       },
-      season: { slug: season.slug, name: season.name },
+      season: {
+        slug: season.slug,
+        name: season.name,
+        registration: {
+          deadline: season.registrationDeadline,
+          startDate: season.startDate,
+          isFull: false,
+        },
+      },
     });
     const stateOf = (anchor: Element | null | undefined) =>
       routerLinkState(harness.fixture, anchor);
@@ -625,6 +638,28 @@ describe('PublicLeaguePage with a full season whose registration is open', () =>
     expect(statusOf(full)).toEqual(['Full', 'waitlist open']);
     expectBadge(room.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
     expectBadge(full.querySelector('[data-slot="badge"]'), 'outline', 'fit');
+  });
+
+  it('gives the full season’s card and row links the full flag, and the season with room false', async () => {
+    const harness = await open();
+    emit(leagueQueryResults({ league: fullLeague, seasons: fullRows }));
+    await settle(harness);
+    const flag = (anchor: Element | null | undefined) =>
+      (
+        routerLinkState(harness.fixture, anchor) as {
+          season: { registration: { isFull: boolean } };
+        }
+      ).season.registration.isFull;
+
+    expect(flag(card(harness)?.querySelector('h3 a'))).toBe(true);
+    expect(flag(card(harness)?.querySelector('a[data-slot="button"]'))).toBe(true);
+    expect(rows(harness).map((row) => flag(row.querySelector('h3 a')))).toEqual([
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 
   it('keeps Closes and no badge on the card of an open season with room', async () => {
