@@ -5,7 +5,7 @@ import { HlmTableImports } from './index';
 @Component({
   imports: [HlmTableImports],
   template: `
-    <div hlmTableContainer>
+    <div hlmTableContainer aria-label="Standings">
       <table hlmTable>
         <caption hlmCaption>
           Standings
@@ -47,5 +47,12 @@ describe('HlmTable', () => {
   it('closes each row with a border', () => {
     const root = render();
     expect([...root.querySelector('tr')!.classList]).toContain('border-b');
+  });
+
+  it('makes the container a named region that takes keyboard focus, so it can scroll', () => {
+    const container = render().querySelector<HTMLElement>('div')!;
+    expect(container.getAttribute('role')).toBe('region');
+    expect(container.getAttribute('aria-label')).toBe('Standings');
+    expect(container.tabIndex).toBe(0);
   });
 });

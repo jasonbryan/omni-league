@@ -18,7 +18,11 @@ const NUMBER_CELL = 'text-center tabular-nums whitespace-nowrap';
           <section [attr.aria-labelledby]="'pool-' + pool.pool" data-testid="pool" class="mt-6">
             <h3 [id]="'pool-' + pool.pool" class="text-lg font-semibold">Pool {{ pool.pool }}</h3>
             @if (hasResult(pool)) {
-              <div hlmTableContainer class="mt-3">
+              <div
+                hlmTableContainer
+                class="mt-3"
+                [attr.aria-label]="'Pool ' + pool.pool + ' standings'"
+              >
                 <table hlmTable data-testid="standings">
                   <caption hlmCaption class="sr-only">
                     Pool

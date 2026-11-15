@@ -64,6 +64,13 @@ describe('PublicPools', () => {
   });
 
   describe('the standings table', () => {
+    it('puts the table in a focusable region named for the pool, so a table that scrolls takes the keyboard', () => {
+      const container = create([POOL_A]).querySelector('[data-testid="pool"] [role="region"]')!;
+      expect(container.getAttribute('aria-label')).toBe('Pool A standings');
+      expect(container.getAttribute('tabindex')).toBe('0');
+      expect(container.querySelector('table')).not.toBeNull();
+    });
+
     it('has a caption naming the pool', () => {
       const table = create([POOL_A]).querySelector('table')!;
       expect(text(table.querySelector('caption'))).toBe('Pool A standings');

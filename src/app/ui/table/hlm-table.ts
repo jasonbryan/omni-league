@@ -3,7 +3,7 @@ import { Directive } from '@angular/core';
 @Directive({
   selector: 'div[hlmTableContainer]',
   exportAs: 'hlmTableContainer',
-  host: { class: 'relative w-full overflow-x-auto' },
+  host: { role: 'region', tabindex: '0', class: 'relative w-full overflow-x-auto' },
 })
 export class HlmTableContainer {}
 

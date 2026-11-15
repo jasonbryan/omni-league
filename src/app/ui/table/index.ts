@@ -2,6 +2,7 @@
 // (`libs/registry/src/styles/style-nova.css`) inlined in place of its `spartan-table-*` names.
 // Local changes, to keep when re-copying from upstream:
 // - no `hlmTFoot`, which no table uses;
+// - the container is a focusable `region` (`role="region"` and `tabindex="0"`) that the caller names with `aria-label`, because a container that scrolls must take keyboard focus (axe `scrollable-region-focusable`);
 // - static host classes, so a chunk that uses them carries no class-merging code, in place of `classes()`;
 // - the row has no hover colour, selected colour, or expanded colour, because a table row here is not interactive, and the head and cell drop the checkbox padding rule;
 // - no `data-slot` attributes, which nothing here selects on, and none of the classes the app's stylesheet does not already carry other than the container's `overflow-x-auto`, to keep the initial stylesheet from growing:

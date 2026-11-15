@@ -745,6 +745,17 @@ test.describe('public tournament page: pools', () => {
     await container.evaluate((element) => element.scrollTo({ left: element.scrollWidth }));
     await expect(table.locator('thead th').last()).toBeInViewport();
     await expectNoSidewaysScroll(page);
+    await container.evaluate((element) => element.scrollTo({ left: 0 }));
+    await expect(container).toHaveAttribute('role', 'region');
+    await expect(container).toHaveAccessibleName('Pool A standings');
+    await container.focus();
+    await expect(container).toBeFocused();
+    expect(await container.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
+      'none',
+    );
+    await page.keyboard.press('End');
+    await expect.poll(() => container.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await expectNoSidewaysScroll(page);
     await screenshot(page, testInfo, 'public-pools-soccer-320');
     await expectAccessible(page);
   });
