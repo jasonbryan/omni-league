@@ -1,21 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
   lucideCalendarDays,
+  lucideCircleCheck,
   lucideClock,
   lucideMapPin,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { campAgesLabel } from '../../../../convex/lib/campInput';
 import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
+import { registrationIsOpen } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { HlmBadge } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
+import { OUTLINE_BUTTON } from '../../ui/button/button-classes';
 import { HlmCard } from '../../ui/card';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
+import { registerCampPath } from '../register-camp/register-camp-path';
 import {
   CRUMB_LINK,
   CRUMB_LIST,
@@ -35,11 +40,12 @@ type PublicCampSession = PublicCampData['sessions'][number];
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-camp-content',
-  imports: [HlmBadge, HlmBreadcrumbImports, HlmCard, NgIcon, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, HlmCard, NgIcon, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideCalendarClock,
       lucideCalendarDays,
+      lucideCircleCheck,
       lucideClock,
       lucideMapPin,
       lucideUsers,
@@ -124,6 +130,29 @@ type PublicCampSession = PublicCampData['sessions'][number];
                       }}</time></span
                     >
                   </p>
+                  @if (session.registered) {
+                    <p
+                      data-slot="session-registered"
+                      role="status"
+                      class="mt-3 flex items-center gap-1.5 text-sm font-medium"
+                    >
+                      <ng-icon
+                        name="lucideCircleCheck"
+                        class="shrink-0 text-base"
+                        aria-hidden="true"
+                      />You're registered
+                    </p>
+                  } @else if (session.sessionId; as sessionId) {
+                    @if (session.open) {
+                      <a
+                        [routerLink]="registerPath()"
+                        [queryParams]="{ session: sessionId }"
+                        data-slot="button"
+                        [class]="registerButton + ' mt-3'"
+                        >Register<span class="sr-only"> for {{ session.name }}</span></a
+                      >
+                    }
+                  }
                 </li>
               }
             </ul>
@@ -169,7 +198,10 @@ export class PublicCampContent {
   readonly savedAt = input<number | undefined>(undefined);
   /** The viewer's clock, so each session's status follows its deadline after hydration. */
   readonly now = input.required<number>();
+  /** The sessions the viewer holds a place in, which only a signed-in viewer has. */
+  readonly registeredSessionIds = input<readonly string[]>([]);
 
+  protected readonly registerButton = OUTLINE_BUTTON;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -183,7 +215,13 @@ export class PublicCampContent {
       dates: seasonDateParts(session.startDate, session.endDate),
       times: campSessionTimes(session.dailyStartTime, session.dailyEndTime),
       closes: formatCalendarDate(session.registrationDeadline),
+      registered:
+        session.sessionId !== undefined && this.registeredSessionIds().includes(session.sessionId),
+      open: session.placesLeft > 0 && registrationIsOpen(session, this.now()),
     })),
+  );
+  protected readonly registerPath = computed(() =>
+    registerCampPath(this.camp().organization.slug, this.camp().slug),
   );
   protected readonly locationsLabel = computed(() =>
     this.camp().locations.length === 1 ? 'Location' : 'Locations',

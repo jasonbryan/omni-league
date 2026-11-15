@@ -324,7 +324,7 @@ describe('camps.getPublicPage', () => {
     return first;
   }
 
-  test('gives a signed-out caller the published camp with its sessions in date order, the places left, and no id', async () => {
+  test('gives a signed-out caller the published camp with its sessions in date order, the places left, and an id for each session', async () => {
     const s = await setup();
     await published(s);
     expect(await s.t.query(api.camps.getPublicPage, slugs)).toEqual({
@@ -340,6 +340,7 @@ describe('camps.getPublicPage', () => {
       ],
       sessions: [
         {
+          sessionId: expect.any(String) as string,
           name: 'Week 1',
           startDate: '2027-07-05',
           endDate: '2027-07-09',
@@ -349,6 +350,7 @@ describe('camps.getPublicPage', () => {
           registrationDeadline: '2027-07-01',
         },
         {
+          sessionId: expect.any(String) as string,
           name: 'Week 2',
           startDate: '2027-07-12',
           endDate: '2027-07-16',
@@ -358,6 +360,7 @@ describe('camps.getPublicPage', () => {
           registrationDeadline: '2027-07-08',
         },
         {
+          sessionId: expect.any(String) as string,
           name: 'Week 3',
           startDate: '2027-07-19',
           endDate: '2027-07-23',

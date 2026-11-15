@@ -57,6 +57,13 @@ export const appRoutes: Routes = [
       import('./organizations/admin/tournament-page').then((m) => m.TournamentPage),
   },
   {
+    // No guard: an unknown camp shows the not-found view before any sign-in, and the page sends a signed-out visitor to sign in. Ahead of the admin area, whose `organizations/:slug` is a shorter prefix of the same URL space.
+    path: 'organizations/:orgSlug/camps/:campSlug/register',
+    title: 'Register for a camp session | Omni League',
+    loadComponent: () =>
+      import('./organizations/register-camp/register-camp-page').then((m) => m.RegisterCampPage),
+  },
+  {
     // Outside the admin area, which is for org admins only: an organizer assigned to the camp opens it too.
     path: 'organizations/:orgSlug/camps/:campSlug',
     canActivate: [requireSignedIn],

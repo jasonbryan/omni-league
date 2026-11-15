@@ -277,8 +277,10 @@ export type PublicTournamentPage = Infer<typeof publicTournamentPageValidator>;
 
 export const getTournamentPublicPageReturns = v.union(v.null(), publicTournamentPageValidator);
 
-// Holds no ids and no registrant data: the page is cached and saved offline. `placesLeft` is a count, never the registrations behind it.
+// Holds no registrant data: the page is cached and saved offline. `placesLeft` is a count, never the registrations behind it.
+// `sessionId` is optional so a copy saved before it existed stays valid, and its sessions simply have no Register link.
 const publicCampSessionValidator = v.object({
+  sessionId: v.optional(v.id('campSessions')),
   name: v.string(),
   startDate: v.string(),
   endDate: v.string(),
