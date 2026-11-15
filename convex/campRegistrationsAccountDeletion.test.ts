@@ -241,6 +241,94 @@ describe('deleting an account removes its camp registrations', () => {
     expect((await list()).map(({ name }) => name)).toEqual(['other']);
   });
 
+  test.each([99, 100, 101, 200, 201])(
+    'deletes all %i registrations of one account in one session and leaves the count at the other user’s place',
+    async (rows) => {
+      const s = await setup();
+      const sessionId = await s.t.run(async (ctx) => {
+        const camp = (await ctx.db.get('camps', s.campId))!;
+        return insertCampSession(ctx, camp, { name: 'Bulk', ...WEEK, places: 500 });
+      });
+      for (let i = 0; i < rows; i++) {
+        await register(s, sessionId, s.users.guardian, MINOR(`Minor ${i}`));
+      }
+      await register(s, sessionId, s.users.other);
+      expect(await countOf(s, sessionId)).toBe(rows + 1);
+      await deleteAccount(s, 'guardian');
+      expect(await registrationsOf(s, s.users.guardian)).toEqual([]);
+      expect(await countOf(s, sessionId)).toBe(1);
+      expect(await registrationsOf(s, s.users.other)).toHaveLength(1);
+    },
+  );
+
+  test('skips gone sessions in the middle of a run of more than one batch and fixes the rest', async () => {
+    const s = await setup();
+    const sessionIds = await s.t.run(async (ctx) => {
+      const camp = (await ctx.db.get('camps', s.campId))!;
+      const ids: Id<'campSessions'>[] = [];
+      for (const name of ['Gone', 'Zero', 'Live']) {
+        ids.push(await insertCampSession(ctx, camp, { name, ...WEEK, places: 200 }));
+      }
+      return ids;
+    });
+    const [gone, zero, live] = sessionIds as [
+      Id<'campSessions'>,
+      Id<'campSessions'>,
+      Id<'campSessions'>,
+    ];
+    for (const sessionId of [gone, zero, live]) {
+      for (let i = 0; i < 60; i++) {
+        await register(s, sessionId, s.users.guardian, MINOR(`Minor ${i}`));
+      }
+    }
+    await s.t.run(async (ctx) => {
+      await ctx.db.delete('campSessions', gone);
+      await ctx.db.patch('campSessions', zero, { registeredCount: 0 });
+    });
+    await deleteAccount(s, 'guardian');
+    expect(await registrationsOf(s, s.users.guardian)).toEqual([]);
+    expect(await s.t.run((ctx) => ctx.db.get('users', s.users.guardian))).toBeNull();
+    expect(await s.t.run((ctx) => ctx.db.get('campSessions', gone))).toBeNull();
+    expect(await countOf(s, zero)).toBe(0);
+    expect(await countOf(s, live)).toBe(0);
+  });
+
+  test('does not touch a session or an account that holds no registration of the deleted account', async () => {
+    const s = await setup();
+    await register(s, s.sessions.s2, s.users.other);
+    await register(s, s.sessions.s3, s.users.guardian, MINOR('Maya R.'));
+    await deleteAccount(s, 'adult');
+    expect(await countOf(s, s.sessions.s2)).toBe(1);
+    expect(await countOf(s, s.sessions.s3)).toBe(1);
+    expect(await registrationsOf(s, s.users.other)).toHaveLength(1);
+    expect(await registrationsOf(s, s.users.guardian)).toHaveLength(1);
+  });
+
+  test('deletes the account of a guardian with several children and the organizer list drops each child', async () => {
+    const s = await setup();
+    const children = ['Maya R.', 'Noa R.', 'Ola R.'];
+    for (const name of children) await register(s, s.sessions.s2, s.users.guardian, MINOR(name));
+    await register(s, s.sessions.s2, s.users.guardian);
+    await register(s, s.sessions.s2, s.users.other);
+    const list = () =>
+      s.asAdmin.query(api.campRegistrations.listForSession, { sessionId: s.sessions.s2 });
+    expect(await list()).toHaveLength(5);
+    await deleteAccount(s, 'guardian');
+    const after = await list();
+    expect(after.map(({ name }) => name)).toEqual(['other']);
+    expect(await countOf(s, s.sessions.s2)).toBe(1);
+  });
+
+  test('keeps a count at 0 when several rows of one session meet a count of 1', async () => {
+    const s = await setup();
+    for (const name of ['Maya R.', 'Noa R.', 'Ola R.']) {
+      await register(s, s.sessions.s2, s.users.guardian, MINOR(name));
+    }
+    await s.t.run((ctx) => ctx.db.patch('campSessions', s.sessions.s2, { registeredCount: 1 }));
+    await deleteAccount(s, 'guardian');
+    expect(await countOf(s, s.sessions.s2)).toBe(0);
+  });
+
   test('leaves registrations alone when no users row matches', async () => {
     const s = await setup();
     await register(s, s.sessions.s, s.users.adult);
