@@ -168,8 +168,21 @@ describe('PublicCampPage registration, signed in', () => {
     expect(text(registered(2))).toBe("You're registered");
   });
 
-  it('marks the line as a status for a screen reader', async () => {
+  it('is a plain line, which announces nothing on load', async () => {
     await emit(MINE, [WEEK_1]);
-    expect(registered(0)?.getAttribute('role')).toBe('status');
+    expect(registered(0)?.tagName).toBe('P');
+    expect(registered(0)?.hasAttribute('role')).toBe(false);
+  });
+
+  it('takes the box of the Register button it replaces, so the rows below do not move', async () => {
+    const boxClasses = (element: Element | null | undefined) =>
+      ['mt-3', 'h-9'].filter((name) => element?.classList.contains(name));
+    const button = registerLink(0);
+    expect(boxClasses(button)).toEqual(['mt-3', 'h-9']);
+    await emit(MINE, [WEEK_1]);
+    expect(boxClasses(registered(0))).toEqual(['mt-3', 'h-9']);
+    expect(registered(0)?.classList.contains('pointer-coarse:min-h-11')).toBe(true);
+    expect(registered(0)?.classList.contains('flex')).toBe(true);
+    expect(registered(0)?.classList.contains('items-center')).toBe(true);
   });
 });

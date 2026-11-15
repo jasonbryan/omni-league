@@ -133,8 +133,7 @@ type PublicCampSession = PublicCampData['sessions'][number];
                   @if (session.registered) {
                     <p
                       data-slot="session-registered"
-                      role="status"
-                      class="mt-3 flex items-center gap-1.5 text-sm font-medium"
+                      class="mt-3 flex h-9 items-center gap-1.5 text-sm font-medium pointer-coarse:min-h-11"
                     >
                       <ng-icon
                         name="lucideCircleCheck"
@@ -198,7 +197,6 @@ export class PublicCampContent {
   readonly savedAt = input<number | undefined>(undefined);
   /** The viewer's clock, so each session's status follows its deadline after hydration. */
   readonly now = input.required<number>();
-  /** The sessions the viewer holds a place in, which only a signed-in viewer has. */
   readonly registeredSessionIds = input<readonly string[]>([]);
 
   protected readonly registerButton = OUTLINE_BUTTON;

@@ -284,10 +284,7 @@ export default defineSchema({
     participantKey: v.string(),
     ageConfirmedAt: v.optional(v.number()),
     createdAt: v.number(),
-  })
-    .index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey'])
-    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- lists a session's registrations in the order they were made, which the prefix index does not.
-    .index('by_sessionId', ['sessionId']),
+  }).index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

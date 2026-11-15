@@ -452,6 +452,48 @@ describe('campRegistrations.getForRegistration', () => {
   });
 });
 
+describe('a guardian who registered only a minor', () => {
+  async function registerMinorOnly(s: Setup) {
+    await s.t.run(async (ctx) => {
+      const session = (await ctx.db.get('campSessions', week1(s)))!;
+      await ctx.db.insert('campRegistrations', {
+        sessionId: session._id,
+        campId: session.campId,
+        organizationId: session.organizationId,
+        userId: s.users['alice'],
+        participant: { kind: 'minor', minorName: 'Ava Lane' },
+        participantKey: 'minor:ava lane',
+        createdAt: NOW,
+      });
+      await ctx.db.patch('campSessions', session._id, { registeredCount: 1 });
+    });
+  }
+
+  test('is not registered themself, on the register page or the camp page', async () => {
+    const s = await setup();
+    await registerMinorOnly(s);
+    const answer = await s.alice.query(api.campRegistrations.getForRegistration, {
+      orgSlug: 'org-a',
+      campSlug: 'adult-beach-skills-camp',
+      sessionId: week1(s),
+    });
+    expect(answer?.registered).toBe(false);
+    expect(
+      await s.alice.query(api.campRegistrations.listMineForCamp, {
+        orgSlug: 'org-a',
+        campSlug: 'adult-beach-skills-camp',
+      }),
+    ).toEqual([]);
+  });
+
+  test('can still register themself', async () => {
+    const s = await setup();
+    await registerMinorOnly(s);
+    await s.alice.mutation(api.campRegistrations.register, args(week1(s)));
+    expect(await registeredCount(s, week1(s))).toBe(2);
+  });
+});
+
 describe('campRegistrations.listMineForCamp', () => {
   const list = (caller: Caller | Setup['t'], campSlug = 'adult-beach-skills-camp') =>
     caller.query(api.campRegistrations.listMineForCamp, { orgSlug: 'org-a', campSlug });

@@ -131,7 +131,7 @@ export const getForRegistration = query({
       ? await ctx.db
           .query('campRegistrations')
           .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
-            q.eq('sessionId', session._id).eq('userId', user._id),
+            q.eq('sessionId', session._id).eq('userId', user._id).eq('participantKey', SELF_KEY),
           )
           .first()
       : null;
@@ -152,7 +152,6 @@ export const getForRegistration = query({
   },
 });
 
-/** The camp's sessions the caller holds a place in, for the "You're registered" line on the camp page. */
 // eslint-disable-next-line @convex-dev/require-access-control -- reads only the caller's own rows, and a signed-out caller gets an empty list.
 export const listMineForCamp = query({
   args: { orgSlug: v.string(), campSlug: v.string() },
@@ -173,7 +172,7 @@ export const listMineForCamp = query({
       const registration = await ctx.db
         .query('campRegistrations')
         .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
-          q.eq('sessionId', session._id).eq('userId', user._id),
+          q.eq('sessionId', session._id).eq('userId', user._id).eq('participantKey', SELF_KEY),
         )
         .first();
       if (registration) held.push(session._id);

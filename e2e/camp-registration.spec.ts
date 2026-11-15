@@ -124,7 +124,7 @@ test.describe('register for a camp session', () => {
     await expectAccessible(page);
     await screenshot(page, testInfo, '355-camp-registered');
 
-    // The register page was replaced in history, so Back leaves the camp.
+    // The register page was replaced in history, so Back does not return to it.
     await page.goBack();
     expect(page.url()).not.toContain('/register');
 
