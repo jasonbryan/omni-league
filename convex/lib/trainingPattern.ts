@@ -4,6 +4,9 @@ import { formatDailyTime, isDailyTime } from './campSessionInput';
 import { addCalendarDays } from './registration';
 import { formatCalendarDate, isCalendarDate } from './seasonInput';
 
+export const MIN_TRAINING_YEAR = 1000;
+export const MAX_TRAINING_YEAR = 9999;
+
 export const MIN_TRAINING_WEEKS = 1;
 export const MAX_TRAINING_WEEKS = 52;
 
@@ -60,12 +63,14 @@ export const TRAINING_PATTERN_FIELDS: readonly TrainingPatternField[] = [
 
 export type TrainingPatternCode =
   | 'weekdayEmpty'
+  | 'weekdayInvalid'
   | 'startTimeEmpty'
   | 'endTimeEmpty'
   | 'timeInvalid'
   | 'endTimeNotAfterStart'
   | 'dateEmpty'
   | 'dateInvalid'
+  | 'lastClassTooLate'
   | 'firstDateOffWeekday'
   | 'deadlineAfterFirstClass'
   | 'weeksEmpty'
@@ -85,6 +90,7 @@ const PLACES_RANGE = `from ${MIN_TRAINING_CLASS_PLACES} to ${MAX_TRAINING_CLASS_
 
 export const TRAINING_PATTERN_MESSAGES = {
   weekdayEmpty: 'Choose a weekday.',
+  weekdayInvalid: 'Choose a weekday from Sunday to Saturday.',
   startTimeEmpty: 'Enter the start time.',
   endTimeEmpty: 'Enter the end time.',
   timeInvalid: 'Enter a time such as 6:00 PM.',
@@ -93,6 +99,8 @@ export const TRAINING_PATTERN_MESSAGES = {
   firstDateEmpty: 'Enter the date of the first class.',
   deadlineEmpty: 'Enter the series registration deadline.',
   dateInvalid: 'Enter a real date.',
+  yearOutOfRange: `Enter a date in a year from ${MIN_TRAINING_YEAR} to ${MAX_TRAINING_YEAR}.`,
+  lastClassTooLate: `The last class would fall after the year ${MAX_TRAINING_YEAR}. Use fewer weeks or an earlier first date.`,
   firstDateOffWeekday: (weekday: number, firstDate: string) =>
     `The first class must be on a ${WEEKDAY_NAMES[weekday]}. ${formatCalendarDate(firstDate)} is a ${WEEKDAY_NAMES[weekdayOf(firstDate)]}.`,
   deadlineAfterFirstClass: (firstDate: string) =>
@@ -121,10 +129,23 @@ export interface TrainingPatternValues {
 
 type Errors = Partial<Record<TrainingPatternField, TrainingPatternError>>;
 
+/** The year a series ends in, counted past 9999 too, which `addCalendarDays` writes as `+010000-…`. */
+function lastClassYear(firstDate: string, weeks: number): number {
+  const [year, month, day] = firstDate.split('-').map(Number) as [number, number, number];
+  return utcDate(year, month, day + (weeks - 1) * 7).getUTCFullYear();
+}
+
+// `Date.UTC` reads the years 0 to 99 as 1900 to 1999, which `setUTCFullYear` does not.
+function utcDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
 /** The weekday of a stored calendar date, read as text so a browser in any time zone agrees. */
 export function weekdayOf(date: string): number {
   const [year, month, day] = date.split('-').map(Number) as [number, number, number];
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return utcDate(year, month, day).getUTCDay();
 }
 
 export function classDates(firstDate: string, weeks: number): string[] {
@@ -133,6 +154,10 @@ export function classDates(firstDate: string, weeks: number): string[] {
 
 export function trainingClassTimes(startTime: string, endTime: string): string {
   return `${formatDailyTime(startTime)} to ${formatDailyTime(endTime)}`;
+}
+
+function isWeekday(weekday: number | undefined): weekday is number {
+  return weekday !== undefined && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6;
 }
 
 function timeErrors({ startTime, endTime }: TrainingPatternValues): Errors {
@@ -176,6 +201,12 @@ function dateErrors({ weekday, firstDate, registrationDeadline }: TrainingPatter
     const value = dates[field];
     if (value === '') {
       errors[field] = { field, code: 'dateEmpty', message: empty[field] };
+    } else if (isCalendarDate(value) && Number(value.slice(0, 4)) < MIN_TRAINING_YEAR) {
+      errors[field] = {
+        field,
+        code: 'dateInvalid',
+        message: TRAINING_PATTERN_MESSAGES.yearOutOfRange,
+      };
     } else if (isCalendarDate(value)) {
       real[field] = true;
     } else {
@@ -186,7 +217,7 @@ function dateErrors({ weekday, firstDate, registrationDeadline }: TrainingPatter
       };
     }
   }
-  if (real.firstDate && weekday !== undefined && weekdayOf(firstDate) !== weekday) {
+  if (real.firstDate && isWeekday(weekday) && weekdayOf(firstDate) !== weekday) {
     errors.firstDate = {
       field: 'firstDate',
       code: 'firstDateOffWeekday',
@@ -229,10 +260,28 @@ export function checkTrainingPattern(values: TrainingPatternValues): Errors {
       code: 'weekdayEmpty',
       message: TRAINING_PATTERN_MESSAGES.weekdayEmpty,
     };
+  } else if (!isWeekday(values.weekday)) {
+    errors.weekday = {
+      field: 'weekday',
+      code: 'weekdayInvalid',
+      message: TRAINING_PATTERN_MESSAGES.weekdayInvalid,
+    };
   }
   Object.assign(errors, timeErrors(values), dateErrors(values));
   const weeks = countError('weeks', values.weeks);
   if (weeks) errors.weeks = weeks;
+  else if (
+    values.weeks !== undefined &&
+    isCalendarDate(values.firstDate) &&
+    Number(values.firstDate.slice(0, 4)) >= MIN_TRAINING_YEAR &&
+    lastClassYear(values.firstDate, values.weeks) > MAX_TRAINING_YEAR
+  ) {
+    errors.weeks = {
+      field: 'weeks',
+      code: 'lastClassTooLate',
+      message: TRAINING_PATTERN_MESSAGES.lastClassTooLate,
+    };
+  }
   const places = countError('placesPerClass', values.placesPerClass);
   if (places) errors.placesPerClass = places;
   return errors;

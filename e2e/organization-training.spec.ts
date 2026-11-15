@@ -453,8 +453,8 @@ test.describe('Training: an invited league organizer', () => {
   });
 });
 
-// The first Tuesday on or after two weeks from today, so the registration deadline can be earlier.
-function firstTuesday(): string {
+// Two weeks out, so the registration deadline can fall before the first class.
+function firstTuesdayTwoWeeksOut(): string {
   for (let days = 14; ; days++) {
     const date = dateFromToday(days);
     if (new Date(`${date}T00:00:00Z`).getUTCDay() === 2) return date;
@@ -507,7 +507,7 @@ test.describe('Training: scheduling the classes', () => {
     await screenshot(page, testInfo, 'training-page-empty');
     await expectAccessible(page);
 
-    const first = firstTuesday();
+    const first = firstTuesdayTwoWeeksOut();
     await fillPattern(page, first);
     await screenshot(page, testInfo, 'training-page-filled');
     await scheduleSubmit(page).click();
@@ -578,7 +578,7 @@ test.describe('Training: scheduling the classes', () => {
   }, testInfo) => {
     const { path } = await openTraining(page);
     await page.goto(path);
-    await fillPattern(page, firstTuesday());
+    await fillPattern(page, firstTuesdayTwoWeeksOut());
     await scheduleSubmit(page).click();
     await expect(classRows(page)).toHaveCount(8);
 
@@ -642,7 +642,7 @@ test.describe('Training: the management page states', () => {
   }, testInfo) => {
     const { path } = await openTraining(page);
     await page.goto(path);
-    await fillPattern(page, firstTuesday());
+    await fillPattern(page, firstTuesdayTwoWeeksOut());
     await context.setOffline(true);
     await expect(scheduleSubmit(page)).toHaveAttribute('aria-disabled', 'true');
     // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press.
@@ -666,7 +666,7 @@ test.describe('Training: a schedule the server fails', () => {
     const { path } = await openTraining(page);
     await failMutation(page, 'trainingClasses:schedule');
     await page.goto(path);
-    await fillPattern(page, firstTuesday());
+    await fillPattern(page, firstTuesdayTwoWeeksOut());
     await scheduleSubmit(page).click();
     await expect(page.locator('#schedule form').getByRole('alert')).toContainText(
       'The classes could not be scheduled.',

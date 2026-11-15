@@ -24,7 +24,7 @@ import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import { findTrainingBySlugs } from './lib/trainingLookup';
-import { weekdayOf } from './lib/trainingPattern';
+import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
@@ -845,6 +845,7 @@ interface DemoTraining {
   locations: readonly string[];
   coachName: string;
   classes: {
+    weekday: number;
     firstDaysFromRun: number;
     deadlineDaysFromRun: number;
     startTime: string;
@@ -863,6 +864,7 @@ const DEMO_TRAININGS: readonly DemoTraining[] = [
     locations: ['North Beach Sand Courts'],
     coachName: 'Dana Ruiz',
     classes: {
+      weekday: WEEKDAY_NAMES.indexOf('Tuesday'),
       firstDaysFromRun: 14,
       deadlineDaysFromRun: 7,
       startTime: '18:00',
@@ -898,9 +900,10 @@ async function ensureTrainingClasses(
   if (!organization) return 0;
   const found = await findTrainingBySlugs(ctx, organization, demo.slug);
   if (!found || found.training.pattern !== undefined) return 0;
-  const firstDate = addCalendarDays(today, demo.classes.firstDaysFromRun);
+  const earliest = addCalendarDays(today, demo.classes.firstDaysFromRun);
+  const firstDate = addCalendarDays(earliest, (demo.classes.weekday - weekdayOf(earliest) + 7) % 7);
   return insertTrainingClasses(ctx, found.training, {
-    weekday: weekdayOf(firstDate),
+    weekday: demo.classes.weekday,
     startTime: demo.classes.startTime,
     endTime: demo.classes.endTime,
     firstDate,

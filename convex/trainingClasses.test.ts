@@ -6,7 +6,7 @@ import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { isForbidden } from './lib/forbidden';
 import { insertDraftTraining, insertTenant } from './lib/tenantWrites';
-import { TRAINING_PATTERN_MESSAGES } from './lib/trainingPattern';
+import { TRAINING_PATTERN_MESSAGES, WEEKDAY_NAMES } from './lib/trainingPattern';
 import schema from './schema';
 import { insertTournamentProgram, modules } from './test.setup';
 
@@ -127,13 +127,17 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-// 2027-01-05 is a Tuesday.
+const A_TUESDAY = '2027-01-05';
+const TUESDAY = WEEKDAY_NAMES.indexOf('Tuesday');
+const WEDNESDAY = WEEKDAY_NAMES.indexOf('Wednesday');
+const THURSDAY = WEEKDAY_NAMES.indexOf('Thursday');
+
 const valid = (s: Setup) => ({
   trainingId: s.serving.trainingId,
-  weekday: 2,
+  weekday: TUESDAY,
   startTime: '18:00',
   endTime: '19:00',
-  firstDate: '2027-01-05',
+  firstDate: A_TUESDAY,
   weeks: 8,
   placesPerClass: 12,
   registrationDeadline: '2027-01-01',
@@ -198,7 +202,7 @@ describe('trainingClasses.schedule', () => {
     });
     const training = await s.t.run((ctx) => ctx.db.get('trainings', s.serving.trainingId));
     expect(training?.pattern).toEqual({
-      weekday: 2,
+      weekday: TUESDAY,
       startTime: '18:00',
       endTime: '19:00',
       firstDate: '2027-01-05',
@@ -221,7 +225,7 @@ describe('trainingClasses.schedule', () => {
     await s.adminA.mutation(api.trainingClasses.schedule, {
       ...valid(s),
       trainingId: s.passing.trainingId,
-      weekday: 4,
+      weekday: THURSDAY,
       firstDate: '2027-01-07',
       weeks: 1,
       placesPerClass: 1,
@@ -262,8 +266,29 @@ describe('trainingClasses.schedule', () => {
       'registrationDeadline',
       'deadlineAfterFirstClass',
     ],
-    ['a weekday outside 0 to 6', { weekday: 7 }, 'firstDate', 'firstDateOffWeekday'],
+    ['a weekday above 6', { weekday: 7 }, 'weekday', 'weekdayInvalid'],
+    ['a negative weekday', { weekday: -1 }, 'weekday', 'weekdayInvalid'],
+    ['a fractional weekday', { weekday: 2.5 }, 'weekday', 'weekdayInvalid'],
+    ['a weekday that is not a number', { weekday: NaN }, 'weekday', 'weekdayInvalid'],
     ['a malformed time', { startTime: '6pm' }, 'startTime', 'timeInvalid'],
+    ['a first date in the year 26', { firstDate: '0026-11-17' }, 'firstDate', 'dateInvalid'],
+    [
+      'a deadline in the year 26',
+      { registrationDeadline: '0026-11-17' },
+      'registrationDeadline',
+      'dateInvalid',
+    ],
+    [
+      '51 weeks from 9999-12-01',
+      {
+        weekday: WEDNESDAY,
+        firstDate: '9999-12-01',
+        weeks: 51,
+        registrationDeadline: '9999-11-01',
+      },
+      'weeks',
+      'lastClassTooLate',
+    ],
   ])(
     'refuses %s, with the shared message, and writes nothing',
     async (_label, change, field, code) => {
@@ -284,7 +309,11 @@ describe('trainingClasses.schedule', () => {
     const before = await classesOf(s);
     expect(
       await refusal(
-        s.adminA.mutation(api.trainingClasses.schedule, { ...valid(s), weeks: 2, weekday: 2 }),
+        s.adminA.mutation(api.trainingClasses.schedule, {
+          ...valid(s),
+          weeks: 2,
+          weekday: TUESDAY,
+        }),
       ),
     ).toEqual({
       field: 'weekday',
@@ -384,7 +413,7 @@ describe('trainingClasses.listForTraining', () => {
     await s.adminA.mutation(api.trainingClasses.schedule, {
       ...valid(s),
       trainingId: s.passing.trainingId,
-      weekday: 4,
+      weekday: THURSDAY,
       firstDate: '2027-01-07',
     });
     expect(await list(s)).toEqual([]);
@@ -529,7 +558,7 @@ describe('trainings.getForManagement', () => {
   test('carries the pattern once the classes are scheduled', async () => {
     const s = await setup();
     await s.adminA.mutation(api.trainingClasses.schedule, valid(s));
-    expect((await get(s.adminA))?.pattern).toMatchObject({ weekday: 2, weeks: 8 });
+    expect((await get(s.adminA))?.pattern).toMatchObject({ weekday: TUESDAY, weeks: 8 });
   });
 
   test('is null for an unknown organization, and for an unused address to staff', async () => {

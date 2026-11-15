@@ -67,6 +67,7 @@ const READS: Partial<Record<TrainingPatternField, readonly Reads[]>> = {
   startTime: ['startTime', 'endTime'],
   endTime: ['startTime', 'endTime'],
   firstDate: ['weekday', 'firstDate'],
+  weeks: ['firstDate', 'weeks'],
   registrationDeadline: ['firstDate', 'registrationDeadline'],
 };
 

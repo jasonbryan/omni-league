@@ -15,7 +15,7 @@ import {
 import { searchWords } from './lib/searchQuery';
 import { checkCampSessionFields } from './lib/campSessionInput';
 import { checkSeasonFields } from './lib/seasonInput';
-import { checkTrainingPattern, weekdayOf } from './lib/trainingPattern';
+import { WEEKDAY_NAMES, checkTrainingPattern, weekdayOf } from './lib/trainingPattern';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { sportName } from './lib/sports';
 import { insertLeague, insertLocation, insertTenant, defaultDivision } from './lib/tenantWrites';
@@ -1497,13 +1497,16 @@ describe('seed:demo training classes', () => {
       return { training, rows };
     });
 
-  test('gives the Tuesday Serving Clinic 8 weekly classes, 6 to 7 PM, 12 places each, the first 14 days after the run, and a second run adds none', async () => {
+  test('gives the Tuesday Serving Clinic 8 weekly classes on Tuesdays, 6 to 7 PM, 12 places each, the first on or after 14 days after the run, and a second run adds none', async () => {
     const t = setup();
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(8);
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(0);
     const { training, rows } = await classesOfServing(t);
     const today = dateAtUtcMinus12(Date.now());
-    const first = addCalendarDays(today, 14);
+    const first = rows[0].date;
+    expect(weekdayOf(first)).toBe(WEEKDAY_NAMES.indexOf('Tuesday'));
+    expect(first >= addCalendarDays(today, 14)).toBe(true);
+    expect(first <= addCalendarDays(today, 20)).toBe(true);
     expect(rows.map((row) => row.date)).toEqual(
       Array.from({ length: 8 }, (_, week) => addCalendarDays(first, week * 7)),
     );

@@ -11,14 +11,19 @@ import {
   trainingClassTimes,
   weekdayOf,
   type TrainingPatternValues,
+  WEEKDAY_NAMES,
 } from './trainingPattern';
 
-// 2027-01-05 is a Tuesday.
+const A_TUESDAY = '2027-01-05';
+const TUESDAY = WEEKDAY_NAMES.indexOf('Tuesday');
+const WEDNESDAY = WEEKDAY_NAMES.indexOf('Wednesday');
+const LAST_YEAR_WEDNESDAY = '9999-12-01';
+
 const VALID: TrainingPatternValues = {
-  weekday: 2,
+  weekday: TUESDAY,
   startTime: '18:00',
   endTime: '19:00',
-  firstDate: '2027-01-05',
+  firstDate: A_TUESDAY,
   weeks: 8,
   placesPerClass: 12,
   registrationDeadline: '2027-01-01',
@@ -28,6 +33,13 @@ const errorsOf = (change: Partial<TrainingPatternValues>) =>
   checkTrainingPattern({ ...VALID, ...change });
 
 describe('weekdayOf and classDates', () => {
+  test('reads the weekday and the dates of the years 0 to 99 as those years, not as 1900 to 1999', () => {
+    expect(weekdayOf('0026-11-17')).toBe(TUESDAY);
+    expect(weekdayOf('0099-01-01')).toBe(weekdayOf('0099-01-08'));
+    expect(classDates('0026-11-17', 3)).toEqual(['0026-11-17', '0026-11-24', '0026-12-01']);
+    expect(classDates('0099-12-25', 2)).toEqual(['0099-12-25', '0100-01-01']);
+  });
+
   test('reads the weekday of a calendar date as text, 0 for Sunday', () => {
     expect(weekdayOf('2027-01-05')).toBe(2);
     expect(weekdayOf('2027-01-03')).toBe(0);
@@ -89,6 +101,15 @@ describe('checkTrainingPattern', () => {
     expect(errorsOf({ placesPerClass }).placesPerClass?.code).toBe('placesInvalid');
   });
 
+  test.each([7, -1, 2.5, Number.NaN, Infinity])('refuses %s as a weekday', (weekday) => {
+    expect(errorsOf({ weekday }).weekday).toEqual({
+      field: 'weekday',
+      code: 'weekdayInvalid',
+      message: 'Choose a weekday from Sunday to Saturday.',
+    });
+    expect(errorsOf({ weekday }).firstDate).toBeUndefined();
+  });
+
   test('says weeks, places, and the weekday are missing', () => {
     expect(errorsOf({ weeks: undefined }).weeks).toEqual({
       field: 'weeks',
@@ -128,6 +149,43 @@ describe('checkTrainingPattern', () => {
     expect(errorsOf({ registrationDeadline: 'soon' }).registrationDeadline?.code).toBe(
       'dateInvalid',
     );
+  });
+
+  test('refuses a first date or a deadline before the year 1000, which a two-digit year typed into a date box gives', () => {
+    const error = errorsOf({ firstDate: '0026-11-17' }).firstDate;
+    expect(error).toEqual({
+      field: 'firstDate',
+      code: 'dateInvalid',
+      message: 'Enter a date in a year from 1000 to 9999.',
+    });
+    expect(errorsOf({ firstDate: '0999-12-28' }).firstDate?.code).toBe('dateInvalid');
+    expect(errorsOf({ firstDate: '1000-01-06' }).firstDate?.code).not.toBe('dateInvalid');
+    expect(errorsOf({ registrationDeadline: '0026-11-17' }).registrationDeadline).toEqual({
+      field: 'registrationDeadline',
+      code: 'dateInvalid',
+      message: 'Enter a date in a year from 1000 to 9999.',
+    });
+  });
+
+  test('refuses a series whose last class falls after the year 9999, and accepts one that ends on 9999-12-31', () => {
+    expect(
+      errorsOf({ firstDate: LAST_YEAR_WEDNESDAY, weekday: WEDNESDAY, weeks: 51 }).weeks,
+    ).toEqual({
+      field: 'weeks',
+      code: 'lastClassTooLate',
+      message:
+        'The last class would fall after the year 9999. Use fewer weeks or an earlier first date.',
+    });
+    expect(errorsOf({ firstDate: LAST_YEAR_WEDNESDAY, weekday: WEDNESDAY, weeks: 5 })).toEqual({});
+    expect(
+      errorsOf({ firstDate: LAST_YEAR_WEDNESDAY, weekday: WEDNESDAY, weeks: 6 }).weeks?.code,
+    ).toBe('lastClassTooLate');
+  });
+
+  test('does not read the end of a series whose weeks are invalid', () => {
+    expect(
+      errorsOf({ firstDate: LAST_YEAR_WEDNESDAY, weekday: WEDNESDAY, weeks: 53 }).weeks?.code,
+    ).toBe('weeksInvalid');
   });
 
   test('says an existing series is refused with the shared wording', () => {

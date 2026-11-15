@@ -83,4 +83,9 @@ describe('addCalendarDays', () => {
     expect(addCalendarDays('2027-03-01', -1)).toBe('2027-02-28');
     expect(addCalendarDays('2026-10-27', 0)).toBe('2026-10-27');
   });
+
+  test('keeps the years 0 to 99 as those years, not as 1900 to 1999', () => {
+    expect(addCalendarDays('0026-11-17', 7)).toBe('0026-11-24');
+    expect(addCalendarDays('0099-12-31', 1)).toBe('0100-01-01');
+  });
 });

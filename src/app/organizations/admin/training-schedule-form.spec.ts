@@ -1,5 +1,5 @@
 import { ConvexError } from 'convex/values';
-import { TRAINING_PATTERN_MESSAGES } from '../../../../convex/lib/trainingPattern';
+import { TRAINING_PATTERN_MESSAGES, WEEKDAY_NAMES } from '../../../../convex/lib/trainingPattern';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { PRIMARY_BUTTON } from './button-classes';
@@ -15,13 +15,16 @@ import {
 
 const tokens = (value: string) => value.split(' ').sort();
 
-// 2027-01-05 is a Tuesday.
+const A_TUESDAY = '2027-01-05';
+const TUESDAY = WEEKDAY_NAMES.indexOf('Tuesday');
+const WEDNESDAY = WEEKDAY_NAMES.indexOf('Wednesday');
+
 const VALID_ARGS = {
   trainingId: 'tr_serving',
-  weekday: 2,
+  weekday: TUESDAY,
   startTime: '18:00',
   endTime: '19:00',
-  firstDate: '2027-01-05',
+  firstDate: A_TUESDAY,
   weeks: 8,
   placesPerClass: 12,
   registrationDeadline: '2027-01-01',
@@ -73,7 +76,7 @@ describe('TrainingScheduleForm', () => {
   }
 
   async function fill() {
-    await weekday(2);
+    await weekday(TUESDAY);
     await type('start-time', '18:00');
     await type('end-time', '19:00');
     await type('first-date', '2027-01-05');
@@ -181,7 +184,7 @@ describe('TrainingScheduleForm', () => {
     });
 
     it('shows a first date off the weekday under the first date, naming both days', async () => {
-      await weekday(2);
+      await weekday(TUESDAY);
       await type('first-date', '2027-01-06');
       await leave('first-date');
       expect(error('first-date')).toBe(
@@ -195,11 +198,31 @@ describe('TrainingScheduleForm', () => {
       await type('first-date', '2027-01-06');
       await leave('first-date');
       expect(error('first-date')).toBeNull();
-      await weekday(2);
+      await weekday(TUESDAY);
       await leave('first-date');
       expect(error('first-date')).not.toBeNull();
-      await weekday(3);
+      await weekday(WEDNESDAY);
       expect(error('first-date')).toBeNull();
+    });
+
+    it('shows a first date in the year 26 under the first date, with the shared wording', async () => {
+      await weekday(TUESDAY);
+      await type('first-date', '0026-11-17');
+      await leave('first-date');
+      expect(error('first-date')).toBe(TRAINING_PATTERN_MESSAGES.yearOutOfRange);
+      await type('first-date', A_TUESDAY);
+      expect(error('first-date')).toBeNull();
+    });
+
+    it('shows a series that ends after the year 9999 under the number of weeks, and clears it when the first date moves earlier', async () => {
+      await weekday(WEDNESDAY);
+      await type('first-date', '9999-12-01');
+      await type('weeks', '6');
+      await leave('weeks');
+      expect(error('weeks')).toBe(TRAINING_PATTERN_MESSAGES.lastClassTooLate);
+      await type('first-date', '9999-11-24');
+      await leave('first-date');
+      expect(error('weeks')).toBeNull();
     });
 
     it('shows a deadline after the first class under the deadline, naming the date', async () => {
@@ -254,7 +277,7 @@ describe('TrainingScheduleForm', () => {
     });
 
     it('focus goes to the first invalid field, in page order', async () => {
-      await weekday(2);
+      await weekday(TUESDAY);
       await submit();
       expect(document.activeElement).toBe(input('start-time'));
       await type('start-time', '18:00');
