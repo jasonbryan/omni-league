@@ -29,7 +29,6 @@ export const trainingPatternValidator = v.object({
   weeks: v.number(),
   placesPerClass: v.number(),
   registrationDeadline: v.string(),
-  /** Read by single-class registration. */
   allowSingleRegistration: v.boolean(),
 });
 
@@ -128,7 +127,6 @@ export function weekdayOf(date: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
-/** One date per week from the first date. */
 export function classDates(firstDate: string, weeks: number): string[] {
   return Array.from({ length: weeks }, (_, week) => addCalendarDays(firstDate, week * 7));
 }
@@ -248,7 +246,6 @@ export function firstTrainingPatternError(errors: Errors): TrainingPatternError 
   return null;
 }
 
-/** For example `Tue, Jan 5, 2027`. */
 export function trainingClassDate(date: string): string {
   return `${WEEKDAY_NAMES[weekdayOf(date)].slice(0, 3)}, ${formatCalendarDate(date)}`;
 }

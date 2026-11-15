@@ -100,7 +100,6 @@ export const cancel = mutation({
   },
 });
 
-/** The Undo of `cancel`. */
 export const restore = mutation({
   args: { trainingClassId: v.id('trainingClasses') },
   returns: v.null(),

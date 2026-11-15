@@ -888,7 +888,7 @@ async function ensureTraining(ctx: MutationCtx, demo: DemoTraining): Promise<boo
   return true;
 }
 
-/** Schedules the weekly series of a training program that has none, so a program an earlier run made without it gets it. */
+/** A program an earlier run made without classes gets them. */
 async function ensureTrainingClasses(
   ctx: MutationCtx,
   demo: DemoTraining,

@@ -539,7 +539,6 @@ export class TrainingManagement {
         : 'Single-class registration is not allowed.',
     };
   });
-  /** The schedule section is a skeleton while the classes load, the form while there are none, and gone once there are some. */
   protected readonly scheduling = computed<'form' | 'loading' | 'no'>(() => {
     const view = this.classes();
     if (view.status === 'error') return 'no';
