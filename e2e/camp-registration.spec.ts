@@ -276,7 +276,7 @@ test.describe('a guardian registers a child', () => {
     await screenshot(page, testInfo, '356-camp-child-registered');
   });
 
-  test('registers a second child, each reading "<name> is registered" in the order registered', async ({
+  test('registers a second child, and the one line names both in the order registered', async ({
     page,
   }) => {
     const { tenant, youth } = await seed();
@@ -289,8 +289,9 @@ test.describe('a guardian registers a child', () => {
       await registerButton(page).click();
       await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
     }
-    const lines = row(page, 'Week 1').locator('[data-slot="session-registered"]');
-    await expect(lines).toHaveText(['Maya R. is registered', 'Leo R. is registered']);
+    await expect(row(page, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText(
+      'Maya R. and Leo R. are registered',
+    );
     await expect(row(page, 'Week 1')).toContainText('10 places left');
   });
 
@@ -354,10 +355,9 @@ test.describe('a guardian registers a child', () => {
     await ageBox(page).click();
     await registerButton(page).click();
     await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
-    await expect(row(page, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText([
-      "You're registered",
-      'Maya R. is registered',
-    ]);
+    await expect(row(page, 'Week 1').locator('[data-slot="session-registered"]')).toHaveText(
+      'You and Maya R. are registered',
+    );
 
     await row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }).click();
     await expect(page.getByRole('radio', { name: 'My child' })).toBeChecked();
