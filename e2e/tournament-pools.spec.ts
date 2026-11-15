@@ -847,10 +847,9 @@ test.describe('Tournaments: pool score reports', () => {
       await reportBox(form, 'Ace').fill('21');
       await reportBox(form, 'Dune').fill('18');
       await reportButton(form).click();
-      await expect(
-        reportPanel(ace).getByRole('status').filter({ hasText: 'Score reported' }),
-      ).toBeFocused();
-      await expect(reportPanel(ace).getByRole('status')).toContainText(
+      const status = reportPanel(ace).getByRole('status').filter({ hasText: 'Score reported' });
+      await expect(status).toBeFocused();
+      await expect(status).toContainText(
         'The organizer confirms it before it counts in the standings.',
       );
       await expect(reportPanel(ace).locator('[data-slot="reported"]')).toHaveText(
