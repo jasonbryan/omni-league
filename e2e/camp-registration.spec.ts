@@ -4,6 +4,7 @@ import { seedPublishedCamp } from './support/camp';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
@@ -643,6 +644,104 @@ test.describe('the camp page rows when "You\'re registered" replaces Register', 
       });
       expect(Math.abs((await line.boundingBox())!.height - buttonHeight)).toBeLessThanOrEqual(
         TOLERANCE,
+      );
+    });
+  }
+});
+
+test.describe('the camp page rows when a guardian’s children answer after sign-in', () => {
+  const WIDTHS = [360, 1280] as const;
+  const TOLERANCE = 0.5;
+
+  async function registerChild(
+    page: Page,
+    path: string,
+    camp: string,
+    name: string,
+  ): Promise<void> {
+    await page.goto(path);
+    await childName(page).fill(name);
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${camp}`, { timeout: 20_000 });
+  }
+
+  const layout = (page: Page) =>
+    page.evaluate(() => ({
+      page: document.documentElement.scrollHeight,
+      rows: [...document.querySelectorAll('#sessions li')].map((li) => {
+        const box = li.getBoundingClientRect();
+        return { top: box.top + window.scrollY, height: box.height };
+      }),
+    }));
+
+  async function expectRowsStay(
+    page: Page,
+    camp: string,
+    answers: string[],
+    lines: string[],
+  ): Promise<void> {
+    const held = await holdQueries(page, answers);
+    await page.goto(camp);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }),
+    ).toBeVisible();
+    const before = await layout(page);
+
+    held.release();
+    const registered = row(page, 'Week 1').locator('[data-slot="session-registered"]');
+    await expect(registered).toHaveText(lines);
+    const after = await layout(page);
+    expect(after.rows).toHaveLength(before.rows.length);
+    expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
+    after.rows.forEach((box, index) => {
+      expect(Math.abs(box.top - before.rows[index].top), `row ${index} top`).toBeLessThanOrEqual(
+        TOLERANCE,
+      );
+    });
+  }
+
+  for (const width of WIDTHS) {
+    test(`on a youth camp, the sessions below stay where they were when the children’s lines arrive at ${width}px`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, youth } = await seed();
+      const ids = await sessionIds(tenant, YOUTH.slug);
+      const path = registerPath(tenant, YOUTH.slug, ids['Week 1']);
+      await signUp(page, newUser('Guardian'));
+      await registerChild(page, path, youth, 'Maya R.');
+
+      await expectRowsStay(
+        page,
+        youth,
+        ['campRegistrations:listMyMinorsForCamp'],
+        ['Maya R. is registered'],
+      );
+      await expectAccessible(page);
+      await screenshot(page, testInfo, `356-camp-children-arrived-${width}`);
+    });
+
+    test(`on a camp that admits both, the sessions below stay where they were when the guardian’s lines arrive at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, mixed } = await seed();
+      const ids = await sessionIds(tenant, MIXED.slug);
+      const path = registerPath(tenant, MIXED.slug, ids['Week 1']);
+      await signUp(page, newUser('Both'));
+      await page.goto(path);
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
+      await registerChild(page, path, mixed, 'Maya R.');
+
+      await expectRowsStay(
+        page,
+        mixed,
+        ['campRegistrations:listMineForCamp', 'campRegistrations:listMyMinorsForCamp'],
+        ["You're registered", 'Maya R. is registered'],
       );
     });
   }

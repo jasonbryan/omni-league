@@ -100,7 +100,20 @@ describe('registerCampState: the first state that applies', () => {
       { ...OPEN, minimumAge: 14, maximumAge: 30, registered: true },
       true,
       AFTER,
-      'closed',
+      'registered',
+    ],
+    [
+      'registered for a camp that admits a child, in a full session',
+      {
+        ...OPEN,
+        minimumAge: 14,
+        maximumAge: 30,
+        registered: true,
+        session: { ...SESSION, placesLeft: 0 },
+      },
+      true,
+      BEFORE,
+      'registered',
     ],
     [
       'ages no one may register for, unregistered',
