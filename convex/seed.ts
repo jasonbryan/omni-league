@@ -13,7 +13,7 @@ import {
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
 import { CAMP_SESSIONS_LIMIT, campSessionTotal, findCampBySlugs } from './lib/campLookup';
-import { SELF_PARTICIPANT } from './lib/campRegistration';
+import { SELF_PARTICIPANT } from './lib/individualRegistration';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
@@ -1486,13 +1486,30 @@ const DEMO_MINOR = {
   minorName: 'Ava Lane',
 } as const;
 
-/** player@ holds a place in this session, so the camp page reads "You're registered" for that account. Inserted once: any registration of player@ in the session means it was. */
-const DEMO_CAMP_REGISTRATION = {
-  organizationSlug: 'gulf-coast-sport-social',
-  campSlug: 'adult-beach-skills-camp',
-  sessionName: 'Week 1',
-  email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+/**
+ * Each account holds a place in one session, so the camp page reads "You're registered" for player@ and "Maya R. is registered" for
+ * guardian@. Inserted once: any registration of the account in the session means it was.
+ */
+const DEMO_CAMP_REGISTRATIONS = {
+  player: {
+    organizationSlug: 'gulf-coast-sport-social',
+    campSlug: 'adult-beach-skills-camp',
+    sessionName: 'Week 1',
+    email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+    participant: SELF_PARTICIPANT,
+  },
+  guardian: {
+    organizationSlug: 'gulf-coast-sport-social',
+    campSlug: 'junior-beach-volleyball-camp',
+    sessionName: 'Week 1',
+    email: `guardian@${DEMO_ACCOUNT_DOMAIN}`,
+    participant: { kind: 'minor', minorName: 'Maya R.' },
+  },
 } as const;
+
+const CAMP_REGISTRATION_ACCOUNTS = ['player', 'guardian'] as const;
+
+const demoCampRegistrationValidator = v.union(v.literal('player'), v.literal('guardian'));
 
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
@@ -2273,20 +2290,20 @@ export const insertDemoMinor = internalMutation({
 });
 
 export const insertDemoCampRegistration = internalMutation({
-  args: { authUserId: v.string() },
+  args: { authUserId: v.string(), account: demoCampRegistrationValidator },
   returns: v.boolean(),
-  handler: async (ctx, { authUserId }) => {
+  handler: async (ctx, { authUserId, account }) => {
     assertPreviewDeployment();
-    const organization = await organizationBySlug(ctx, DEMO_CAMP_REGISTRATION.organizationSlug);
-    const found =
-      organization && (await findCampBySlugs(ctx, organization, DEMO_CAMP_REGISTRATION.campSlug));
+    const demo = DEMO_CAMP_REGISTRATIONS[account];
+    const organization = await organizationBySlug(ctx, demo.organizationSlug);
+    const found = organization && (await findCampBySlugs(ctx, organization, demo.campSlug));
     if (!found) return false;
     const session = (
       await ctx.db
         .query('campSessions')
         .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
         .take(CAMP_SESSIONS_LIMIT)
-    ).find((row) => row.name === DEMO_CAMP_REGISTRATION.sessionName);
+    ).find((row) => row.name === demo.sessionName);
     if (!session || session.registeredCount >= session.places) return false;
     const user = await ctx.db
       .query('users')
@@ -2302,7 +2319,7 @@ export const insertDemoCampRegistration = internalMutation({
     if (held) return false;
     await insertCampRegistration(ctx, session, {
       userId: user._id,
-      participant: SELF_PARTICIPANT,
+      participant: demo.participant,
       ageConfirmedAt: Date.now(),
     });
     return true;
@@ -2542,10 +2559,14 @@ export const demo = internalAction({
             authUserId: guardian.authUserId,
           });
         }
-        const campPlayer = people.find((account) => account.email === DEMO_CAMP_REGISTRATION.email);
-        if (campPlayer) {
+        for (const account of CAMP_REGISTRATION_ACCOUNTS) {
+          const holder = people.find(
+            (person) => person.email === DEMO_CAMP_REGISTRATIONS[account].email,
+          );
+          if (!holder) continue;
           const inserted = await ctx.runMutation(internal.seed.insertDemoCampRegistration, {
-            authUserId: campPlayer.authUserId,
+            authUserId: holder.authUserId,
+            account,
           });
           if (inserted) campRegistrations++;
         }

@@ -1,8 +1,8 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import { campParticipantValidator } from './lib/campRegistration';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { freeAgentStatusValidator } from './lib/freeAgent';
+import { participantValidator } from './lib/individualRegistration';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { poolValidator } from './lib/pools';
@@ -279,7 +279,7 @@ export default defineSchema({
     organizationId: v.id('organizations'),
     /** The account holder, who is the participant for `self` and the guardian for `minor`. */
     userId: v.id('users'),
-    participant: campParticipantValidator,
+    participant: participantValidator,
     /** `self`, or `minor:` and the lower-cased minor's name, so the one-per-participant check is an index read. */
     participantKey: v.string(),
     ageConfirmedAt: v.optional(v.number()),

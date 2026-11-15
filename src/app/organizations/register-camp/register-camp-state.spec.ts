@@ -2,6 +2,7 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   campClosedLine,
   registerCampState,
+  registrationOptions,
   type CampRegistrationAnswer,
 } from './register-camp-state';
 
@@ -71,18 +72,52 @@ describe('registerCampState: the first state that applies', () => {
       { ...OPEN, minimumAge: 9, maximumAge: 17 },
       true,
       AFTER,
-      'adult-not-allowed',
+      'closed',
     ],
     [
-      'a camp whose maximum age is 17',
+      'a camp whose maximum age is 17 offers the form, for a child',
       { ...OPEN, minimumAge: 9, maximumAge: 17 },
       true,
       BEFORE,
-      'adult-not-allowed',
+      'form',
     ],
     [
       'a youth camp that is full',
-      { ...OPEN, maximumAge: 14, session: { ...SESSION, placesLeft: 0 } },
+      { ...OPEN, minimumAge: 9, maximumAge: 14, session: { ...SESSION, placesLeft: 0 } },
+      true,
+      BEFORE,
+      'full',
+    ],
+    [
+      'registered for a camp that admits a child, the form for a child',
+      { ...OPEN, minimumAge: 14, maximumAge: 30, registered: true },
+      true,
+      BEFORE,
+      'form',
+    ],
+    [
+      'registered for a camp that admits a child, after the deadline',
+      { ...OPEN, minimumAge: 14, maximumAge: 30, registered: true },
+      true,
+      AFTER,
+      'registered',
+    ],
+    [
+      'registered for a camp that admits a child, in a full session',
+      {
+        ...OPEN,
+        minimumAge: 14,
+        maximumAge: 30,
+        registered: true,
+        session: { ...SESSION, placesLeft: 0 },
+      },
+      true,
+      BEFORE,
+      'registered',
+    ],
+    [
+      'ages no one may register for, unregistered',
+      { ...OPEN, minimumAge: 20, maximumAge: 15 },
       true,
       BEFORE,
       'adult-not-allowed',
@@ -90,6 +125,22 @@ describe('registerCampState: the first state that applies', () => {
     ['open with room', OPEN, true, BEFORE, 'form'],
   ])('%s', (_label, answer, signedIn, nowMs, expected) => {
     expect(registerCampState({ answer, signedIn, nowMs })).toBe(expected);
+  });
+});
+
+describe('registrationOptions: who the form offers', () => {
+  it.each<[string, Partial<NonNullable<CampRegistrationAnswer>>, string[]]>([
+    ['an adult camp: only the adult', {}, ['self']],
+    ['a youth camp: only a child', { minimumAge: 9, maximumAge: 17 }, ['minor']],
+    ['ages that span 18: both', { minimumAge: 14, maximumAge: 30 }, ['self', 'minor']],
+    [
+      'both, the adult already registered: only a child',
+      { minimumAge: 14, maximumAge: 30, registered: true },
+      ['minor'],
+    ],
+    ['an adult camp, the adult registered: none', { registered: true }, []],
+  ])('%s', (_label, over, expected) => {
+    expect(registrationOptions({ ...OPEN, ...over })).toEqual(expected);
   });
 });
 
