@@ -9,14 +9,22 @@ import {
   defaultDivision,
   insertCustomLevel,
   insertDraftLeague,
+  insertDraftTournament,
   insertLeague,
+  insertLocation,
   insertTenant,
   leagueSlugTaken,
+  MAX_PROGRAMS_SEARCH_UPDATED,
   programSlugTaken,
   publishLeague,
+  publishTournament,
   restoreLeague,
   updateLeague,
+  updateLocation,
+  updateOrganizationCityState,
+  updateTournamentDetails,
   type LeagueDivision,
+  type NewTournament,
 } from './tenantWrites';
 
 function setup() {
@@ -61,6 +69,7 @@ function mirrored(league: Doc<'leagues'>) {
     level: league.level,
     customLevelId: league.customLevelId,
     ageGroup: league.ageGroup,
+    searchText: league.searchText,
   };
 }
 
@@ -438,6 +447,351 @@ describe('program slugs', () => {
           )
           .unique())!._id,
       );
+    });
+  });
+});
+
+describe('programs.searchText', () => {
+  const TOURNAMENT: NewTournament = {
+    name: 'Spring Cup',
+    slug: 'spring-cup',
+    sport: 'soccer',
+    locationIds: [],
+    division: {
+      gender: 'mens',
+      playersPerSide: 7,
+      level: 'rec',
+      ageGroup: 'adult',
+    },
+    startDate: '2027-04-10',
+    endDate: '2027-04-11',
+    registrationDeadline: '2027-04-01',
+    maximumTeams: 8,
+  };
+
+  async function world() {
+    const t = setup();
+    const ids = await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, {
+        ...TENANT,
+        organization: { ...TENANT.organization, cityState: 'Corpus Christi, TX' },
+      });
+      const otherId = await insertTenant(ctx, {
+        ...OTHER_TENANT,
+        organization: { ...OTHER_TENANT.organization, cityState: 'Chicago, IL' },
+      });
+      const alpha = (await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organizationId).eq('name', 'Alpha Field'),
+        )
+        .unique())!;
+      const bravo = (await ctx.db
+        .query('locations')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organizationId).eq('name', 'Bravo Beach'),
+        )
+        .unique())!;
+      return { organizationId, otherId, alpha, bravo };
+    });
+    return { t, ...ids };
+  }
+
+  const programNamed = (ctx: MutationCtx, organizationId: Id<'organizations'>, slug: string) =>
+    ctx.db
+      .query('programs')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', organizationId).eq('slug', slug),
+      )
+      .unique()
+      .then((program) => program!);
+
+  test('a league inserted into an organization holds its name, sport, division, organization, location, and City, state', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      const { leagueId } = await insertLeague(ctx, organizationId, SOCCER);
+      const { league, program } = await programOfLeague(ctx, leagueId);
+      expect(program.searchText).toBe(
+        'Coed 7v7 Soccer Coed 7v7 Rec Org A Alpha Field Corpus Christi, TX',
+      );
+      expect(program.searchText).toBe(league.searchText);
+    });
+  });
+
+  test('a soccer league’s program holds Soccer and the words of its division label', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      const { leagueId } = await insertLeague(ctx, organizationId, {
+        ...SOCCER,
+        division: { ...SOCCER.division, gender: 'womens', ageGroup: 'u10' },
+      });
+      const { program } = await programOfLeague(ctx, leagueId);
+      expect(program.searchText).toContain('Soccer Girls 7v7 Rec U10');
+    });
+  });
+
+  test('a draft league holds it too', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const leagueId = await insertDraftLeague(ctx, organizationId, {
+        name: 'Draft Sand',
+        slug: 'draft-sand',
+        sport: 'beachVolleyball',
+        locationIds: [alpha._id],
+        division: defaultDivision('beachVolleyball'),
+      });
+      expect((await programOfLeague(ctx, leagueId)).program.searchText).toBe(
+        'Draft Sand Beach volleyball Coed 2v2 Rec Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('a draft tournament holds its name, sport, division, organization, location, and City, state', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id],
+      });
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Rec mens Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('a tournament with a custom level holds its name and the standard level it maps to', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      const customLevelId = await insertCustomLevel(ctx, organizationId, {
+        sport: 'soccer',
+        name: 'Gold',
+        standardLevel: 'rec',
+      });
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        division: { ...TOURNAMENT.division, customLevelId },
+      });
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Gold (Rec) mens Org A Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('updating a league rewrites its program’s text, and undoing the update puts the old text back', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      const { leagueId } = await insertLeague(ctx, organizationId, SOCCER);
+      const league = (await ctx.db.get('leagues', leagueId))!;
+      const earlier = await updateLeague(ctx, league, {
+        name: 'Fall Sevens',
+        division: { gender: 'womens', playersPerSide: 11, level: 'competitive', ageGroup: 'adult' },
+      });
+      const updated = await programOfLeague(ctx, leagueId);
+      expect(updated.program.searchText).toBe(
+        'Fall Sevens Soccer Women 11v11 Competitive womens Org A Alpha Field Corpus Christi, TX',
+      );
+      expect(updated.program.searchText).toBe(updated.league.searchText);
+
+      await restoreLeague(ctx, updated.league, earlier);
+      const restored = await programOfLeague(ctx, leagueId);
+      expect(restored.program.searchText).toBe(
+        'Coed 7v7 Soccer Coed 7v7 Rec Org A Alpha Field Corpus Christi, TX',
+      );
+      expect(restored.program.searchText).toBe(restored.league.searchText);
+    });
+  });
+
+  test('publishing a league rewrites its program’s text from the row', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      const { leagueId } = await insertLeague(ctx, organizationId, { ...SOCCER, status: 'draft' });
+      const { league } = await programOfLeague(ctx, leagueId);
+      await ctx.db.patch('programs', league.programId, { searchText: 'stale' });
+
+      await publishLeague(ctx, league);
+
+      expect((await programOfLeague(ctx, leagueId)).program.searchText).toBe(
+        'Coed 7v7 Soccer Coed 7v7 Rec Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('publishing a tournament rewrites its program’s text from the row', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const tournamentId = await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id],
+      });
+      const tournament = (await ctx.db.get('tournaments', tournamentId))!;
+      await ctx.db.patch('programs', tournament.programId, { searchText: 'stale' });
+
+      await publishTournament(ctx, tournament);
+
+      const program = (await ctx.db.get('programs', tournament.programId))!;
+      expect(program.status).toBe('published');
+      expect(program.searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Rec mens Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('editing a tournament’s dates and size leaves its text as it was', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const tournamentId = await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id],
+      });
+      const tournament = (await ctx.db.get('tournaments', tournamentId))!;
+      const before = (await ctx.db.get('programs', tournament.programId))!.searchText;
+
+      await updateTournamentDetails(ctx, tournament, {
+        startDate: '2027-05-01',
+        endDate: '2027-05-02',
+        registrationDeadline: '2027-04-20',
+        maximumTeams: 12,
+        setsPerGame: 1,
+      });
+
+      expect((await ctx.db.get('programs', tournament.programId))!.searchText).toBe(before);
+    });
+  });
+
+  test('renaming a location rewrites the league and tournament programs held there, and no other', async () => {
+    const { t, organizationId, otherId, alpha, bravo } = await world();
+    await t.run(async (ctx) => {
+      await insertLeague(ctx, organizationId, SOCCER);
+      await insertLeague(ctx, organizationId, {
+        ...SOCCER,
+        name: 'Bravo Sevens',
+        locations: ['Bravo Beach'],
+      });
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id, bravo._id],
+      });
+      await insertLocation(ctx, otherId, { name: 'Alpha Field', address: '9 Lake Rd' });
+      await insertLeague(ctx, otherId, { ...SOCCER, name: 'Lake Sevens' });
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+
+      expect((await programNamed(ctx, organizationId, 'coed-7v7')).searchText).toBe(
+        'Coed 7v7 Soccer Coed 7v7 Rec Org A Omega Field Corpus Christi, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Rec mens Org A Omega Field Bravo Beach Corpus Christi, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'bravo-sevens')).searchText).toBe(
+        'Bravo Sevens Soccer Coed 7v7 Rec Org A Bravo Beach Corpus Christi, TX',
+      );
+      expect((await programNamed(ctx, otherId, 'lake-sevens')).searchText).toBe(
+        'Lake Sevens Soccer Coed 7v7 Rec Org B Alpha Field Chicago, IL',
+      );
+    });
+  });
+
+  test('changing City, state rewrites every league and tournament program of the organization, and clearing it removes the words', async () => {
+    const { t, organizationId, otherId, alpha } = await world();
+    await t.run(async (ctx) => {
+      await insertLeague(ctx, organizationId, SOCCER);
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id],
+      });
+      await insertLeague(ctx, otherId, {
+        ...SOCCER,
+        name: 'Lake Sevens',
+        locations: ['B Field'],
+      });
+
+      await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
+      expect((await programNamed(ctx, organizationId, 'coed-7v7')).searchText).toBe(
+        'Coed 7v7 Soccer Coed 7v7 Rec Org A Alpha Field Galveston, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Rec mens Org A Alpha Field Galveston, TX',
+      );
+
+      await updateOrganizationCityState(ctx, organizationId, null);
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'Spring Cup Soccer Men 7v7 Rec mens Org A Alpha Field',
+      );
+      expect((await programNamed(ctx, otherId, 'lake-sevens')).searchText).toContain('Chicago, IL');
+    });
+  });
+
+  test('a location rename that reaches 200 programs rewrites all 200', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < MAX_PROGRAMS_SEARCH_UPDATED; i++) {
+        await ctx.db.insert('programs', {
+          ...tournamentProgramFields(organizationId, `bulk-${i}`),
+          locationIds: [alpha._id],
+        });
+      }
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+
+      const programs = await ctx.db
+        .query('programs')
+        .withIndex('by_organizationId_and_slug', (q) => q.eq('organizationId', organizationId))
+        .collect();
+      expect(programs).toHaveLength(MAX_PROGRAMS_SEARCH_UPDATED);
+      expect(programs.every((program) => program.searchText?.includes('Omega Field'))).toBe(true);
+    });
+  });
+
+  test('a location rename that would reach 201 programs is refused with the bound, and writes nothing', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= MAX_PROGRAMS_SEARCH_UPDATED; i++) {
+        await ctx.db.insert('programs', {
+          ...tournamentProgramFields(organizationId, `bulk-${i}`),
+          locationIds: [alpha._id],
+        });
+      }
+    });
+    await expect(
+      t.run((ctx) => updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address })),
+    ).rejects.toThrow(/more than 200 tournament programs/);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get('locations', alpha._id))!.name).toBe('Alpha Field');
+      const programs = await ctx.db.query('programs').collect();
+      expect(programs.every((program) => program.searchText === undefined)).toBe(true);
+    });
+  });
+
+  test('the search index finds a program by its words within a type, and the browse index lists a status, type, and sport by sort name', async () => {
+    const { t, organizationId, otherId, alpha } = await world();
+    await t.run(async (ctx) => {
+      await insertLeague(ctx, organizationId, SOCCER);
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [alpha._id],
+      });
+      const tournamentId = await insertDraftTournament(ctx, otherId, {
+        ...TOURNAMENT,
+        name: 'Autumn Cup',
+        slug: 'autumn-cup',
+      });
+      await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
+
+      const found = await ctx.db
+        .query('programs')
+        .withSearchIndex('search_searchText', (search) =>
+          search.search('searchText', 'corpus').eq('status', 'draft').eq('type', 'tournament'),
+        )
+        .collect();
+      expect(found.map((program) => program.slug)).toEqual(['spring-cup']);
+
+      const browsed = await ctx.db
+        .query('programs')
+        .withIndex('by_status_and_type_and_sport_and_sortName', (q) =>
+          q.eq('status', 'published').eq('type', 'tournament').eq('sport', 'soccer'),
+        )
+        .collect();
+      expect(browsed.map((program) => program.slug)).toEqual(['autumn-cup']);
     });
   });
 });

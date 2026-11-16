@@ -85,22 +85,26 @@ async function markHasPublishedLeague(
 
 export const MAX_LEAGUES_SEARCH_UPDATED = 200;
 
-type LeagueSearchFields = LeagueDivisionFields & Pick<Doc<'leagues'>, 'name' | 'locationIds'>;
+export const MAX_PROGRAMS_SEARCH_UPDATED = 200;
 
-// Every writer of a league's name, sport, division, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
-async function leagueSearchText(
+const SEARCHED_PROGRAM_TYPES = ['league', 'tournament'] as const;
+
+type ProgramSearchFields = LeagueDivisionFields & Pick<Doc<'programs'>, 'name' | 'locationIds'>;
+
+// Every writer of a league's or tournament's name, sport, division, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
+async function programSearchText(
   ctx: Pick<MutationCtx, 'db'>,
   organization: Doc<'organizations'>,
-  league: LeagueSearchFields,
+  program: ProgramSearchFields,
 ): Promise<string> {
   const locationNames: string[] = [];
-  for (const id of league.locationIds) {
+  for (const id of program.locationIds) {
     const location = await ctx.db.get('locations', id);
     if (location?.organizationId === organization._id) locationNames.push(location.name);
   }
   return joinSearchText([
-    league.name,
-    ...(await leagueDivisionSearchWords(ctx, league)),
+    program.name,
+    ...(await leagueDivisionSearchWords(ctx, program)),
     organization.name,
     ...locationNames,
     organization.cityState,
@@ -114,6 +118,15 @@ async function organizationOf(
   const organization = await ctx.db.get('organizations', organizationId);
   if (!organization) throw new Error('No organization has this id');
   return organization;
+}
+
+async function refreshSearchText(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  locationId?: Id<'locations'>,
+): Promise<void> {
+  await refreshLeaguesSearchText(ctx, organizationId, locationId);
+  await refreshProgramsSearchText(ctx, organizationId, locationId);
 }
 
 async function refreshLeaguesSearchText(
@@ -133,9 +146,39 @@ async function refreshLeaguesSearchText(
   }
   for (const league of leagues) {
     if (locationId !== undefined && !league.locationIds.includes(locationId)) continue;
-    const searchText = await leagueSearchText(ctx, organization, league);
+    const searchText = await programSearchText(ctx, organization, league);
     if (league.searchText !== searchText) {
       await ctx.db.patch('leagues', league._id, { searchText });
+    }
+  }
+}
+
+async function refreshProgramsSearchText(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  locationId?: Id<'locations'>,
+): Promise<void> {
+  const organization = await organizationOf(ctx, organizationId);
+  const programs: Doc<'programs'>[] = [];
+  for (const type of SEARCHED_PROGRAM_TYPES) {
+    const ofType = await ctx.db
+      .query('programs')
+      .withIndex('by_organizationId_and_type_and_status_and_sortName', (q) =>
+        q.eq('organizationId', organizationId).eq('type', type),
+      )
+      .take(MAX_PROGRAMS_SEARCH_UPDATED + 1);
+    if (ofType.length > MAX_PROGRAMS_SEARCH_UPDATED) {
+      throw new Error(
+        `Organization ${JSON.stringify(organization.slug)} has more than ${MAX_PROGRAMS_SEARCH_UPDATED} ${type} programs, so their search text cannot be rewritten in one change`,
+      );
+    }
+    programs.push(...ofType);
+  }
+  for (const program of programs) {
+    if (locationId !== undefined && !program.locationIds.includes(locationId)) continue;
+    const searchText = await programSearchText(ctx, organization, program);
+    if (program.searchText !== searchText) {
+      await ctx.db.patch('programs', program._id, { searchText });
     }
   }
 }
@@ -250,7 +293,7 @@ export async function updateOrganizationCityState(
   cityState: string | null,
 ): Promise<void> {
   await ctx.db.patch('organizations', organizationId, { cityState: cityState ?? undefined });
-  await refreshLeaguesSearchText(ctx, organizationId);
+  await refreshSearchText(ctx, organizationId);
 }
 
 export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id<'organizations'>> {
@@ -308,7 +351,7 @@ export async function updateLocation(
     address: change.address,
     sortName: sortName(change.name),
   });
-  await refreshLeaguesSearchText(ctx, location.organizationId, location._id);
+  await refreshSearchText(ctx, location.organizationId, location._id);
 }
 
 export async function insertLeague(
@@ -457,6 +500,13 @@ export async function insertDraftTournament(
 ): Promise<Id<'tournaments'>> {
   const { division } = tournament;
   assertDivision(tournament.sport, division);
+  const searchText = await programSearchText(ctx, await organizationOf(ctx, organizationId), {
+    organizationId,
+    name: tournament.name,
+    sport: tournament.sport,
+    locationIds: tournament.locationIds,
+    ...division,
+  });
   const programId = await ctx.db.insert('programs', {
     organizationId,
     type: 'tournament',
@@ -467,6 +517,7 @@ export async function insertDraftTournament(
     status: 'draft',
     locationIds: tournament.locationIds,
     ...divisionFields(division),
+    searchText,
   });
   return ctx.db.insert('tournaments', {
     programId,
@@ -683,7 +734,14 @@ export async function publishTournament(
     throw new Error(`Tournament ${tournament._id} has no program of its organization`);
   }
   if (program.status === 'published') return;
-  await ctx.db.patch('programs', program._id, { status: 'published' });
+  await ctx.db.patch('programs', program._id, {
+    status: 'published',
+    searchText: await programSearchText(
+      ctx,
+      await organizationOf(ctx, program.organizationId),
+      program,
+    ),
+  });
   await ctx.db.patch('tournaments', tournament._id, { status: 'published' });
 }
 
@@ -814,7 +872,7 @@ export async function updateLeague(
   await ctx.db.patch('leagues', league._id, {
     name: change.name,
     sortName: sortName(change.name),
-    searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+    searchText: await programSearchText(ctx, await organizationOf(ctx, league.organizationId), {
       ...league,
       name: change.name,
       ...change.division,
@@ -872,7 +930,7 @@ export async function restoreLeague(
   await ctx.db.patch('leagues', league._id, {
     name: values.name,
     sortName: sortName(values.name),
-    searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+    searchText: await programSearchText(ctx, await organizationOf(ctx, league.organizationId), {
       ...league,
       name: values.name,
       gender: values.gender,
@@ -898,7 +956,7 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
   if (league.status === 'published') return;
   await ctx.db.patch('leagues', league._id, {
     status: 'published',
-    searchText: await leagueSearchText(
+    searchText: await programSearchText(
       ctx,
       await organizationOf(ctx, league.organizationId),
       league,
@@ -990,7 +1048,7 @@ async function insertLeagueRow(
   status: LeagueStatus,
 ): Promise<Id<'leagues'>> {
   assertDivision(league.sport, league.division);
-  const searchText = await leagueSearchText(ctx, await organizationOf(ctx, organizationId), {
+  const searchText = await programSearchText(ctx, await organizationOf(ctx, organizationId), {
     organizationId,
     name: league.name,
     sport: league.sport,
@@ -1009,6 +1067,7 @@ async function insertLeagueRow(
     organizationId,
     type: 'league',
     slug: league.slug,
+    searchText,
   });
   const leagueId = await ctx.db.insert('leagues', {
     ...row,
@@ -1127,7 +1186,14 @@ function programFieldsOfLeague(
 async function syncProgramOfLeague(ctx: MutationCtx, leagueId: Id<'leagues'>): Promise<void> {
   const league = await ctx.db.get('leagues', leagueId);
   if (!league) throw new Error('No league has this id');
-  await ctx.db.patch('programs', league.programId, programFieldsOfLeague(league));
+  await ctx.db.patch('programs', league.programId, {
+    ...programFieldsOfLeague(league),
+    searchText: await programSearchText(
+      ctx,
+      await organizationOf(ctx, league.organizationId),
+      league,
+    ),
+  });
 }
 
 // A sport counted here for an organization with unset sport counters would be counted twice by the
