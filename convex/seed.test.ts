@@ -1059,6 +1059,7 @@ describe('seed:demo', () => {
       DEMO_RUN_SEASONS,
       DEMO_TOURNAMENTS,
       DEMO_CAMPS,
+      DEMO_CAMP_WAITLIST,
       DEMO_ACCOUNTS,
       DEMO_ACCOUNT_DOMAIN,
       DEMO_TEAM_SEASON,
@@ -1087,6 +1088,7 @@ describe('seed:demo', () => {
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_TOURNAMENTS)).toBe(true);
     expect(Array.isArray(DEMO_CAMPS)).toBe(true);
+    expect(DEMO_CAMP_WAITLIST.sessionName).toBe('Week 4');
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual([
       'admin',
       'organizer',

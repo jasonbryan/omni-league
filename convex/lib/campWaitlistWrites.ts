@@ -53,7 +53,6 @@ export async function promoteCampWaitlistEntry(
   return registrationId;
 }
 
-/** In the order they joined; positions and the organizer's list read at most `WAITLIST_READ_LIMIT`. */
 export function waitingEntriesOf(
   ctx: Pick<QueryCtx, 'db'>,
   sessionId: Id<'campSessions'>,
@@ -66,7 +65,6 @@ export function waitingEntriesOf(
     .take(WAITLIST_READ_LIMIT);
 }
 
-/** Past the read limit it is the limit plus 1. */
 export function positionIn(
   waiting: readonly Doc<'campWaitlistEntries'>[],
   id: Id<'campWaitlistEntries'>,

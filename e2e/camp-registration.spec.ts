@@ -61,7 +61,11 @@ async function seed() {
   });
   const youth = await seedPublishedCamp(tenant, {
     ...YOUTH,
-    sessions: [week('Week 1', 30, 23), { ...week('Full week', 37, 30, 1), registeredCount: 1 }],
+    sessions: [
+      week('Week 1', 30, 23),
+      { ...week('Full week', 37, 30, 1), registeredCount: 1 },
+      week('Later week', 44, 37),
+    ],
   });
   const mixed = await seedPublishedCamp(tenant, {
     ...MIXED,
@@ -1064,4 +1068,95 @@ test.describe('the waitlist of a full session', () => {
       expect((await joinButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
   });
+});
+
+test.describe('the camp page rows when the waitlist answers after sign-in', () => {
+  const WIDTHS = [320, 360, 1280] as const;
+  const TOLERANCE = 0.5;
+  const WAITING = 'campWaitlist:listMineForCamp';
+
+  const layout = (page: Page) =>
+    page.evaluate(() => ({
+      page: document.documentElement.scrollHeight,
+      rows: [...document.querySelectorAll('#sessions li')].map((li) => {
+        const box = li.getBoundingClientRect();
+        return { top: box.top + window.scrollY, height: box.height };
+      }),
+    }));
+
+  async function expectRowsStay(
+    page: Page,
+    camp: string,
+    sessionName: string,
+    line: string,
+  ): Promise<void> {
+    const held = await holdQueries(page, [WAITING]);
+    await page.goto(camp);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const actions = row(page, sessionName).locator('[data-slot="session-actions"]');
+    await expect(actions).toBeVisible();
+    const before = await layout(page);
+    const actionsBefore = (await actions.boundingBox())!;
+
+    held.release();
+    await expect(row(page, sessionName).locator('[data-slot="session-waitlist"]')).toHaveText(line);
+    const after = await layout(page);
+    expect(after.rows).toHaveLength(before.rows.length);
+    expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
+    after.rows.forEach((box, index) => {
+      expect(Math.abs(box.top - before.rows[index].top), `row ${index} top`).toBeLessThanOrEqual(
+        TOLERANCE,
+      );
+      expect(
+        Math.abs(box.height - before.rows[index].height),
+        `row ${index} height`,
+      ).toBeLessThanOrEqual(TOLERANCE);
+    });
+    const actionsAfter = (await actions.boundingBox())!;
+    expect(Math.abs(actionsAfter.height - actionsBefore.height)).toBeLessThanOrEqual(TOLERANCE);
+    expect(Math.abs(actionsAfter.y - actionsBefore.y)).toBeLessThanOrEqual(TOLERANCE);
+    const waitingLine = row(page, sessionName).locator('[data-slot="session-waitlist"]');
+    const [lineBox, rowBox] = [
+      (await waitingLine.boundingBox())!,
+      (await row(page, sessionName).boundingBox())!,
+    ];
+    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + TOLERANCE);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      page.viewportSize()!.width,
+    );
+    await expectAccessible(page);
+  }
+
+  for (const width of WIDTHS) {
+    test(`a child on the waitlist: the sessions below stay where they were when the line arrives at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, youth } = await seed();
+      const ids = await sessionIds(tenant, YOUTH.slug);
+      await signUp(page, newUser('Guardian'));
+      await page.goto(registerPath(tenant, YOUTH.slug, ids['Full week']));
+      await childName(page).fill('Maya R.');
+      await ageBox(page).click();
+      await joinButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+
+      await expectRowsStay(page, youth, 'Full week', 'Maya R. is on the waitlist, position 1');
+    });
+
+    test(`an adult on the waitlist: the row keeps its height when the Join link gives way to the line at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, adult } = await seed();
+      const ids = await sessionIds(tenant, ADULT.slug);
+      await signUp(page, newUser('Adult'));
+      await page.goto(registerPath(tenant, ADULT.slug, ids['Last place']));
+      await ageBox(page).click();
+      await joinButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+
+      await expectRowsStay(page, adult, 'Last place', 'You are on the waitlist, position 1');
+    });
+  }
 });

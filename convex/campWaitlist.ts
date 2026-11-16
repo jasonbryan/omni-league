@@ -60,7 +60,6 @@ export const join = mutation({
   },
 });
 
-/** Organizers give the place to the person who joined first; the list shows them in that order. */
 export const promote = mutation({
   args: { campWaitlistEntryId: v.id('campWaitlistEntries') },
   returns: v.object({ registrationId: v.id('campRegistrations') }),

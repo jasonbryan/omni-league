@@ -245,7 +245,7 @@ describe('PublicCampPage registration, a guardian’s children', () => {
 
   it('puts the line and the Register link in the one row, beside each other', async () => {
     await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
-    expect(registered(0)?.parentElement).toBe(actions(0));
+    expect(registered(0)?.closest('[data-slot="session-actions"]')).toBe(actions(0));
     expect(registerLink(0)?.parentElement).toBe(actions(0));
     expect(rows()[0].querySelectorAll('[data-slot="session-actions"]')).toHaveLength(1);
   });
@@ -314,6 +314,21 @@ describe('PublicCampPage waitlist', () => {
   beforeEach(async () => {
     await open({ signedIn: true, now: '2027-07-03' });
     await emit(CAMP, JUNIOR_CAMP);
+  });
+
+  it('puts the waiting line in the row the Join link already holds, so its answer changes no row', async () => {
+    await emit(CAMP, ADULT_CAMP);
+    const before = actions(2)?.className;
+    expect(before?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'h-10', 'flex']));
+    await emit(WAITING, [entry(WEEK_3, { kind: 'self' }, 1)]);
+    expect(actions(2)?.className).toBe(before);
+    expect(rows()[2].querySelectorAll('[data-slot="session-actions"]')).toHaveLength(1);
+    expect(
+      rows()[2]
+        .querySelector('[data-slot="session-waitlist"]')
+        ?.closest('[data-slot="session-actions"]'),
+    ).toBe(actions(2));
+    expect(joinLink(2)).toBeUndefined();
   });
 
   it('asks for the caller’s waiting entries in this camp with the route’s slugs', () => {

@@ -35,6 +35,7 @@ import {
 import { campSessionStatus } from './camp-session-status';
 import type { PublicCampData } from './public-camp-view';
 
+const ACTIONS_ROW = 'mt-3 flex items-center gap-3 pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -157,34 +158,43 @@ function waitingLine(participant: Participant, position: number): string {
                       }}</time></span
                     >
                   </p>
-                  @for (line of session.waitingLines; track line) {
-                    <p
-                      data-slot="session-waitlist"
-                      class="${SESSION_LINE} font-medium text-foreground"
-                    >
-                      <ng-icon
-                        name="lucideListOrdered"
-                        class="${SESSION_ICON}"
-                        aria-hidden="true"
-                      /><span class="wrap-anywhere">{{ line }}</span>
-                    </p>
-                  }
-                  @if (session.canRegister || session.canJoin || session.registeredLine) {
+                  @if (
+                    session.canRegister ||
+                    session.canJoin ||
+                    session.registeredLine ||
+                    session.waitingLines.length > 0
+                  ) {
                     <div
                       data-slot="session-actions"
-                      class="mt-3 flex h-9 items-center gap-3 pointer-coarse:min-h-11"
+                      [class]="session.status.full ? fullActionsRow : actionsRow"
                     >
-                      @if (session.registeredLine; as line) {
-                        <p
-                          data-slot="session-registered"
-                          class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
-                        >
-                          <ng-icon
-                            name="lucideCircleCheck"
-                            class="shrink-0 text-base"
-                            aria-hidden="true"
-                          /><span class="truncate">{{ line }}</span>
-                        </p>
+                      @if (session.registeredLine || session.waitingLines.length > 0) {
+                        <div class="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+                          @if (session.registeredLine; as line) {
+                            <p
+                              data-slot="session-registered"
+                              class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
+                            >
+                              <ng-icon
+                                name="lucideCircleCheck"
+                                class="shrink-0 text-base"
+                                aria-hidden="true"
+                              /><span class="truncate">{{ line }}</span>
+                            </p>
+                          }
+                          @for (line of session.waitingLines; track line) {
+                            <p
+                              data-slot="session-waitlist"
+                              class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
+                            >
+                              <ng-icon
+                                name="lucideListOrdered"
+                                class="shrink-0 text-base"
+                                aria-hidden="true"
+                              /><span class="line-clamp-2 wrap-anywhere">{{ line }}</span>
+                            </p>
+                          }
+                        </div>
                       }
                       @if (session.canRegister; as sessionId) {
                         <a
@@ -258,6 +268,8 @@ export class PublicCampContent {
   >([]);
 
   protected readonly registerButton = OUTLINE_BUTTON;
+  protected readonly actionsRow = ACTIONS_ROW + ' h-9';
+  protected readonly fullActionsRow = ACTIONS_ROW + ' h-10';
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 

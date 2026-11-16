@@ -4,6 +4,7 @@ import { sportName } from '../../convex/lib/sports';
 import {
   DEMO,
   DEMO_CAMPS,
+  DEMO_CAMP_WAITLIST,
   DEMO_RUN_SEASONS,
   DEMO_SEASONS,
   DEMO_TOURNAMENTS,
@@ -76,6 +77,8 @@ function openSeasonRows(orgSlug: string, nowMs: number): OpenSeasonRow[] {
 
 export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
   const today = dateAtUtcMinus12(nowMs);
+  // With the demo accounts, guardian@'s child takes the one place of the waitlist session, which Registration open then leaves out.
+  const accountsSeeded = (process.env['DEMO_ACCOUNT_PASSWORD'] ?? '') !== '';
   const cards = openSeasonRows(orgSlug, nowMs).map((row) => ({
     deadline: row.registrationDeadline,
     title: row.league.name,
@@ -94,6 +97,13 @@ export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): E
       const start = addCalendarDays(today, session.startDaysFromRun);
       const deadline = addCalendarDays(start, -session.deadlineDaysBeforeStart);
       if (today > deadline || today >= start) continue;
+      if (
+        accountsSeeded &&
+        camp.slug === DEMO_CAMP_WAITLIST.campSlug &&
+        session.name === DEMO_CAMP_WAITLIST.sessionName
+      ) {
+        continue;
+      }
       cards.push({ deadline, title: camp.name, subtitle: session.name });
     }
   }

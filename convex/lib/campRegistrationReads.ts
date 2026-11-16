@@ -19,7 +19,7 @@ export async function minorRegistrationsOf(
     .take(MAX_MINORS_PER_SESSION);
 }
 
-/** The guardian's children still waiting; a promoted entry is already a registration, which `minorRegistrationsOf` counts. */
+/** Leaves out a promoted entry: it is already a registration, which `minorRegistrationsOf` counts. */
 export async function minorWaitlistEntriesOf(
   ctx: Pick<QueryCtx, 'db'>,
   sessionId: Id<'campSessions'>,
