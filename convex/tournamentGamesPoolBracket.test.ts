@@ -790,3 +790,74 @@ describe('tournamentGames.createBracketFromPools: concurrent creates', () => {
     expect(await bracketGames(s)).toHaveLength(3);
   });
 });
+
+describe('teams level in a pool of three: the points rule applied again', () => {
+  /** Pool A holds Team 01, Team 04, and Team 05. Each result is `[winner, loser, winner's points, loser's points]`, patched in directly so any points can be tested. */
+  async function playedPoolA(results: [number, number, number, number][]) {
+    const { s, teamIds } = await world();
+    await s.t.run(async (ctx) => {
+      for (const game of await ctx.db
+        .query('tournamentGames')
+        .withIndex(GAME_INDEX, (q) => q.eq('tournamentId', s.gulf).eq('stage', 'pool'))
+        .collect()) {
+        const [first, second] = game.teamIds.map((id) => teamIds.indexOf(id!) + 1);
+        const given = results.find(
+          ([winner, loser]) => [winner, loser].includes(first) && [winner, loser].includes(second),
+        );
+        const [winner, , won, lost] = given ?? [Math.min(first, second), 0, 21, 15];
+        const firstWins = winner === first;
+        await ctx.db.patch('tournamentGames', game._id, {
+          score: firstWins ? set(won, lost) : set(lost, won),
+          winnerTeamId: game.teamIds[firstWins ? 0 : 1]!,
+        });
+      }
+    });
+    return { s, teamIds };
+  }
+
+  const poolA = async (s: TournamentWorld) =>
+    (await view(s))!.ranked
+      .filter((team) => team.pool === 'A')
+      .map((team) => [team.name, team.tie?.level ?? null]);
+
+  test('puts the team on 40 points first and the team that beat the other on 38 ahead of it, each at its own level', async () => {
+    // Team 01 beats Team 04 23 to 17, Team 04 beats Team 05 21 to 15, and Team 05 beats Team 01 23 to 17: 40, 38, and 38 points.
+    const { s } = await playedPoolA([
+      [1, 4, 23, 17],
+      [4, 5, 21, 15],
+      [5, 1, 23, 17],
+    ]);
+    expect(await poolA(s)).toEqual([
+      ['Team 01', 0],
+      ['Team 04', 1],
+      ['Team 05', 2],
+    ]);
+  });
+
+  test('puts a team later in the seed order ahead of an earlier one when it won the game between the two on 38', async () => {
+    // Team 01 beats Team 05 23 to 17, Team 05 beats Team 04 21 to 15, and Team 04 beats Team 01 23 to 17: 40, 38, and 38 points.
+    const { s } = await playedPoolA([
+      [1, 5, 23, 17],
+      [5, 4, 21, 15],
+      [4, 1, 23, 17],
+    ]);
+    expect(await poolA(s)).toEqual([
+      ['Team 01', 0],
+      ['Team 05', 1],
+      ['Team 04', 2],
+    ]);
+  });
+
+  test('leaves three teams on the same points at one level, so seed order decides', async () => {
+    const { s } = await playedPoolA([
+      [1, 4, 21, 15],
+      [4, 5, 21, 15],
+      [5, 1, 21, 15],
+    ]);
+    expect(await poolA(s)).toEqual([
+      ['Team 01', 0],
+      ['Team 04', 0],
+      ['Team 05', 0],
+    ]);
+  });
+});
