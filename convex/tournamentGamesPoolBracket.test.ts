@@ -99,12 +99,28 @@ const swapSides = (score: Score): Score =>
     ? { kind: 'sets', sets: score.sets.map(({ a, b }) => ({ a: b, b: a })) }
     : score;
 
-const create = (
+/** Sends the order the page would have shown, read as the admin just before, unless the test names the one it saw earlier. */
+const create = async (
   s: TournamentWorld,
-  args: { advancePerPool: number; seedOrder?: Id<'teams'>[]; replace?: boolean },
+  args: {
+    advancePerPool: number;
+    seedOrder?: Id<'teams'>[];
+    replace?: boolean;
+    expectedRanking?: Id<'teams'>[];
+  },
   who: Pick<Person, 'authUserId' | 'name'> = s.admin,
-) =>
-  s.as(who).mutation(api.tournamentGames.createBracketFromPools, { tournamentId: s.gulf, ...args });
+) => {
+  const expectedRanking =
+    args.expectedRanking ??
+    (await s.as(s.admin).query(api.tournamentGames.getPoolBracket, TOURNAMENT_SLUGS))!.ranked.map(
+      (team) => team.teamId,
+    );
+  return s.as(who).mutation(api.tournamentGames.createBracketFromPools, {
+    tournamentId: s.gulf,
+    ...args,
+    expectedRanking,
+  });
+};
 
 const view = (s: TournamentWorld, who: Pick<Person, 'authUserId' | 'name'> = s.admin) =>
   s.as(who).query(api.tournamentGames.getPoolBracket, TOURNAMENT_SLUGS);
@@ -256,6 +272,28 @@ describe('tournamentGames.createBracketFromPools', () => {
         seedOrder: [teamIds[0], teamIds[1], teamIds[2], foreign],
       }).catch(refusalOf),
     ).toMatchObject({ code: 'advancingInvalid' });
+  });
+
+  test('refuses a Create on standings that a corrected result has changed since the page loaded', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    const shown = (await view(s))!.ranked.map((team) => team.teamId);
+    const game = (await poolGames(s)).find(
+      (row) => row.teamIds.includes(teamIds[0]) && row.teamIds.includes(teamIds[3]),
+    )!;
+    const swappedSides = game.teamIds[0] !== teamIds[0];
+    await s.as(s.admin).mutation(api.tournamentGames.correctResult, {
+      gameId: game._id,
+      score: swappedSides ? set(21, 15) : set(15, 21),
+    });
+    expect(await create(s, { advancePerPool: 2, expectedRanking: shown }).catch(refusalOf)).toEqual(
+      {
+        code: 'standingsChanged',
+        message: POOL_MESSAGES.standingsChanged,
+      },
+    );
+    expect(await bracketGames(s)).toEqual([]);
+    expect(await create(s, { advancePerPool: 2 })).toMatchObject({ teamCount: 4 });
   });
 
   test('refuses an advance above the smallest pool, none, and a part of a team', async () => {
@@ -535,11 +573,10 @@ describe('teams tied in a pool', () => {
         score: swappedSides ? swapSides(score) : score,
       });
     }
-    const tie = { place: 1, decidedBy: 'headToHead' };
     expect(await poolATies(s)).toEqual([
-      ['Team 05', tie],
-      ['Team 01', tie],
-      ['Team 04', tie],
+      ['Team 05', { place: 1, level: 0 }],
+      ['Team 01', { place: 1, level: 1 }],
+      ['Team 04', { place: 1, level: 2 }],
     ]);
     await create(s, { advancePerPool: 1 });
     const [final] = await bracketGames(s);
@@ -549,7 +586,7 @@ describe('teams tied in a pool', () => {
   test('keeps the pool seed order when the two teams drew their game', async () => {
     const { s } = await soccerWorld();
     await drawAll(s);
-    const tie = { place: 1, decidedBy: 'seedOrder' };
+    const tie = { place: 1, level: 0 };
     expect(await poolATies(s)).toEqual([
       ['Team 01', tie],
       ['Team 04', tie],
@@ -564,7 +601,7 @@ describe('teams tied in a pool', () => {
       (row) => row.teamIds.includes(teamIds[0]) && row.teamIds.includes(teamIds[3]),
     )!;
     await s.t.run((ctx) => ctx.db.delete('tournamentGames', game._id));
-    const tie = { place: 2, decidedBy: 'seedOrder' };
+    const tie = { place: 2, level: 1 };
     expect(await poolATies(s)).toEqual([
       ['Team 05', null],
       ['Team 01', tie],
@@ -612,6 +649,7 @@ describe('access to the pool bracket functions', () => {
       s.t.mutation(api.tournamentGames.createBracketFromPools, {
         tournamentId: s.gulf,
         advancePerPool: 2,
+        expectedRanking: [],
       }),
     ).rejects.toThrow(/Sign in required/);
   });

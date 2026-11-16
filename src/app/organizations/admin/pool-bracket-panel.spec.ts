@@ -81,6 +81,7 @@ const game = (gameId: string, slot: number, one: number | null, other: number | 
   locked: false,
   reports: [],
 });
+const RANKING = ['tm_1', 'tm_2', 'tm_3', 'tm_4', 'tm_5', 'tm_6'];
 const FOUR = ['tm_1', 'tm_2', 'tm_3', 'tm_4'];
 const BRACKET = {
   hasResult: false,
@@ -361,6 +362,7 @@ describe('PoolBracketPanel', () => {
           {
             tournamentId: 'tn_winter',
             advancePerPool: 2,
+            expectedRanking: RANKING,
             seedOrder: ['tm_1', 'tm_3', 'tm_2', 'tm_4'],
           },
         ],
@@ -484,6 +486,7 @@ describe('PoolBracketPanel', () => {
           {
             tournamentId: 'tn_winter',
             advancePerPool: 2,
+            expectedRanking: RANKING,
             seedOrder: ['tm_1', 'tm_2', 'tm_3', 'tm_4'],
             replace: true,
           },
@@ -536,15 +539,14 @@ describe('PoolBracketPanel', () => {
   });
 
   describe('teams tied in a pool', () => {
-    const tie = (decidedBy: string) => ({ place: 2, decidedBy });
-    const tied = (decidedBy: string) =>
+    const tied = (levels: readonly [number, number]) =>
       setupOf({
         ranked: ranked(
           [1, 'A', 1],
           [2, 'B', 1],
-          [3, 'A', 2, tie(decidedBy)],
+          [3, 'A', 2, { place: 2, level: levels[0] }],
           [4, 'B', 2],
-          [5, 'A', 3, tie(decidedBy)],
+          [5, 'A', 3, { place: 2, level: levels[1] }],
           [6, 'B', 3],
         ),
       });
@@ -555,7 +557,7 @@ describe('PoolBracketPanel', () => {
     const note = () => text(panel().querySelector('[data-slot="tie-note"]'));
 
     it('labels the tied teams with the place they share', async () => {
-      await open(tied('headToHead'));
+      await open(tied([1, 2]));
       expect(rows().map((row) => text(row.querySelector('[data-slot="place"]')))).toEqual([
         'Pool A, 1st',
         'Pool B, 1st',
@@ -565,26 +567,45 @@ describe('PoolBracketPanel', () => {
     });
 
     it.each([
-      ['headToHead', 'The team that scored more points in the games between them advances.'],
-      ['seedOrder', 'so seed order decides.'],
-    ])('says %s decided it, in one line', async (decidedBy, words) => {
-      await open(tied(decidedBy));
+      [[1, 2], 'The team that scored more points in the games between them advances.'],
+      [[1, 1], 'so seed order decides.'],
+    ] as const)('says what decided it, in one line, for levels %j', async (levels, words) => {
+      await open(tied(levels));
       expect(panel().querySelectorAll('[data-slot="tie-note"]')).toHaveLength(1);
       expect(note()).toContain('Pool A is tied for 2nd between Team 03 and Team 05.');
       expect(note()).toContain(words);
     });
 
+    it('names the rule that separated the last team in from the first team out, in a band the points split only partly', async () => {
+      await open(
+        setupOf({
+          ranked: ranked(
+            [1, 'A', 1, { place: 1, level: 0 }],
+            [2, 'B', 1],
+            [3, 'A', 2, { place: 1, level: 1 }],
+            [4, 'B', 2],
+            [5, 'A', 3, { place: 1, level: 1 }],
+            [6, 'B', 3],
+          ),
+        }),
+      );
+      await chooseAdvance(1);
+      expect(note()).toContain(
+        'The team that scored more points in the games between them advances.',
+      );
+      await chooseAdvance(2);
+      expect(note()).toContain('so seed order decides.');
+    });
+
     it('says nothing when the tie is not on the advance line', async () => {
-      await open(tied('seedOrder'));
+      await open(tied([1, 1]));
       await chooseAdvance(1);
       expect(panel().querySelector('[data-slot="tie-note"]')).toBeNull();
     });
 
     it('lets the organizer put the other tied team through, says it is their choice, and sends it', async () => {
-      await open(tied('headToHead'));
+      await open(tied([1, 2]));
       await tick(3);
-      expect(panel().querySelector('[data-slot="advancing-reason"]')).not.toBeNull();
-      expect(createButton()).toBeNull();
       await tick(5);
       expect(names()).toEqual(['Team 01', 'Team 02', 'Team 04', 'Team 05']);
       expect(seedStatus()).toBe('Team 05 advances.');
@@ -597,21 +618,28 @@ describe('PoolBracketPanel', () => {
           {
             tournamentId: 'tn_winter',
             advancePerPool: 2,
+            expectedRanking: RANKING,
             seedOrder: ['tm_1', 'tm_2', 'tm_4', 'tm_5'],
           },
         ],
       ]);
     });
 
-    it('holds Create and says how many to choose while a pool sends another count', async () => {
-      await open(tied('headToHead'));
+    it('says under the pool how many to choose, keeps Create, and a press focuses that pool without sending', async () => {
+      await open(tied([1, 2]));
       await tick(5);
-      expect(text(panel().querySelector('[data-slot="advancing-reason"]'))).toBe(
-        'Choose 2 teams from each pool, each from its own pool.',
+      const fieldset = panel().querySelector<HTMLElement>('#advancing-pool-A')!;
+      expect(text(fieldset.querySelector('[role="alert"]'))).toBe(
+        'Choose 2 teams from Pool A. 3 are chosen.',
       );
-      expect(createButton()).toBeNull();
+      expect(fieldset.getAttribute('aria-describedby')).toBe('advancing-error-A');
+      expect(panel().querySelector('#advancing-pool-B [role="alert"]')).toBeNull();
+      createButton()!.click();
+      await o.flush();
+      expect(calls()).toEqual([]);
+      expect(document.activeElement).toBe(fieldset);
       await tick(5);
-      expect(createButton()).not.toBeNull();
+      expect(fieldset.querySelector('[role="alert"]')).toBeNull();
     });
   });
 });

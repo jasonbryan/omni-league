@@ -579,14 +579,8 @@ const rankedTeamValidator = v.object({
   pool: poolValidator,
   /** The team's place in its pool, from 1. */
   place: v.number(),
-  /** Set when the team shares its place in the pool with another: the place, and what put one ahead. */
-  tie: v.union(
-    v.null(),
-    v.object({
-      place: v.number(),
-      decidedBy: v.union(v.literal('headToHead'), v.literal('seedOrder')),
-    }),
-  ),
+  /** Set when the team shares its place in the pool with another: the place, and a `level` that two teams share only when seed order alone put one ahead. */
+  tie: v.union(v.null(), v.object({ place: v.number(), level: v.number() })),
 });
 
 export const getPoolBracket = query({
@@ -653,12 +647,14 @@ export const createBracketFromPools = mutation({
   args: {
     tournamentId: v.id('tournaments'),
     advancePerPool: v.number(),
+    /** The teams of the pools in the order the page showed them, so a result corrected since is refused instead of bracketed on old standings. */
+    expectedRanking: v.array(v.id('teams')),
     /** The advancing teams in seed order, `advancePerPool` from each pool, which may override who the pool results put through; absent takes the pool results. */
     seedOrder: v.optional(v.array(v.id('teams'))),
     replace: v.optional(v.boolean()),
   },
   returns: v.object({ gameCount: v.number(), replaced: v.boolean(), teamCount: v.number() }),
-  handler: async (ctx, { tournamentId, advancePerPool, seedOrder, replace }) => {
+  handler: async (ctx, { tournamentId, advancePerPool, expectedRanking, seedOrder, replace }) => {
     const { tournament, program } = await requireTournamentOrganizer(ctx, tournamentId);
     if (tournament.structure !== 'pools') {
       refusePool({ code: 'notPools', message: POOL_MESSAGES.notPools });
@@ -672,6 +668,13 @@ export const createBracketFromPools = mutation({
         code: 'poolGamesPending',
         message: POOL_MESSAGES.poolGamesPending(results.withoutResult),
       });
+    }
+    const shown = results.ranked.map((seed) => seed.team._id);
+    if (
+      shown.length !== expectedRanking.length ||
+      shown.some((id, i) => id !== expectedRanking[i])
+    ) {
+      refusePool({ code: 'standingsChanged', message: POOL_MESSAGES.standingsChanged });
     }
     if (registrationIsOpen(tournament, Date.now())) {
       refuseBracket({

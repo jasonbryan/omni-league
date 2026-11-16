@@ -13,9 +13,14 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideArrowDown, lucideArrowUp, lucideRefreshCw, lucideTrophy } from '@ng-icons/lucide';
+import {
+  lucideArrowDown,
+  lucideArrowUp,
+  lucideCircleAlert,
+  lucideRefreshCw,
+  lucideTrophy,
+} from '@ng-icons/lucide';
 import { BRACKET_MESSAGES, roundCount } from '../../../../convex/lib/bracket';
-import { checkAdvancing } from '../../../../convex/lib/poolBracket';
 import { POOL_MESSAGES, type Pool } from '../../../../convex/lib/pools';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -23,7 +28,7 @@ import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../cor
 import { injectNow } from '../../core/now';
 import { Checkbox } from '../../ui/checkbox';
 import { HlmCard } from '../../ui/card';
-import { HlmFieldImports } from '../../ui/field';
+import { HlmFieldImports, HlmFieldSetImports } from '../../ui/field';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
@@ -49,6 +54,7 @@ import {
   advanceOptions,
   BRACKET_KEEPS_SEEDS_NOTE,
   placeText,
+  poolCountText,
   tieNote,
   type TieDeciding,
   SEEDS_HINT,
@@ -95,11 +101,20 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
     ConfirmDialog,
     HlmCard,
     HlmFieldImports,
+    HlmFieldSetImports,
     HlmSkeleton,
     HlmSpinner,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideArrowDown, lucideArrowUp, lucideRefreshCw, lucideTrophy })],
+  providers: [
+    provideIcons({
+      lucideArrowDown,
+      lucideArrowUp,
+      lucideCircleAlert,
+      lucideRefreshCw,
+      lucideTrophy,
+    }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -237,8 +252,24 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                 </h3>
                 <p [class]="hint + ' mt-1'">{{ advancingHint }}</p>
                 @for (group of poolGroups(); track group.pool) {
-                  <fieldset class="mt-3" [attr.data-pool]="group.pool">
-                    <legend class="text-sm font-medium">Pool {{ group.pool }}</legend>
+                  <fieldset
+                    hlmFieldSet
+                    tabindex="-1"
+                    class="mt-3 focus:outline-none"
+                    [id]="'advancing-pool-' + group.pool"
+                    [attr.data-pool]="group.pool"
+                    [attr.aria-describedby]="
+                      poolIssues().has(group.pool) ? 'advancing-error-' + group.pool : null
+                    "
+                    [attr.data-invalid]="poolIssues().has(group.pool) ? 'true' : null"
+                  >
+                    <legend
+                      hlmFieldLegend
+                      variant="label"
+                      [class.text-destructive]="poolIssues().has(group.pool)"
+                    >
+                      Pool {{ group.pool }}
+                    </legend>
                     @for (team of group.teams; track team.teamId) {
                       <div hlmField orientation="horizontal" class="mt-2">
                         <app-checkbox
@@ -256,6 +287,16 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                         </div>
                       </div>
                     }
+                    @if (poolIssues().get(group.pool); as issue) {
+                      <div hlmFieldError [id]="'advancing-error-' + group.pool">
+                        <ng-icon
+                          name="lucideCircleAlert"
+                          class="mt-0.5 shrink-0 text-base"
+                          aria-hidden="true"
+                        />
+                        <span>{{ issue }}</span>
+                      </div>
+                    }
                   </fieldset>
                 }
               </section>
@@ -271,8 +312,6 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
             <div [class]="section">
               @if (hasResult()) {
                 <p [class]="hint" data-slot="create-reason">{{ resultEntered }}</p>
-              } @else if (advancingIssue(); as issue) {
-                <p [class]="hint" data-slot="advancing-reason">{{ issue }}</p>
               } @else {
                 <button
                   type="button"
@@ -499,16 +538,16 @@ export class PoolBracketPanel {
     return [...groups].map(([pool, teams]) => ({ pool, teams }));
   });
 
-  protected readonly advancingIssue = computed(() => {
+  protected readonly poolIssues = computed(() => {
     const ranked = new Map((this.setup()?.ranked ?? []).map((team) => [team.teamId, team]));
+    const advance = this.advance();
     const chosen = this.order().flatMap((teamId) => ranked.get(teamId) ?? []);
-    return (
-      checkAdvancing(
-        chosen,
-        this.poolGroups().map((group) => group.pool),
-        this.advance(),
-      )?.message ?? null
-    );
+    const issues = new Map<Pool, string>();
+    for (const { pool } of this.poolGroups()) {
+      const count = chosen.filter((team) => team.pool === pool).length;
+      if (count !== advance) issues.set(pool, poolCountText(pool, advance, count));
+    }
+    return issues;
   });
 
   /** A pool whose tie sits on the advance line gets one line saying what decided who advances. */
@@ -528,7 +567,13 @@ export class PoolBracketPanel {
         const sameChoice = band.every(
           (team) => chosen.has(team.teamId) === proposed.includes(team.teamId),
         );
-        const deciding: TieDeciding = sameChoice ? band[0].tie!.decidedBy : 'organizer';
+        const lastIn = band.find((team) => team.place === advance)!.tie!;
+        const firstOut = band.find((team) => team.place === advance + 1)!.tie!;
+        const deciding: TieDeciding = !sameChoice
+          ? 'organizer'
+          : lastIn.level === firstOut.level
+            ? 'seedOrder'
+            : 'headToHead';
         return [
           {
             pool,
@@ -563,7 +608,6 @@ export class PoolBracketPanel {
     this.notice.set(null);
   }
 
-  /** True when the bracket was created with another advance or another order than the list shows. */
   protected readonly differsFromBracket = computed(
     () =>
       this.hasBracket() &&
@@ -597,6 +641,11 @@ export class PoolBracketPanel {
 
   protected async create(): Promise<void> {
     if (this.creating()) return;
+    const [invalid] = this.poolIssues().keys();
+    if (invalid !== undefined) {
+      this.host.nativeElement.querySelector<HTMLElement>(`#advancing-pool-${invalid}`)?.focus();
+      return;
+    }
     this.notice.set(null);
     this.state.update((state) => ({ ...state, text: '' }));
     if (this.hasBracket()) {
@@ -633,6 +682,7 @@ export class PoolBracketPanel {
       const result = await this.createCall.run({
         tournamentId: this.tournament().tournamentId,
         advancePerPool: this.advance(),
+        expectedRanking: (this.setup()?.ranked ?? []).map((team) => team.teamId),
         seedOrder: [...this.order()],
         ...(replace && { replace }),
       });

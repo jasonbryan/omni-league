@@ -17,15 +17,13 @@ export interface PoolStanding {
   games: readonly StandingsGame[];
 }
 
-export type TieDecidedBy = 'headToHead' | 'seedOrder';
-
 export interface PoolSeed {
   teamId: string;
   pool: Pool;
   /** The team's place in its pool, from 1, which tied teams take one after the other. */
   place: number;
-  /** Set for a team that shares its place in the pool with another, with the place they share. */
-  tie: { place: number; decidedBy: TieDecidedBy } | null;
+  /** Set for a team that shares its place in the pool with another: the place they share, and a number that two of them share only when nothing separated them but seed order. */
+  tie: { place: number; level: number } | null;
 }
 
 export function checkAdvance(poolSizes: readonly number[], advance: number): PoolIssue | null {
@@ -66,28 +64,43 @@ function compareValues(first: readonly number[], second: readonly number[]): num
   return 0;
 }
 
-/** Teams level in a pool: the one that scored more points in the games between them first, else the pool's seed order. */
+/**
+ * Teams level in a pool, best first: the points rule is applied again to each group it leaves level, and the pool's seed order
+ * separates what is still level. `level` is the pool index of the first team of the group a team ends in.
+ */
+function byPointsAmong(
+  group: readonly string[],
+  games: readonly StandingsGame[],
+  firstIndex: number,
+): { teamId: string; level: number }[] {
+  const points = pointsAmong(group, games);
+  if (new Set(points.values()).size === 1) {
+    return group.map((teamId) => ({ teamId, level: firstIndex }));
+  }
+  const ordered: { teamId: string; level: number }[] = [];
+  const bestFirst = [...new Set(points.values())].sort((a, b) => b - a);
+  for (const value of bestFirst) {
+    const level = group.filter((teamId) => points.get(teamId) === value);
+    ordered.push(...byPointsAmong(level, games, firstIndex + ordered.length));
+  }
+  return ordered;
+}
+
 function orderedPool({ pool, teamIds, games }: PoolStanding, sport: Sport) {
   const rows = standingsOf(sport, teamIds, games);
   const ordered: { teamId: string; place: number; tie: PoolSeed['tie']; values: number[] }[] = [];
+  const valuesOf = new Map(rows.map((row) => [row.teamId, crossPoolValues(sport, row)]));
   for (let start = 0; start < rows.length;) {
     const band = rows.filter((row) => row.place === rows[start].place);
-    const points = pointsAmong(
-      band.map((row) => row.teamId),
-      games,
-    );
-    const separated = new Set(points.values()).size > 1;
-    const tie: PoolSeed['tie'] =
-      band.length > 1
-        ? { place: rows[start].place, decidedBy: separated ? 'headToHead' : 'seedOrder' }
-        : null;
-    const inOrder = [...band].sort((a, b) => points.get(b.teamId)! - points.get(a.teamId)!);
-    for (const row of inOrder) {
+    const ids = band.map((row) => row.teamId);
+    const inOrder =
+      band.length > 1 ? byPointsAmong(ids, games, start) : [{ teamId: ids[0], level: start }];
+    for (const { teamId, level } of inOrder) {
       ordered.push({
-        teamId: row.teamId,
+        teamId,
         place: ordered.length + 1,
-        tie,
-        values: crossPoolValues(sport, row),
+        tie: band.length > 1 ? { place: rows[start].place, level } : null,
+        values: valuesOf.get(teamId)!,
       });
     }
     start += band.length;

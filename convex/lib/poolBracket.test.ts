@@ -97,7 +97,7 @@ describe('seedsFromPools: teams level in a pool', () => {
     ]).filter((seed) => seed.pool === 'A');
     expect(seeds.map((seed) => seed.teamId)).toEqual(['a3', 'a1', 'a2']);
     expect(seeds.map((seed) => seed.place)).toEqual([1, 2, 3]);
-    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'headToHead' });
+    expect(seeds.map((seed) => seed.tie?.level)).toEqual([0, 1, 2]);
   });
 
   test('falls back to the pool seed order when they scored the same points', () => {
@@ -106,7 +106,24 @@ describe('seedsFromPools: teams level in a pool', () => {
       trio('B', [set(21, 19), set(21, 19), set(21, 19)]),
     ]).filter((seed) => seed.pool === 'A');
     expect(seeds.map((seed) => seed.teamId)).toEqual(['a1', 'a2', 'a3']);
-    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'seedOrder' });
+    expect(seeds.map((seed) => seed.tie)).toEqual([
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+    ]);
+  });
+
+  test('applies the points rule again to the teams it leaves level: 40, 38, and 38 points', () => {
+    // Each team beats one and loses to one by 6, so they score 40 (a), 38 (b), and 38 (c); b beat c 21 to 15.
+    const aBeatsB = game('a', 'b', set(23, 17));
+    const bBeatsC = game('b', 'c', set(21, 15));
+    const cBeatsA = game('c', 'a', set(23, 17));
+    const seeds = seedsFromPools('beachVolleyball', [
+      pool('A', ['a', 'c', 'b'], [aBeatsB, bBeatsC, cBeatsA]),
+      trio('B', [set(21, 19), set(21, 19), set(21, 19)]),
+    ]).filter((seed) => seed.pool === 'A');
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['a', 'b', 'c']);
+    expect(seeds.map((seed) => seed.tie?.level)).toEqual([0, 1, 2]);
   });
 
   test('falls back to the pool seed order when they did not play each other', () => {
@@ -119,7 +136,7 @@ describe('seedsFromPools: teams level in a pool', () => {
       'a2',
       'a3',
     ]);
-    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'seedOrder' });
+    expect(seeds.map((seed) => seed.tie?.level)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 });
 

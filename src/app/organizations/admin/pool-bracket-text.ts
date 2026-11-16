@@ -61,3 +61,7 @@ export const BRACKET_KEEPS_SEEDS_NOTE =
   'The bracket keeps the seeds it was created with. Recreate it to use this order.';
 
 export const SEEDS_RESET_TEXT = 'The pool results changed, so the seeds start again from them.';
+
+export function poolCountText(pool: Pool, advance: number, chosen: number): string {
+  return `Choose ${advance} ${advance === 1 ? 'team' : 'teams'} from Pool ${pool}. ${chosen} ${chosen === 1 ? 'is' : 'are'} chosen.`;
+}

@@ -1174,10 +1174,12 @@ test.describe('Tournaments: bracket from pools', () => {
     await expectAccessible(page);
 
     await bracketPanel(page).getByRole('checkbox', { name: /^Dune/ }).click();
-    await expect(bracketPanel(page).locator('[data-slot="advancing-reason"]')).toHaveText(
-      'Choose 2 teams from each pool, each from its own pool.',
+    await expect(bracketPanel(page).locator('#advancing-pool-A [role="alert"]')).toHaveText(
+      'Choose 2 teams from Pool A. 1 is chosen.',
     );
-    await expect(createBracket(page)).toHaveCount(0);
+    await createBracket(page).click();
+    await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
+    await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
     await bracketPanel(page).getByRole('checkbox', { name: /^Eddy/ }).click();
     await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Cove', 'Eddy']);
     await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toContainText(
