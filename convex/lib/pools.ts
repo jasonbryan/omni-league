@@ -55,7 +55,7 @@ export const POOL_REFUSAL_CODES = [
   'advanceCount',
   'advanceTotal',
   'poolGamesPending',
-  'seedsChanged',
+  'advancingInvalid',
   'poolsFrozen',
 ] as const;
 
@@ -92,7 +92,8 @@ export const POOL_MESSAGES = {
   advanceTotal: `At least ${MIN_ADVANCING_TEAMS} teams must advance in total.`,
   poolGamesPending: (count: number) =>
     `${count} pool ${count === 1 ? 'game still needs' : 'games still need'} a confirmed result.`,
-  seedsChanged: 'The pool results changed since. Check the seeds and try again.',
+  advancingInvalid: (advance: number) =>
+    `Choose ${advance} ${advance === 1 ? 'team' : 'teams'} from each pool, each from its own pool.`,
   poolsFrozen: 'The bracket is created, so pool results cannot change.',
 } as const;
 

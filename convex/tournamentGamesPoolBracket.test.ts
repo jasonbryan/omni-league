@@ -94,6 +94,11 @@ async function playPoolGames(
   }
 }
 
+const swapSides = (score: Score): Score =>
+  score.kind === 'sets'
+    ? { kind: 'sets', sets: score.sets.map(({ a, b }) => ({ a: b, b: a })) }
+    : score;
+
 const create = (
   s: TournamentWorld,
   args: { advancePerPool: number; seedOrder?: Id<'teams'>[]; replace?: boolean },
@@ -200,20 +205,57 @@ describe('tournamentGames.createBracketFromPools', () => {
     ]);
   });
 
-  test.each([
-    ['a team that did not advance', (ids: Id<'teams'>[]) => [ids[0], ids[1], ids[2], ids[4]]],
-    ['a team missing', (ids: Id<'teams'>[]) => [ids[0], ids[1], ids[2]]],
-    ['a team twice', (ids: Id<'teams'>[]) => [ids[0], ids[1], ids[2], ids[2]]],
-  ])('refuses an order with %s', async (_label, order) => {
+  test('advances the teams the organizer put through in place of the pool results’ choice, when each pool sends its share', async () => {
     const { s, teamIds } = await world();
     await playPoolGames(s, teamIds);
-    expect(
-      await create(s, { advancePerPool: 2, seedOrder: order(teamIds) }).catch(refusalOf),
-    ).toEqual({
-      code: 'seedsChanged',
-      message: POOL_MESSAGES.seedsChanged,
+    await create(s, {
+      advancePerPool: 2,
+      seedOrder: [teamIds[0], teamIds[1], teamIds[4], teamIds[2]],
+    });
+    const first = (await bracketGames(s)).filter((game) => game.round === 1);
+    expect(await Promise.all(first.map((game) => teamNames(s, game.teamIds)))).toEqual([
+      ['Team 01', 'Team 03'],
+      ['Team 02', 'Team 05'],
+    ]);
+  });
+
+  test.each([
+    ['3 teams of one pool', (ids: Id<'teams'>[]) => [ids[0], ids[3], ids[4], ids[1]]],
+    ['a team missing', (ids: Id<'teams'>[]) => [ids[0], ids[1], ids[2]]],
+    ['a team twice', (ids: Id<'teams'>[]) => [ids[0], ids[1], ids[2], ids[2]]],
+  ])('refuses an override with %s', async (_label, order) => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    const refused = await create(s, { advancePerPool: 2, seedOrder: order(teamIds) }).catch(
+      refusalOf,
+    );
+    expect(refused).toEqual({
+      code: 'advancingInvalid',
+      message: POOL_MESSAGES.advancingInvalid(2),
     });
     expect(await bracketGames(s)).toEqual([]);
+  });
+
+  test('refuses an override naming a team of another tournament', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    const foreign = await s.t.run((ctx) =>
+      ctx.db.insert('teams', {
+        organizationId: s.a,
+        tournamentId: s.second,
+        name: 'Elsewhere',
+        sortName: 'elsewhere',
+        captainUserId: s.captain.userId,
+        rosterCount: 2,
+        createdAt: 5,
+      }),
+    );
+    expect(
+      await create(s, {
+        advancePerPool: 2,
+        seedOrder: [teamIds[0], teamIds[1], teamIds[2], foreign],
+      }).catch(refusalOf),
+    ).toMatchObject({ code: 'advancingInvalid' });
   });
 
   test('refuses an advance above the smallest pool, none, and a part of a team', async () => {
@@ -439,43 +481,114 @@ describe('pool results once the bracket exists', () => {
   });
 });
 
-describe('a pool whose teams nothing separates', () => {
-  async function levelWorld() {
-    const { s, teamIds } = await world();
-    await s.t.run(async (ctx) => {
-      await ctx.db.patch('tournaments', s.gulf, { sport: 'soccer' });
-      const tournament = (await ctx.db.get('tournaments', s.gulf))!;
-      await ctx.db.patch('programs', tournament.programId, { sport: 'soccer' });
-    });
-    for (const game of await poolGames(s)) {
-      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
-        gameId: game._id,
-        score: { kind: 'goals', a: 1, b: 1 },
-      });
-    }
-    return { s, teamIds };
-  }
+describe('teams tied in a pool', () => {
+  const swapped = (teamIds: Id<'teams'>[]) => [teamIds[3], teamIds[1], teamIds[0], teamIds[2]];
 
   const tableOf = async (s: TournamentWorld) =>
     (await s.t.query(api.tournaments.getPublicPage, TOURNAMENT_SLUGS))!.pools!.map((pool) =>
       pool.standings.map((row) => row.name),
     );
 
-  test('keeps the pool table and the advancing team when the organizer swaps two pool-mates in the bracket', async () => {
-    const { s, teamIds } = await levelWorld();
-    const before = await tableOf(s);
-    expect(before).toEqual([
-      ['Team 01', 'Team 04', 'Team 05'],
-      ['Team 02', 'Team 03', 'Team 06'],
-    ]);
-    await create(s, {
-      advancePerPool: 2,
-      seedOrder: [teamIds[3], teamIds[1], teamIds[0], teamIds[2]],
+  async function soccerWorld() {
+    const { s, teamIds } = await world();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('tournaments', s.gulf, { sport: 'soccer' });
+      const tournament = (await ctx.db.get('tournaments', s.gulf))!;
+      await ctx.db.patch('programs', tournament.programId, { sport: 'soccer' });
     });
+    return { s, teamIds };
+  }
+
+  async function drawAll(s: TournamentWorld) {
+    for (const game of await poolGames(s)) {
+      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+        gameId: game._id,
+        score: { kind: 'goals', a: 1, b: 1 },
+      });
+    }
+  }
+
+  const poolATies = async (s: TournamentWorld) =>
+    (await view(s))!.ranked
+      .filter((team) => team.pool === 'A')
+      .map((team) => [team.name, team.tie]);
+
+  test('puts the team that scored more points against the others first: a head-to-head win', async () => {
+    // Each of Team 01, 04, and 05 beats one of the others by 6, so nothing separates them but the points they scored.
+    const { s, teamIds } = await world();
+    const results: [number, number, Score][] = [
+      [1, 4, set(21, 15)],
+      [4, 5, set(25, 19)],
+      [5, 1, set(30, 24)],
+      [2, 3, set(21, 15)],
+      [2, 6, set(21, 15)],
+      [3, 6, set(21, 15)],
+    ];
+    for (const [first, second, score] of results) {
+      const game = (await poolGames(s)).find(
+        (row) =>
+          row.teamIds.includes(teamIds[first - 1]) && row.teamIds.includes(teamIds[second - 1]),
+      )!;
+      const swappedSides = game.teamIds[0] !== teamIds[first - 1];
+      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+        gameId: game._id,
+        score: swappedSides ? swapSides(score) : score,
+      });
+    }
+    const tie = { place: 1, decidedBy: 'headToHead' };
+    expect(await poolATies(s)).toEqual([
+      ['Team 05', tie],
+      ['Team 01', tie],
+      ['Team 04', tie],
+    ]);
+    await create(s, { advancePerPool: 1 });
+    const [final] = await bracketGames(s);
+    expect((await teamNames(s, final.teamIds)).sort()).toEqual(['Team 02', 'Team 05']);
+  });
+
+  test('keeps the pool seed order when the two teams drew their game', async () => {
+    const { s } = await soccerWorld();
+    await drawAll(s);
+    const tie = { place: 1, decidedBy: 'seedOrder' };
+    expect(await poolATies(s)).toEqual([
+      ['Team 01', tie],
+      ['Team 04', tie],
+      ['Team 05', tie],
+    ]);
+  });
+
+  test('keeps the pool seed order when the tied teams never played each other', async () => {
+    const { s, teamIds } = await soccerWorld();
+    await drawAll(s);
+    const game = (await poolGames(s)).find(
+      (row) => row.teamIds.includes(teamIds[0]) && row.teamIds.includes(teamIds[3]),
+    )!;
+    await s.t.run((ctx) => ctx.db.delete('tournamentGames', game._id));
+    const tie = { place: 2, decidedBy: 'seedOrder' };
+    expect(await poolATies(s)).toEqual([
+      ['Team 05', null],
+      ['Team 01', tie],
+      ['Team 04', tie],
+    ]);
+  });
+
+  test('keeps the pool table and the advancing team when the organizer swaps two pool-mates in the bracket', async () => {
+    const { s, teamIds } = await soccerWorld();
+    await drawAll(s);
+    const before = await tableOf(s);
+    await create(s, { advancePerPool: 2, seedOrder: swapped(teamIds) });
     expect(await tableOf(s)).toEqual(before);
     await create(s, { advancePerPool: 1, replace: true });
     const [final] = await bracketGames(s);
     expect(await teamNames(s, final.teamIds)).toEqual(['Team 01', 'Team 02']);
+  });
+
+  test('lets the organizer put the other tied team through', async () => {
+    const { s, teamIds } = await soccerWorld();
+    await drawAll(s);
+    await create(s, { advancePerPool: 1, seedOrder: [teamIds[4], teamIds[1]] });
+    const [final] = await bracketGames(s);
+    expect(await teamNames(s, final.teamIds)).toEqual(['Team 05', 'Team 02']);
   });
 });
 

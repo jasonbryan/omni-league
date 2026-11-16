@@ -1150,6 +1150,48 @@ test.describe('Tournaments: bracket from pools', () => {
     ).toHaveText('Game 1: Ace v Cove');
   });
 
+  test('says what decided a tie on the advance line, and the organizer puts the other tied team through', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX), sport: 'soccer' });
+    await seedPoolPlay(tenant, SLUG, 2);
+    for (const [one, other] of [
+      ['Ace', 'Dune'],
+      ['Ace', 'Eddy'],
+      ['Dune', 'Eddy'],
+      ['Bay', 'Cove'],
+      ['Bay', 'Flow'],
+      ['Cove', 'Flow'],
+    ] as const) {
+      await seedPoolResult(tenant, SLUG, [one, other], { score: { kind: 'goals', a: 1, b: 1 } });
+    }
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toHaveText(
+      'Pool A is tied for 1st between Ace, Dune, and Eddy. They scored the same points against each other, or did not play, so seed order decides.',
+    );
+    await screenshot(page, testInfo, 'pool-bracket-tie');
+    await expectAccessible(page);
+
+    await bracketPanel(page).getByRole('checkbox', { name: /^Dune/ }).click();
+    await expect(bracketPanel(page).locator('[data-slot="advancing-reason"]')).toHaveText(
+      'Choose 2 teams from each pool, each from its own pool.',
+    );
+    await expect(createBracket(page)).toHaveCount(0);
+    await bracketPanel(page).getByRole('checkbox', { name: /^Eddy/ }).click();
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Cove', 'Eddy']);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toContainText(
+      'Your choice decides who advances.',
+    );
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').first(),
+    ).toHaveText('Game 1: Ace v Eddy');
+    await page.reload();
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Cove', 'Eddy']);
+    await expect(bracketPanel(page).locator('[data-slot="seed-note"]')).toHaveCount(0);
+  });
+
   test('once the bracket exists a pool game shows why it cannot change, with no Correct result or Clear result', async ({
     page,
   }) => {

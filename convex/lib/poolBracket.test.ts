@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { planBracket } from './bracket';
 import { POOL_MESSAGES, type Pool } from './pools';
-import { checkAdvance, seedsFromPools, type PoolStanding } from './poolBracket';
+import { checkAdvance, checkAdvancing, seedsFromPools, type PoolStanding } from './poolBracket';
 import type { Score, Sport } from './sports';
 import type { StandingsGame } from './standings';
 
@@ -52,10 +52,10 @@ describe('seedsFromPools: two equal pools', () => {
 
   test('names the pool and the place each team finished in', () => {
     expect(seedsFromPools('beachVolleyball', pools).slice(0, 4)).toEqual([
-      { teamId: 'a1', pool: 'A', place: 1 },
-      { teamId: 'b1', pool: 'B', place: 1 },
-      { teamId: 'a2', pool: 'A', place: 2 },
-      { teamId: 'b2', pool: 'B', place: 2 },
+      { teamId: 'a1', pool: 'A', place: 1, tie: null },
+      { teamId: 'b1', pool: 'B', place: 1, tie: null },
+      { teamId: 'a2', pool: 'A', place: 2, tie: null },
+      { teamId: 'b2', pool: 'B', place: 2, tie: null },
     ]);
   });
 
@@ -79,6 +79,80 @@ describe('seedsFromPools: two equal pools', () => {
   test('keeps teams that nothing separates in their pool seed order', () => {
     const none = [pool('A', ['a1', 'a2', 'a3'], []), pool('B', ['b1', 'b2', 'b3'], [])];
     expect(labels('soccer', none)).toEqual(['a1', 'b1', 'a2', 'b2', 'a3', 'b3']);
+  });
+});
+
+describe('seedsFromPools: teams level in a pool', () => {
+  const cycle = (scores: [Score, Score, Score]) =>
+    pool(
+      'A',
+      ['a1', 'a2', 'a3'],
+      [game('a1', 'a2', scores[0]), game('a2', 'a3', scores[1]), game('a3', 'a1', scores[2])],
+    );
+
+  test('puts the team that scored more points in the games between them first, and names it', () => {
+    const seeds = seedsFromPools('beachVolleyball', [
+      cycle([set(21, 15), set(25, 19), set(30, 24)]),
+      trio('B', [set(21, 19), set(21, 19), set(21, 19)]),
+    ]).filter((seed) => seed.pool === 'A');
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['a3', 'a1', 'a2']);
+    expect(seeds.map((seed) => seed.place)).toEqual([1, 2, 3]);
+    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'headToHead' });
+  });
+
+  test('falls back to the pool seed order when they scored the same points', () => {
+    const seeds = seedsFromPools('beachVolleyball', [
+      cycle([set(21, 15), set(21, 15), set(21, 15)]),
+      trio('B', [set(21, 19), set(21, 19), set(21, 19)]),
+    ]).filter((seed) => seed.pool === 'A');
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['a1', 'a2', 'a3']);
+    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'seedOrder' });
+  });
+
+  test('falls back to the pool seed order when they did not play each other', () => {
+    const seeds = seedsFromPools('soccer', [
+      pool('A', ['a1', 'a2', 'a3'], []),
+      pool('B', ['b1', 'b2', 'b3'], []),
+    ]);
+    expect(seeds.filter((seed) => seed.pool === 'A').map((seed) => seed.teamId)).toEqual([
+      'a1',
+      'a2',
+      'a3',
+    ]);
+    expect(seeds[0].tie).toEqual({ place: 1, decidedBy: 'seedOrder' });
+  });
+});
+
+describe('checkAdvancing', () => {
+  const team = (teamId: string, name: Pool) => ({ teamId, pool: name });
+
+  test('accepts the advance from each pool, whichever teams', () => {
+    expect(
+      checkAdvancing(
+        [team('a2', 'A'), team('b1', 'B'), team('a1', 'A'), team('b3', 'B')],
+        ['A', 'B'],
+        2,
+      ),
+    ).toBeNull();
+  });
+
+  test('refuses another count from a pool, a team twice, and a missing pool', () => {
+    const refused = { code: 'advancingInvalid', message: POOL_MESSAGES.advancingInvalid(2) };
+    expect(
+      checkAdvancing(
+        [team('a1', 'A'), team('a2', 'A'), team('a3', 'A'), team('b1', 'B')],
+        ['A', 'B'],
+        2,
+      ),
+    ).toEqual(refused);
+    expect(
+      checkAdvancing(
+        [team('a1', 'A'), team('a1', 'A'), team('b1', 'B'), team('b2', 'B')],
+        ['A', 'B'],
+        2,
+      ),
+    ).toEqual(refused);
+    expect(checkAdvancing([team('a1', 'A'), team('a2', 'A')], ['A', 'B'], 2)).toEqual(refused);
   });
 });
 

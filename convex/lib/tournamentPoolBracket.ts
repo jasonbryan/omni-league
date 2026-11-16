@@ -1,7 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { POOL_MESSAGES } from './pools';
-import { seedsFromPools, type PoolSeed, type PoolStanding } from './poolBracket';
+import { checkAdvancing, seedsFromPools, type PoolSeed, type PoolStanding } from './poolBracket';
 import type { Sport } from './sports';
 import { gameHasResult, replaceBracketGames } from './tournamentBracket';
 import { poolGames, poolSetup, refusePool } from './tournamentPools';
@@ -43,17 +43,25 @@ export async function poolResults(
 }
 
 function chosenOrder(
-  advancing: readonly Doc<'teams'>[],
+  results: PoolResults,
+  advancePerPool: number,
   order: readonly Id<'teams'>[],
 ): Doc<'teams'>[] {
-  const byId = new Map(advancing.map((team) => [team._id, team]));
-  const chosen = order.flatMap((teamId) => byId.get(teamId) ?? []);
-  const sameTeams =
-    order.length === advancing.length &&
-    chosen.length === advancing.length &&
-    new Set(order).size === order.length;
-  if (!sameTeams) refusePool({ code: 'seedsChanged', message: POOL_MESSAGES.seedsChanged });
-  return chosen;
+  const ranked = new Map(results.ranked.map((seed) => [seed.team._id, seed]));
+  const chosen = order.flatMap((teamId) => ranked.get(teamId) ?? []);
+  const issue =
+    chosen.length === order.length
+      ? checkAdvancing(
+          chosen,
+          [...new Set(results.ranked.map((seed) => seed.pool))],
+          advancePerPool,
+        )
+      : {
+          code: 'advancingInvalid' as const,
+          message: POOL_MESSAGES.advancingInvalid(advancePerPool),
+        };
+  if (issue) refusePool(issue);
+  return chosen.map((seed) => seed.team);
 }
 
 export async function replaceBracketFromPools(
@@ -66,7 +74,7 @@ export async function replaceBracketFromPools(
 ): Promise<{ gameCount: number; teamCount: number }> {
   const advancingCount = advancePerPool * results.poolSizes.length;
   const advancing = results.ranked.slice(0, advancingCount).map((seed) => seed.team);
-  const seeds = seedOrder ? chosenOrder(advancing, seedOrder) : advancing;
+  const seeds = seedOrder ? chosenOrder(results, advancePerPool, seedOrder) : advancing;
   // `teams.seed` stays the split's order, which the pool tables keep for teams that nothing separates.
   const gameCount = await replaceBracketGames(ctx, tournament._id, seeds, replaced);
   return { gameCount, teamCount: seeds.length };

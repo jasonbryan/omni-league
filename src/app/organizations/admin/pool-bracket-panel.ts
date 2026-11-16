@@ -15,12 +15,15 @@ import {
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowDown, lucideArrowUp, lucideRefreshCw, lucideTrophy } from '@ng-icons/lucide';
 import { BRACKET_MESSAGES, roundCount } from '../../../../convex/lib/bracket';
-import { POOL_MESSAGES } from '../../../../convex/lib/pools';
+import { checkAdvancing } from '../../../../convex/lib/poolBracket';
+import { POOL_MESSAGES, type Pool } from '../../../../convex/lib/pools';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { injectNow } from '../../core/now';
+import { Checkbox } from '../../ui/checkbox';
 import { HlmCard } from '../../ui/card';
+import { HlmFieldImports } from '../../ui/field';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
@@ -39,10 +42,15 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup } from './chip-radio-group';
 import { ConfirmDialog, type ConfirmAlertView } from './confirm-dialog';
 import {
+  ADVANCING_HEADING,
+  ADVANCING_HINT,
+  advancingToggledText,
   advanceDescription,
   advanceOptions,
   BRACKET_KEEPS_SEEDS_NOTE,
   placeText,
+  tieNote,
+  type TieDeciding,
   SEEDS_HINT,
   SEEDS_NOT_SAVED_NOTE,
   SEEDS_RESET_TEXT,
@@ -83,8 +91,10 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
     AdminOfflineAlert,
     BracketGame,
     ChipRadioGroup,
+    Checkbox,
     ConfirmDialog,
     HlmCard,
+    HlmFieldImports,
     HlmSkeleton,
     HlmSpinner,
     NgIcon,
@@ -209,6 +219,46 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                   </li>
                 }
               </ol>
+              @for (line of tieLines(); track line.pool) {
+                <p
+                  [class]="hint + ' border-t border-border px-4 py-3 md:px-5'"
+                  data-slot="tie-note"
+                >
+                  {{ line.text }}
+                </p>
+              }
+              <section
+                aria-labelledby="pool-bracket-advancing-heading"
+                [class]="section"
+                data-slot="advancing"
+              >
+                <h3 id="pool-bracket-advancing-heading" class="font-semibold">
+                  {{ advancingHeading }}
+                </h3>
+                <p [class]="hint + ' mt-1'">{{ advancingHint }}</p>
+                @for (group of poolGroups(); track group.pool) {
+                  <fieldset class="mt-3" [attr.data-pool]="group.pool">
+                    <legend class="text-sm font-medium">Pool {{ group.pool }}</legend>
+                    @for (team of group.teams; track team.teamId) {
+                      <div hlmField orientation="horizontal" class="mt-2">
+                        <app-checkbox
+                          [controlId]="'advancing-' + team.teamId"
+                          [checked]="isAdvancing(team.teamId)"
+                          (checkedChange)="toggleAdvancing(team, $event)"
+                        />
+                        <div hlmFieldContent>
+                          <label hlmFieldLabel [for]="'advancing-' + team.teamId"
+                            >{{ team.name
+                            }}<span class="font-normal text-muted-foreground">
+                              {{ team.label }}</span
+                            ></label
+                          >
+                        </div>
+                      </div>
+                    }
+                  </fieldset>
+                }
+              </section>
               @if (differsFromBracket() && canMove()) {
                 <p
                   [class]="hint + ' border-t border-border px-4 py-3 md:px-5'"
@@ -221,6 +271,8 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
             <div [class]="section">
               @if (hasResult()) {
                 <p [class]="hint" data-slot="create-reason">{{ resultEntered }}</p>
+              } @else if (advancingIssue(); as issue) {
+                <p [class]="hint" data-slot="advancing-reason">{{ issue }}</p>
               } @else {
                 <button
                   type="button"
@@ -323,6 +375,8 @@ export class PoolBracketPanel {
   protected readonly notSavedNote = SEEDS_NOT_SAVED_NOTE;
   protected readonly keepsSeedsNote = BRACKET_KEEPS_SEEDS_NOTE;
   protected readonly resultEntered = BRACKET_MESSAGES.resultEntered;
+  protected readonly advancingHeading = ADVANCING_HEADING;
+  protected readonly advancingHint = ADVANCING_HINT;
   protected readonly directions: readonly SeedDirection[] = ['up', 'down'];
   protected readonly skeletonRows = [1, 2, 3];
 
@@ -422,13 +476,92 @@ export class PoolBracketPanel {
         teamId,
         name: team.name,
         seed: index + 1,
-        place: placeText(team.pool, team.place),
+        place: placeText(team.pool, team.place, team.tie),
         first: index === 0,
         last: index === order.length - 1,
       };
     });
   });
   protected readonly canMove = computed(() => this.rows().length > 1 && !this.hasResult());
+
+  private readonly rankIndex = computed(
+    () => new Map((this.setup()?.ranked ?? []).map((team, index) => [team.teamId, index])),
+  );
+
+  protected readonly poolGroups = computed(() => {
+    const groups = new Map<Pool, { teamId: Id<'teams'>; name: string; label: string }[]>();
+    for (const team of this.setup()?.ranked ?? []) {
+      groups.set(team.pool, [
+        ...(groups.get(team.pool) ?? []),
+        { teamId: team.teamId, name: team.name, label: placeText(team.pool, team.place, team.tie) },
+      ]);
+    }
+    return [...groups].map(([pool, teams]) => ({ pool, teams }));
+  });
+
+  protected readonly advancingIssue = computed(() => {
+    const ranked = new Map((this.setup()?.ranked ?? []).map((team) => [team.teamId, team]));
+    const chosen = this.order().flatMap((teamId) => ranked.get(teamId) ?? []);
+    return (
+      checkAdvancing(
+        chosen,
+        this.poolGroups().map((group) => group.pool),
+        this.advance(),
+      )?.message ?? null
+    );
+  });
+
+  /** A pool whose tie sits on the advance line gets one line saying what decided who advances. */
+  protected readonly tieLines = computed(() => {
+    const ranked = this.setup()?.ranked ?? [];
+    const advance = this.advance();
+    const chosen = new Set(this.order());
+    return this.poolGroups().flatMap(({ pool }) => {
+      const members = ranked.filter((team) => team.pool === pool && team.tie !== null);
+      const places = [...new Set(members.map((team) => team.tie!.place))];
+      return places.flatMap((place) => {
+        const band = members.filter((team) => team.tie!.place === place);
+        const onTheLine =
+          band.some((team) => team.place <= advance) && band.some((team) => team.place > advance);
+        if (!onTheLine) return [];
+        const proposed = band.filter((team) => team.place <= advance).map((team) => team.teamId);
+        const sameChoice = band.every(
+          (team) => chosen.has(team.teamId) === proposed.includes(team.teamId),
+        );
+        const deciding: TieDeciding = sameChoice ? band[0].tie!.decidedBy : 'organizer';
+        return [
+          {
+            pool,
+            text: tieNote(
+              pool,
+              band.map((team) => team.name),
+              place,
+              deciding,
+            ),
+          },
+        ];
+      });
+    });
+  });
+
+  protected isAdvancing(teamId: Id<'teams'>): boolean {
+    return this.order().includes(teamId);
+  }
+
+  protected toggleAdvancing(team: { teamId: Id<'teams'>; name: string }, advancing: boolean): void {
+    const order = this.order().filter((teamId) => teamId !== team.teamId);
+    if (advancing) {
+      const ranks = this.rankIndex();
+      const at = order.findIndex((teamId) => ranks.get(teamId)! > ranks.get(team.teamId)!);
+      order.splice(at === -1 ? order.length : at, 0, team.teamId);
+    }
+    this.state.set({
+      order,
+      moved: true,
+      text: advancingToggledText(team.name, advancing),
+    });
+    this.notice.set(null);
+  }
 
   /** True when the bracket was created with another advance or another order than the list shows. */
   protected readonly differsFromBracket = computed(

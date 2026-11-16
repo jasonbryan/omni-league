@@ -579,6 +579,14 @@ const rankedTeamValidator = v.object({
   pool: poolValidator,
   /** The team's place in its pool, from 1. */
   place: v.number(),
+  /** Set when the team shares its place in the pool with another: the place, and what put one ahead. */
+  tie: v.union(
+    v.null(),
+    v.object({
+      place: v.number(),
+      decidedBy: v.union(v.literal('headToHead'), v.literal('seedOrder')),
+    }),
+  ),
 });
 
 export const getPoolBracket = query({
@@ -590,7 +598,7 @@ export const getPoolBracket = query({
       smallestPool: v.number(),
       gamesCreated: v.boolean(),
       gamesWithoutResult: v.number(),
-      /** The seeds when every pool game has a confirmed result, else empty: the pool winners, then the runners-up, and so on, up to the smallest pool's size from each pool. */
+      /** Every team in a pool when every pool game has a confirmed result, else empty: the pool winners first, then the runners-up, and so on. */
       ranked: v.array(rankedTeamValidator),
       /** The existing bracket's teams in seed order, else empty, so the page starts from the bracket it shows. */
       bracketSeeds: v.array(v.id('teams')),
@@ -619,11 +627,12 @@ export const getPoolBracket = query({
       gamesCreated: results.gameCount > 0,
       gamesWithoutResult: results.withoutResult,
       ranked: ready
-        ? results.ranked.slice(0, smallestPool * results.poolSizes.length).map((seed) => ({
+        ? results.ranked.map((seed) => ({
             teamId: seed.team._id,
             name: seed.team.name,
             pool: seed.pool,
             place: seed.place,
+            tie: seed.tie,
           }))
         : [],
       bracketSeeds: seedOrderOfBracket(games) as Id<'teams'>[],
@@ -644,7 +653,7 @@ export const createBracketFromPools = mutation({
   args: {
     tournamentId: v.id('tournaments'),
     advancePerPool: v.number(),
-    /** The advancing teams in the order the organizer chose; absent takes the pool results' order. */
+    /** The advancing teams in seed order, `advancePerPool` from each pool, which may override who the pool results put through; absent takes the pool results. */
     seedOrder: v.optional(v.array(v.id('teams'))),
     replace: v.optional(v.boolean()),
   },

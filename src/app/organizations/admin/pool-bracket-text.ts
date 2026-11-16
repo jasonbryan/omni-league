@@ -4,8 +4,41 @@ import type { ChipOption } from './chip-radio-group';
 const ordinals = new Intl.PluralRules('en-US', { type: 'ordinal' });
 const SUFFIXES: Record<string, string> = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
 
-export function placeText(pool: Pool, place: number): string {
-  return `Pool ${pool}, ${place}${SUFFIXES[ordinals.select(place)]}`;
+const ordinal = (place: number) => `${place}${SUFFIXES[ordinals.select(place)]}`;
+
+export function placeText(pool: Pool, place: number, tie: { place: number } | null): string {
+  return tie ? `Pool ${pool}, ${ordinal(tie.place)}, tied` : `Pool ${pool}, ${ordinal(place)}`;
+}
+
+export type TieDeciding = 'headToHead' | 'seedOrder' | 'organizer';
+
+const names = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' });
+
+/** One line for a pool whose tie sits on the advance line, saying what decided who advances. */
+export function tieNote(
+  pool: Pool,
+  tieNames: readonly string[],
+  place: number,
+  deciding: TieDeciding,
+): string {
+  const lead = `Pool ${pool} is tied for ${ordinal(place)} between ${names.format(tieNames)}.`;
+  switch (deciding) {
+    case 'headToHead':
+      return `${lead} The team that scored more points in the games between them advances.`;
+    case 'seedOrder':
+      return `${lead} They scored the same points against each other, or did not play, so seed order decides.`;
+    case 'organizer':
+      return `${lead} Your choice decides who advances.`;
+  }
+}
+
+export const ADVANCING_HEADING = 'Who advances';
+
+export const ADVANCING_HINT =
+  'The pool results choose the teams. Check or clear a team to choose who advances instead.';
+
+export function advancingToggledText(teamName: string, advancing: boolean): string {
+  return `${teamName} ${advancing ? 'advances' : 'does not advance'}.`;
 }
 
 export function advanceOptions(smallestPool: number): ChipOption[] {

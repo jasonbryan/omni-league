@@ -135,6 +135,16 @@ function bandsBestFirst(group: readonly string[], valueOf: (teamId: string) => n
   return bands;
 }
 
+/** The points each of the teams scored in the games they played against each other. */
+export function pointsAmong(
+  teamIds: readonly string[],
+  games: readonly StandingsGame[],
+): Map<string, number> {
+  return new Map(
+    [...totalsOf(teamIds, games)].map(([teamId, totals]) => [teamId, totals.pointsFor]),
+  );
+}
+
 /**
  * What compares a team with one of another pool, best first: the ranking value, then the tiebreakers that need no head-to-head.
  * Totals are per game played, because pools differ in size.

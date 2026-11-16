@@ -45,12 +45,17 @@ const TOURNAMENT = {
   registrationDeadline: '2025-01-09',
 };
 
-const ranked = (...entries: readonly (readonly [number, string, number])[]) =>
-  entries.map(([seed, pool, place]) => ({
+const ranked = (
+  ...entries: readonly (
+    readonly [number, string, number] | readonly [number, string, number, object]
+  )[]
+) =>
+  entries.map(([seed, pool, place, tie]) => ({
     teamId: `tm_${seed}`,
     name: `Team ${String(seed).padStart(2, '0')}`,
     pool,
     place,
+    tie: tie ?? null,
   }));
 const SIX = ranked([1, 'A', 1], [2, 'B', 1], [3, 'A', 2], [4, 'B', 2], [5, 'A', 3], [6, 'B', 3]);
 
@@ -527,6 +532,86 @@ describe('PoolBracketPanel', () => {
       expect(advanceRadio(1)).toBeNull();
       expect(rows()).toHaveLength(0);
       expect(panel().querySelectorAll('#pool-bracket-rounds section')).toHaveLength(2);
+    });
+  });
+
+  describe('teams tied in a pool', () => {
+    const tie = (decidedBy: string) => ({ place: 2, decidedBy });
+    const tied = (decidedBy: string) =>
+      setupOf({
+        ranked: ranked(
+          [1, 'A', 1],
+          [2, 'B', 1],
+          [3, 'A', 2, tie(decidedBy)],
+          [4, 'B', 2],
+          [5, 'A', 3, tie(decidedBy)],
+          [6, 'B', 3],
+        ),
+      });
+    const tick = async (teamNumber: number) => {
+      page.querySelector<HTMLButtonElement>(`#advancing-tm_${teamNumber}`)!.click();
+      await o.flush();
+    };
+    const note = () => text(panel().querySelector('[data-slot="tie-note"]'));
+
+    it('labels the tied teams with the place they share', async () => {
+      await open(tied('headToHead'));
+      expect(rows().map((row) => text(row.querySelector('[data-slot="place"]')))).toEqual([
+        'Pool A, 1st',
+        'Pool B, 1st',
+        'Pool A, 2nd, tied',
+        'Pool B, 2nd',
+      ]);
+    });
+
+    it.each([
+      ['headToHead', 'The team that scored more points in the games between them advances.'],
+      ['seedOrder', 'so seed order decides.'],
+    ])('says %s decided it, in one line', async (decidedBy, words) => {
+      await open(tied(decidedBy));
+      expect(panel().querySelectorAll('[data-slot="tie-note"]')).toHaveLength(1);
+      expect(note()).toContain('Pool A is tied for 2nd between Team 03 and Team 05.');
+      expect(note()).toContain(words);
+    });
+
+    it('says nothing when the tie is not on the advance line', async () => {
+      await open(tied('seedOrder'));
+      await chooseAdvance(1);
+      expect(panel().querySelector('[data-slot="tie-note"]')).toBeNull();
+    });
+
+    it('lets the organizer put the other tied team through, says it is their choice, and sends it', async () => {
+      await open(tied('headToHead'));
+      await tick(3);
+      expect(panel().querySelector('[data-slot="advancing-reason"]')).not.toBeNull();
+      expect(createButton()).toBeNull();
+      await tick(5);
+      expect(names()).toEqual(['Team 01', 'Team 02', 'Team 04', 'Team 05']);
+      expect(seedStatus()).toBe('Team 05 advances.');
+      expect(note()).toContain('Your choice decides who advances.');
+      createButton()!.click();
+      await o.flush();
+      expect(calls()).toEqual([
+        [
+          CREATE,
+          {
+            tournamentId: 'tn_winter',
+            advancePerPool: 2,
+            seedOrder: ['tm_1', 'tm_2', 'tm_4', 'tm_5'],
+          },
+        ],
+      ]);
+    });
+
+    it('holds Create and says how many to choose while a pool sends another count', async () => {
+      await open(tied('headToHead'));
+      await tick(5);
+      expect(text(panel().querySelector('[data-slot="advancing-reason"]'))).toBe(
+        'Choose 2 teams from each pool, each from its own pool.',
+      );
+      expect(createButton()).toBeNull();
+      await tick(5);
+      expect(createButton()).not.toBeNull();
     });
   });
 });
