@@ -377,38 +377,49 @@ describe('trainingClasses.schedule', () => {
 
   test.each([
     // 0026-11-17 is a Tuesday and 9999-12-01 a Wednesday in the proleptic Gregorian calendar.
-    ['year 0026', '0026-11-17', 2, 3, '0026-11-10'],
-    ['9999 with 51 weeks', '9999-12-01', 3, 51, '9999-11-20'],
+    ['a first date in year 0026', '0026-11-17', 2, 3, '0026-11-10', 'firstDate'],
+    ['51 weeks from 9999-12-01', '9999-12-01', 3, 51, '9999-11-20', 'weeks'],
+    ['6 weeks from 9999-12-01', '9999-12-01', 3, 6, '9999-11-20', 'weeks'],
   ])(
-    'a first date in %s is refused with nothing written, or stored as real four-digit dates a week apart',
-    async (_label, firstDate, weekday, weeks, registrationDeadline) => {
+    'refuses %s under its field and writes nothing',
+    async (_label, firstDate, weekday, weeks, registrationDeadline, field) => {
       const s = await setup();
-      const outcome = await s.adminA
-        .mutation(api.trainingClasses.schedule, {
+      const data = await refusal(
+        s.adminA.mutation(api.trainingClasses.schedule, {
           ...valid(s),
           weekday,
           firstDate,
           weeks,
           registrationDeadline,
-        })
-        .then(
-          () => 'scheduled',
-          () => 'refused',
-        );
-      const rows = await classesOf(s);
-      if (outcome === 'refused') {
-        expect(rows).toEqual([]);
-        return;
-      }
-      expect(rows).toHaveLength(weeks);
-      const dates = rows.map((row) => row.date).sort();
-      expect(dates.every((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))).toBe(true);
-      expect(dates[0]).toBe(firstDate);
-      dates.slice(1).forEach((date, index) => {
-        expect(Date.parse(`${date}T00:00:00Z`) - Date.parse(`${dates[index]}T00:00:00Z`)).toBe(
-          7 * 86_400_000,
-        );
-      });
+        }),
+      );
+      expect(data.field).toBe(field);
+      expect(await classesOf(s)).toEqual([]);
+    },
+  );
+
+  test('stores the last class of 5 weeks from 9999-12-01 as 9999-12-29', async () => {
+    const s = await setup();
+    await s.adminA.mutation(api.trainingClasses.schedule, {
+      ...valid(s),
+      weekday: 3,
+      firstDate: '9999-12-01',
+      weeks: 5,
+      registrationDeadline: '9999-11-20',
+    });
+    const dates = (await classesOf(s)).map((row) => row.date).sort();
+    expect(dates).toEqual(['9999-12-01', '9999-12-08', '9999-12-15', '9999-12-22', '9999-12-29']);
+  });
+
+  test.each([7, -1, 2.5, NaN, Infinity])(
+    'refuses the weekday %s as weekdayInvalid',
+    async (weekday) => {
+      const s = await setup();
+      const data = await refusal(
+        s.adminA.mutation(api.trainingClasses.schedule, { ...valid(s), weekday }),
+      );
+      expect(data).toMatchObject({ field: 'weekday', code: 'weekdayInvalid' });
+      expect(await classesOf(s)).toEqual([]);
     },
   );
 

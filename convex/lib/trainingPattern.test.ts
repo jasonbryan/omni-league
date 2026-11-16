@@ -87,40 +87,56 @@ describe('classDates across a clock change and the limits', () => {
   });
 });
 
-describe('dates at the edge of the four-digit year range', () => {
-  const REAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-  // A pattern is either refused under its first date, or every class date is a real four-digit date a week apart.
-  function expectRefusedOrWholeSeries(
-    firstDate: string,
-    weekday: number,
-    weeks: number,
-    deadline: string,
-  ) {
-    const errors = errorsOf({ weekday, firstDate, weeks, registrationDeadline: deadline });
-    if (errors.firstDate) return;
-    expect(errors).toEqual({});
-    const dates = classDates(firstDate, weeks);
-    expect(dates).toHaveLength(weeks);
-    expect(dates.every((date) => REAL_DATE.test(date))).toBe(true);
-    expect(dates[0]).toBe(firstDate);
-    dates.slice(1).forEach((date, index) => {
-      expect(Date.parse(`${date}T00:00:00Z`) - Date.parse(`${dates[index]}T00:00:00Z`)).toBe(
-        7 * 86_400_000,
-      );
-    });
-  }
-
-  test('a first date in year 0026 is refused or gives classes in year 0026, never 1926', () => {
-    // 0026-11-17 is a Tuesday and 9999-12-01 a Wednesday in the proleptic Gregorian calendar.
+describe('dates at the edge of the supported year range', () => {
+  // 0026-11-17 is a Tuesday, 9999-12-01 a Wednesday, and 1000-01-01 a Wednesday in the proleptic Gregorian calendar.
+  test('reads the weekday of a year before 100 as that year, not 19xx', () => {
     expect(weekdayOf('0026-11-17')).toBe(2);
-    expectRefusedOrWholeSeries('0026-11-17', 2, 3, '0026-11-10');
-    expect(classDates('0026-11-17', 3).every((date) => date.startsWith('0026-'))).toBe(true);
+    expect(classDates('0026-11-17', 3)).toEqual(['0026-11-17', '0026-11-24', '0026-12-01']);
   });
 
-  test('a first date in 9999 with 51 weeks is refused, or gives only four-digit dates', () => {
-    expect(weekdayOf('9999-12-01')).toBe(3);
-    expectRefusedOrWholeSeries('9999-12-01', 3, 51, '9999-11-20');
+  test('refuses a first date in year 0026 under the first date', () => {
+    const errors = errorsOf({
+      weekday: 2,
+      firstDate: '0026-11-17',
+      registrationDeadline: '2027-01-01',
+    });
+    expect(errors.firstDate).toMatchObject({ field: 'firstDate' });
+  });
+
+  test('refuses 51 weeks from 9999-12-01 under the weeks, since the last class falls in year 10000', () => {
+    const errors = errorsOf({
+      weekday: 3,
+      firstDate: '9999-12-01',
+      weeks: 51,
+      registrationDeadline: '9999-11-20',
+    });
+    expect(errors.weeks).toMatchObject({ field: 'weeks', code: 'lastClassTooLate' });
+    expect(Object.keys(errors)).toEqual(['weeks']);
+  });
+
+  test('accepts the last class on 9999-12-29, and refuses one week more', () => {
+    const base = { weekday: 3, firstDate: '9999-12-01', registrationDeadline: '9999-11-20' };
+    expect(errorsOf({ ...base, weeks: 5 })).toEqual({});
+    expect(classDates('9999-12-01', 5).at(-1)).toBe('9999-12-29');
+    expect(errorsOf({ ...base, weeks: 6 }).weeks).toMatchObject({ code: 'lastClassTooLate' });
+  });
+
+  test('accepts the first supported date, 1000-01-01, and refuses the day before the range', () => {
+    expect(
+      errorsOf({ weekday: 3, firstDate: '1000-01-01', registrationDeadline: '1000-01-01' }),
+    ).toEqual({});
+    expect(
+      errorsOf({ weekday: 3, firstDate: '0999-12-29', registrationDeadline: '0999-12-01' })
+        .firstDate,
+    ).toBeDefined();
+  });
+
+  test('refuses a weekday outside 0 to 6 or not whole, with no "undefined" in the message', () => {
+    for (const weekday of [7, -1, 2.5, NaN]) {
+      const error = errorsOf({ weekday }).weekday;
+      expect(error).toMatchObject({ field: 'weekday', code: 'weekdayInvalid' });
+      expect(error?.message).not.toContain('undefined');
+    }
   });
 });
 
