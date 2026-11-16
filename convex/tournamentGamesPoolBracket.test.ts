@@ -623,3 +623,132 @@ describe('access to the pool bracket functions', () => {
     expect(await bracketGames(s)).toHaveLength(3);
   });
 });
+
+/** Teams split into pools with the pool games created, then every pool game played as the lower-numbered team winning. */
+async function playedWorld(teamCount: number, poolCount: number) {
+  vi.useFakeTimers({ now: AFTER_DEADLINE });
+  const s = await tournamentWorld();
+  await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { structure: 'pools' }));
+  const teamIds: Id<'teams'>[] = [];
+  for (let number = 1; number <= teamCount; number++) {
+    registeredAt += 1;
+    teamIds.push(
+      await s.t.run((ctx) =>
+        ctx.db.insert('teams', {
+          organizationId: s.a,
+          tournamentId: s.gulf,
+          name: `Team ${String(number).padStart(2, '0')}`,
+          sortName: `team ${number}`,
+          captainUserId: s.captain.userId,
+          rosterCount: 2,
+          createdAt: registeredAt,
+        }),
+      ),
+    );
+  }
+  await s.as(s.admin).mutation(api.tournamentGames.splitPools, { tournamentId: s.gulf, poolCount });
+  await s.as(s.admin).mutation(api.tournamentGames.createPoolGames, { tournamentId: s.gulf });
+  await s.t.run(async (ctx) => {
+    for (const game of await ctx.db
+      .query('tournamentGames')
+      .withIndex(GAME_INDEX, (q) => q.eq('tournamentId', s.gulf).eq('stage', 'pool'))
+      .collect()) {
+      const [first, second] = game.teamIds.map((teamId) => teamIds.indexOf(teamId!));
+      await ctx.db.patch('tournamentGames', game._id, {
+        score: first < second ? set(21, 15) : set(15, 21),
+        winnerTeamId: game.teamIds[first < second ? 0 : 1]!,
+      });
+    }
+  });
+  return { s, teamIds };
+}
+
+describe('tournamentGames.createBracketFromPools: the advance count', () => {
+  test('advances every team of the smallest pool, and leaves the larger pool its extra team out', async () => {
+    const { s, teamIds } = await playedWorld(10, 3);
+    expect((await view(s))!).toMatchObject({ poolCount: 3, smallestPool: 3 });
+    const seedsBefore = await s.t.run(async (ctx) =>
+      Promise.all(teamIds.map(async (teamId) => (await ctx.db.get('teams', teamId))!.seed ?? null)),
+    );
+    expect(await create(s, { advancePerPool: 3 })).toMatchObject({ teamCount: 9 });
+    const { bracketSeeds } = (await view(s))!;
+    expect(bracketSeeds).toHaveLength(9);
+    expect(new Set(bracketSeeds).size).toBe(9);
+    const seedsAfter = await s.t.run(async (ctx) =>
+      Promise.all(teamIds.map(async (teamId) => (await ctx.db.get('teams', teamId))!.seed ?? null)),
+    );
+    expect(seedsAfter).toEqual(seedsBefore);
+  });
+
+  test('refuses an advance of 4 when the smallest of three pools holds 3', async () => {
+    const { s } = await playedWorld(10, 3);
+    expect(await create(s, { advancePerPool: 4 }).catch(refusalOf)).toEqual({
+      code: 'advanceCount',
+      message: POOL_MESSAGES.advanceCount(3),
+    });
+  });
+
+  test('advances 8 from each of 8 pools of 8 into a bracket of 64 teams', async () => {
+    const { s } = await playedWorld(64, 8);
+    expect(await create(s, { advancePerPool: 8 })).toEqual({
+      gameCount: 63,
+      replaced: false,
+      teamCount: 64,
+    });
+    expect(await bracketGames(s)).toHaveLength(63);
+  });
+});
+
+describe('tournamentGames.createBracketFromPools: ties at the advance line', () => {
+  /** Pool A in a circle, Team 01 over Team 04 over Team 05 over Team 01, each by 21 to 15; the rest follow the lower number. */
+  async function circleInPoolA() {
+    const { s, teamIds } = await world();
+    const teamNumber = (teamId: Id<'teams'> | null) => teamIds.indexOf(teamId!) + 1;
+    const circle = new Map([
+      ['1-4', true],
+      ['4-5', true],
+      ['1-5', false],
+    ]);
+    for (const game of await poolGames(s)) {
+      const [first, second] = game.teamIds.map(teamNumber);
+      const key = `${Math.min(first, second)}-${Math.max(first, second)}`;
+      const lowerWins = circle.get(key) ?? true;
+      const firstWins = first < second === lowerWins;
+      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+        gameId: game._id,
+        score: firstWins ? set(21, 15) : set(15, 21),
+      });
+    }
+    return { s, teamIds };
+  }
+
+  test('puts the team first in the pool seed order ahead when nothing separates the pool', async () => {
+    const { s } = await circleInPoolA();
+    const shown = (await view(s))!;
+    expect(shown.ranked.filter((team) => team.pool === 'A').map((team) => team.name)).toEqual([
+      'Team 01',
+      'Team 04',
+      'Team 05',
+    ]);
+  });
+
+  test('advances the first team in the pool seed order from the level pool, and seeds it below the pool that has a clear winner', async () => {
+    const { s } = await circleInPoolA();
+    await create(s, { advancePerPool: 1 });
+    const [final] = await bracketGames(s);
+    expect(await teamNames(s, final.teamIds)).toEqual(['Team 02', 'Team 01']);
+  });
+});
+
+describe('tournamentGames.createBracketFromPools: concurrent creates', () => {
+  test('creates one bracket when two organizers press Create together', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    const outcomes = await Promise.allSettled([
+      create(s, { advancePerPool: 2 }),
+      create(s, { advancePerPool: 2 }, s.assignedOrganizer),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(await bracketGames(s)).toHaveLength(3);
+  });
+});

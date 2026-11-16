@@ -1278,4 +1278,43 @@ test.describe('Tournaments: bracket from pools', () => {
     await expect(page.getByRole('alertdialog', { name: 'Recreate the bracket?' })).toBeVisible();
     await expectNoSidewaysScroll(page);
   });
+
+  test('long team names and a name with no space keep the seeds, the bracket, and the dialog inside 320px', async ({
+    page,
+  }, testInfo) => {
+    const spaced = 'Intergalactic Wanderers Volleyball Club of the Gulf Coast';
+    const unbroken = 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch';
+    const names = [spaced, 'Bay', 'Cove', unbroken, 'Eddy', 'Flow'];
+    const { tenant, managePath } = await adminOf(page, { teams: full(names) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    // The snake split puts seeds 1, 4, and 5 in Pool A, and seeds 2, 3, and 6 in Pool B.
+    const [one, two, three, four, five, six] = names;
+    const wins: [readonly [string, string], { a: number; b: number }][] = [
+      [[one, four], { a: 21, b: 10 }],
+      [[one, five], { a: 21, b: 10 }],
+      [[four, five], { a: 21, b: 5 }],
+      [[two, three], { a: 21, b: 19 }],
+      [[two, six], { a: 21, b: 19 }],
+      [[three, six], { a: 21, b: 19 }],
+    ];
+    await playPools(tenant, wins);
+    const projectViewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText([one, two, four, three]);
+    await expectNoSidewaysScroll(page);
+    await screenshot(page, testInfo, 'pool-bracket-long-names-320');
+
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+    ).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await createBracket(page).click();
+    await expect(page.getByRole('alertdialog', { name: 'Recreate the bracket?' })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await page.keyboard.press('Escape');
+    await page.setViewportSize(projectViewport);
+    await expectAccessible(page);
+  });
 });
