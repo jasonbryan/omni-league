@@ -123,7 +123,10 @@ describe('dates at the edge of the supported year range', () => {
 
   test('accepts the first supported date, 1000-01-01, and refuses the day before the range', () => {
     expect(
-      errorsOf({ weekday: 3, firstDate: '1000-01-01', registrationDeadline: '1000-01-01' }),
+      errorsOf(
+        { weekday: 3, firstDate: '1000-01-01', registrationDeadline: '1000-01-01' },
+        '1000-01-01',
+      ),
     ).toEqual({});
     expect(
       errorsOf({ weekday: 3, firstDate: '0999-12-29', registrationDeadline: '0999-12-01' })
