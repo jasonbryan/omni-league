@@ -61,6 +61,7 @@ import { CampBreadcrumb } from './camp-breadcrumb';
 import { CampContext, type CampSessionRow } from './camp-context';
 import { CampNoAccess } from './camp-no-access';
 import { CampRegistrants } from './camp-registrants';
+import { CampWaitlist } from './camp-waitlist';
 import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
 import { PlacesEditor, type PlacesSave } from './places-editor';
@@ -80,6 +81,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
     CampBreadcrumb,
     CampNoAccess,
     CampRegistrants,
+    CampWaitlist,
     CampSessionForm,
     HlmBadge,
     HlmCard,
@@ -366,15 +368,25 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                                 aria-hidden="true"
                               /><span data-slot="session-registered"
                                 >{{ row.registeredCount }} of {{ row.places }} registered</span
-                              ><span class="sr-only"> in {{ row.name }}</span>
+                              >
+                              @if (row.waitlistCount > 0) {
+                                <span data-slot="session-waiting">
+                                  ({{ row.waitlistCount }} waiting)</span
+                                >
+                              }
+                              <span class="sr-only"> in {{ row.name }}</span>
                             </button>
-                            @if (row.registeredCount === 0 && keepsCampPublished(rows().length)) {
+                            @if (
+                              row.registeredCount === 0 &&
+                              row.waitlistCount === 0 &&
+                              keepsCampPublished(rows().length)
+                            ) {
                               <span
                                 data-slot="session-required"
                                 class="text-sm text-muted-foreground"
                                 >Required while published</span
                               >
-                            } @else if (row.registeredCount === 0) {
+                            } @else if (row.registeredCount === 0 && row.waitlistCount === 0) {
                               <button
                                 type="button"
                                 data-slot="button"
@@ -412,6 +424,13 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                               <app-camp-registrants
                                 [sessionId]="row.campSessionId"
                                 [sessionName]="row.name"
+                                [retryHref]="retryHref()"
+                              />
+                              <app-camp-waitlist
+                                class="mt-5"
+                                [sessionId]="row.campSessionId"
+                                [sessionName]="row.name"
+                                [freePlaces]="row.places - row.registeredCount"
                                 [retryHref]="retryHref()"
                               />
                             </div>

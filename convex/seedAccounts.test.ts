@@ -282,7 +282,7 @@ const DATA = {
   seasons: 8,
   tournaments: 6,
   camps: 3,
-  campSessions: 4,
+  campSessions: 5,
   trainings: 1,
   trainingClasses: 8,
 };
@@ -315,6 +315,7 @@ describe('seed:demo accounts: a new deployment', () => {
         teamInvites: 4,
         freeAgents: 6,
         campRegistrations: 2,
+        campWaitlistEntries: 1,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -1002,7 +1003,8 @@ describe('seed:demo accounts: camp registration', () => {
         sessions: await ctx.db.query('campSessions').collect(),
         users: await ctx.db.query('users').collect(),
       }));
-      expect(rows).toHaveLength(2);
+      // Sam R., who holds the one place of Week 4, is the third.
+      expect(rows).toHaveLength(3);
 
       const week = sessions.find((session) => session.places === 12)!;
       expect(week).toMatchObject({ name: 'Week 1', registeredCount: 1 });
@@ -1037,8 +1039,10 @@ describe('seed:demo accounts: camp registration', () => {
       });
       expect(typeof guardianRow.ageConfirmedAt).toBe('number');
       const guardian = await as(t, EMAILS.guardian);
+      const week4 = sessions.find((session) => session.name === 'Week 4')!;
       expect(await guardian.query(api.campRegistrations.listMyMinorsForCamp, JUNIOR_CAMP)).toEqual([
         { sessionId: junior._id, minorName: 'Maya R.' },
+        { sessionId: week4._id, minorName: 'Sam R.' },
       ]);
       expect(await guardian.query(api.campRegistrations.listMineForCamp, JUNIOR_CAMP)).toEqual([]);
       expect(await player.query(api.campRegistrations.listMyMinorsForCamp, JUNIOR_CAMP)).toEqual(
@@ -1046,7 +1050,51 @@ describe('seed:demo accounts: camp registration', () => {
       );
 
       expect((await run(t)).campRegistrations).toBe(0);
-      expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(2);
+      expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(3);
+    },
+    SLOW,
+  );
+
+  test(
+    'Week 4 of the Junior Beach Volleyball Camp has one place held by Sam R., so it reads Full and guardian@ waits there with Maya R. at position 1, and a rerun adds none',
+    async () => {
+      const t = setup();
+      expect((await run(t)).campWaitlistEntries).toBe(1);
+      const { week4, entries, users } = await t.run(async (ctx) => ({
+        week4: (await ctx.db.query('campSessions').collect()).find(
+          (session) => session.name === 'Week 4',
+        )!,
+        entries: await ctx.db.query('campWaitlistEntries').collect(),
+        users: await ctx.db.query('users').collect(),
+      }));
+      expect(week4).toMatchObject({ places: 1, registeredCount: 1, waitlistCount: 1 });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        sessionId: week4._id,
+        status: 'waiting',
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+        userId: users.find((user) => user.name === 'Demo Guardian')!._id,
+      });
+      expect(typeof entries[0]?.ageConfirmedAt).toBe('number');
+
+      const guardian = await as(t, EMAILS.guardian);
+      expect(await guardian.query(api.campWaitlist.listMineForCamp, JUNIOR_CAMP)).toEqual([
+        { sessionId: week4._id, participant: { kind: 'minor', minorName: 'Maya R.' }, position: 1 },
+      ]);
+      const page = await guardian.query(api.camps.getPublicPage, JUNIOR_CAMP);
+      expect(page?.sessions.find((row) => row.sessionId === week4._id)?.placesLeft).toBe(0);
+      const player = await as(t, EMAILS.player);
+      expect(await player.query(api.campWaitlist.listMineForCamp, JUNIOR_CAMP)).toEqual([]);
+      const admin = await as(t, EMAILS.admin);
+      expect(
+        (await admin.query(api.campWaitlist.listForSession, { sessionId: week4._id })).map(
+          ({ name, guardian: holder }) => [name, holder?.name],
+        ),
+      ).toEqual([['Maya R.', 'Demo Guardian']]);
+
+      expect((await run(t)).campWaitlistEntries).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('campWaitlistEntries').collect())).toHaveLength(1);
     },
     SLOW,
   );
@@ -1085,6 +1133,7 @@ describe('seed:demo accounts: a second run', () => {
         teamInvites: 0,
         freeAgents: 0,
         campRegistrations: 0,
+        campWaitlistEntries: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -1213,6 +1262,7 @@ describe('seed:demo accounts: the password', () => {
         teamInvites: 0,
         freeAgents: 0,
         campRegistrations: 0,
+        campWaitlistEntries: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -1288,6 +1338,7 @@ describe('seed:demo accounts: the password', () => {
         teamInvites: 0,
         freeAgents: 0,
         campRegistrations: 0,
+        campWaitlistEntries: 0,
       });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);

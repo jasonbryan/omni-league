@@ -310,6 +310,7 @@ describe('campSessions.listForCamp', () => {
       places: 20,
       registrationDeadline: '2027-07-05',
       registeredCount: 0,
+      waitlistCount: 0,
     });
   });
 

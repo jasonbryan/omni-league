@@ -20,16 +20,23 @@ export type RegisterCampState =
   | 'minor-not-allowed'
   | 'closed'
   | 'full'
+  | 'waitlisted'
+  | 'waitlist'
   | 'form';
 
-/** Who the form offers: the guardian cannot register themself twice, so a held place leaves only the child. */
+/** Who the form offers: the guardian cannot register or wait twice for themself, so a held place or a spot on the waitlist leaves only the child. */
 export function registrationOptions(
   answer: NonNullable<CampRegistrationAnswer>,
 ): ('self' | 'minor')[] {
-  return participantsOffered(answer).filter((kind) => kind !== 'self' || !answer.registered);
+  return participantsOffered(answer).filter(
+    (kind) => kind !== 'self' || !(answer.registered || answer.waitlisted),
+  );
 }
 
-/** "Registered" comes before the rest once nothing else can be registered, so a person holding a place still sees it after the deadline or when the session is full. */
+/**
+ * "Registered" and "waitlisted" come before the rest once nothing else can be asked for, so a person holding a place or a spot
+ * still sees it after the deadline or when the session is full. A full session offers the form to join its waitlist.
+ */
 export function registerCampState({
   answer,
   signedIn,
@@ -46,10 +53,11 @@ export function registerCampState({
   if (session === null) return 'no-session';
   const noOptionLeft = registrationOptions(answer).length === 0;
   const open = registrationIsOpen(session, nowMs);
-  if (answer.registered && (noOptionLeft || !open || session.placesLeft === 0)) return 'registered';
+  if (answer.registered && (noOptionLeft || !open)) return 'registered';
+  if (answer.waitlisted && (noOptionLeft || !open)) return 'waitlisted';
   if (noOptionLeft) return 'adult-not-allowed';
   if (!open) return 'closed';
-  return session.placesLeft === 0 ? 'full' : 'form';
+  return session.placesLeft === 0 ? 'waitlist' : 'form';
 }
 
 /** Registration also closes when the session starts, so a deadline on or after the start date is not the day it closed. */

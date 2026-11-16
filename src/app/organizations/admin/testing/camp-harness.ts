@@ -60,6 +60,7 @@ export function session(change: Record<string, unknown> = {}) {
     places: 20,
     registrationDeadline: '2027-07-01',
     registeredCount: 0,
+    waitlistCount: 0,
     ...change,
   };
 }

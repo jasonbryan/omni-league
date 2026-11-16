@@ -233,7 +233,7 @@ describe('PublicCampPage populated', () => {
     );
     expect(spaced(rows[1])).toContain('1 place left');
     expect(spaced(rows[2])).toBe(
-      'Week 3 Jul 19 – Jul 23, 2027 Full Registration closes Jul 15, 2027',
+      'Week 3 Jul 19 – Jul 23, 2027 Full Registration closes Jul 15, 2027 Join the waitlist for Week 3',
     );
   });
 
@@ -281,9 +281,13 @@ describe('PublicCampPage populated', () => {
     expect(text(host(harness).querySelector('main h1')?.nextElementSibling)).toBe('Age 10');
   });
 
-  it('offers Register only for the sessions that are open with places, and shows no price', () => {
+  it('offers Register for the sessions that are open with places and the waitlist for a full one, and shows no price', () => {
     const links = [...host(harness).querySelectorAll('main a[href*="/register"]')];
-    expect(links.map((link) => text(link))).toEqual(['Register for Week 1', 'Register for Week 2']);
+    expect(links.map((link) => text(link))).toEqual([
+      'Register for Week 1',
+      'Register for Week 2',
+      'Join the waitlist for Week 3',
+    ]);
     expect(text(host(harness).querySelector('main'))).not.toMatch(/\$|price|fee/i);
   });
 

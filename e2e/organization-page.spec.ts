@@ -29,6 +29,8 @@ import {
 } from './support/tenant';
 import { holdQueries } from './support/hold-queries';
 import { seedTenantWithCamps, type CampPageSeed } from './support/camp';
+import { seedCampWaitlistEntry } from './support/camp-registrations';
+import { newUser, seedUser } from './support/users';
 import type { TournamentSeed } from './support/tournament';
 import { screenshot } from './support/screenshot';
 import { topBarFind } from './support/top-bar-find';
@@ -2332,6 +2334,36 @@ test.describe('organization page: Camps, raw server HTML', () => {
       expect(row).not.toContain(monthDay(5));
       expect(row).not.toContain('Full');
       expect(row).toContain('Register for Crowded Week Camp');
+    },
+  );
+
+  test(
+    'a camp whose only session has a place free but someone waiting reads Full, and one with a later open session shows that session',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const waiting = sandCamp('Waiting Week Camp', [{ name: 'Week 1', startsInDays: 5 }]);
+      const later = sandCamp('Later After Waiting Camp', [
+        { name: 'Week 1', startsInDays: 5 },
+        { name: 'Week 2', startsInDays: 20 },
+      ]);
+      const tenant = await campTenant([waiting, later]);
+      const guardian = await seedUser(newUser('Guardian'));
+      const maya = { kind: 'minor', minorName: 'Maya R.' } as const;
+      await seedCampWaitlistEntry(tenant, waiting.slug, 'Week 1', guardian, maya);
+      await seedCampWaitlistEntry(tenant, later.slug, 'Week 1', guardian, maya);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      const rows = sectionWithId(html, 'camps').split('<li').slice(1);
+      const waitingRow = plainText(rows.find((row) => row.includes('Waiting Week Camp')) ?? '');
+      expect(waitingRow).toContain('Full');
+      expect(waitingRow).not.toContain('Register for Waiting Week Camp');
+      const laterRow = plainText(
+        rows.find((row) => row.includes('Later After Waiting Camp')) ?? '',
+      );
+      expect(laterRow).toContain(monthDay(20));
+      expect(laterRow).not.toContain('Full');
+      expect(laterRow).toContain('Register for Later After Waiting Camp');
+      expect(titlesIn(sectionOf(html))).toEqual(['Later After Waiting Camp']);
     },
   );
 

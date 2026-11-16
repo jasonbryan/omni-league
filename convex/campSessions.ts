@@ -61,6 +61,7 @@ export const listForCamp = query({
       places: v.number(),
       registrationDeadline: v.string(),
       registeredCount: v.number(),
+      waitlistCount: v.number(),
     }),
   ),
   handler: async (ctx, { campId }) => {
@@ -79,6 +80,7 @@ export const listForCamp = query({
       places: session.places,
       registrationDeadline: session.registrationDeadline,
       registeredCount: session.registeredCount,
+      waitlistCount: session.waitlistCount ?? 0,
     }));
   },
 });
@@ -108,6 +110,12 @@ export const remove = mutation({
       throw new ConvexError({
         code: 'hasRegistrations',
         message: CAMP_SESSION_MESSAGES.hasRegistrations(session.registeredCount),
+      });
+    }
+    if ((session.waitlistCount ?? 0) > 0) {
+      throw new ConvexError({
+        code: 'hasWaitlist',
+        message: CAMP_SESSION_MESSAGES.hasWaitlist(session.waitlistCount ?? 0),
       });
     }
     if (program.status === 'published' && (await campSessionTotal(ctx, camp)) <= 1) {

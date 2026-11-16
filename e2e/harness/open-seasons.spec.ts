@@ -1,4 +1,8 @@
-import { expectedOpenCards, expectedRegistrationOpenCards } from '../support/open-seasons';
+import {
+  campSessionKey,
+  expectedOpenCards,
+  expectedRegistrationOpenCards,
+} from '../support/open-seasons';
 import { expect, test } from '../support/fixtures';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
@@ -60,11 +64,22 @@ test.describe(
         { title: 'Adult Beach Skills Camp', subtitle: 'Week 1' },
         { title: 'Gulf Coast Beach Open', subtitle: 'Tournament' },
         { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 3' },
+        { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 4' },
         { title: 'Gulf Coast King of the Beach', subtitle: 'Tournament' },
         { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
         { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
         { title: 'Sunday Reverse Coed 4s', subtitle: 'Summer 2027' },
       ]);
+    });
+
+    test('leaves out a camp session that has no place left on the backend, such as Week 4 once guardian@’s child holds its one place', () => {
+      const filled = new Set([campSessionKey('junior-beach-volleyball-camp', 'Week 4')]);
+      const cards = expectedRegistrationOpenCards(GULF_COAST, RUN, filled);
+      expect(cards).not.toContainEqual({
+        title: 'Junior Beach Volleyball Camp',
+        subtitle: 'Week 4',
+      });
+      expect(cards).toContainEqual({ title: 'Junior Beach Volleyball Camp', subtitle: 'Week 3' });
     });
 
     test('leaves out the draft Winter Doubles Classic', () => {

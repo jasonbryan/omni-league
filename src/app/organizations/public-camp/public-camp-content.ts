@@ -6,6 +6,7 @@ import {
   lucideCalendarDays,
   lucideCircleCheck,
   lucideClock,
+  lucideListOrdered,
   lucideMapPin,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -14,6 +15,7 @@ import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
 import {
   MAX_MINORS_PER_SESSION,
   participantsOffered,
+  type Participant,
 } from '../../../../convex/lib/individualRegistration';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
@@ -33,6 +35,7 @@ import {
 import { campSessionStatus } from './camp-session-status';
 import type { PublicCampData } from './public-camp-view';
 
+const ACTIONS_ROW = 'mt-3 flex items-center gap-3 pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -50,6 +53,11 @@ function registeredLine(self: boolean, children: readonly string[]): string | nu
   return `${NAMES.format(names)} ${names.length === 1 ? 'is' : 'are'} registered`;
 }
 
+function waitingLine(participant: Participant, position: number): string {
+  const who = participant.kind === 'self' ? 'You are' : `${participant.minorName} is`;
+  return `${who} on the waitlist, position ${position}`;
+}
+
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-camp-content',
@@ -60,6 +68,7 @@ function registeredLine(self: boolean, children: readonly string[]): string | nu
       lucideCalendarDays,
       lucideCircleCheck,
       lucideClock,
+      lucideListOrdered,
       lucideMapPin,
       lucideUsers,
     }),
@@ -149,22 +158,43 @@ function registeredLine(self: boolean, children: readonly string[]): string | nu
                       }}</time></span
                     >
                   </p>
-                  @if (session.canRegister || session.registeredLine) {
+                  @if (
+                    session.canRegister ||
+                    session.canJoin ||
+                    session.registeredLine ||
+                    session.waitingLines.length > 0
+                  ) {
                     <div
                       data-slot="session-actions"
-                      class="mt-3 flex h-9 items-center gap-3 pointer-coarse:min-h-11"
+                      [class]="session.status.full ? fullActionsRow : actionsRow"
                     >
-                      @if (session.registeredLine; as line) {
-                        <p
-                          data-slot="session-registered"
-                          class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
-                        >
-                          <ng-icon
-                            name="lucideCircleCheck"
-                            class="shrink-0 text-base"
-                            aria-hidden="true"
-                          /><span class="truncate">{{ line }}</span>
-                        </p>
+                      @if (session.registeredLine || session.waitingLines.length > 0) {
+                        <div class="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+                          @if (session.registeredLine; as line) {
+                            <p
+                              data-slot="session-registered"
+                              class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
+                            >
+                              <ng-icon
+                                name="lucideCircleCheck"
+                                class="shrink-0 text-base"
+                                aria-hidden="true"
+                              /><span class="truncate">{{ line }}</span>
+                            </p>
+                          }
+                          @for (line of session.waitingLines; track line) {
+                            <p
+                              data-slot="session-waitlist"
+                              class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
+                            >
+                              <ng-icon
+                                name="lucideListOrdered"
+                                class="shrink-0 text-base"
+                                aria-hidden="true"
+                              /><span class="wrap-anywhere">{{ line }}</span>
+                            </p>
+                          }
+                        </div>
                       }
                       @if (session.canRegister; as sessionId) {
                         <a
@@ -173,6 +203,15 @@ function registeredLine(self: boolean, children: readonly string[]): string | nu
                           data-slot="button"
                           [class]="registerButton + ' ms-auto shrink-0'"
                           >Register<span class="sr-only"> for {{ session.name }}</span></a
+                        >
+                      }
+                      @if (session.canJoin; as sessionId) {
+                        <a
+                          [routerLink]="registerPath()"
+                          [queryParams]="{ session: sessionId }"
+                          data-slot="button"
+                          [class]="registerButton + ' ms-auto shrink-0'"
+                          >Join the waitlist<span class="sr-only"> for {{ session.name }}</span></a
                         >
                       }
                     </div>
@@ -224,8 +263,13 @@ export class PublicCampContent {
   readonly now = input.required<number>();
   readonly registeredSessionIds = input<readonly string[]>([]);
   readonly registeredMinors = input<readonly { sessionId: string; minorName: string }[]>([]);
+  readonly waitlist = input<
+    readonly { sessionId: string; participant: Participant; position: number }[]
+  >([]);
 
   protected readonly registerButton = OUTLINE_BUTTON;
+  protected readonly actionsRow = ACTIONS_ROW + ' min-h-9';
+  protected readonly fullActionsRow = ACTIONS_ROW + ' min-h-10';
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -241,9 +285,20 @@ export class PublicCampContent {
       const children = this.registeredMinors()
         .filter((minor) => minor.sessionId === sessionId)
         .map((minor) => minor.minorName);
-      const canAddSelf = offered.includes('self') && !registered;
-      const canAddChild = offered.includes('minor') && children.length < MAX_MINORS_PER_SESSION;
-      const open = session.placesLeft > 0 && registrationIsOpen(session, this.now());
+      const waiting = this.waitlist().filter((entry) => entry.sessionId === sessionId);
+      const waitingChildren = waiting.filter(({ participant }) => participant.kind === 'minor');
+      const canAddSelf =
+        offered.includes('self') &&
+        !registered &&
+        !waiting.some(({ participant }) => participant.kind === 'self');
+      const canAddChild =
+        offered.includes('minor') &&
+        children.length + waitingChildren.length < MAX_MINORS_PER_SESSION;
+      const asks =
+        sessionId !== undefined &&
+        (canAddSelf || canAddChild) &&
+        registrationIsOpen(session, this.now());
+      const full = session.placesLeft === 0;
       return {
         ...session,
         status: campSessionStatus(session, this.now()),
@@ -251,8 +306,11 @@ export class PublicCampContent {
         times: campSessionTimes(session.dailyStartTime, session.dailyEndTime),
         closes: formatCalendarDate(session.registrationDeadline),
         registeredLine: registeredLine(registered, children),
-        canRegister:
-          open && sessionId !== undefined && (canAddSelf || canAddChild) ? sessionId : null,
+        waitingLines: waiting.map(({ participant, position }) =>
+          waitingLine(participant, position),
+        ),
+        canRegister: asks && !full ? sessionId : null,
+        canJoin: asks && full ? sessionId : null,
       };
     });
   });

@@ -1,42 +1,16 @@
-import { ConvexError, v } from 'convex/values';
+import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireCampSessionOrganizer, requireUser } from './lib/access';
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs, publishedCampOfSession } from './lib/campLookup';
-import {
-  CAMP_NOT_FOUND_CODE,
-  CAMP_REGISTRATION_MESSAGES,
-  type CampRegistrationRefusal,
-} from './lib/campRegistration';
+import { CAMP_NOT_FOUND_CODE, CAMP_REGISTRATION_MESSAGES } from './lib/campRegistration';
 import { minorRegistrationsOf } from './lib/campRegistrationReads';
+import { checkedRegistrant, refuseRegistration } from './lib/campRegistrationRules';
 import { campRegistrantsOf } from './lib/campRegistrants';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
-import {
-  MAX_MINORS_PER_SESSION,
-  SELF_KEY,
-  adultMayRegister,
-  childNameError,
-  minorMayRegister,
-  participantKey,
-  participantValidator,
-  type Participant,
-} from './lib/individualRegistration';
-import { checkMinorName } from './lib/minorName';
-import { registrationIsOpen } from './lib/registration';
+import { campSessionPlacesLeft } from './lib/campWaitlist';
+import { SELF_KEY, participantValidator } from './lib/individualRegistration';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { getCurrentUser } from './lib/users';
-
-function refuse(refusal: CampRegistrationRefusal): never {
-  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...refusal });
-}
-
-/** The team minors' name rule, so one name is one key however it was typed. */
-function checkedParticipant(participant: Participant): Participant {
-  if (participant.kind === 'self') return participant;
-  const checked = checkMinorName(participant.minorName);
-  if (!checked.ok) throw new ConvexError({ ...childNameError(checked.error) });
-  return { kind: 'minor', minorName: checked.name };
-}
 
 export const register = mutation({
   args: {
@@ -49,63 +23,22 @@ export const register = mutation({
     const user = await requireUser(ctx);
     const found = await publishedCampOfSession(ctx, sessionId);
     if (!found) {
-      refuse({ code: CAMP_NOT_FOUND_CODE, message: CAMP_REGISTRATION_MESSAGES.campNotFound });
+      refuseRegistration({
+        code: CAMP_NOT_FOUND_CODE,
+        message: CAMP_REGISTRATION_MESSAGES.campNotFound,
+      });
     }
     const { session, camp } = found;
-    if (!registrationIsOpen(session, Date.now())) {
-      refuse({
-        code: 'registrationClosed',
-        message: CAMP_REGISTRATION_MESSAGES.registrationClosed,
-      });
-    }
-    const participant = checkedParticipant(asked);
-    const existing = await ctx.db
-      .query('campRegistrations')
-      .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
-        q
-          .eq('sessionId', sessionId)
-          .eq('userId', user._id)
-          .eq('participantKey', participantKey(participant)),
-      )
-      .first();
-    if (existing) {
-      refuse({
-        code: 'alreadyRegistered',
-        ...(participant.kind === 'minor' && { field: 'minorName' as const }),
-        message: CAMP_REGISTRATION_MESSAGES.alreadyRegistered(existing.participant),
-      });
-    }
-    if (participant.kind === 'self' && !adultMayRegister(camp.maximumAge)) {
-      refuse({
-        code: 'adultNotAllowed',
-        message: CAMP_REGISTRATION_MESSAGES.adultNotAllowed(camp.maximumAge),
-      });
-    }
-    if (participant.kind === 'minor' && !minorMayRegister(camp.minimumAge)) {
-      refuse({
-        code: 'minorNotAllowed',
-        message: CAMP_REGISTRATION_MESSAGES.minorNotAllowed(camp.minimumAge),
-      });
-    }
-    if (!ageConfirmed) {
-      refuse({
-        code: 'ageNotConfirmed',
-        field: 'ageConfirmed',
-        message: CAMP_REGISTRATION_MESSAGES.ageNotConfirmed(participant),
-      });
-    }
-    if (
-      participant.kind === 'minor' &&
-      (await minorRegistrationsOf(ctx, sessionId, user._id)).length >= MAX_MINORS_PER_SESSION
-    ) {
-      refuse({
-        code: 'minorLimit',
-        field: 'minorName',
-        message: CAMP_REGISTRATION_MESSAGES.minorLimit,
-      });
-    }
-    if (session.registeredCount >= session.places) {
-      refuse({ code: 'sessionFull', message: CAMP_REGISTRATION_MESSAGES.sessionFull });
+    const participant = await checkedRegistrant(ctx, {
+      userId: user._id,
+      session,
+      camp,
+      asked,
+      ageConfirmed,
+    });
+    // Anyone waiting holds the next place, so a place raised or freed goes to the waitlist, not to a new registration.
+    if (campSessionPlacesLeft(session) === 0) {
+      refuseRegistration({ code: 'sessionFull', message: CAMP_REGISTRATION_MESSAGES.sessionFull });
     }
     const registrationId = await insertCampRegistration(ctx, session, {
       userId: user._id,
@@ -144,6 +77,7 @@ export const getForRegistration = query({
         }),
       ),
       registered: v.boolean(),
+      waitlisted: v.boolean(),
     }),
   ),
   handler: async (ctx, { orgSlug, campSlug, sessionId }) => {
@@ -161,7 +95,9 @@ export const getForRegistration = query({
     };
     const id = sessionId === undefined ? null : ctx.db.normalizeId('campSessions', sessionId);
     const session = id === null ? null : await ctx.db.get('campSessions', id);
-    if (session?.campId !== camp._id) return { ...base, session: null, registered: false };
+    if (session?.campId !== camp._id) {
+      return { ...base, session: null, registered: false, waitlisted: false };
+    }
     const user = await getCurrentUser(ctx);
     const held = user
       ? await ctx.db
@@ -169,6 +105,15 @@ export const getForRegistration = query({
           .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
             q.eq('sessionId', session._id).eq('userId', user._id).eq('participantKey', SELF_KEY),
           )
+          .first()
+      : null;
+    const waiting = user
+      ? await ctx.db
+          .query('campWaitlistEntries')
+          .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
+            q.eq('sessionId', session._id).eq('userId', user._id).eq('participantKey', SELF_KEY),
+          )
+          .order('desc')
           .first()
       : null;
     return {
@@ -181,9 +126,10 @@ export const getForRegistration = query({
         ...(session.dailyStartTime !== undefined && { dailyStartTime: session.dailyStartTime }),
         ...(session.dailyEndTime !== undefined && { dailyEndTime: session.dailyEndTime }),
         registrationDeadline: session.registrationDeadline,
-        placesLeft: Math.max(0, session.places - session.registeredCount),
+        placesLeft: campSessionPlacesLeft(session),
       },
       registered: held !== null,
+      waitlisted: waiting?.status === 'waiting',
     };
   },
 });

@@ -1,6 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { CAMP_SESSIONS_LIMIT } from './campLookup';
+import { campSessionPlacesLeft } from './campWaitlist';
 import { leagueLocations } from './publicLeague';
 import { dateAtUtcMinus12 } from './registration';
 import { sportName, type Sport } from './sports';
@@ -71,7 +72,7 @@ export function sessionRow(session: Doc<'campSessions'>) {
     startDate: session.startDate,
     endDate: session.endDate,
     registrationDeadline: session.registrationDeadline,
-    placesLeft: Math.max(0, session.places - session.registeredCount),
+    placesLeft: campSessionPlacesLeft(session),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { deleteUserCampRegistrations } from './campRegistrationWrites';
+import { deleteUserCampWaitlistEntries } from './campWaitlistWrites';
 import { deleteUserMemberships } from './memberships';
 import { MAX_SUBSCRIPTIONS_PER_USER } from './pushSubscription';
 import { TEST_SEND_LIMIT } from './pushTestSend';
@@ -34,6 +35,7 @@ export async function deleteUserRecord(
   for (const row of testSends) await ctx.db.delete('pushTestSends', row._id);
   await deleteUserMemberships(ctx, user._id);
   await deleteUserCampRegistrations(ctx, user._id);
+  await deleteUserCampWaitlistEntries(ctx, user._id);
   await ctx.db.delete('users', user._id);
 }
 

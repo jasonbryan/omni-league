@@ -1,3 +1,4 @@
+import { convexRun } from './convex';
 import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { slugify } from '../../convex/lib/slugs';
 import { sportName } from '../../convex/lib/sports';
@@ -74,7 +75,33 @@ function openSeasonRows(orgSlug: string, nowMs: number): OpenSeasonRow[] {
   return openSeasonsBySoonestDeadline(rows, nowMs);
 }
 
-export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): ExpectedOpenCard[] {
+export function campSessionKey(campSlug: string, sessionName: string): string {
+  return `${campSlug}/${sessionName}`;
+}
+
+/**
+ * The demo camp sessions that have no place left on the backend under test: with the demo accounts, guardian@'s child takes the one
+ * place of Week 4, which Registration open then leaves out. Local runs only, like every `convexRun`.
+ */
+export async function filledDemoCampSessions(orgSlug: string): Promise<Set<string>> {
+  const filled = new Set<string>();
+  for (const camp of DEMO_CAMPS) {
+    if (camp.organizationSlug !== orgSlug || camp.published !== true) continue;
+    const page = (await convexRun('camps:getPublicPage', { orgSlug, campSlug: camp.slug })) as {
+      sessions: { name: string; placesLeft: number }[];
+    } | null;
+    for (const session of page?.sessions ?? []) {
+      if (session.placesLeft === 0) filled.add(campSessionKey(camp.slug, session.name));
+    }
+  }
+  return filled;
+}
+
+export function expectedRegistrationOpenCards(
+  orgSlug: string,
+  nowMs: number,
+  filledCampSessions: ReadonlySet<string> = new Set(),
+): ExpectedOpenCard[] {
   const today = dateAtUtcMinus12(nowMs);
   const cards = openSeasonRows(orgSlug, nowMs).map((row) => ({
     deadline: row.registrationDeadline,
@@ -94,6 +121,7 @@ export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): E
       const start = addCalendarDays(today, session.startDaysFromRun);
       const deadline = addCalendarDays(start, -session.deadlineDaysBeforeStart);
       if (today > deadline || today >= start) continue;
+      if (filledCampSessions.has(campSessionKey(camp.slug, session.name))) continue;
       cards.push({ deadline, title: camp.name, subtitle: session.name });
     }
   }
