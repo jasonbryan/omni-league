@@ -25,3 +25,18 @@ export async function seedTraining(tenant: Tenant, training: TrainingSeed): Prom
   })) as { slug: string };
   return slug;
 }
+
+/** Sets the count directly: nothing registers for a training class yet. Local runs only. */
+export async function setTrainingClassRegistered(
+  tenant: Tenant,
+  trainingSlug: string,
+  date: string,
+  registeredCount: number,
+): Promise<void> {
+  await convexRun('testing:setTrainingClassRegistered', {
+    organizationSlug: tenant.slug,
+    trainingSlug,
+    date,
+    registeredCount,
+  });
+}

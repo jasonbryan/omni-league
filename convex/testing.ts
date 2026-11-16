@@ -86,6 +86,7 @@ import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
+import { findTrainingBySlugs } from './lib/trainingLookup';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
@@ -610,6 +611,33 @@ export const seedTraining = internalMutation({
     }
     await insertDraftTraining(ctx, organization._id, { ...training, locationIds });
     return { slug: training.slug };
+  },
+});
+
+/** Sets the count directly: nothing registers for a training class yet. */
+export const setTrainingClassRegistered = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    trainingSlug: v.string(),
+    date: v.string(),
+    registeredCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug, date, registeredCount }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const row = await ctx.db
+      .query('trainingClasses')
+      .withIndex('by_trainingId_and_date', (q) =>
+        q.eq('trainingId', found.training._id).eq('date', date),
+      )
+      .first();
+    if (!row) throw new Error(`No class is on ${date}`);
+    await ctx.db.patch('trainingClasses', row._id, { registeredCount });
+    return null;
   },
 });
 

@@ -30,7 +30,12 @@ import {
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { campAgesLabel } from '../../../../convex/lib/campInput';
-import { campSessionTimes } from '../../../../convex/lib/campSessionInput';
+import type { Id } from '../../../../convex/_generated/dataModel';
+import {
+  MAX_CAMP_SESSION_PLACES,
+  campSessionTimes,
+  checkCampSessionPlaces,
+} from '../../../../convex/lib/campSessionInput';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import {
   api,
@@ -58,6 +63,7 @@ import { CampNoAccess } from './camp-no-access';
 import { CampRegistrants } from './camp-registrants';
 import { campPath } from './camp-path';
 import { CampSessionForm } from './camp-session-form';
+import { PlacesEditor, type PlacesSave } from './places-editor';
 import { PublishCampDialog, type PublishCampOutcome } from './publish-camp-dialog';
 import { injectSectionJump } from './section-jump';
 import { PageTitle } from '../../core/page-title';
@@ -80,6 +86,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
     HlmSkeleton,
     NgIcon,
     NotFoundView,
+    PlacesEditor,
     PublishCampDialog,
     RouterLink,
     ServerErrorView,
@@ -390,6 +397,16 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                               </button>
                             }
                           </div>
+                          <app-places-editor
+                            class="basis-full"
+                            [target]="row.campSessionId"
+                            [subject]="row.name"
+                            [places]="row.places"
+                            [registered]="row.registeredCount"
+                            [maximum]="maxPlaces"
+                            [rule]="placesRule"
+                            [save]="savePlaces"
+                          />
                           @if (isOpen(row)) {
                             <div [id]="registrantsId(row)" class="basis-full min-w-0">
                               <app-camp-registrants
@@ -505,6 +522,7 @@ export class CampManagement {
   private readonly pageTitle = inject(PageTitle);
   private readonly removeCall = injectMutation(api.campSessions.remove);
   private readonly addCall = injectMutation(api.campSessions.add);
+  private readonly placesCall = injectMutation(api.campSessions.updatePlaces);
   private readonly cause = injectOfflineCause();
 
   protected readonly online = injectOnline();
@@ -514,6 +532,8 @@ export class CampManagement {
     'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground';
   protected readonly placeholders = [1, 2];
   protected readonly detailRows = [1, 2];
+  protected readonly maxPlaces = MAX_CAMP_SESSION_PLACES;
+  protected readonly placesRule = checkCampSessionPlaces;
 
   protected readonly state = this.context.state;
   protected readonly camp = this.context.camp;
@@ -573,6 +593,16 @@ export class CampManagement {
       if (camp) this.pageTitle.set([camp.name, camp.organization.name]);
     });
   }
+
+  protected readonly savePlaces: PlacesSave = async (target, places) => {
+    const campSessionId = target as Id<'campSessions'>;
+    const { previousPlaces } = await this.placesCall.run({ campSessionId, places });
+    return {
+      saved: 'Places saved.',
+      restored: 'Places restored.',
+      undo: () => this.placesCall.run({ campSessionId, places: previousPlaces }),
+    };
+  };
 
   protected isOpen(row: CampSessionRow): boolean {
     return this.openSessions().has(row.campSessionId);

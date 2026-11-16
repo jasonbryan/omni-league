@@ -401,7 +401,7 @@ describe('TrainingManagement', () => {
       expect(items()).toHaveLength(3);
     });
 
-    it('offers Cancel on a class with no registrations, and only a note on one with some', async () => {
+    it('offers Cancel on a class with no registrations, and only a note on one with some, and places on both but not on a cancelled one', async () => {
       await open(TRAINING, CLASSES);
       expect(
         items().map((li) => [
@@ -410,8 +410,8 @@ describe('TrainingManagement', () => {
           text(li.querySelector('[data-slot="class-required"]')) ?? null,
         ]),
       ).toEqual([
-        ['Tue, Jan 5, 2027', ['Cancel Tue, Jan 5, 2027'], null],
-        ['Tue, Jan 12, 2027', [], 'Has registrations'],
+        ['Tue, Jan 5, 2027', ['Cancel Tue, Jan 5, 2027', 'Save places for Tue, Jan 5, 2027'], null],
+        ['Tue, Jan 12, 2027', ['Save places for Tue, Jan 12, 2027'], 'Has registrations'],
         ['Tue, Jan 19, 2027', ['Restore Tue, Jan 19, 2027'], null],
       ]);
       expect(rowButton('Tue, Jan 5, 2027', 'Cancel').type).toBe('button');

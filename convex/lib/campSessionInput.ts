@@ -46,6 +46,7 @@ export type CampSessionInputCode =
   | 'endTimeNotAfterStart'
   | 'placesEmpty'
   | 'placesInvalid'
+  | 'placesBelowRegistered'
   | 'sessionLimit';
 
 export interface CampSessionInputError {
@@ -79,6 +80,8 @@ export const CAMP_SESSION_MESSAGES = {
     `The end time must be after the start time, ${formatDailyTime(startTime)}.`,
   placesEmpty: `Enter the number of places, ${PLACES_RANGE}.`,
   placesInvalid: `Enter a whole number of places ${PLACES_RANGE}.`,
+  placesBelowRegistered: (registeredCount: number) =>
+    `Use at least ${registeredCount} ${registeredCount === 1 ? 'place' : 'places'}. ${registeredCount} ${registeredCount === 1 ? 'is' : 'are'} registered.`,
   sessionLimit: `A camp takes up to ${MAX_CAMP_SESSIONS} sessions. Delete one before adding another.`,
   hasRegistrations: (registeredCount: number) =>
     `${registeredCount} ${registeredCount === 1 ? 'registration is' : 'registrations are'} in this session, so it cannot be deleted.`,
@@ -222,6 +225,22 @@ function placesError(places: number | undefined): CampSessionInputError | null {
   return valid
     ? null
     : { field, code: 'placesInvalid', message: CAMP_SESSION_MESSAGES.placesInvalid };
+}
+
+export function checkCampSessionPlaces(
+  places: number | undefined,
+  registeredCount: number,
+): CampSessionInputError | null {
+  const outOfRange = placesError(places);
+  if (outOfRange) return outOfRange;
+  if (places !== undefined && places < registeredCount) {
+    return {
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: CAMP_SESSION_MESSAGES.placesBelowRegistered(registeredCount),
+    };
+  }
+  return null;
 }
 
 export function checkCampSessionFields(values: CampSessionValues): Errors {

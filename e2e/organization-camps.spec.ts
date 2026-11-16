@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
-import { seedCamp, seedCampSession } from './support/camp';
+import { seedCamp, seedCampSession, seedPublishedCamp } from './support/camp';
 import { seedCampRegistration } from './support/camp-registrations';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
+import { MAX_CAMP_SESSION_NAME_LENGTH } from '../convex/lib/campSessionInput';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { failMutation } from './support/fail-mutation';
@@ -777,6 +778,212 @@ test.describe('Camp sessions: Delete and Undo', () => {
     ).toBeVisible();
     await screenshot(page, testInfo, 'camp-session-registered');
     await expectAccessible(page);
+  });
+});
+
+test.describe('Camp sessions: changing the places', () => {
+  const placesField = (row: Locator) => row.getByLabel('Places for Week 1');
+  const savePlaces = (row: Locator) => row.getByRole('button', { name: 'Save places for Week 1' });
+  const placesStatus = (row: Locator) => row.locator('[data-slot="places-status"]');
+  const fieldError = (row: Locator) => row.locator('[data-slot="field-error"]');
+
+  async function fullSession(page: Page) {
+    const { tenant } = await memberOf(page, 'orgAdmin');
+    const publicPage = await seedPublishedCamp(tenant, {
+      ...JUNIOR,
+      locations: [PELICAN],
+      minimumAge: 9,
+      maximumAge: 14,
+      sessions: [
+        {
+          name: 'Week 1',
+          startDate: dateFromToday(14),
+          endDate: dateFromToday(18),
+          places: 20,
+          registrationDeadline: dateFromToday(11),
+          registeredCount: 20,
+        },
+      ],
+    });
+    return { tenant, publicPage, camp: campPage(tenant) };
+  }
+
+  test('raising a full session from 20 to 22 says "Places saved." and shows "2 places left" on the public page, and Undo makes it full again', async ({
+    page,
+  }, testInfo) => {
+    const { camp, publicPage } = await fullSession(page);
+    await page.goto(publicPage);
+    await expect(page.locator('[data-slot="session-places"]')).toHaveText('Full');
+
+    await page.goto(camp);
+    const row = sessionRows(page).first();
+    await expect(row.locator('[data-slot="session-registered"]')).toHaveText('20 of 20 registered');
+    await expect(placesField(row)).toHaveValue('20');
+    await placesField(row).fill('22');
+    await screenshot(page, testInfo, 'camp-places-edited');
+    await savePlaces(row).click();
+
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await expect(row.locator('[data-slot="session-registered"]')).toHaveText('20 of 22 registered');
+    await expect(row.locator('[data-slot="session-places"]')).toHaveText('22 places');
+    await expect(savePlaces(row)).toBeFocused();
+    await screenshot(page, testInfo, 'camp-places-saved');
+    await expectAccessible(page);
+
+    await page.goto(publicPage);
+    await expect(page.locator('[data-slot="session-places"]')).toHaveText('2 places left');
+
+    await page.goto(camp);
+    await placesField(sessionRows(page).first()).fill('21');
+    await savePlaces(sessionRows(page).first()).click();
+    await placesStatus(sessionRows(page).first()).getByRole('button', { name: 'Undo' }).click();
+    await expect(placesStatus(sessionRows(page).first())).toContainText('Places restored.');
+    await expect(placesField(sessionRows(page).first())).toHaveValue('22');
+    await page.goto(publicPage);
+    await expect(page.locator('[data-slot="session-places"]')).toHaveText('2 places left');
+  });
+
+  test('places below the registered count show under the field on leaving it, keep the text, and are not saved', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await fullSession(page);
+    await page.goto(camp);
+    const row = sessionRows(page).first();
+    await placesField(row).fill('19');
+    await placesField(row).blur();
+    await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
+    await expect(placesField(row)).toHaveAttribute('aria-invalid', 'true');
+    await expect(placesField(row)).toHaveValue('19');
+    await screenshot(page, testInfo, 'camp-places-error');
+    await expectAccessible(page);
+
+    await savePlaces(row).click();
+    await expect(placesField(row)).toBeFocused();
+    await expect(row.locator('[data-slot="session-registered"]')).toHaveText('20 of 20 registered');
+
+    await placesField(row).fill('20');
+    await expect(fieldError(row)).toHaveCount(0);
+    await page.reload();
+    await expect(placesField(sessionRows(page).first())).toHaveValue('20');
+  });
+
+  test('a session with no registrations takes any places from 1 to 500, and refuses 501 under the field', async ({
+    page,
+  }) => {
+    const { tenant } = await adminWithCamp(page);
+    await seedCampSession(tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+    });
+    await page.goto(campPage(tenant));
+    const row = sessionRows(page).first();
+    await placesField(row).fill('501');
+    await placesField(row).blur();
+    await expect(fieldError(row)).toHaveText('Enter a whole number of places from 1 to 500.');
+    await placesField(row).fill('1');
+    await savePlaces(row).click();
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await expect(row.locator('[data-slot="session-places"]')).toHaveText('1 place');
+  });
+
+  test('the field is reached, filled, and saved by keyboard, and its hint and error are linked to it', async ({
+    page,
+  }) => {
+    const { camp } = await fullSession(page);
+    await page.goto(camp);
+    const row = sessionRows(page).first();
+    await placesField(row).focus();
+    await expect(placesField(row)).toHaveAttribute('aria-describedby', /^places-.+-description$/);
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type('19');
+    await page.keyboard.press('Tab');
+    await expect(savePlaces(row)).toBeFocused();
+    await expect(placesField(row)).toHaveAttribute('aria-describedby', /description .+-error$/);
+    await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
+
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type('21');
+    await page.keyboard.press('Enter');
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await expect(row.locator('[data-slot="session-places"]')).toHaveText('21 places');
+  });
+
+  test('a session name of 100 letters with no break wraps, and its places field, error, and status fit at 320px', async ({
+    page,
+  }, testInfo) => {
+    const unbroken = 'Wolfeschlegelsteinhausenbergerdorff'
+      .repeat(3)
+      .slice(0, MAX_CAMP_SESSION_NAME_LENGTH);
+    const { tenant } = await memberOf(page, 'orgAdmin');
+    await seedPublishedCamp(tenant, {
+      ...JUNIOR,
+      locations: [PELICAN],
+      minimumAge: 9,
+      maximumAge: 14,
+      sessions: [
+        {
+          name: unbroken,
+          startDate: dateFromToday(14),
+          endDate: dateFromToday(18),
+          places: 20,
+          registrationDeadline: dateFromToday(11),
+          registeredCount: 20,
+        },
+      ],
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(campPage(tenant));
+    const row = sessionRows(page).first();
+    const field = row.getByLabel(`Places for ${unbroken}`);
+    await expect(field).toHaveValue('20');
+    await field.fill('19');
+    await field.blur();
+    await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
+    await screenshot(page, testInfo, 'camp-places-long-name-error');
+    await expectAccessible(page);
+
+    await field.fill('21');
+    await row.getByRole('button', { name: `Save places for ${unbroken}` }).click();
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await screenshot(page, testInfo, 'camp-places-long-name-saved');
+    await expectAccessible(page);
+  });
+
+  test('pressing Save places offline shows the offline alert and keeps the text', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { camp } = await fullSession(page);
+    await page.goto(camp);
+    const row = sessionRows(page).first();
+    await placesField(row).fill('22');
+    await context.setOffline(true);
+    await expect(savePlaces(row)).toHaveAttribute('aria-disabled', 'true');
+    await savePlaces(row).click({ force: true });
+    await expect(row.getByRole('alert')).toContainText("You're offline. Nothing was sent.");
+    await expect(placesField(row)).toHaveValue('22');
+    await screenshot(page, testInfo, 'camp-places-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+
+  test.describe('a save the server fails', () => {
+    test.use({ expectedConvexErrors: ['campSessions:updatePlaces'] });
+
+    test('keeps the text, and the alert says what to do', async ({ page }, testInfo) => {
+      const { camp } = await fullSession(page);
+      await failMutation(page, 'campSessions:updatePlaces');
+      await page.goto(camp);
+      const row = sessionRows(page).first();
+      await placesField(row).fill('22');
+      await savePlaces(row).click();
+      await expect(row.getByRole('alert')).toContainText('The places could not be saved.');
+      await expect(placesField(row)).toHaveValue('22');
+      await screenshot(page, testInfo, 'camp-places-failed');
+      await expectAccessible(page);
+    });
   });
 });
 
