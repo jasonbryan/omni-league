@@ -355,13 +355,15 @@ test.describe('camps offline', () => {
     await expect(note).toBeVisible();
     await expect(rows.locator('h3')).toHaveText(['Ends Tomorrow Camp', 'Closing Camp']);
     await expect(rows.nth(1)).toContainText('Registration open');
+    const week1Status = await rows.nth(1).locator('p:last-of-type').innerText();
     await expect(cards.locator('h3')).toHaveText(['Closing Camp', 'Closing Camp']);
     await expect(page.getByRole('link', { name: 'Register for a camp' })).toBeVisible();
 
-    // Two days on, the saved copy still lists each camp; the page applies the date.
+    // Two days on, the saved copy still lists each camp; the page applies the date, and the row moves to Week 2, the earliest session still open.
     await page.clock.fastForward('48:00:00');
     await expect(rows.locator('h3')).toHaveText(['Closing Camp']);
-    await expect(rows.first()).toContainText('Registration closed');
+    await expect(rows.first()).toContainText('Registration open');
+    await expect(rows.first().locator('p:last-of-type')).not.toHaveText(week1Status);
     await expect(cards).toHaveCount(1);
     await expect(cards.first()).toContainText('Week 2');
     await expect(note).toBeVisible();

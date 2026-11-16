@@ -2256,7 +2256,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
   );
 
   test(
-    'a draft camp and a camp whose sessions have all ended are listed nowhere, and a camp past its first week lists the next',
+    'a draft camp and a camp whose sessions have all ended are listed nowhere, and a camp past its first week shows the next open session',
     RAW_HTTP,
     async ({ request }, testInfo) => {
       test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
@@ -2271,7 +2271,8 @@ test.describe('organization page: Camps, raw server HTML', () => {
       const { html } = await fetchRawHtml(request, tenant.path);
       const camps = sectionWithId(html, 'camps');
       expect(titlesIn(camps)).toEqual(['Midway Camp']);
-      expect(plainText(camps)).toContain('In progress');
+      expect(plainText(camps)).toContain('Registration open');
+      expect(plainText(camps)).not.toContain('In progress');
       expect(html).not.toContain('Draft Camp');
       expect(html).not.toContain('Ended Camp');
       expect(titlesIn(sectionOf(html))).toEqual(['Midway Camp']);

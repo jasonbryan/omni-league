@@ -199,7 +199,7 @@ test.describe('public camp page: in the browser', () => {
     await campsCrumb.click();
     await expect(page).toHaveURL(`${tenant.path}#camps`);
     const section = page.locator('#camps');
-    await expect(section.getByRole('link', { name: JUNIOR.name })).toBeVisible();
+    await expect(section.getByRole('link', { name: JUNIOR.name, exact: true })).toBeVisible();
 
     // Opened as a link, in a new tab or from a shared URL, the browser scrolls to the section.
     await page.goto(campsHref!);
