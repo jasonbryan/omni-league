@@ -12,6 +12,7 @@ import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/ro
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { scoreValidator, sportCountsValidator, sportValidator } from './lib/sports';
 import { setsPerGameValidator, structureValidator } from './lib/tournamentEdit';
+import { trainingClassStatusValidator, trainingPatternValidator } from './lib/trainingPattern';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
@@ -296,9 +297,26 @@ export default defineSchema({
     /** Whole years, `MIN_TRAINING_AGE` to `MAX_TRAINING_AGE`; either bound may be absent, and `minimumAge` is no higher than `maximumAge` when both are set. */
     minimumAge: v.optional(v.number()),
     maximumAge: v.optional(v.number()),
+    /** Set once, when the classes are scheduled; `trainingClasses` holds the dated classes it produced. */
+    pattern: v.optional(trainingPatternValidator),
   })
     .index('by_programId', ['programId'])
     .index('by_organizationId', ['organizationId']),
+
+  trainingClasses: defineTable({
+    trainingId: v.id('trainings'),
+    organizationId: v.id('organizations'),
+    /** A calendar date (`YYYY-MM-DD`) on the pattern's weekday. */
+    date: v.string(),
+    /** `HH:MM` as stored, in 24-hour time with no time zone. */
+    startTime: v.string(),
+    endTime: v.string(),
+    /** Whole places, `MIN_TRAINING_CLASS_PLACES` to `MAX_TRAINING_CLASS_PLACES`. */
+    places: v.number(),
+    /** The registrations in the class; a class with any cannot be cancelled. */
+    registeredCount: v.number(),
+    status: trainingClassStatusValidator,
+  }).index('by_trainingId_and_date', ['trainingId', 'date']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
