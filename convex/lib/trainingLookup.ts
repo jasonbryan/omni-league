@@ -3,8 +3,6 @@ import type { QueryCtx } from '../_generated/server';
 import { leagueLocations } from './publicLeague';
 import { sportName } from './sports';
 
-export const TRAINING_CLASSES_LIMIT = 52;
-
 export async function findTrainingBySlugs(
   ctx: Pick<QueryCtx, 'db'>,
   organization: Doc<'organizations'>,

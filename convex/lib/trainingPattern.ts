@@ -1,7 +1,7 @@
 // Imports only `convex/values` and `convex/lib` files that import nothing from the server, so the app can import it.
 import { v, type Infer } from 'convex/values';
 import { formatDailyTime, isDailyTime } from './campSessionInput';
-import { addCalendarDays } from './registration';
+import { addCalendarDays, utcDate } from './registration';
 import { formatCalendarDate, isCalendarDate } from './seasonInput';
 
 export const MIN_TRAINING_YEAR = 1000;
@@ -72,12 +72,12 @@ export type TrainingPatternCode =
   | 'dateInvalid'
   | 'lastClassTooLate'
   | 'firstDateOffWeekday'
+  | 'firstDateInPast'
   | 'deadlineAfterFirstClass'
   | 'weeksEmpty'
   | 'weeksInvalid'
   | 'placesEmpty'
-  | 'placesInvalid'
-  | 'alreadyScheduled';
+  | 'placesInvalid';
 
 export interface TrainingPatternError {
   field: TrainingPatternField;
@@ -101,6 +101,8 @@ export const TRAINING_PATTERN_MESSAGES = {
   dateInvalid: 'Enter a real date.',
   yearOutOfRange: `Enter a date in a year from ${MIN_TRAINING_YEAR} to ${MAX_TRAINING_YEAR}.`,
   lastClassTooLate: `The last class would fall after the year ${MAX_TRAINING_YEAR}. Use fewer weeks or an earlier first date.`,
+  firstDateInPast: (today: string) =>
+    `The first class must be today, ${formatCalendarDate(today)}, or later.`,
   firstDateOffWeekday: (weekday: number, firstDate: string) =>
     `The first class must be on a ${WEEKDAY_NAMES[weekday]}. ${formatCalendarDate(firstDate)} is a ${WEEKDAY_NAMES[weekdayOf(firstDate)]}.`,
   deadlineAfterFirstClass: (firstDate: string) =>
@@ -133,13 +135,6 @@ type Errors = Partial<Record<TrainingPatternField, TrainingPatternError>>;
 function lastClassYear(firstDate: string, weeks: number): number {
   const [year, month, day] = firstDate.split('-').map(Number) as [number, number, number];
   return utcDate(year, month, day + (weeks - 1) * 7).getUTCFullYear();
-}
-
-// `Date.UTC` reads the years 0 to 99 as 1900 to 1999, which `setUTCFullYear` does not.
-function utcDate(year: number, month: number, day: number): Date {
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  return date;
 }
 
 /** The weekday of a stored calendar date, read as text so a browser in any time zone agrees. */
@@ -189,7 +184,10 @@ function timeErrors({ startTime, endTime }: TrainingPatternValues): Errors {
   return errors;
 }
 
-function dateErrors({ weekday, firstDate, registrationDeadline }: TrainingPatternValues): Errors {
+function dateErrors(
+  { weekday, firstDate, registrationDeadline }: TrainingPatternValues,
+  today: string,
+): Errors {
   const errors: Errors = {};
   const dates = { firstDate, registrationDeadline } as const;
   const empty = {
@@ -224,6 +222,13 @@ function dateErrors({ weekday, firstDate, registrationDeadline }: TrainingPatter
       message: TRAINING_PATTERN_MESSAGES.firstDateOffWeekday(weekday, firstDate),
     };
   }
+  if (real.firstDate && !errors.firstDate && firstDate < today) {
+    errors.firstDate = {
+      field: 'firstDate',
+      code: 'firstDateInPast',
+      message: TRAINING_PATTERN_MESSAGES.firstDateInPast(today),
+    };
+  }
   if (real.firstDate && real.registrationDeadline && registrationDeadline > firstDate) {
     errors.registrationDeadline = {
       field: 'registrationDeadline',
@@ -252,7 +257,8 @@ function countError(
     : { field, code: `${kind}Invalid`, message: TRAINING_PATTERN_MESSAGES[`${kind}Invalid`] };
 }
 
-export function checkTrainingPattern(values: TrainingPatternValues): Errors {
+/** `today` is the caller's clock, as a calendar date: the server's for a refusal, the form's for a message. */
+export function checkTrainingPattern(values: TrainingPatternValues, today: string): Errors {
   const errors: Errors = {};
   if (values.weekday === undefined) {
     errors.weekday = {
@@ -267,7 +273,7 @@ export function checkTrainingPattern(values: TrainingPatternValues): Errors {
       message: TRAINING_PATTERN_MESSAGES.weekdayInvalid,
     };
   }
-  Object.assign(errors, timeErrors(values), dateErrors(values));
+  Object.assign(errors, timeErrors(values), dateErrors(values, today));
   const weeks = countError('weeks', values.weeks);
   if (weeks) errors.weeks = weeks;
   else if (

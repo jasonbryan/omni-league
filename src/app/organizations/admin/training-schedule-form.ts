@@ -13,7 +13,13 @@ import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCalendarPlus, lucideCircleAlert } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { WEEKDAY_NAMES } from '../../../../convex/lib/trainingPattern';
+import {
+  MAX_TRAINING_CLASS_PLACES,
+  MAX_TRAINING_WEEKS,
+  MIN_TRAINING_CLASS_PLACES,
+  MIN_TRAINING_WEEKS,
+  WEEKDAY_NAMES,
+} from '../../../../convex/lib/trainingPattern';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { Checkbox } from '../../ui/checkbox';
@@ -175,7 +181,7 @@ const FOCUS_SELECTOR: Record<Exclude<TrainingPatternField, 'weekday'>, string> =
             [attr.data-matches-spartan-invalid]="form.errors.firstDate() ? 'true' : null"
           />
           <p hlmFieldDescription id="first-date-description">
-            The date of the first class, on the weekday above.
+            The date of the first class, on the weekday above, today or later.
           </p>
           @if (form.errors.firstDate(); as error) {
             <div hlmFieldError id="first-date-error">
@@ -305,12 +311,17 @@ export class TrainingScheduleForm {
   protected readonly alerts = TRAINING_SCHEDULE_ALERTS;
   protected readonly times = TIMES;
   protected readonly counts: readonly Entry[] = [
-    { field: 'weeks', id: 'weeks', label: 'Number of weeks', description: 'From 1 to 52.' },
+    {
+      field: 'weeks',
+      id: 'weeks',
+      label: 'Number of weeks',
+      description: `From ${MIN_TRAINING_WEEKS} to ${MAX_TRAINING_WEEKS}.`,
+    },
     {
       field: 'placesPerClass',
       id: 'places-per-class',
       label: 'Places per class',
-      description: 'From 1 to 200.',
+      description: `From ${MIN_TRAINING_CLASS_PLACES} to ${MAX_TRAINING_CLASS_PLACES}.`,
     },
   ];
   protected readonly weekdays: readonly ChipOption[] = WEEKDAY_ORDER.map((day) => ({

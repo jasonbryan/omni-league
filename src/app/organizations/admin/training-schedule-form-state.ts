@@ -4,10 +4,12 @@ import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import {
   TRAINING_PATTERN_FIELDS,
+  TRAINING_PATTERN_MESSAGES,
   checkTrainingPattern,
   type TrainingPatternError,
   type TrainingPatternField,
 } from '../../../../convex/lib/trainingPattern';
+import { dateAtUtcMinus12 } from '../../../../convex/lib/registration';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import type { AlertTexts } from './alert-text';
@@ -34,12 +36,16 @@ export interface TrainingScheduleSend {
   allowSingleRegistration: boolean;
 }
 
-export type TrainingScheduleAlertKind = 'offline' | 'failed';
+export type TrainingScheduleAlertKind = 'offline' | 'failed' | 'alreadyScheduled';
 
 export const TRAINING_SCHEDULE_ALERTS = {
   failed: {
     title: 'The classes could not be scheduled.',
     description: 'Check your connection and try again.',
+  },
+  alreadyScheduled: {
+    title: 'The classes could not be scheduled.',
+    description: TRAINING_PATTERN_MESSAGES.alreadyScheduled,
   },
   offline: {
     description: "Your details are still here. Try again when you're connected.",
@@ -70,6 +76,12 @@ const READS: Partial<Record<TrainingPatternField, readonly Reads[]>> = {
   weeks: ['firstDate', 'weeks'],
   registrationDeadline: ['firstDate', 'registrationDeadline'],
 };
+
+function isAlreadyScheduled(data: unknown): boolean {
+  return (
+    typeof data === 'object' && data !== null && 'code' in data && data.code === 'alreadyScheduled'
+  );
+}
 
 function inputErrorOf(failure: unknown): TrainingPatternError | null {
   if (!(failure instanceof ConvexError)) return null;
@@ -108,7 +120,7 @@ export class TrainingScheduleFormState {
 
   readonly errors: Record<TrainingPatternField, Signal<string | null>>;
 
-  constructor() {
+  constructor(private readonly today: () => string = () => dateAtUtcMinus12(Date.now())) {
     // `required` puts the attribute on the inputs; the messages come from `trainingPattern.ts`, so the form and `trainingClasses.schedule` agree.
     this.fields = form(this.model, (path) => {
       required(path.startTime);
@@ -120,15 +132,18 @@ export class TrainingScheduleFormState {
     });
     this.clientErrors = computed(() => {
       const m = this.model();
-      return checkTrainingPattern({
-        weekday: this.weekday() ?? undefined,
-        startTime: m.startTime,
-        endTime: m.endTime,
-        firstDate: m.firstDate,
-        weeks: limitFromText(m.weeks),
-        placesPerClass: limitFromText(m.placesPerClass),
-        registrationDeadline: m.registrationDeadline,
-      });
+      return checkTrainingPattern(
+        {
+          weekday: this.weekday() ?? undefined,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          firstDate: m.firstDate,
+          weeks: limitFromText(m.weeks),
+          placesPerClass: limitFromText(m.placesPerClass),
+          registrationDeadline: m.registrationDeadline,
+        },
+        this.today(),
+      );
     });
     this.shown = Object.fromEntries(
       TRAINING_PATTERN_FIELDS.map((field) => [
@@ -201,6 +216,9 @@ export class TrainingScheduleFormState {
 
   private failed(failure: unknown): TrainingScheduleOutcome {
     if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
+    if (failure instanceof ConvexError && isAlreadyScheduled(failure.data)) {
+      return this.showAlert('alreadyScheduled');
+    }
     const refusal = inputErrorOf(failure);
     if (refusal) {
       this.serverErrors[refusal.field].set(refusal.message);

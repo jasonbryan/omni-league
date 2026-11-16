@@ -18,6 +18,7 @@ const tokens = (value: string) => value.split(' ').sort();
 const A_TUESDAY = '2027-01-05';
 const TUESDAY = WEEKDAY_NAMES.indexOf('Tuesday');
 const WEDNESDAY = WEEKDAY_NAMES.indexOf('Wednesday');
+const SUNDAY = WEEKDAY_NAMES.indexOf('Sunday');
 
 const VALID_ARGS = {
   trainingId: 'tr_serving',
@@ -85,7 +86,13 @@ describe('TrainingScheduleForm', () => {
     await type('registration-deadline', '2027-01-01');
   }
 
-  beforeEach(() => open());
+  const NOW = Date.UTC(2026, 10, 15, 12, 0, 0);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: NOW });
+    return open();
+  });
+  afterEach(() => vi.useRealTimers());
 
   describe('the fields', () => {
     it('has Weekday, the two times, First date, Number of weeks, Places per class, the deadline, and the single-class choice, each labelled', () => {
@@ -203,6 +210,33 @@ describe('TrainingScheduleForm', () => {
       expect(error('first-date')).not.toBeNull();
       await weekday(WEDNESDAY);
       expect(error('first-date')).toBeNull();
+    });
+
+    it('shows a first date before today under the first date, and allows today itself', async () => {
+      await weekday(TUESDAY);
+      await type('first-date', '2026-11-10');
+      await leave('first-date');
+      expect(error('first-date')).toBe(TRAINING_PATTERN_MESSAGES.firstDateInPast('2026-11-15'));
+      expect(error('first-date')).toBe('The first class must be today, Nov 15, 2026, or later.');
+      await weekday(WEDNESDAY);
+      await type('first-date', '2026-11-15');
+      expect(error('first-date')).not.toBeNull();
+      await weekday(SUNDAY);
+      await type('first-date', '2026-11-15');
+      expect(error('first-date')).toBeNull();
+    });
+
+    it('takes today from the form’s clock at UTC-12', async () => {
+      await weekday(TUESDAY);
+      vi.setSystemTime(Date.UTC(2026, 10, 18, 11, 59, 59));
+      await type('first-date', '2026-11-17');
+      await leave('first-date');
+      expect(error('first-date')).toBeNull();
+      vi.setSystemTime(Date.UTC(2026, 10, 18, 12, 0, 0));
+      await type('first-date', '2026-11-10');
+      await type('first-date', '2026-11-17');
+      await leave('first-date');
+      expect(error('first-date')).toBe(TRAINING_PATTERN_MESSAGES.firstDateInPast('2026-11-18'));
     });
 
     it('shows a first date in the year 26 under the first date, with the shared wording', async () => {
@@ -328,18 +362,37 @@ describe('TrainingScheduleForm', () => {
       await submit();
       o.convex.calls[0].reject(
         new ConvexError({
-          field: 'weekday',
+          field: 'weeks',
+          code: 'lastClassTooLate',
+          message: TRAINING_PATTERN_MESSAGES.lastClassTooLate,
+        }),
+      );
+      await o.flush();
+      expect(error('weeks')).toBe(TRAINING_PATTERN_MESSAGES.lastClassTooLate);
+      expect(document.activeElement).toBe(input('weeks'));
+      expect(input('start-time').value).toBe('18:00');
+    });
+
+    it('the server saying the classes are already scheduled shows the form alert, focuses it, and keeps every value', async () => {
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
           code: 'alreadyScheduled',
           message: TRAINING_PATTERN_MESSAGES.alreadyScheduled,
         }),
       );
       await o.flush();
-      expect(text(page.querySelector('#weekday-error'))).toBe(
+      const alert = form().querySelector<HTMLElement>('[role="alert"][data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The classes could not be scheduled.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
         TRAINING_PATTERN_MESSAGES.alreadyScheduled,
       );
-      expect(document.activeElement).toBe(page.querySelector('#schedule #weekday input'));
+      expect(page.querySelector('#weekday-error')).toBeNull();
+      expect(document.activeElement).toBe(alert);
       expect(input('weeks').value).toBe('8');
-      expect(input('start-time').value).toBe('18:00');
     });
 
     it('any other failure shows the form alert, titled and with what to do, focuses it, and keeps every value', async () => {

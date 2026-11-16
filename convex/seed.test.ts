@@ -1532,7 +1532,7 @@ describe('seed:demo training classes', () => {
       registrationDeadline: addCalendarDays(today, 7),
       allowSingleRegistration: false,
     });
-    expect(checkTrainingPattern(training.pattern!)).toEqual({});
+    expect(checkTrainingPattern(training.pattern!, today)).toEqual({});
   });
 
   test('gives classes to a training program an earlier run made without them', async () => {

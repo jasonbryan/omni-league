@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { isForbidden } from './lib/forbidden';
@@ -9,6 +9,15 @@ import { insertDraftTraining, insertTenant } from './lib/tenantWrites';
 import { TRAINING_PATTERN_MESSAGES, WEEKDAY_NAMES } from './lib/trainingPattern';
 import schema from './schema';
 import { insertTournamentProgram, modules } from './test.setup';
+
+const NOW = Date.UTC(2026, 10, 15, 12, 0, 0);
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -303,6 +312,39 @@ describe('trainingClasses.schedule', () => {
     },
   );
 
+  test('refuses a first date before today under the first date, writes nothing, and allows today itself', async () => {
+    const s = await setup();
+    vi.setSystemTime(Date.UTC(2027, 0, 5, 12, 0, 0));
+    const lastTuesday = '2026-12-29';
+    expect(
+      await refusal(
+        s.adminA.mutation(api.trainingClasses.schedule, {
+          ...valid(s),
+          firstDate: lastTuesday,
+          registrationDeadline: '2026-12-20',
+        }),
+      ),
+    ).toEqual({
+      field: 'firstDate',
+      code: 'firstDateInPast',
+      message: 'The first class must be today, Jan 5, 2027, or later.',
+    });
+    expect(await classesOf(s)).toEqual([]);
+    await s.adminA.mutation(api.trainingClasses.schedule, valid(s));
+    expect(await classesOf(s)).toHaveLength(8);
+  });
+
+  test('takes today from the server clock at UTC-12, so a date stays open until it has ended everywhere', async () => {
+    const s = await setup();
+    vi.setSystemTime(Date.UTC(2027, 0, 6, 12, 0, 0));
+    expect((await refusal(s.adminA.mutation(api.trainingClasses.schedule, valid(s)))).code).toBe(
+      'firstDateInPast',
+    );
+    vi.setSystemTime(Date.UTC(2027, 0, 6, 11, 59, 59));
+    await s.adminA.mutation(api.trainingClasses.schedule, valid(s));
+    expect(await classesOf(s)).toHaveLength(8);
+  });
+
   test('refuses a second Schedule classes and adds no class', async () => {
     const s = await setup();
     await s.adminA.mutation(api.trainingClasses.schedule, valid(s));
@@ -316,7 +358,6 @@ describe('trainingClasses.schedule', () => {
         }),
       ),
     ).toEqual({
-      field: 'weekday',
       code: 'alreadyScheduled',
       message: TRAINING_PATTERN_MESSAGES.alreadyScheduled,
     });

@@ -42,6 +42,9 @@ describe('TrainingManagement', () => {
   let o: Opened;
   let page: HTMLElement;
 
+  beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: Date.UTC(2026, 10, 15, 12, 0, 0) }));
+  afterEach(() => vi.useRealTimers());
+
   async function open(result?: unknown, classes?: unknown[], url = TRAINING_URL) {
     o = await openAdmin(TRAINING_ROUTES, url);
     page = o.page;

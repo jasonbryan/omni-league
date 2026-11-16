@@ -29,8 +29,10 @@ const VALID: TrainingPatternValues = {
   registrationDeadline: '2027-01-01',
 };
 
-const errorsOf = (change: Partial<TrainingPatternValues>) =>
-  checkTrainingPattern({ ...VALID, ...change });
+const TODAY = '2026-11-15';
+
+const errorsOf = (change: Partial<TrainingPatternValues>, today = TODAY) =>
+  checkTrainingPattern({ ...VALID, ...change }, today);
 
 describe('weekdayOf and classDates', () => {
   test('reads the weekday and the dates of the years 0 to 99 as those years, not as 1900 to 1999', () => {
@@ -186,6 +188,36 @@ describe('checkTrainingPattern', () => {
     expect(
       errorsOf({ firstDate: LAST_YEAR_WEDNESDAY, weekday: WEDNESDAY, weeks: 53 }).weeks?.code,
     ).toBe('weeksInvalid');
+  });
+
+  test('refuses a first date before today under the first date, and allows today itself and later', () => {
+    const TUESDAY_BEFORE_TODAY = '2026-11-10';
+    const A_TUESDAY_TODAY = '2026-11-17';
+    expect(
+      errorsOf({ firstDate: TUESDAY_BEFORE_TODAY, registrationDeadline: '2026-11-01' }, TODAY),
+    ).toEqual({
+      firstDate: {
+        field: 'firstDate',
+        code: 'firstDateInPast',
+        message: 'The first class must be today, Nov 15, 2026, or later.',
+      },
+    });
+    expect(
+      errorsOf({ firstDate: A_TUESDAY_TODAY, registrationDeadline: '2026-11-16' }, A_TUESDAY_TODAY),
+    ).toEqual({});
+    expect(
+      errorsOf({ firstDate: A_TUESDAY_TODAY, registrationDeadline: '2026-11-16' }, '2026-11-18')
+        .firstDate?.code,
+    ).toBe('firstDateInPast');
+    expect(
+      errorsOf({ firstDate: A_TUESDAY_TODAY, registrationDeadline: '2026-11-16' }, TODAY),
+    ).toEqual({});
+  });
+
+  test('reports the weekday before the past: a first date off the weekday keeps its own message', () => {
+    expect(
+      errorsOf({ firstDate: '2026-11-11', registrationDeadline: '2026-11-01' }).firstDate?.code,
+    ).toBe('firstDateOffWeekday');
   });
 
   test('says an existing series is refused with the shared wording', () => {

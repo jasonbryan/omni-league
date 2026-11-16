@@ -1,10 +1,11 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireTrainingClassOrganizer, requireTrainingOrganizer } from './lib/access';
+import { dateAtUtcMinus12 } from './lib/registration';
 import { insertTrainingClasses } from './lib/tenantWrites';
-import { TRAINING_CLASSES_LIMIT } from './lib/trainingLookup';
 import {
   TRAINING_PATTERN_MESSAGES,
+  MAX_TRAINING_WEEKS,
   checkTrainingPattern,
   firstTrainingPatternError,
   trainingClassStatusValidator,
@@ -31,15 +32,16 @@ export const schedule = mutation({
   returns: v.object({ classCount: v.number() }),
   handler: async (ctx, { trainingId, allowSingleRegistration, ...values }) => {
     const { training } = await requireTrainingOrganizer(ctx, trainingId);
-    const refusal = firstTrainingPatternError(checkTrainingPattern(values));
+    const refusal = firstTrainingPatternError(
+      checkTrainingPattern(values, dateAtUtcMinus12(Date.now())),
+    );
     if (refusal) refuse(refusal);
     const existing = await ctx.db
       .query('trainingClasses')
       .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId))
       .first();
     if (existing || training.pattern !== undefined) {
-      refuse({
-        field: 'weekday',
+      throw new ConvexError({
         code: 'alreadyScheduled',
         message: TRAINING_PATTERN_MESSAGES.alreadyScheduled,
       });
@@ -70,7 +72,7 @@ export const listForTraining = query({
     const classes = await ctx.db
       .query('trainingClasses')
       .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId))
-      .take(TRAINING_CLASSES_LIMIT);
+      .take(MAX_TRAINING_WEEKS);
     return classes.map((row) => ({
       trainingClassId: row._id,
       date: row.date,
