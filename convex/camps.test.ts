@@ -611,6 +611,36 @@ describe('camps.listPublic', () => {
     expect(campSlugs(await listPublic(s))).toEqual(['ends-today', 'upcoming']);
   });
 
+  test('keeps a camp whose next session is full in the list with all its unended sessions, so the page can show a later open one, and gives the full one no open card', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'full',
+        sessions: [
+          { name: 'Week 1', startInDays: 10, places: 5 },
+          { name: 'Week 2', startInDays: 20 },
+        ],
+      },
+    ]);
+    await s.t.run(async (ctx) => {
+      const week1 = (await ctx.db.query('campSessions').collect()).find(
+        (session) => session.name === 'Week 1',
+      );
+      await ctx.db.patch('campSessions', week1!._id, { registeredCount: 5 });
+    });
+    const listed = await listPublic(s);
+    expect(campSlugs(listed)).toEqual(['full']);
+    expect(listed.rows[0].sessions.map((session) => [session.name, session.placesLeft])).toEqual([
+      ['Week 1', 0],
+      ['Week 2', 20],
+    ]);
+    expect(
+      (await s.t.query(api.camps.listOpenForOrganization, { organizationSlug: 'org-a' })).map(
+        (card) => card.sessionName,
+      ),
+    ).toEqual(['Week 2']);
+  });
+
   test('lists the camp whose last session ends soonest first', async () => {
     const s = await setup();
     await insertDated(s, [

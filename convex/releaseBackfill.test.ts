@@ -318,6 +318,47 @@ describe('the release backfill', () => {
     expect((await t.action(internal.releaseBackfill.run, {})).backfilled.campFields).toBe(0);
   });
 
+  test('fills the camps of several batches, and a second run leaves every row as the first left it', async () => {
+    const t = setup();
+    const camps = BATCH_SIZE.camps * 2 + 5;
+    await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, {
+        organization: { name: 'Many Camps', slug: 'many-camps' },
+        locations: [],
+        leagues: [],
+      });
+      for (let i = 0; i < camps; i++) {
+        const programId = await insertCampProgram(ctx, organizationId, `Camp ${i}`, `camp-${i}`);
+        await ctx.db.patch('programs', programId, { status: 'published' });
+        const campId = await ctx.db.insert('camps', {
+          programId,
+          organizationId,
+          minimumAge: 9,
+          maximumAge: 14,
+        });
+        await ctx.db.insert('campSessions', {
+          campId,
+          organizationId,
+          name: 'Week 1',
+          startDate: '2030-07-01',
+          endDate: `2030-08-${String((i % 28) + 1).padStart(2, '0')}`,
+          places: 10,
+          registrationDeadline: '2030-06-30',
+          registeredCount: 0,
+        });
+      }
+    });
+
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.campFields).toBe(camps);
+    const snapshot = () => t.run(async (ctx) => ctx.db.query('camps').collect());
+    const first = await snapshot();
+    expect(
+      first.every((camp) => camp.status === 'published' && camp.lastSessionEndDate !== undefined),
+    ).toBe(true);
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.campFields).toBe(0);
+    expect(await snapshot()).toEqual(first);
+  });
+
   test('runs on a deployment that is not a preview or staging one', async () => {
     const t = setup();
     await insertTenantWithoutCounters(t, 'prod-like', { published: 1 });

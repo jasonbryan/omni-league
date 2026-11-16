@@ -2183,6 +2183,12 @@ const JUNIOR_CAMP = sandCamp('Junior Beach Volleyball Camp', [
   { startsInDays: 21 },
 ]);
 
+function monthDay(daysFromToday: number): string {
+  const date = new Date(`${dateFromToday(daysFromToday)}T00:00:00Z`);
+  const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(date);
+  return `${month} ${date.getUTCDate()}`;
+}
+
 function campTenant(camps: CampPageSeed[], name = 'E2E Camps'): Promise<Tenant> {
   return seedTenantWithCamps(
     {
@@ -2309,6 +2315,26 @@ test.describe('organization page: Camps, raw server HTML', () => {
   );
 
   test(
+    'a camp whose next session is full shows the later open session with its Register link, not Full',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const camp = sandCamp('Full First Camp', [
+        { name: 'Week 1', startsInDays: 5 },
+        { name: 'Week 2', startsInDays: 20 },
+      ]);
+      camp.sessions[0] = { ...camp.sessions[0], places: 5, registeredCount: 5 };
+      const tenant = await campTenant([camp]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      const row = plainText(sectionWithId(html, 'camps'));
+      expect(row).toContain('Registration open');
+      expect(row).toContain(monthDay(5));
+      expect(row).not.toContain('Full');
+      expect(row).toContain('Register for Full First Camp');
+    },
+  );
+
+  test(
     '7 upcoming camps: page 1 holds 5, page 2 the last 2 with its range, links, and canonical, and a page past the last shows page 1',
     RAW_HTTP,
     async ({ request }, testInfo) => {
@@ -2425,6 +2451,31 @@ test.describe('organization page: Camps in the browser', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Junior Beach Volleyball Camp' }),
     ).toBeVisible();
+  });
+
+  test('a row keeps the status of the next session while none is open, and moves to the following session when the page clock passes the next one’s end, with the same query answer', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const tenant = await campTenant([
+      sandCamp('Clock Camp', [
+        { name: 'Week 1', startsInDays: 2, endsInDays: 6, deadlineInDays: -2 },
+        { name: 'Week 2', startsInDays: 20, endsInDays: 24, deadlineInDays: -1 },
+      ]),
+    ]);
+    await page.clock.install();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const row = page.locator('#camps li', { hasText: 'Clock Camp' });
+    await expect(row).toContainText('Registration closed');
+    await expect(row).toContainText(`${monthDay(2)} – ${monthDay(6)}`);
+    await expect(row.getByRole('link', { name: /^Register/ })).toHaveCount(0);
+
+    await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);
+    await expect(row).toContainText(`${monthDay(20)} – ${monthDay(24)}`);
+    await expect(row).not.toContainText(monthDay(2));
+    await expect(row).toContainText('Registration closed');
   });
 
   const STATES = [
