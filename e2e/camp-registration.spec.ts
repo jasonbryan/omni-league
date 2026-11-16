@@ -1160,3 +1160,49 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
     });
   }
 });
+
+test.describe('a child whose name has no break in it', () => {
+  test.use({ expectedConvexErrors: ['campWaitlist:join'] });
+
+  const UNBROKEN = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
+  const overflow = (page: Page) =>
+    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+  test('stays inside the camp page and the register page at 320px', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    const path = registerPath(tenant, YOUTH.slug, ids['Full week']);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(path);
+    await childName(page).fill(UNBROKEN);
+    await joinButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toContainText(UNBROKEN);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'camp-waitlist-register-long-name-error');
+
+    await ageBox(page).click();
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    const line = row(page, 'Full week').locator('[data-slot="session-waitlist"]');
+    await expect(line).toHaveText(`${UNBROKEN} is on the waitlist, position 1`);
+    const [lineBox, rowBox] = [
+      (await line.boundingBox())!,
+      (await row(page, 'Full week').boundingBox())!,
+    ];
+    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'camp-waitlist-camp-long-name');
+
+    await page.goto(path);
+    await childName(page).fill(UNBROKEN);
+    await ageBox(page).click();
+    await joinButton(page).click();
+    await expect(page.locator('#minor-name-error')).toContainText(UNBROKEN);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'camp-waitlist-register-long-name-duplicate');
+  });
+});

@@ -8,6 +8,7 @@ import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { CAMP_WAITLIST_MESSAGES } from './lib/campWaitlist';
 import { MAX_MINORS_PER_SESSION, type Participant } from './lib/individualRegistration';
 import { insertCampSession, insertDraftCamp, insertTenant, publishCamp } from './lib/tenantWrites';
+import { deleteUserRecord } from './lib/users';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -848,5 +849,135 @@ describe('campSessions', () => {
     await expect(
       s.asAdmin.mutation(api.campSessions.remove, { campSessionId: sessionId }),
     ).rejects.toMatchObject({ data: { code: 'hasWaitlist' } });
+  });
+});
+
+describe('writes that arrive together', () => {
+  async function consistent(s: Setup, sessionId: Id<'campSessions'>) {
+    const { entries, registrations, sessions } = await rowsOf(s);
+    const session = sessions.find((row) => row._id === sessionId)!;
+    expect(session.waitlistCount ?? 0).toBe(
+      entries.filter((row) => row.sessionId === sessionId && row.status === 'waiting').length,
+    );
+    expect(session.registeredCount).toBe(
+      registrations.filter((row) => row.sessionId === sessionId).length,
+    );
+    expect(session.registeredCount).toBeLessThanOrEqual(session.places);
+  }
+
+  test('two joins at once take positions 1 and 2', async () => {
+    const s = await setup();
+    const sessionId = await withFullSession(s);
+    const answers = await Promise.all([
+      join(s.asGuardian, sessionId, MINOR('Maya R.')),
+      join(s.asZed, sessionId, SELF),
+    ]);
+    expect(answers.map(({ position }) => position).sort()).toEqual([1, 2]);
+    await consistent(s, sessionId);
+  });
+
+  test('a join and a promotion at once leave every count equal to its rows', async () => {
+    const s = await setup();
+    const sessionId = await withFullSession(s);
+    await join(s.asGuardian, sessionId, MINOR('Maya R.'));
+    await s.asAdmin.mutation(api.campSessions.updatePlaces, {
+      campSessionId: sessionId,
+      places: 2,
+    });
+    const [first] = (await rowsOf(s)).entries;
+    await Promise.all([
+      s.asAdmin.mutation(api.campWaitlist.promote, { campWaitlistEntryId: first._id }),
+      join(s.asPat, sessionId, SELF),
+    ]);
+    await consistent(s, sessionId);
+    const { entries } = await rowsOf(s);
+    expect(entries.map((row) => row.status).sort()).toEqual(['promoted', 'waiting']);
+  });
+
+  test('a registration and a promotion at once never take more places than the session has', async () => {
+    const s = await setup();
+    const sessionId = await withFullSession(s);
+    await join(s.asGuardian, sessionId, MINOR('Maya R.'));
+    await s.asAdmin.mutation(api.campSessions.updatePlaces, {
+      campSessionId: sessionId,
+      places: 2,
+    });
+    const [first] = (await rowsOf(s)).entries;
+    await Promise.allSettled([
+      s.asAdmin.mutation(api.campWaitlist.promote, { campWaitlistEntryId: first._id }),
+      s.asPat.mutation(api.campRegistrations.register, {
+        sessionId,
+        participant: SELF,
+        ageConfirmed: true,
+      }),
+    ]);
+    await consistent(s, sessionId);
+    const { registrations } = await rowsOf(s);
+    expect(
+      registrations.some((row) => row.userId === s.guardian.userId) ||
+        registrations.some((row) => row.userId === s.pat.userId),
+    ).toBe(true);
+  });
+});
+
+describe('a place freed by a removed registration', () => {
+  test('goes to the waitlist, not to a new registration, until promoted', async () => {
+    const s = await setup();
+    const sessionId = await withFullSession(s);
+    await join(s.asGuardian, sessionId, MINOR('Maya R.'));
+    await s.t.run((ctx) => deleteUserRecord(ctx, s.holder.authUserId));
+    expect((await sessionOf(s, sessionId)).registeredCount).toBe(0);
+    const slugs = { orgSlug: 'org-a', campSlug: 'junior-beach-volleyball-camp' };
+    const page = await s.signedOut.query(api.camps.getPublicPage, slugs);
+    expect(page?.sessions.find((row) => row.sessionId === sessionId)?.placesLeft).toBe(0);
+    await expect(
+      refusal(
+        s.asPat.mutation(api.campRegistrations.register, {
+          sessionId,
+          participant: SELF,
+          ageConfirmed: true,
+        }),
+      ),
+    ).resolves.toMatchObject({ code: 'sessionFull' });
+    const [first] = (await rowsOf(s)).entries;
+    await expect(
+      s.asAdmin.mutation(api.campWaitlist.promote, { campWaitlistEntryId: first._id }),
+    ).resolves.toHaveProperty('registrationId');
+    expect(await sessionOf(s, sessionId)).toMatchObject({ registeredCount: 1, waitlistCount: 0 });
+  });
+});
+
+describe('the most one guardian may bring', () => {
+  test('counts registered, waiting, and promoted children together, for that guardian only', async () => {
+    const s = await setup();
+    const sessionId = await withFullSession(s);
+    const half = MAX_MINORS_PER_SESSION / 2;
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', sessionId, { places: 1 + half });
+      for (let i = 0; i < half; i++) {
+        const session = (await ctx.db.get('campSessions', sessionId))!;
+        await insertCampRegistration(ctx, session, {
+          userId: s.guardian.userId,
+          participant: MINOR(`Held ${i}`),
+        });
+      }
+    });
+    for (let i = 0; i < half; i++) await join(s.asGuardian, sessionId, MINOR(`Waiting ${i}`));
+    await expect(refusal(join(s.asGuardian, sessionId, MINOR('One more')))).resolves.toMatchObject({
+      code: 'minorLimit',
+      field: 'minorName',
+    });
+    await s.asAdmin.mutation(api.campSessions.updatePlaces, {
+      campSessionId: sessionId,
+      places: 1 + half + 1,
+    });
+    const [first] = (await rowsOf(s)).entries;
+    await s.asAdmin.mutation(api.campWaitlist.promote, { campWaitlistEntryId: first._id });
+    await expect(refusal(join(s.asGuardian, sessionId, MINOR('One more')))).resolves.toMatchObject({
+      code: 'minorLimit',
+    });
+    await expect(join(s.asZed, sessionId, MINOR('One more'))).resolves.toMatchObject({
+      position: half,
+    });
   });
 });
