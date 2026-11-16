@@ -17,9 +17,18 @@ export function dateAtUtcMinus12(nowMs: number): string {
   return new Date(nowMs - UTC_MINUS_12_MS).toISOString().slice(0, 10);
 }
 
+// `Date.UTC` reads the years 0 to 99 as 1900 to 1999, which `setUTCFullYear` does not.
+export function utcDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
 export function addCalendarDays(date: string, days: number): string {
   const [year, month, day] = date.split('-').map(Number) as [number, number, number];
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+  return utcDate(year, month, day + days)
+    .toISOString()
+    .slice(0, 10);
 }
 
 export function msUntilUtcMinus12DateChange(nowMs: number): number {

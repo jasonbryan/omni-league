@@ -280,6 +280,41 @@ export async function requireCampSessionOrganizer(
   return { ...access, campSession };
 }
 
+/** Signed in first, so a training program that does not exist and another organization's look alike. */
+export async function requireTrainingOrganizer(
+  ctx: Ctx,
+  trainingId: Id<'trainings'>,
+): Promise<Authorized & { program: Doc<'programs'>; training: Doc<'trainings'> }> {
+  await requireUser(ctx);
+  const training = await ctx.db.get('trainings', trainingId);
+  if (!training) throw new Error('Not allowed');
+  const access = await requireProgramOrganizer(ctx, training.programId);
+  if (
+    access.program.type !== 'training' ||
+    access.program.organizationId !== training.organizationId
+  ) {
+    throw new Error('Not allowed');
+  }
+  return { ...access, training };
+}
+
+export async function requireTrainingClassOrganizer(
+  ctx: Ctx,
+  trainingClassId: Id<'trainingClasses'>,
+): Promise<
+  Authorized & {
+    program: Doc<'programs'>;
+    training: Doc<'trainings'>;
+    trainingClass: Doc<'trainingClasses'>;
+  }
+> {
+  await requireUser(ctx);
+  const trainingClass = await ctx.db.get('trainingClasses', trainingClassId);
+  if (!trainingClass) throw new Error('Not allowed');
+  const access = await requireTrainingOrganizer(ctx, trainingClass.trainingId);
+  return { ...access, trainingClass };
+}
+
 /** Signed in first, so a tournament that does not exist and another organization's look alike. */
 export async function requireTournamentOrganizer(
   ctx: Ctx,

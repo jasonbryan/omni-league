@@ -23,6 +23,8 @@ import { verifyPassword } from './lib/password';
 import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
+import { findTrainingBySlugs } from './lib/trainingLookup';
+import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
@@ -82,6 +84,7 @@ import {
   insertCampSession,
   insertDraftCamp,
   insertDraftTraining,
+  insertTrainingClasses,
   insertDraftTournament,
   publishCamp,
   publishTournament,
@@ -842,6 +845,15 @@ interface DemoTraining {
   sport: Sport;
   locations: readonly string[];
   coachName: string;
+  classes: {
+    weekday: number;
+    firstDaysFromRun: number;
+    deadlineDaysFromRun: number;
+    startTime: string;
+    endTime: string;
+    weeks: number;
+    placesPerClass: number;
+  };
 }
 
 const DEMO_TRAININGS: readonly DemoTraining[] = [
@@ -852,6 +864,15 @@ const DEMO_TRAININGS: readonly DemoTraining[] = [
     sport: 'beachVolleyball',
     locations: ['North Beach Sand Courts'],
     coachName: 'Dana Ruiz',
+    classes: {
+      weekday: WEEKDAY_NAMES.indexOf('Tuesday'),
+      firstDaysFromRun: 14,
+      deadlineDaysFromRun: 7,
+      startTime: '18:00',
+      endTime: '19:00',
+      weeks: 8,
+      placesPerClass: 12,
+    },
   },
 ];
 
@@ -868,6 +889,30 @@ async function ensureTraining(ctx: MutationCtx, demo: DemoTraining): Promise<boo
     coachName: demo.coachName,
   });
   return true;
+}
+
+/** A program an earlier run made without classes gets them. */
+async function ensureTrainingClasses(
+  ctx: MutationCtx,
+  demo: DemoTraining,
+  today: string,
+): Promise<number> {
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization) return 0;
+  const found = await findTrainingBySlugs(ctx, organization, demo.slug);
+  if (!found || found.training.pattern !== undefined) return 0;
+  const earliest = addCalendarDays(today, demo.classes.firstDaysFromRun);
+  const firstDate = addCalendarDays(earliest, (demo.classes.weekday - weekdayOf(earliest) + 7) % 7);
+  return insertTrainingClasses(ctx, found.training, {
+    weekday: demo.classes.weekday,
+    startTime: demo.classes.startTime,
+    endTime: demo.classes.endTime,
+    firstDate,
+    weeks: demo.classes.weeks,
+    placesPerClass: demo.classes.placesPerClass,
+    registrationDeadline: addCalendarDays(today, demo.classes.deadlineDaysFromRun),
+    allowSingleRegistration: false,
+  });
 }
 
 async function ensureCamp(ctx: MutationCtx, demo: DemoCamp): Promise<boolean> {
@@ -964,6 +1009,7 @@ const resultValidator = v.object({
   camps: v.number(),
   campSessions: v.number(),
   trainings: v.number(),
+  trainingClasses: v.number(),
   backfilled: v.object({
     ...backfilledValidator.fields,
     teamCounts: v.number(),
@@ -1046,6 +1092,7 @@ export const insertDemoData = internalMutation({
       camps: 0,
       campSessions: 0,
       trainings: 0,
+      trainingClasses: 0,
     };
     const backfilled = {
       ...(await backfillTenantFields(ctx)),
@@ -1116,6 +1163,7 @@ export const insertDemoData = internalMutation({
     }
     for (const demo of DEMO_TRAININGS) {
       if (await ensureTraining(ctx, demo)) inserted.trainings++;
+      inserted.trainingClasses += await ensureTrainingClasses(ctx, demo, today);
     }
     return { ...inserted, backfilled };
   },

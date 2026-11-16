@@ -15,6 +15,7 @@ import {
 } from './divisions';
 import { CAMP_SESSIONS_LIMIT } from './campLookup';
 import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
+import { classDates, type TrainingPattern } from './trainingPattern';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
@@ -552,6 +553,29 @@ export async function insertDraftTraining(
     ...(training.minimumAge !== undefined && { minimumAge: training.minimumAge }),
     ...(training.maximumAge !== undefined && { maximumAge: training.maximumAge }),
   });
+}
+
+// The caller has checked access, the input, and that the training program has no class yet.
+export async function insertTrainingClasses(
+  ctx: MutationCtx,
+  training: Doc<'trainings'>,
+  pattern: TrainingPattern,
+): Promise<number> {
+  const dates = classDates(pattern.firstDate, pattern.weeks);
+  for (const date of dates) {
+    await ctx.db.insert('trainingClasses', {
+      trainingId: training._id,
+      organizationId: training.organizationId,
+      date,
+      startTime: pattern.startTime,
+      endTime: pattern.endTime,
+      places: pattern.placesPerClass,
+      registeredCount: 0,
+      status: 'scheduled',
+    });
+  }
+  await ctx.db.patch('trainings', training._id, { pattern });
+  return dates.length;
 }
 
 export interface NewCampSession {

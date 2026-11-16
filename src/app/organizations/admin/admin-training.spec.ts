@@ -12,6 +12,7 @@ import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { AdminArea } from './admin-area';
 import { AdminTraining } from './admin-training';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { ROW_TITLE_LINK } from './link-classes';
 import {
   adminRoutes,
   COASTAL,
@@ -240,9 +241,25 @@ describe('AdminTraining', () => {
       ]);
     });
 
-    it('shows each name as text, not a link, until the training page exists', async () => {
+    it('links each name to its page', async () => {
       await open(TRAINING);
-      expect(page.querySelectorAll('#training-list a')).toHaveLength(0);
+      const base = `/app/organizations/${COASTAL.slug}/training`;
+      expect(
+        items().map((li) => {
+          const link = li.querySelector<HTMLAnchorElement>('h3 a')!;
+          return [text(link), link.getAttribute('href')];
+        }),
+      ).toEqual([
+        ['Adult Passing Clinic', `${base}/adult-passing-clinic`],
+        ['Tuesday Serving Clinic', `${base}/tuesday-serving-clinic`],
+        ['Juniors Drills', `${base}/juniors-drills`],
+        ['Under 12 Passing', `${base}/under-12-passing`],
+      ]);
+    });
+
+    it('draws the name link as the Tournaments list does, underlined at rest with a 44px touch target', async () => {
+      await open(TRAINING);
+      expect(tokens(items()[0].querySelector('h3 a')!.className)).toEqual(tokens(ROW_TITLE_LINK));
     });
 
     it('a failed list shows the destructive alert, never the error message', async () => {
@@ -560,8 +577,12 @@ describe('AdminTraining', () => {
       await open([]);
       await created();
       const status = createdStatus()!;
-      expect(text(status)).toBe('Tuesday Serving Clinic created.');
-      expect(status.querySelector('a')).toBeNull();
+      expect(text(status)).toBe('Tuesday Serving Clinic created.Schedule classes');
+      const next = status.querySelector<HTMLAnchorElement>('a')!;
+      expect([text(next), next.getAttribute('href')]).toEqual([
+        'Schedule classes',
+        `/app/organizations/${COASTAL.slug}/training/tuesday-serving-clinic#schedule`,
+      ]);
       expect(status.getAttribute('role')).toBe('status');
       expect(status.nextElementSibling).toBe(submitButton());
       for (const id of ['name', 'slug', 'coach-name', 'minimum-age', 'maximum-age']) {

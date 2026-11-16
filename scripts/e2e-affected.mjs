@@ -146,6 +146,7 @@ export const ROUTE_SPECS = {
     'camp-page',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/training/:trainingSlug': ['organization-training', 'after-sign-in'],
   'app/organizations/:slug': ['organization-admin', 'after-sign-in'],
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
@@ -1195,7 +1196,8 @@ export const AREAS = [
   {
     name: 'convex training',
     test: (file) =>
-      named('convex/', ['trainings'])(file) || named('convex/lib/', ['trainingInput'])(file),
+      named('convex/', ['trainings', 'trainingClasses'])(file) ||
+      named('convex/lib/', ['trainingInput', 'trainingLookup', 'trainingPattern'])(file),
     specs: ['organization-training'],
   },
   {
