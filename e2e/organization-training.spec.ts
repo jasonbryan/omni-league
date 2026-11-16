@@ -461,6 +461,13 @@ function firstTuesdayTwoWeeksOut(): string {
   }
 }
 
+function aDayThatIsNotTuesday(): string {
+  for (let days = 15; ; days++) {
+    const date = dateFromToday(days);
+    if (new Date(`${date}T00:00:00Z`).getUTCDay() !== 2) return date;
+  }
+}
+
 async function fillPattern(page: Page, first: string) {
   await chipLabel(page, 'Tuesday').click();
   await page.locator('#start-time').fill('18:00');
@@ -552,7 +559,7 @@ test.describe('Training: scheduling the classes', () => {
     const { path } = await openTraining(page);
     await page.goto(path);
     await chipLabel(page, 'Tuesday').click();
-    await page.locator('#first-date').fill(dateFromToday(15));
+    await page.locator('#first-date').fill(aDayThatIsNotTuesday());
     await page.locator('#first-date').blur();
     const offWeekday = page.locator('#first-date-error');
     await expect(offWeekday).toContainText('The first class must be on a Tuesday.');
