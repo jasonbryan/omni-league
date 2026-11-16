@@ -367,12 +367,12 @@ const publicCampSessionFields = {
   placesLeft: v.number(),
 };
 
-// `nextSession` is the earliest session that had not ended when the query ran; `lastSessionEndDate` lets the page drop a camp that has ended since.
+// `sessions` are those that had not ended when the query ran, in start order, because a query does not rerun as time passes: the page picks the next one by its own clock, and `lastSessionEndDate` lets it drop a camp that has ended since.
 export const publicCampsValidator = publicListValidator(
   v.object({
     ...publicCampRowFields,
     lastSessionEndDate: v.string(),
-    nextSession: v.object({ name: v.string(), ...publicCampSessionFields }),
+    sessions: v.array(v.object({ name: v.string(), ...publicCampSessionFields })),
   }),
 );
 

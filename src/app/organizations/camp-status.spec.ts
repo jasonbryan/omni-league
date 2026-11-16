@@ -1,4 +1,9 @@
-import { campStatus, openCampSessionsBySoonestDeadline, upcomingCamps } from './camp-status';
+import {
+  campStatus,
+  nextCampSession,
+  openCampSessionsBySoonestDeadline,
+  upcomingCamps,
+} from './camp-status';
 
 const NEXT = {
   name: 'Week 1',
@@ -11,7 +16,11 @@ const NEXT = {
 const at = (date: string) => Date.parse(`${date}T18:00:00Z`);
 
 describe('upcomingCamps', () => {
-  const camp = (slug: string, lastSessionEndDate: string) => ({ slug, lastSessionEndDate });
+  const camp = (slug: string, lastSessionEndDate: string) => ({
+    slug,
+    lastSessionEndDate,
+    sessions: [NEXT],
+  });
 
   it('keeps a camp whose last session ends today and drops one that ended yesterday', () => {
     expect(
@@ -20,6 +29,22 @@ describe('upcomingCamps', () => {
         at('2027-07-09'),
       ).map((row) => row.slug),
     ).toEqual(['today', 'later']);
+  });
+});
+
+describe('nextCampSession', () => {
+  const week = (name: string, endDate: string) => ({ ...NEXT, name, endDate });
+
+  it('is the first session, in the order given, that has not ended at the page’s time', () => {
+    const sessions = [week('Week 1', '2027-07-09'), week('Week 2', '2027-07-16')];
+    expect(nextCampSession(sessions, at('2027-07-09'))?.name).toBe('Week 1');
+    expect(nextCampSession(sessions, at('2027-07-10'))?.name).toBe('Week 2');
+  });
+
+  it('is the last session when all have ended, and none for none', () => {
+    const sessions = [week('Week 1', '2027-07-09'), week('Week 2', '2027-07-16')];
+    expect(nextCampSession(sessions, at('2027-08-01'))?.name).toBe('Week 2');
+    expect(nextCampSession([], at('2027-08-01'))).toBeUndefined();
   });
 });
 

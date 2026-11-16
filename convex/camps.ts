@@ -248,13 +248,14 @@ export const listPublic = query({
     const rows = [];
     for (const camp of pageRows(read.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
       const program = await publishedProgramOf(ctx, camp);
-      // Sessions run in start order, so the first that has not ended is the earliest to come.
-      const next = (await sessionsOf(ctx, camp._id)).find((session) => session.endDate >= from);
-      if (program && next && camp.lastSessionEndDate !== undefined) {
+      const sessions = (await sessionsOf(ctx, camp._id))
+        .filter((session) => session.endDate >= from)
+        .map((session) => ({ name: session.name, ...sessionRow(session) }));
+      if (program && sessions.length > 0 && camp.lastSessionEndDate !== undefined) {
         rows.push({
           ...(await publicCampRow(ctx, organization, camp, program)),
           lastSessionEndDate: camp.lastSessionEndDate,
-          nextSession: { name: next.name, ...sessionRow(next) },
+          sessions,
         });
       }
     }
@@ -283,9 +284,16 @@ export const listOpenForOrganization = query({
           continue;
         }
         cards.push({ ...row, sessionName: session.name, ...dates, placesLeft });
-        if (cards.length >= OPEN_CAMP_SESSIONS_LIMIT) return cards;
       }
     }
-    return cards;
+    // Cut after sorting, so the sessions that close soonest are the ones kept.
+    return cards
+      .sort(
+        (a, b) =>
+          a.registrationDeadline.localeCompare(b.registrationDeadline) ||
+          a.name.localeCompare(b.name) ||
+          a.sessionName.localeCompare(b.sessionName),
+      )
+      .slice(0, OPEN_CAMP_SESSIONS_LIMIT);
   },
 });

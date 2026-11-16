@@ -8,7 +8,7 @@ import { seasonDates } from './league/season-dates';
 import type { PublicCampRows, PublicOpenCampRows } from './organization-path';
 import { BADGE_TEXT, closesText, compare, FULL_BADGE_TEXT } from './season-status';
 
-type NextSession = PublicCampRows[number]['nextSession'];
+type CampSession = PublicCampRows[number]['sessions'][number];
 
 export interface CampStatusLine {
   badge: string;
@@ -18,16 +18,24 @@ export interface CampStatusLine {
 }
 
 /** The query keeps the camps whose last session had not ended when it ran; the page drops one that has ended since. */
-export function upcomingCamps<T extends { lastSessionEndDate: string }>(
-  camps: readonly T[],
-  nowMs: number,
-): T[] {
+export function upcomingCamps<
+  T extends { lastSessionEndDate: string; sessions: readonly unknown[] },
+>(camps: readonly T[], nowMs: number): T[] {
   const today = dateAtUtcMinus12(nowMs);
-  return camps.filter((camp) => camp.lastSessionEndDate >= today);
+  return camps.filter((camp) => camp.lastSessionEndDate >= today && camp.sessions.length > 0);
+}
+
+/** The sessions come in start order, so the first that has not ended is the earliest to come. */
+export function nextCampSession(
+  sessions: readonly CampSession[],
+  nowMs: number,
+): CampSession | undefined {
+  const today = dateAtUtcMinus12(nowMs);
+  return sessions.find((session) => session.endDate >= today) ?? sessions.at(-1);
 }
 
 /** The status of the camp's next session, as a season's: its places only add Full once registration is open. */
-export function campStatus(next: NextSession, nowMs: number): CampStatusLine {
+export function campStatus(next: CampSession, nowMs: number): CampStatusLine {
   const phase = seasonPhase(next, nowMs);
   const full = phase === 'registrationOpen' && next.placesLeft === 0;
   const registrationOpen = phase === 'registrationOpen' && !full;

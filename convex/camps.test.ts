@@ -552,7 +552,7 @@ describe('camps.listPublic', () => {
   const listPublic = (s: Setup, args: object = {}) =>
     s.t.query(api.camps.listPublic, { organizationSlug: 'org-a', page: 1, ...args });
 
-  test('gives a signed-out caller a published upcoming camp with its ages, sport, locations, and next session', async () => {
+  test('gives a signed-out caller a published upcoming camp with its ages, sport, locations, and sessions', async () => {
     const s = await setup();
     await insertDated(s, [
       {
@@ -571,13 +571,15 @@ describe('camps.listPublic', () => {
           maximumAge: 14,
           locationNames: ['bravo Beach', 'Alpha Field'],
           lastSessionEndDate: inDays(18),
-          nextSession: {
-            name: 'Week 1',
-            startDate: inDays(14),
-            endDate: inDays(18),
-            registrationDeadline: inDays(10),
-            placesLeft: 20,
-          },
+          sessions: [
+            {
+              name: 'Week 1',
+              startDate: inDays(14),
+              endDate: inDays(18),
+              registrationDeadline: inDays(10),
+              placesLeft: 20,
+            },
+          ],
         },
       ],
       page: 1,
@@ -671,34 +673,24 @@ describe('camps.listPublic', () => {
     expect(campSlugs(await listPublic(s, { sport: 'soccer' }))).toEqual(['soccer-1']);
   });
 
-  test('shows the earliest session that has not ended as the next one, and moves to Week 2 when Week 1 ends with no write in between', async () => {
+  test('returns the sessions that had not ended when the query ran, in start order, so the page picks the next one by its own clock', async () => {
     const s = await setup();
     await insertDated(s, [
       {
-        slug: 'two-weeks',
+        slug: 'three-weeks',
         sessions: [
-          { name: 'Week 2', startInDays: 12, endInDays: 16, deadlineInDays: 8 },
-          { name: 'Week 1', startInDays: 5, endInDays: 9, deadlineInDays: 1 },
+          { name: 'Week 3', startInDays: 19, endInDays: 23, deadlineInDays: 15 },
+          { name: 'Week 1', startInDays: -6, endInDays: -2, deadlineInDays: -9 },
+          { name: 'Week 2', startInDays: 5, endInDays: 9, deadlineInDays: 1 },
         ],
       },
     ]);
-    const before = await s.t.run((ctx) => ctx.db.query('camps').collect());
-    const nextName = async () => (await listPublic(s)).rows[0]?.nextSession.name;
-    expect(await nextName()).toBe('Week 1');
+    const names = async () => (await listPublic(s)).rows[0]?.sessions.map((row) => row.name);
+    expect(await names()).toEqual(['Week 2', 'Week 3']);
 
-    vi.useFakeTimers({ now: Date.now() + 9 * 24 * 60 * 60 * 1000 });
-    expect(await nextName()).toBe('Week 1');
-    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
-    const week2 = (await listPublic(s)).rows[0];
-    expect(week2?.nextSession).toMatchObject({
-      name: 'Week 2',
-      startDate: inDays(2),
-      endDate: inDays(6),
-    });
-    expect(week2?.lastSessionEndDate).toBe(inDays(6));
-    expect(await s.t.run((ctx) => ctx.db.query('camps').collect())).toEqual(before);
-
-    vi.setSystemTime(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    vi.useFakeTimers({ now: Date.now() + 10 * 24 * 60 * 60 * 1000 });
+    expect(await names()).toEqual(['Week 3']);
+    vi.setSystemTime(Date.now() + 14 * 24 * 60 * 60 * 1000);
     expect(campSlugs(await listPublic(s))).toEqual([]);
   });
 
@@ -807,7 +799,7 @@ describe('camps.listOpenForOrganization', () => {
     expect(await cards(s)).toEqual(['mixed/Deadline today', 'mixed/Open']);
   });
 
-  test('lists a camp’s sessions in date order after the camp whose last session ends sooner, and only the organization’s own camps, narrowed to a sport', async () => {
+  test('lists the soonest deadline first, and only the organization’s own camps, narrowed to a sport', async () => {
     const s = await setup();
     await insertDated(s, [
       {
@@ -820,9 +812,66 @@ describe('camps.listOpenForOrganization', () => {
       { slug: 'soccer', sport: 'soccer', sessions: [{ startInDays: 11 }] },
       { slug: 'other-org', organizationId: s.organizationB },
     ]);
-    expect(await cards(s)).toEqual(['soccer/Week 1', 'sand/Week 1', 'sand/Week 2']);
+    expect(await cards(s)).toEqual(['sand/Week 1', 'soccer/Week 1', 'sand/Week 2']);
     expect(await cards(s, { sport: 'soccer' })).toEqual(['soccer/Week 1']);
     expect(await cards(s, { sport: 'beachVolleyball' })).toEqual(['sand/Week 1', 'sand/Week 2']);
+  });
+
+  test('reads the 25 camps whose last session ends soonest, and leaves out the 26th', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: 26 }, (_, i) => ({
+        slug: `camp-${String(i + 1).padStart(2, '0')}`,
+        sessions: [{ startInDays: 10 + i, deadlineInDays: 5 }],
+      })),
+    );
+    const slugs = (await listOpen(s)).map((card) => card.slug);
+    expect(slugs).toHaveLength(25);
+    expect(slugs).toContain('camp-25');
+    expect(slugs).not.toContain('camp-26');
+  });
+
+  test('keeps the 30 sessions with the soonest deadlines of 31, whatever the order of their camps and start dates', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'one-camp',
+        sessions: Array.from({ length: 31 }, (_, i) => ({
+          name: `Session ${String(i).padStart(2, '0')}`,
+          startInDays: 60 + i,
+          deadlineInDays: 50 - i,
+        })),
+      },
+    ]);
+    const open = await listOpen(s);
+    expect(open).toHaveLength(30);
+    expect(open[0]?.sessionName).toBe('Session 30');
+    expect(open.map((card) => card.sessionName)).not.toContain('Session 00');
+    const deadlines = open.map((card) => card.registrationDeadline);
+    expect(deadlines).toEqual([...deadlines].sort());
+  });
+
+  test('keeps a sooner deadline from a later camp over a later deadline from an earlier camp when it cuts to 30', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'ends-first',
+        sessions: Array.from({ length: 30 }, (_, i) => ({
+          name: `Early ${String(i).padStart(2, '0')}`,
+          startInDays: 50,
+          endInDays: 51,
+          deadlineInDays: 20 + (i % 10),
+        })),
+      },
+      {
+        slug: 'ends-later',
+        sessions: [{ name: 'Soonest', startInDays: 40, endInDays: 60, deadlineInDays: 2 }],
+      },
+    ]);
+    const names = (await listOpen(s)).map((card) => card.sessionName);
+    expect(names).toHaveLength(30);
+    expect(names[0]).toBe('Soonest');
   });
 
   test('is empty for an unknown organization', async () => {

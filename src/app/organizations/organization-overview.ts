@@ -47,7 +47,7 @@ import {
 import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
 import { leadingKind, openIntro, registerForText, type OpenCardKind } from './open-registration';
 import { campAgesLabel } from '../../../convex/lib/campInput';
-import { campStatus, upcomingCamps } from './camp-status';
+import { campStatus, nextCampSession, upcomingCamps } from './camp-status';
 import { pagingWithoutDropped, type ListPaging } from './list-paging';
 import { publicCampNames } from './public-camp/public-camp-names';
 import { publicCampPath } from './public-camp/public-camp-path';
@@ -917,7 +917,7 @@ export class OrganizationOverview {
       const href = publicCampPath(this.page().slug, session.slug);
       return {
         kind: 'camp' as const,
-        key: `${href}#${session.sessionName}`,
+        key: `${href}#${session.startDate}#${session.sessionName}`,
         fragment: 'sessions',
         href,
         names: publicCampNames({ organization: this.page(), camp: session }),
@@ -1008,7 +1008,10 @@ export class OrganizationOverview {
       names: publicCampNames({ organization: this.page(), camp }),
       ages: campAgesLabel(camp.minimumAge, camp.maximumAge),
       where: [camp.sportName, camp.locationNames.join(', ')].filter(Boolean).join(' · '),
-      status: campStatus(camp.nextSession, this.now()),
+      status: campStatus(
+        nextCampSession(camp.sessions, this.now()) ?? camp.sessions[0],
+        this.now(),
+      ),
     })),
   );
 

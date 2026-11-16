@@ -36,13 +36,22 @@ const JUNIOR: PublicCampRows[number] = {
   maximumAge: 14,
   locationNames: ['North Beach Sand Courts'],
   lastSessionEndDate: '2027-07-23',
-  nextSession: {
-    name: 'Week 1',
-    startDate: '2027-07-05',
-    endDate: '2027-07-09',
-    registrationDeadline: '2027-07-01',
-    placesLeft: 15,
-  },
+  sessions: [
+    {
+      name: 'Week 1',
+      startDate: '2027-07-05',
+      endDate: '2027-07-09',
+      registrationDeadline: '2027-07-01',
+      placesLeft: 15,
+    },
+    {
+      name: 'Week 2',
+      startDate: '2027-07-19',
+      endDate: '2027-07-23',
+      registrationDeadline: '2027-07-15',
+      placesLeft: 20,
+    },
+  ],
 };
 const SOCCER_CAMP: PublicCampRows[number] = {
   ...JUNIOR,
@@ -53,12 +62,14 @@ const SOCCER_CAMP: PublicCampRows[number] = {
   maximumAge: 8,
   locationNames: [],
   lastSessionEndDate: '2027-06-25',
-  nextSession: {
-    ...JUNIOR.nextSession,
-    startDate: '2027-06-21',
-    endDate: '2027-06-25',
-    registrationDeadline: '2027-06-18',
-  },
+  sessions: [
+    {
+      ...JUNIOR.sessions[0],
+      startDate: '2027-06-21',
+      endDate: '2027-06-25',
+      registrationDeadline: '2027-06-18',
+    },
+  ],
 };
 const ENDED: PublicCampRows[number] = {
   ...JUNIOR,
@@ -243,10 +254,7 @@ describe('the Camps section', () => {
     it('shows Full with no Register link when the next session has no place left', async () => {
       await emit(harness, {
         ...queryResults(withCamps([])),
-        [CAMPS]: listPage(
-          [{ ...JUNIOR, nextSession: { ...JUNIOR.nextSession, placesLeft: 0 } }],
-          1,
-        ),
+        [CAMPS]: listPage([{ ...JUNIOR, sessions: [{ ...JUNIOR.sessions[0], placesLeft: 0 }] }], 1),
       });
       const row = rows(harness)[0];
       expect(text(row.querySelector('[data-slot="badge"]'))).toBe('Full');
@@ -292,6 +300,23 @@ describe('the Camps section', () => {
         'Registration closed',
       );
       expect(rows(harness)[0].querySelector('a[href$="#sessions"]')).toBeNull();
+    });
+
+    it('moves a row to the next session when the first ends, with the same answer from the query', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withCamps([JUNIOR])));
+      expect(text(rows(harness)[0].querySelector('p:last-of-type'))).toContain(
+        'Jul 5 – Jul 9, 2027 · closes Jul 1',
+      );
+      vi.setSystemTime(at('2027-07-09'));
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+      await settle(harness);
+      expect(text(rows(harness)[0].querySelector('p:last-of-type'))).toContain(
+        'Jul 19 – Jul 23, 2027 · closes Jul 15',
+      );
+      expect(text(rows(harness)[0].querySelector('[data-slot="badge"]'))).toBe('Registration open');
+      expect(rows(harness)[0].querySelector('a[href$="#sessions"]')).not.toBeNull();
+      expect(client.activeSubscriptions.filter((s) => s.name === CAMPS)).toHaveLength(1);
     });
   });
 
