@@ -100,6 +100,11 @@ describe('OrganizationPage', () => {
         .map(({ name, args }) => ({ name, args }))
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
+      {
+        name: 'camps:listOpenForOrganization',
+        args: { organizationSlug: 'gulf-coast-sport-social' },
+      },
+      { name: 'camps:listPublic', args: { organizationSlug: 'gulf-coast-sport-social', page: 1 } },
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
       { name: FACETS, args: { slug: 'gulf-coast-sport-social' } },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 3 } },

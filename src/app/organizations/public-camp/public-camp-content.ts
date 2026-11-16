@@ -75,6 +75,12 @@ function registeredLine(self: boolean, children: readonly string[]): string | nu
               camp().organization.name
             }}</a>
           </li>
+          <li hlmBreadcrumbSeparator></li>
+          <li hlmBreadcrumbItem>
+            <a hlmBreadcrumbLink [link]="organizationHref()" fragment="camps" class="${CRUMB_LINK}"
+              >Camps</a
+            >
+          </li>
         </ol>
       </nav>
       <h1 class="${LEAGUE_HEADING}">{{ camp().name }}</h1>

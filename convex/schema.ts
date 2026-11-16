@@ -252,9 +252,27 @@ export default defineSchema({
     maximumAge: v.number(),
     /** Kept by `insertCampSession` and `deleteCampSession`; absent on a camp that has had no session written since it was created, which readers recount. */
     sessionCount: v.optional(v.number()),
+    /** The program's `status` and `sport`, kept equal to it by the tenant writers so the date indexes can serve the public lists; absent on a camp written before they were kept, which the public lists leave out until a writer or a backfill sets them. */
+    status: v.optional(programStatusValidator),
+    sport: v.optional(sportValidator),
+    /** The latest `endDate` of the camp's sessions, `YYYY-MM-DD`; it changes only when a session is added or deleted, never with time. Absent while the camp has no session. */
+    lastSessionEndDate: v.optional(v.string()),
   })
     .index('by_programId', ['programId'])
-    .index('by_organizationId', ['organizationId']),
+    // The admin list reads newest first, which the status index below cannot give.
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes
+    .index('by_organizationId', ['organizationId'])
+    .index('by_organizationId_and_status_and_lastSessionEndDate', [
+      'organizationId',
+      'status',
+      'lastSessionEndDate',
+    ])
+    .index('by_organizationId_and_sport_and_status_and_lastSessionEndDate', [
+      'organizationId',
+      'sport',
+      'status',
+      'lastSessionEndDate',
+    ]),
 
   campSessions: defineTable({
     campId: v.id('camps'),

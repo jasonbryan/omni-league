@@ -6,9 +6,11 @@ import {
   getPublicPageReturns,
   getSeasonPublicPageReturns,
   getTournamentPublicPageReturns,
+  publicCampsValidator,
   publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
+  publicOpenCampSessionsValidator,
   publicOpenSeasonsValidator,
   publicOpenTournamentsValidator,
   publicSeasonsValidator,
@@ -45,6 +47,8 @@ const ORGANIZATION_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.seasons.listOpenForOrganization, publicOpenSeasonsValidator, 1),
   savedQuery(api.tournaments.listPublic, publicTournamentsValidator, 1),
   savedQuery(api.tournaments.listOpenForOrganization, publicOpenTournamentsValidator, 1),
+  savedQuery(api.camps.listPublic, publicCampsValidator, 1),
+  savedQuery(api.camps.listOpenForOrganization, publicOpenCampSessionsValidator, 1),
   savedQuery(api.organizations.listPublicLeagueFacets, publicLeagueFacetsValidator, 1),
 ];
 

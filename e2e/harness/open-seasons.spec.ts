@@ -53,9 +53,13 @@ test.describe(
   () => {
     const RUN = Date.parse('2026-10-30T17:00:00Z');
 
-    test('puts the published tournaments, soonest deadline first, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
+    test('puts the open sessions of the published camps and the published tournaments, soonest deadline first, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
       expect(expectedRegistrationOpenCards(GULF_COAST, RUN)).toEqual([
+        { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 1' },
+        { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 2' },
+        { title: 'Adult Beach Skills Camp', subtitle: 'Week 1' },
         { title: 'Gulf Coast Beach Open', subtitle: 'Tournament' },
+        { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 3' },
         { title: 'Gulf Coast King of the Beach', subtitle: 'Tournament' },
         { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
         { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },
@@ -68,7 +72,12 @@ test.describe(
       expect(titles).not.toContain('Winter Doubles Classic');
     });
 
-    test('is empty for a demo organization with no published season or tournament', () => {
+    test('leaves out the draft Fall Break Camp', () => {
+      const titles = expectedRegistrationOpenCards(GULF_COAST, RUN).map((card) => card.title);
+      expect(titles).not.toContain('Fall Break Camp');
+    });
+
+    test('is empty for a demo organization with no published season, tournament, or camp', () => {
       expect(expectedRegistrationOpenCards('port-aransas-beach-volleyball-club', RUN)).toEqual([]);
     });
   },

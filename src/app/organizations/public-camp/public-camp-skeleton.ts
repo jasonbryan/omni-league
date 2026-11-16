@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronRight } from '@ng-icons/lucide';
 import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import {
@@ -13,7 +15,8 @@ const BAR = 'block rounded-md';
 /** Its heading sits where the page's `h1` does, so the page replaces it without a jump. */
 @Component({
   selector: 'app-public-camp-skeleton',
-  imports: [HlmCard, HlmSkeleton],
+  imports: [HlmCard, HlmSkeleton, NgIcon],
+  providers: [provideIcons({ lucideChevronRight })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', 'data-testid': 'camp-skeleton', 'data-page-loading': '' },
   template: `
@@ -24,6 +27,12 @@ const BAR = 'block rounded-md';
           <li>
             <span class="${CRUMB_BOX}">{{ names.organization.name }}</span>
           </li>
+          <li>
+            <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" />
+          </li>
+          <li>
+            <span class="${CRUMB_BOX}">Camps</span>
+          </li>
         </ol>
         <p data-testid="skeleton-heading" aria-hidden="true" class="${LEAGUE_HEADING}">
           {{ names.camp.name }}
@@ -33,7 +42,7 @@ const BAR = 'block rounded-md';
           data-testid="skeleton-breadcrumb-row"
           class="flex h-5 items-center pointer-coarse:h-11"
         >
-          <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-40 md:h-5"></span>
+          <span hlmSkeleton aria-hidden="true" class="${BAR} h-4 w-64 md:h-5"></span>
         </div>
         <span
           hlmSkeleton

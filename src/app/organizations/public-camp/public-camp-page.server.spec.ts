@@ -163,7 +163,10 @@ describe('PublicCampPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe('Junior Beach Volleyball Camp');
     expect(
       [...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map((a) => href(a)),
-    ).toEqual(['/organizations/gulf-coast-sport-social']);
+    ).toEqual([
+      '/organizations/gulf-coast-sport-social',
+      '/organizations/gulf-coast-sport-social#camps',
+    ]);
     expect([...body.querySelectorAll('main dl > div')].map((row) => text(row))).toEqual([
       'Age range Ages 9 to 14',
       'Location North Beach Sand Courts3500 Sandcourt Ln, Corpus Christi, TX 78402',

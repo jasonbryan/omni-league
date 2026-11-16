@@ -34,7 +34,9 @@ import {
   pageQueryFor,
   sportViewPath,
   type PagedList,
+  type PublicCampRows,
   type PublicLeagueRows,
+  type PublicOpenCampRows,
   type PublicOpenSeasonRows,
   type PublicOpenTournamentRows,
   type PublicTournamentRows,
@@ -42,7 +44,13 @@ import {
   type PublicOrganizationHeader,
   type PublicSport,
 } from './organization-path';
-import { UNSEEN_OPEN_SEASON_COUNT, type OpenCardKind } from './open-seasons-seen';
+import { UNSEEN_OPEN_SEASON_COUNT } from './open-seasons-seen';
+import { leadingKind, openIntro, registerForText, type OpenCardKind } from './open-registration';
+import { campAgesLabel } from '../../../convex/lib/campInput';
+import { campStatus, shownCampSession, upcomingCamps } from './camp-status';
+import { pagingWithoutDropped, type ListPaging } from './list-paging';
+import { publicCampNames } from './public-camp/public-camp-names';
+import { publicCampPath } from './public-camp/public-camp-path';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
@@ -67,38 +75,30 @@ import {
 import { HlmSkeleton } from '../ui/skeleton';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
 import { publicPageNames } from './public-league/public-page-names';
-import {
-  closesText,
-  compare,
-  FULL_BADGE_TEXT,
-  OPEN_SEASONS_INTRO,
-  leagueSeasonStatus,
-} from './season-status';
+import { closesText, compare, FULL_BADGE_TEXT, leagueSeasonStatus } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 import { publicTournamentNames } from './public-tournament/public-tournament-names';
 import { publicTournamentPath } from './public-tournament/public-tournament-path';
-import {
-  OPEN_MIXED_INTRO,
-  OPEN_TOURNAMENTS_INTRO,
-  REGISTER_FOR_SEASON,
-  REGISTER_FOR_TOURNAMENT,
-  tournamentStatus,
-  upcomingTournaments,
-} from './tournament-status';
+import { tournamentStatus, upcomingTournaments } from './tournament-status';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-export interface ListPaging {
-  readonly page: number;
-  readonly pageCount: number;
-  readonly total: number;
+const LOCATIONS_ROW_SPAN: Readonly<Record<number, string>> = {
+  1: 'lg:row-span-1',
+  2: 'lg:row-span-2',
+  3: 'lg:row-span-3',
+};
+
+/** A page left with no row after a date change still shows its section, for the way back to the pages before it. */
+function sectionShown(rowCount: number, paging: ListPaging | undefined): boolean {
+  return rowCount > 0 || ((paging?.page ?? 1) > 1 && (paging?.total ?? 0) > LIST_PAGE_SIZE);
 }
 
 function rowId(
-  list: 'league' | 'location' | 'tournament',
+  list: 'league' | 'location' | 'tournament' | 'camp',
   paging: ListPaging | undefined,
   i: number,
 ): string {
@@ -227,7 +227,13 @@ function rowId(
         </div>
       </div>
     }
-    @if (!isEmpty() || locationsLoading() || locationRows().length || tournamentsShown()) {
+    @if (
+      !isEmpty() ||
+      locationsLoading() ||
+      locationRows().length ||
+      tournamentsShown() ||
+      campsShown()
+    ) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
         @if (registrationOpenShown()) {
           <section
@@ -245,7 +251,7 @@ function rowId(
               @if (cards.length) {
                 <p class="mt-1 text-sm text-muted-foreground">{{ openIntro() }}</p>
                 <ul role="list" class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
-                  @for (card of cards; track card.href) {
+                  @for (card of cards; track card.key) {
                     <li hlmCard size="bare" class="flex flex-col p-5">
                       <p class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                         <span hlmBadge variant="secondary" size="fit">{{ card.sportName }}</span>
@@ -299,7 +305,7 @@ function rowId(
                             <a
                               [routerLink]="card.href"
                               [state]="card.names"
-                              fragment="registration"
+                              [fragment]="card.fragment"
                               data-slot="button"
                               [class]="registerButton"
                               >Register<span class="sr-only"> {{ card.registerFor }}</span></a
@@ -539,6 +545,78 @@ function rowId(
               }
             </section>
           }
+          @if (campsShown()) {
+            <section id="camps" aria-labelledby="camps-heading" [class]="campsClass()">
+              <h2
+                #campsHeading
+                id="camps-heading"
+                tabindex="-1"
+                class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+              >
+                {{ campsHeadingText() }}
+              </h2>
+              <ul
+                role="list"
+                class="mt-2 divide-y divide-border"
+                [attr.aria-busy]="campsBusy() ? 'true' : null"
+              >
+                @for (camp of campRows(); track camp.id) {
+                  <li [id]="camp.id" class="group relative">
+                    <div class="flex min-h-18 items-center gap-4 py-4">
+                      <div class="min-w-0 flex-1">
+                        <h3 class="font-medium">
+                          <a
+                            [routerLink]="camp.href"
+                            [state]="camp.names"
+                            class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
+                            >{{ camp.name }}</a
+                          >
+                        </h3>
+                        <p class="mt-0.5 text-sm font-medium">{{ camp.ages }}</p>
+                        <p class="mt-0.5 text-sm text-muted-foreground">{{ camp.where }}</p>
+                        <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span hlmBadge size="fit" [variant]="camp.status.badgeVariant">{{
+                            camp.status.badge
+                          }}</span>
+                          <span class="text-xs text-muted-foreground">{{ camp.status.text }}</span>
+                          @if (camp.status.registrationOpen) {
+                            <a
+                              [routerLink]="camp.href"
+                              [state]="camp.names"
+                              fragment="sessions"
+                              class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-fine:-my-1 pointer-fine:py-1 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                              >Register<span class="sr-only"> for {{ camp.name }}</span></a
+                            >
+                          }
+                        </p>
+                      </div>
+                      <ng-icon
+                        name="lucideChevronRight"
+                        class="shrink-0 text-lg text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (shownCampPaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Camps pages"
+                    noun="camps"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [shown]="campRows().length"
+                    [path]="pagePath()"
+                    fragment="camps"
+                    [queryFor]="campQueryFor()"
+                    (pageActivated)="pageRequested.camps = true"
+                  />
+                </div>
+              }
+            </section>
+          }
           @if (locationsLoading() || locationRows().length) {
             <section id="locations" aria-labelledby="locations-heading" [class]="locationsClass()">
               <h2
@@ -610,8 +688,12 @@ export class OrganizationOverview {
   readonly tournaments = input<PublicTournamentRows | undefined>(undefined);
   readonly tournamentPaging = input<ListPaging | undefined>(undefined);
   readonly tournamentsBusy = input(false);
+  readonly camps = input<PublicCampRows | undefined>(undefined);
+  readonly campPaging = input<ListPaging | undefined>(undefined);
+  readonly campsBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly openTournaments = input<PublicOpenTournamentRows | undefined>(undefined);
+  readonly openCamps = input<PublicOpenCampRows | undefined>(undefined);
   readonly expectedOpenSeasons = input(UNSEEN_OPEN_SEASON_COUNT);
   readonly expectedOpenKind = input<OpenCardKind>('season');
   readonly openCardsShownBefore = input(false);
@@ -635,12 +717,14 @@ export class OrganizationOverview {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');
   private readonly tournamentsHeading = viewChild<ElementRef<HTMLElement>>('tournamentsHeading');
+  private readonly campsHeading = viewChild<ElementRef<HTMLElement>>('campsHeading');
   private readonly injector = inject(Injector);
 
   protected readonly pageRequested: Record<PagedList, boolean> = {
     leagues: false,
     locations: false,
     tournaments: false,
+    camps: false,
   };
 
   protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
@@ -669,18 +753,21 @@ export class OrganizationOverview {
     return names ? `${names} · ${counts}` : counts;
   });
 
-  // Beside Leagues and Tournaments, which stack in the first two columns.
-  protected readonly locationsClass = computed(() =>
-    this.isEmpty()
-      ? 'py-8 md:py-12 lg:col-span-3'
-      : 'border-t border-border py-8 md:py-12 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:border-t-0',
-  );
+  // Beside Leagues, Tournaments, and Camps, which stack in the first two columns.
+  protected readonly locationsClass = computed(() => {
+    if (this.isEmpty()) return 'py-8 md:py-12 lg:col-span-3';
+    const stacked = 1 + Number(this.tournamentsShown()) + Number(this.campsShown());
+    return `border-t border-border py-8 md:py-12 lg:col-start-3 lg:row-start-1 lg:border-t-0 ${LOCATIONS_ROW_SPAN[stacked]}`;
+  });
 
-  protected readonly tournamentsClass = computed(() =>
-    this.isEmpty()
+  protected readonly tournamentsClass = computed(() => this.stackedSectionClass());
+  protected readonly campsClass = computed(() => this.stackedSectionClass());
+
+  private stackedSectionClass(): string {
+    return this.isEmpty()
       ? 'py-8 md:py-12 lg:col-span-3'
-      : 'border-t border-border py-8 md:py-12 lg:col-span-2',
-  );
+      : 'border-t border-border py-8 md:py-12 lg:col-span-2';
+  }
 
   protected readonly sportLeagueCounts = computed((): SportCounts =>
     Object.fromEntries(this.page().sports.map((sport) => [sport.key, sport.leagueCount])),
@@ -731,6 +818,11 @@ export class OrganizationOverview {
     return sport ? `${sport.name} tournaments` : 'Tournaments';
   });
 
+  protected readonly campsHeadingText = computed(() => {
+    const sport = this.sport();
+    return sport ? `${sport.name} camps` : 'Camps';
+  });
+
   // The chip row and the filter bar end in a rule of their own, so the sections below start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
     (this.registrationOpenShown() || !this.noMatches()) &&
@@ -748,6 +840,7 @@ export class OrganizationOverview {
     leagues: this.leaguePaging()?.page ?? 1,
     locations: this.locationPaging()?.page ?? 1,
     tournaments: this.tournamentPaging()?.page ?? 1,
+    camps: this.campPaging()?.page ?? 1,
   }));
   protected readonly leagueQueryFor = computed(() =>
     pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined, this.filters()),
@@ -757,6 +850,9 @@ export class OrganizationOverview {
   );
   protected readonly tournamentQueryFor = computed(() =>
     pageQueryFor('tournaments', this.shownPages(), this.sport() !== undefined, this.filters()),
+  );
+  protected readonly campQueryFor = computed(() =>
+    pageQueryFor('camps', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
 
   protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);
@@ -773,6 +869,8 @@ export class OrganizationOverview {
   private readonly openSeasonCards = computed(() =>
     (this.seasonsListed() ? this.openSeasons() : [])?.map((season) => ({
       kind: 'season' as const,
+      key: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
+      fragment: 'registration',
       href: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
       names: publicPageNames({ organization: this.page(), league: season.league, season }),
       sportName: season.league.sportName,
@@ -795,6 +893,8 @@ export class OrganizationOverview {
   private readonly openTournamentCards = computed(() =>
     this.openTournaments()?.map((tournament) => ({
       kind: 'tournament' as const,
+      key: publicTournamentPath(this.page().slug, tournament.slug),
+      fragment: 'registration',
       href: publicTournamentPath(this.page().slug, tournament.slug),
       names: publicTournamentNames({ organization: this.page(), tournament }),
       sportName: tournament.sportName,
@@ -812,12 +912,38 @@ export class OrganizationOverview {
     })),
   );
 
-  // Undefined until both have answered, so a card does not arrive after the others and move what is below.
+  private readonly openCampCards = computed(() =>
+    this.openCamps()?.map((session) => {
+      const href = publicCampPath(this.page().slug, session.slug);
+      return {
+        kind: 'camp' as const,
+        key: `${href}#${session.startDate}#${session.sessionName}`,
+        fragment: 'sessions',
+        href,
+        names: publicCampNames({ organization: this.page(), camp: session }),
+        sportName: session.sportName,
+        title: session.name,
+        subtitle: session.sessionName,
+        registerFor: `for ${session.name}, ${session.sessionName}`,
+        deadline: session.registrationDeadline,
+        dates: seasonDates(session.startDate, session.endDate),
+        teams: `${campAgesLabel(session.minimumAge, session.maximumAge)}, ${session.placesLeft} ${session.placesLeft === 1 ? 'place' : 'places'} left`,
+        where: session.locationNames.join(', '),
+        closes: closesText(session.registrationDeadline),
+        full: false,
+        canRegister: true,
+        closesLabel: 'Closes',
+      };
+    }),
+  );
+
+  // Undefined until all three have answered, so a card does not arrive after the others and move what is below.
   protected readonly openCards = computed(() => {
     const seasons = this.openSeasonCards();
     const tournaments = this.openTournamentCards();
-    if (!seasons || !tournaments) return undefined;
-    return [...seasons, ...tournaments].sort(
+    const camps = this.openCampCards();
+    if (!seasons || !tournaments || !camps) return undefined;
+    return [...seasons, ...tournaments, ...camps].sort(
       (a, b) =>
         compare(a.deadline, b.deadline) ||
         compare(a.title, b.title) ||
@@ -834,46 +960,59 @@ export class OrganizationOverview {
       : cards.length > 0;
   });
 
+  private readonly openKinds = computed(() => (this.openCards() ?? []).map((card) => card.kind));
+
   protected readonly heroRegisterText = computed(() =>
-    this.openCards()?.some((card) => card.kind === 'season')
-      ? REGISTER_FOR_SEASON
-      : REGISTER_FOR_TOURNAMENT,
+    registerForText(leadingKind(this.openKinds())),
   );
 
-  protected readonly placeholderText = computed(() =>
-    this.expectedOpenKind() === 'tournament' ? REGISTER_FOR_TOURNAMENT : REGISTER_FOR_SEASON,
-  );
+  protected readonly placeholderText = computed(() => registerForText(this.expectedOpenKind()));
 
-  protected readonly openIntro = computed(() => {
-    const cards = this.openCards() ?? [];
-    const season = cards.some((card) => card.kind === 'season');
-    const tournament = cards.some((card) => card.kind === 'tournament');
-    if (season && tournament) return OPEN_MIXED_INTRO;
-    return tournament ? OPEN_TOURNAMENTS_INTRO : OPEN_SEASONS_INTRO;
-  });
+  protected readonly openIntro = computed(() => openIntro(this.openKinds()));
 
   private readonly upcoming = computed(() =>
     upcomingTournaments(this.tournaments() ?? [], this.now()),
   );
 
-  // The query counts the rows that have ended since it ran, so the total drops them, and a page left with none keeps its control for the way back.
-  protected readonly shownTournamentPaging = computed((): ListPaging | undefined => {
-    const paging = this.tournamentPaging();
-    const dropped = (this.tournaments()?.length ?? 0) - this.upcoming().length;
-    if (!paging || dropped === 0) return paging;
-    const total = Math.max(
-      paging.total - dropped,
-      paging.page > 1 ? (paging.page - 1) * LIST_PAGE_SIZE + 1 : 0,
-    );
-    const pageCount = Math.min(paging.pageCount, Math.ceil(total / LIST_PAGE_SIZE));
-    return { page: paging.page, total, pageCount: Math.max(paging.page, pageCount) };
-  });
+  protected readonly shownTournamentPaging = computed(() =>
+    pagingWithoutDropped(
+      this.tournamentPaging(),
+      this.tournaments()?.length ?? 0,
+      this.upcoming().length,
+    ),
+  );
 
-  protected readonly tournamentsShown = computed(
-    () =>
-      this.tournamentRows().length > 0 ||
-      ((this.shownTournamentPaging()?.page ?? 1) > 1 &&
-        (this.shownTournamentPaging()?.total ?? 0) > LIST_PAGE_SIZE),
+  protected readonly tournamentsShown = computed(() =>
+    sectionShown(this.tournamentRows().length, this.shownTournamentPaging()),
+  );
+
+  private readonly upcomingCampRows = computed(() => upcomingCamps(this.camps() ?? [], this.now()));
+
+  protected readonly shownCampPaging = computed(() =>
+    pagingWithoutDropped(
+      this.campPaging(),
+      this.camps()?.length ?? 0,
+      this.upcomingCampRows().length,
+    ),
+  );
+
+  protected readonly campsShown = computed(() =>
+    sectionShown(this.campRows().length, this.shownCampPaging()),
+  );
+
+  protected readonly campRows = computed(() =>
+    this.upcomingCampRows().map((camp, i) => ({
+      id: rowId('camp', this.campPaging(), i),
+      name: camp.name,
+      href: publicCampPath(this.page().slug, camp.slug),
+      names: publicCampNames({ organization: this.page(), camp }),
+      ages: campAgesLabel(camp.minimumAge, camp.maximumAge),
+      where: [camp.sportName, camp.locationNames.join(', ')].filter(Boolean).join(' · '),
+      status: campStatus(
+        shownCampSession(camp.sessions, this.now()) ?? camp.sessions[0],
+        this.now(),
+      ),
+    })),
   );
 
   protected readonly tournamentRows = computed(() =>
@@ -930,6 +1069,7 @@ export class OrganizationOverview {
     this.focusHeadingAfterPageChange('leagues', this.leagues, this.heading);
     this.focusHeadingAfterPageChange('locations', this.locations, this.locationsHeading);
     this.focusHeadingAfterPageChange('tournaments', this.tournaments, this.tournamentsHeading);
+    this.focusHeadingAfterPageChange('camps', this.camps, this.campsHeading);
   }
 
   // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.

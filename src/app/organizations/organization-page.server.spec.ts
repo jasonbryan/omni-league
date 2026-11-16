@@ -146,6 +146,8 @@ describe('OrganizationPage server render', () => {
 
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
+      { name: 'camps:listOpenForOrganization', args: { organizationSlug: slug } },
+      { name: 'camps:listPublic', args: { organizationSlug: slug, page: 1 } },
       { name: 'organizations:getPublicPage', args: { slug } },
       { name: 'organizations:listPublicLeagueFacets', args: { slug } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1 } },
@@ -364,6 +366,8 @@ describe('OrganizationPage server render', () => {
     'seasons:listOpenForOrganization',
     'tournaments:listPublic',
     'tournaments:listOpenForOrganization',
+    'camps:listPublic',
+    'camps:listOpenForOrganization',
     'organizations:listPublicLeagueFacets',
   ]) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
@@ -532,6 +536,8 @@ describe('sport view server render', () => {
 
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
+      { name: 'camps:listOpenForOrganization', args: { organizationSlug: slug, sport: 'soccer' } },
+      { name: 'camps:listPublic', args: { organizationSlug: slug, page: 1, sport: 'soccer' } },
       { name: 'organizations:getPublicPage', args: { slug } },
       { name: 'organizations:listPublicLeagueFacets', args: { slug, sport: 'soccer' } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1, sport: 'soccer' } },
@@ -657,6 +663,8 @@ describe('sport view server render', () => {
     'seasons:listOpenForOrganization',
     'tournaments:listPublic',
     'tournaments:listOpenForOrganization',
+    'camps:listPublic',
+    'camps:listOpenForOrganization',
     'organizations:listPublicLeagueFacets',
   ]) {
     it(`answers 503 with no-store when ${failing} fails`, async () => {

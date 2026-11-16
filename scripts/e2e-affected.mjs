@@ -245,6 +245,8 @@ export const PUBLIC_QUERIES = [
   'tournaments:listOpenForOrganization',
   'tournaments:getForRegistration',
   'camps:getPublicPage',
+  'camps:listPublic',
+  'camps:listOpenForOrganization',
 ];
 const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
 const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;

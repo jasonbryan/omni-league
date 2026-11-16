@@ -1,0 +1,166 @@
+import {
+  campStatus,
+  nextCampSession,
+  openCampSessionsBySoonestDeadline,
+  shownCampSession,
+  upcomingCamps,
+} from './camp-status';
+
+const NEXT = {
+  name: 'Week 1',
+  startDate: '2027-07-05',
+  endDate: '2027-07-09',
+  registrationDeadline: '2027-07-01',
+  placesLeft: 12,
+};
+// 18:00 UTC is 06:00 on that date at UTC-12.
+const at = (date: string) => Date.parse(`${date}T18:00:00Z`);
+
+describe('upcomingCamps', () => {
+  const camp = (slug: string, lastSessionEndDate: string) => ({
+    slug,
+    lastSessionEndDate,
+    sessions: [NEXT],
+  });
+
+  it('keeps a camp whose last session ends today and drops one that ended yesterday', () => {
+    expect(
+      upcomingCamps(
+        [camp('ended', '2027-07-08'), camp('today', '2027-07-09'), camp('later', '2027-08-01')],
+        at('2027-07-09'),
+      ).map((row) => row.slug),
+    ).toEqual(['today', 'later']);
+  });
+});
+
+describe('nextCampSession', () => {
+  const week = (name: string, endDate: string) => ({ ...NEXT, name, endDate });
+
+  it('is the first session, in the order given, that has not ended at the page’s time', () => {
+    const sessions = [week('Week 1', '2027-07-09'), week('Week 2', '2027-07-16')];
+    expect(nextCampSession(sessions, at('2027-07-09'))?.name).toBe('Week 1');
+    expect(nextCampSession(sessions, at('2027-07-10'))?.name).toBe('Week 2');
+  });
+
+  it('is the last session when all have ended, and none for none', () => {
+    const sessions = [week('Week 1', '2027-07-09'), week('Week 2', '2027-07-16')];
+    expect(nextCampSession(sessions, at('2027-08-01'))?.name).toBe('Week 2');
+    expect(nextCampSession([], at('2027-08-01'))).toBeUndefined();
+  });
+});
+
+describe('shownCampSession', () => {
+  const session = (name: string, startDate: string, deadline: string, placesLeft = 10) => ({
+    name,
+    startDate,
+    endDate: startDate.replace(/\d\d$/, (day) => String(Number(day) + 4).padStart(2, '0')),
+    registrationDeadline: deadline,
+    placesLeft,
+  });
+  const WEEK_1 = session('Week 1', '2027-07-05', '2027-07-01');
+  const WEEK_2 = session('Week 2', '2027-07-12', '2027-07-08');
+  const WEEK_3 = session('Week 3', '2027-07-19', '2027-07-15');
+  const shown = (sessions: (typeof WEEK_1)[], date: string) =>
+    shownCampSession(sessions, at(date))?.name;
+
+  it('is the next session while its registration is open with room', () => {
+    expect(shown([WEEK_1, WEEK_2], '2027-06-20')).toBe('Week 1');
+  });
+
+  it('is the earliest session with registration open when the next is closed, in progress, or full', () => {
+    expect(shown([WEEK_1, WEEK_2, WEEK_3], '2027-07-02')).toBe('Week 2');
+    expect(shown([WEEK_1, WEEK_2, WEEK_3], '2027-07-06')).toBe('Week 2');
+    expect(shown([{ ...WEEK_1, placesLeft: 0 }, WEEK_2], '2027-06-20')).toBe('Week 2');
+  });
+
+  it('skips a full session with registration open, and a closed one, to the first with room', () => {
+    const sessions = [WEEK_1, { ...WEEK_2, placesLeft: 0 }, WEEK_3];
+    expect(shown(sessions, '2027-07-02')).toBe('Week 3');
+  });
+
+  it('keeps the next session when no session is open with room', () => {
+    expect(
+      shown(
+        [
+          { ...WEEK_1, placesLeft: 0 },
+          { ...WEEK_2, placesLeft: 0 },
+        ],
+        '2027-06-20',
+      ),
+    ).toBe('Week 1');
+    expect(shown([WEEK_1, WEEK_2], '2027-07-09')).toBe('Week 1');
+    expect(shown([WEEK_1, WEEK_2], '2027-07-10')).toBe('Week 2');
+  });
+
+  it('follows the page’s clock with the same sessions', () => {
+    const sessions = [WEEK_1, WEEK_2];
+    expect(shown(sessions, '2027-07-01')).toBe('Week 1');
+    expect(shown(sessions, '2027-07-02')).toBe('Week 2');
+    expect(shown(sessions, '2027-07-10')).toBe('Week 2');
+  });
+
+  it('is none for none', () => {
+    expect(shownCampSession([], at('2027-07-01'))).toBeUndefined();
+  });
+});
+
+describe('campStatus', () => {
+  it('is Registration open with the closing day and a Register link while the next session has room', () => {
+    expect(campStatus(NEXT, at('2027-06-20'))).toEqual({
+      badge: 'Registration open',
+      badgeVariant: 'secondary',
+      registrationOpen: true,
+      text: 'Jul 5 – Jul 9, 2027 · closes Jul 1',
+    });
+  });
+
+  it('is Full with no Register link while registration is open and no place is left', () => {
+    expect(campStatus({ ...NEXT, placesLeft: 0 }, at('2027-06-20'))).toEqual({
+      badge: 'Full',
+      badgeVariant: 'outline',
+      registrationOpen: false,
+      text: 'Jul 5 – Jul 9, 2027',
+    });
+  });
+
+  it('is Registration closed after the deadline, not Full', () => {
+    expect(campStatus({ ...NEXT, placesLeft: 0 }, at('2027-07-02'))).toMatchObject({
+      badge: 'Registration closed',
+      badgeVariant: 'muted',
+      registrationOpen: false,
+    });
+  });
+
+  it('is In progress on the days of the session', () => {
+    expect(campStatus(NEXT, at('2027-07-07'))).toMatchObject({
+      badge: 'In progress',
+      registrationOpen: false,
+    });
+  });
+});
+
+describe('openCampSessionsBySoonestDeadline', () => {
+  const session = (sessionName: string, registrationDeadline: string, name = 'Camp') => ({
+    name,
+    sessionName,
+    startDate: '2027-08-02',
+    endDate: '2027-08-06',
+    registrationDeadline,
+    placesLeft: 5,
+  });
+
+  it('drops a session whose registration has closed or whose first day has come, and orders by deadline, then camp name, then session name', () => {
+    const rows = [
+      session('Closed', '2027-07-01'),
+      session('Late', '2027-07-20'),
+      session('Zed week', '2027-07-10', 'Zed Camp'),
+      session('Week 2', '2027-07-10'),
+      session('Week 1', '2027-07-10'),
+    ];
+    expect(
+      openCampSessionsBySoonestDeadline(rows as never, at('2027-07-05')).map(
+        (row) => `${row.name}/${row.sessionName}`,
+      ),
+    ).toEqual(['Camp/Week 1', 'Camp/Week 2', 'Zed Camp/Zed week', 'Camp/Late']);
+  });
+});

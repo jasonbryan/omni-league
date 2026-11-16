@@ -13,7 +13,7 @@ import {
   type Gender,
   type StandardLevel,
 } from './divisions';
-import { recountCampSessions } from './campLookup';
+import { CAMP_SESSIONS_LIMIT } from './campLookup';
 import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { classDates, type TrainingPattern } from './trainingPattern';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
@@ -512,6 +512,8 @@ export async function insertDraftCamp(
   return ctx.db.insert('camps', {
     programId,
     organizationId,
+    status: 'draft',
+    sport: camp.sport,
     minimumAge: camp.minimumAge,
     maximumAge: camp.maximumAge,
   });
@@ -586,7 +588,7 @@ export interface NewCampSession {
   registrationDeadline: string;
 }
 
-// The caller has checked access and the input. An unset counter is recounted, which already includes the change.
+// The caller has checked access and the input.
 export async function insertCampSession(
   ctx: MutationCtx,
   camp: Doc<'camps'>,
@@ -601,7 +603,7 @@ export async function insertCampSession(
     organizationId: camp.organizationId,
     registeredCount: 0,
   });
-  await changeCampSessionCount(ctx, camp._id, 1);
+  await refreshCamp(ctx, camp._id, 1);
   return id;
 }
 
@@ -611,22 +613,40 @@ export async function deleteCampSession(
   session: Doc<'campSessions'>,
 ): Promise<void> {
   await ctx.db.delete('campSessions', session._id);
-  await changeCampSessionCount(ctx, session.campId, -1);
+  await refreshCamp(ctx, session.campId, -1);
 }
 
-async function changeCampSessionCount(
+// With no counter yet, the sessions read here are the count, so the change is already in them.
+async function refreshCamp(
   ctx: MutationCtx,
   campId: Id<'camps'>,
-  change: 1 | -1,
+  sessionChange: -1 | 0 | 1,
 ): Promise<void> {
   // Read again: a caller that inserts several sessions holds a camp whose counter is already out of date.
   const camp = await ctx.db.get('camps', campId);
   if (!camp) throw new Error(`Camp ${campId} does not exist`);
+  const program = await ctx.db.get('programs', camp.programId);
+  if (program?.organizationId !== camp.organizationId) {
+    throw new Error(`Camp ${campId} has no program of its organization`);
+  }
+  const sessions = await ctx.db
+    .query('campSessions')
+    .withIndex('by_campId_and_startDate', (q) => q.eq('campId', campId))
+    .take(CAMP_SESSIONS_LIMIT);
   const sessionCount =
     camp.sessionCount === undefined
-      ? await recountCampSessions(ctx, campId)
-      : Math.max(0, camp.sessionCount + change);
-  await ctx.db.patch('camps', campId, { sessionCount });
+      ? sessions.length
+      : Math.max(0, camp.sessionCount + sessionChange);
+  const lastSessionEndDate = sessions.reduce<string | undefined>(
+    (latest, { endDate }) => (latest === undefined || endDate > latest ? endDate : latest),
+    undefined,
+  );
+  await ctx.db.patch('camps', campId, {
+    sessionCount,
+    status: program.status,
+    sport: program.sport,
+    lastSessionEndDate,
+  });
 }
 
 export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise<void> {
@@ -634,8 +654,24 @@ export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise
   if (program?.organizationId !== camp.organizationId) {
     throw new Error(`Camp ${camp._id} has no program of its organization`);
   }
-  if (program.status === 'published') return;
-  await ctx.db.patch('programs', program._id, { status: 'published' });
+  if (program.status !== 'published') {
+    await ctx.db.patch('programs', program._id, { status: 'published' });
+  }
+  await refreshCamp(ctx, camp._id, 0);
+}
+
+export async function backfillCampFields(ctx: MutationCtx, camp: Doc<'camps'>): Promise<boolean> {
+  if (camp.status !== undefined && camp.sport !== undefined) return false;
+  await refreshCamp(ctx, camp._id, 0);
+  return true;
+}
+
+export async function backfillAllCampFields(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const camp of await ctx.db.query('camps').take(BACKFILL_SCAN_LIMIT)) {
+    if (await backfillCampFields(ctx, camp)) backfilled++;
+  }
+  return backfilled;
 }
 
 export async function publishTournament(

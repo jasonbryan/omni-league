@@ -75,6 +75,7 @@ import type { SeasonStatus } from './lib/seasonStatus';
 import { scoreWinnerSide, type Score, type Sport } from './lib/sports';
 import {
   backfilledValidator,
+  backfillAllCampFields,
   backfillDraftLeagueCounts,
   backfillTenantFields,
   findCustomLevel,
@@ -786,7 +787,7 @@ const WEEK_OF_MORNINGS = {
   places: 20,
 } as const;
 
-const DEMO_CAMPS: readonly DemoCamp[] = [
+export const DEMO_CAMPS: readonly DemoCamp[] = [
   {
     organizationSlug: 'gulf-coast-sport-social',
     name: 'Junior Beach Volleyball Camp',
@@ -1032,6 +1033,7 @@ const resultValidator = v.object({
     staffCounts: v.number(),
     staffInviteCounts: v.number(),
     draftLeagueCounts: v.number(),
+    campFields: v.number(),
   }),
 });
 
@@ -1115,6 +1117,7 @@ export const insertDemoData = internalMutation({
       staffCounts: await backfillStaffCounts(ctx),
       staffInviteCounts: await backfillPendingInviteCounts(ctx),
       draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
+      campFields: await backfillAllCampFields(ctx),
     };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
