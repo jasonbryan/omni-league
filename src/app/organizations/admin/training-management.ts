@@ -27,10 +27,14 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
+import type { Id } from '../../../../convex/_generated/dataModel';
+import { dateAtUtcMinus12 } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { trainingAgesLabel } from '../../../../convex/lib/trainingInput';
 import {
+  MAX_TRAINING_CLASS_PLACES,
   WEEKDAY_NAMES,
+  checkTrainingClassPlaces,
   trainingClassDate,
   trainingClassTimes,
 } from '../../../../convex/lib/trainingPattern';
@@ -51,6 +55,7 @@ import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { AdminAlert } from './admin-alert';
 import { OUTLINE_BUTTON } from './button-classes';
+import { PlacesEditor, type PlacesRule, type PlacesSave } from './places-editor';
 import { injectSectionJump } from './section-jump';
 import { TrainingBreadcrumb } from './training-breadcrumb';
 import { TrainingContext, type TrainingClassRow } from './training-context';
@@ -76,6 +81,7 @@ type Outcome =
     HlmSkeleton,
     NgIcon,
     NotFoundView,
+    PlacesEditor,
     ServerErrorView,
     TrainingBreadcrumb,
     TrainingNoAccess,
@@ -288,6 +294,24 @@ type Outcome =
                 }
                 @case ('ready') {
                   @if (rows().length > 0) {
+                    @if (firstUpcomingPlaces(); as firstUpcomingPlaces) {
+                      <div data-slot="all-places" class="border-b border-border px-4 py-4 md:px-5">
+                        <h3 class="text-sm font-semibold">Change places for every class</h3>
+                        <p class="mt-1 text-sm text-muted-foreground">
+                          Every class from today on gets these places.
+                        </p>
+                        <app-places-editor
+                          class="mt-3"
+                          [target]="training.trainingId"
+                          subject="every upcoming class"
+                          [places]="firstUpcomingPlaces"
+                          [registered]="0"
+                          [maximum]="maxPlaces"
+                          [rule]="seriesRule"
+                          [save]="saveAllPlaces"
+                        />
+                      </div>
+                    }
                     <ul id="classes-list" role="list" class="divide-y divide-border">
                       @for (row of rows(); track row.trainingClassId) {
                         <li
@@ -383,6 +407,18 @@ type Outcome =
                               </button>
                             }
                           </div>
+                          @if (row.status === 'scheduled') {
+                            <app-places-editor
+                              class="basis-full"
+                              [target]="row.trainingClassId"
+                              [subject]="dateOf(row)"
+                              [places]="row.places"
+                              [registered]="row.registeredCount"
+                              [maximum]="maxPlaces"
+                              [rule]="classRule"
+                              [save]="saveClassPlaces"
+                            />
+                          }
                         </li>
                       }
                     </ul>
@@ -509,6 +545,9 @@ export class TrainingManagement {
   private readonly pageTitle = inject(PageTitle);
   private readonly cancelCall = injectMutation(api.trainingClasses.cancel);
   private readonly restoreCall = injectMutation(api.trainingClasses.restore);
+  private readonly placesCall = injectMutation(api.trainingClasses.updatePlaces);
+  private readonly allPlacesCall = injectMutation(api.trainingClasses.updateAllPlaces);
+  private readonly restorePlacesCall = injectMutation(api.trainingClasses.restorePlaces);
   private readonly cause = injectOfflineCause();
 
   protected readonly online = injectOnline();
@@ -518,6 +557,10 @@ export class TrainingManagement {
   protected readonly placeholders = [1, 2];
   protected readonly detailRows = [1, 2];
   protected readonly skeletonFields = [1, 2, 3];
+  protected readonly maxPlaces = MAX_TRAINING_CLASS_PLACES;
+  protected readonly classRule: PlacesRule = checkTrainingClassPlaces;
+  /** The server names the class that is too full, so the field checks the range alone. */
+  protected readonly seriesRule: PlacesRule = (places) => checkTrainingClassPlaces(places, 0);
 
   protected readonly state = this.context.state;
   protected readonly training = this.context.training;
@@ -525,6 +568,12 @@ export class TrainingManagement {
   protected readonly rows = computed(() => {
     const view = this.classes();
     return view.status === 'ready' ? view.classes : [];
+  });
+  protected readonly firstUpcomingPlaces = computed(() => {
+    const today = dateAtUtcMinus12(Date.now());
+    return (
+      this.rows().find((row) => row.status === 'scheduled' && row.date >= today)?.places ?? null
+    );
   });
   protected readonly ages = computed(() => {
     const training = this.training();
@@ -575,6 +624,27 @@ export class TrainingManagement {
       if (training) this.pageTitle.set([training.name, training.organization.name]);
     });
   }
+
+  protected readonly saveClassPlaces: PlacesSave = async (target, places) => {
+    const trainingClassId = target as Id<'trainingClasses'>;
+    const { previousPlaces } = await this.placesCall.run({ trainingClassId, places });
+    return {
+      saved: 'Places saved.',
+      restored: 'Places restored.',
+      undo: () => this.placesCall.run({ trainingClassId, places: previousPlaces }),
+    };
+  };
+
+  protected readonly saveAllPlaces: PlacesSave = async (target, places) => {
+    const trainingId = target as Id<'trainings'>;
+    const { classCount, previous } = await this.allPlacesCall.run({ trainingId, places });
+    const classes = `${classCount} ${classCount === 1 ? 'class' : 'classes'}`;
+    return {
+      saved: `Places saved for ${classes}.`,
+      restored: `Places restored for ${classes}.`,
+      undo: () => this.restorePlacesCall.run({ trainingId, classes: previous }),
+    };
+  };
 
   protected dateOf(row: { date: string }): string {
     return trainingClassDate(row.date);

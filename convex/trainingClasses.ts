@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import type { Doc } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { requireTrainingClassOrganizer, requireTrainingOrganizer } from './lib/access';
 import { dateAtUtcMinus12 } from './lib/registration';
@@ -6,15 +7,36 @@ import { insertTrainingClasses } from './lib/tenantWrites';
 import {
   TRAINING_PATTERN_MESSAGES,
   MAX_TRAINING_WEEKS,
+  checkTrainingClassPlaces,
   checkTrainingPattern,
   firstTrainingPatternError,
   trainingClassStatusValidator,
   type TrainingPatternError,
+  type TrainingPlacesError,
 } from './lib/trainingPattern';
 
-function refuse(error: TrainingPatternError): never {
+const classPlacesValidator = v.object({
+  trainingClassId: v.id('trainingClasses'),
+  places: v.number(),
+});
+
+function refuse(error: TrainingPatternError | TrainingPlacesError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...error });
+}
+
+/** The series change names the class it would break; a single class's own message needs no date. */
+function refuseBelowRegistered(row: Doc<'trainingClasses'>, places: number): void {
+  const refusal = checkTrainingClassPlaces(places, row.registeredCount);
+  if (!refusal) return;
+  refuse(
+    refusal.code === 'placesBelowRegistered'
+      ? {
+          ...refusal,
+          message: TRAINING_PATTERN_MESSAGES.classBelowRegistered(row.date, row.registeredCount),
+        }
+      : refusal,
+  );
 }
 
 export const schedule = mutation({
@@ -110,5 +132,63 @@ export const restore = mutation({
     if (trainingClass.status === 'scheduled') return null;
     await ctx.db.patch('trainingClasses', trainingClassId, { status: 'scheduled' });
     return null;
+  },
+});
+
+export const updatePlaces = mutation({
+  args: { trainingClassId: v.id('trainingClasses'), places: v.number() },
+  returns: v.object({ previousPlaces: v.number() }),
+  handler: async (ctx, { trainingClassId, places }) => {
+    const { trainingClass } = await requireTrainingClassOrganizer(ctx, trainingClassId);
+    const refusal = checkTrainingClassPlaces(places, trainingClass.registeredCount);
+    if (refusal) refuse(refusal);
+    await ctx.db.patch('trainingClasses', trainingClassId, { places });
+    return { previousPlaces: trainingClass.places };
+  },
+});
+
+/** Cancelled classes change too, so a restored class matches the series. */
+export const updateAllPlaces = mutation({
+  args: { trainingId: v.id('trainings'), places: v.number() },
+  returns: v.object({ classCount: v.number(), previous: v.array(classPlacesValidator) }),
+  handler: async (ctx, { trainingId, places }) => {
+    await requireTrainingOrganizer(ctx, trainingId);
+    const today = dateAtUtcMinus12(Date.now());
+    const upcoming = await ctx.db
+      .query('trainingClasses')
+      .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId).gte('date', today))
+      .take(MAX_TRAINING_WEEKS);
+    const scheduled = upcoming.filter((row) => row.status === 'scheduled');
+    if (scheduled.length === 0) {
+      refuse({
+        field: 'places',
+        code: 'noUpcomingClass',
+        message: TRAINING_PATTERN_MESSAGES.noUpcomingClass,
+      });
+    }
+    for (const row of upcoming) refuseBelowRegistered(row, places);
+    for (const row of upcoming) await ctx.db.patch('trainingClasses', row._id, { places });
+    return {
+      classCount: scheduled.length,
+      previous: upcoming.map((row) => ({ trainingClassId: row._id, places: row.places })),
+    };
+  },
+});
+
+export const restorePlaces = mutation({
+  args: { trainingId: v.id('trainings'), classes: v.array(classPlacesValidator) },
+  returns: v.object({ classCount: v.number() }),
+  handler: async (ctx, { trainingId, classes }) => {
+    await requireTrainingOrganizer(ctx, trainingId);
+    if (classes.length > MAX_TRAINING_WEEKS) throw new Error('Not allowed');
+    const rows: { row: Doc<'trainingClasses'>; places: number }[] = [];
+    for (const { trainingClassId, places } of classes) {
+      const row = await ctx.db.get('trainingClasses', trainingClassId);
+      if (row?.trainingId !== trainingId) throw new Error('Not allowed');
+      rows.push({ row, places });
+    }
+    for (const { row, places } of rows) refuseBelowRegistered(row, places);
+    for (const { row, places } of rows) await ctx.db.patch('trainingClasses', row._id, { places });
+    return { classCount: rows.length };
   },
 });

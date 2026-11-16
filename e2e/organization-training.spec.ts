@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp } from './support/camp';
@@ -13,7 +13,7 @@ import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
-import { seedTraining } from './support/training';
+import { seedTraining, setTrainingClassRegistered } from './support/training';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -595,6 +595,147 @@ test.describe('Training: scheduling the classes', () => {
     await expect(status).toContainText('restored.');
     await expect(first).toHaveAttribute('data-status', 'scheduled');
     await expect(first.getByRole('button', { name: /^Cancel/ })).toBeVisible();
+  });
+});
+
+test.describe('Training: changing the places', () => {
+  const seriesField = (page: Page) => page.getByLabel('Places for every upcoming class');
+  const saveSeries = (page: Page) =>
+    page.getByRole('button', { name: 'Save places for every upcoming class' });
+  const seriesStatus = (page: Page) =>
+    page.locator('[data-slot="all-places"] [data-slot="places-status"]');
+  const rowField = (row: Locator) => row.getByLabel(/^Places for /);
+  const saveRow = (row: Locator) => row.getByRole('button', { name: /^Save places for / });
+  const rowStatus = (row: Locator) => row.locator('[data-slot="places-status"]');
+
+  async function scheduled(page: Page) {
+    const opened = await openTraining(page);
+    await page.goto(opened.path);
+    const first = firstTuesdayTwoWeeksOut();
+    await fillPattern(page, first);
+    await scheduleSubmit(page).click();
+    await expect(classRows(page)).toHaveCount(8);
+    return { ...opened, first };
+  }
+
+  const inDays = (date: string, days: number) =>
+    new Date(new Date(`${date}T00:00:00Z`).getTime() + days * DAY).toISOString().slice(0, 10);
+
+  test('a class row takes new places with "Places saved." and Undo, and shows them in its count', async ({
+    page,
+  }, testInfo) => {
+    await scheduled(page);
+    const row = classRows(page).first();
+    await expect(rowField(row)).toHaveValue('12');
+    await rowField(row).fill('14');
+    await saveRow(row).click();
+    await expect(rowStatus(row)).toContainText('Places saved.');
+    await expect(row.locator('[data-slot="class-registered"]')).toHaveText('0 of 14 registered');
+    await screenshot(page, testInfo, 'training-places-saved');
+    await expectAccessible(page);
+
+    await rowStatus(row).getByRole('button', { name: 'Undo' }).click();
+    await expect(rowStatus(row)).toContainText('Places restored.');
+    await expect(row.locator('[data-slot="class-registered"]')).toHaveText('0 of 12 registered');
+    await expect(rowField(row)).toHaveValue('12');
+  });
+
+  test('places below a class’s registered count show under its field on leaving it, and a cancelled class has no field', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, first } = await scheduled(page);
+    await setTrainingClassRegistered(tenant, SERVING.slug, first, 5);
+    const row = classRows(page).first();
+    await expect(row.locator('[data-slot="class-registered"]')).toHaveText('5 of 12 registered');
+    await rowField(row).fill('4');
+    await rowField(row).blur();
+    await expect(row.locator('[data-slot="field-error"]')).toHaveText(
+      'Use at least 5 places. 5 are registered.',
+    );
+    await expect(rowField(row)).toHaveValue('4');
+    await screenshot(page, testInfo, 'training-places-error');
+    await expectAccessible(page);
+
+    const second = classRows(page).nth(1);
+    await second.getByRole('button', { name: /^Cancel/ }).click();
+    await expect(second).toHaveAttribute('data-status', 'cancelled');
+    await expect(second.getByLabel(/^Places for /)).toHaveCount(0);
+  });
+
+  test('Change places for every class sets them all, Undo brings each class’s own places back, and a class registered above them is refused with its date', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, first } = await scheduled(page);
+    const third = classRows(page).nth(2);
+    await rowField(third).fill('20');
+    await saveRow(third).click();
+    await expect(rowStatus(third)).toContainText('Places saved.');
+    await setTrainingClassRegistered(tenant, SERVING.slug, inDays(first, 14), 15);
+    await expect(third.locator('[data-slot="class-registered"]')).toHaveText('15 of 20 registered');
+
+    await expect(
+      page.getByRole('heading', { name: 'Change places for every class' }),
+    ).toBeVisible();
+    await seriesField(page).fill('14');
+    await saveSeries(page).click();
+    const date = await third.locator('[data-slot="class-date"]').innerText();
+    await expect(page.locator('[data-slot="all-places"] [data-slot="field-error"]')).toHaveText(
+      `${date} has 15 registered, so it needs at least 15 places. Nothing was changed.`,
+    );
+    await expect(seriesField(page)).toHaveValue('14');
+    await expect(rowField(classRows(page).first())).toHaveValue('12');
+    await screenshot(page, testInfo, 'training-places-series-refused');
+    await expectAccessible(page);
+
+    await seriesField(page).fill('16');
+    await saveSeries(page).click();
+    await expect(seriesStatus(page)).toContainText('Places saved for 8 classes.');
+    for (const row of await classRows(page).all()) await expect(rowField(row)).toHaveValue('16');
+    await screenshot(page, testInfo, 'training-places-series-saved');
+    await expectAccessible(page);
+
+    await seriesStatus(page).getByRole('button', { name: 'Undo' }).click();
+    await expect(seriesStatus(page)).toContainText('Places restored for 8 classes.');
+    await expect(rowField(classRows(page).first())).toHaveValue('12');
+    await expect(rowField(third)).toHaveValue('20');
+  });
+
+  test('pressing Save places offline shows the offline alert and keeps the text', async ({
+    page,
+    context,
+  }, testInfo) => {
+    await scheduled(page);
+    const row = classRows(page).first();
+    await rowField(row).fill('14');
+    await context.setOffline(true);
+    await expect(saveRow(row)).toHaveAttribute('aria-disabled', 'true');
+    await saveRow(row).click({ force: true });
+    await expect(row.getByRole('alert')).toContainText("You're offline. Nothing was sent.");
+    await expect(rowField(row)).toHaveValue('14');
+    await screenshot(page, testInfo, 'training-places-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+
+  test.describe('a save the server fails', () => {
+    test.use({ expectedConvexErrors: ['trainingClasses:updateAllPlaces'] });
+
+    test('keeps the text, and the alert says what to do', async ({ page }, testInfo) => {
+      const { path } = await openTraining(page);
+      await failMutation(page, 'trainingClasses:updateAllPlaces');
+      await page.goto(path);
+      await fillPattern(page, firstTuesdayTwoWeeksOut());
+      await scheduleSubmit(page).click();
+      await expect(classRows(page)).toHaveCount(8);
+      await seriesField(page).fill('14');
+      await saveSeries(page).click();
+      await expect(page.locator('[data-slot="all-places"]').getByRole('alert')).toContainText(
+        'The places could not be saved.',
+      );
+      await expect(seriesField(page)).toHaveValue('14');
+      await screenshot(page, testInfo, 'training-places-failed');
+      await expectAccessible(page);
+    });
   });
 });
 

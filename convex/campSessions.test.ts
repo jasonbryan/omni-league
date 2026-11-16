@@ -386,6 +386,142 @@ describe('campSessions.remove', () => {
   });
 });
 
+describe('campSessions.updatePlaces', () => {
+  const placesOf = async (s: Setup, campSessionId: Id<'campSessions'>) =>
+    (await s.t.run((ctx) => ctx.db.get('campSessions', campSessionId)))?.places;
+  const register = (s: Setup, campSessionId: Id<'campSessions'>, registeredCount: number) =>
+    s.t.run((ctx) => ctx.db.patch('campSessions', campSessionId, { registeredCount }));
+  async function added(s: Setup) {
+    const { campSessionId } = await s.adminA.mutation(api.campSessions.add, valid(s));
+    return campSessionId;
+  }
+
+  test('sets the places, answers the places it replaced, and changes nothing else', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await register(s, campSessionId, 4);
+    const [before] = await sessionsOf(s);
+    expect(
+      await s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 30 }),
+    ).toEqual({ previousPlaces: 20 });
+    const [after] = await sessionsOf(s);
+    expect(after).toEqual({ ...before, places: 30 });
+  });
+
+  test('a full session of 20 raised to 22 shows "2 places left" to a signed-out visitor, and the list says 20 of 22', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await s.adminA.mutation(api.camps.publish, { campId: s.junior.campId });
+    await register(s, campSessionId, 20);
+    const publicSlugs = { orgSlug: 'org-a', campSlug: 'junior-beach-volleyball-camp' };
+    expect((await s.t.query(api.camps.getPublicPage, publicSlugs))?.sessions[0].placesLeft).toBe(0);
+
+    await s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 22 });
+    expect((await s.t.query(api.camps.getPublicPage, publicSlugs))?.sessions[0].placesLeft).toBe(2);
+    const [row] = await s.adminA.query(api.campSessions.listForCamp, { campId: s.junior.campId });
+    expect([row.registeredCount, row.places]).toEqual([20, 22]);
+  });
+
+  test('takes places equal to the registered count, which leaves none', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await register(s, campSessionId, 12);
+    await s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 12 });
+    expect(await placesOf(s, campSessionId)).toBe(12);
+  });
+
+  test('refuses places below the registered count, under Places, with the count, and keeps the places', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await register(s, campSessionId, 20);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 19 }),
+      ),
+    ).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: CAMP_SESSION_MESSAGES.placesBelowRegistered(20),
+    });
+    expect(await placesOf(s, campSessionId)).toBe(20);
+  });
+
+  test.each([0, 501, 2.5, Number.NaN, -1])(
+    'refuses %s places as outside the range, and keeps the places',
+    async (places) => {
+      const s = await setup();
+      const campSessionId = await added(s);
+      expect(
+        await refusal(s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places })),
+      ).toMatchObject({ field: 'places', code: 'placesInvalid' });
+      expect(await placesOf(s, campSessionId)).toBe(20);
+    },
+  );
+
+  test('Undo sets the previous places back while they still cover the registrations', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await register(s, campSessionId, 20);
+    const { previousPlaces } = await s.adminA.mutation(api.campSessions.updatePlaces, {
+      campSessionId,
+      places: 22,
+    });
+    await s.adminA.mutation(api.campSessions.updatePlaces, {
+      campSessionId,
+      places: previousPlaces,
+    });
+    expect(await placesOf(s, campSessionId)).toBe(20);
+  });
+
+  test('Undo is refused once registrations have used the added places, and the places stay', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await register(s, campSessionId, 20);
+    const { previousPlaces } = await s.adminA.mutation(api.campSessions.updatePlaces, {
+      campSessionId,
+      places: 22,
+    });
+    await register(s, campSessionId, 21);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: previousPlaces }),
+      ),
+    ).toMatchObject({ field: 'places', code: 'placesBelowRegistered' });
+    expect(await placesOf(s, campSessionId)).toBe(22);
+  });
+
+  test('lets a league organizer assigned to the camp change the places', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await s.assignedA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 25 });
+    expect(await placesOf(s, campSessionId)).toBe(25);
+  });
+
+  test('refuses every caller who may not organize the camp, even with valid places, and keeps the places', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.mutation(api.campSessions.updatePlaces, { campSessionId, places: 25 }),
+        label,
+      ).rejects.toThrow(message);
+    }
+    expect(await placesOf(s, campSessionId)).toBe(20);
+  });
+
+  test('refuses an org admin of another organization, and a session that no longer exists', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await expect(
+      s.adminB.mutation(api.campSessions.updatePlaces, { campSessionId, places: 25 }),
+    ).rejects.toThrow('Not allowed');
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId });
+    await expect(
+      s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 25 }),
+    ).rejects.toThrow('Not allowed');
+  });
+});
+
 describe('camps.getForManagement', () => {
   const slugs = { orgSlug: 'org-a', campSlug: 'junior-beach-volleyball-camp' };
 

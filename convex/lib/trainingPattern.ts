@@ -77,7 +77,8 @@ export type TrainingPatternCode =
   | 'weeksEmpty'
   | 'weeksInvalid'
   | 'placesEmpty'
-  | 'placesInvalid';
+  | 'placesInvalid'
+  | 'placesBelowRegistered';
 
 export interface TrainingPatternError {
   field: TrainingPatternField;
@@ -111,6 +112,11 @@ export const TRAINING_PATTERN_MESSAGES = {
   weeksInvalid: `Enter a whole number of weeks ${WEEKS_RANGE}.`,
   placesEmpty: `Enter the places per class, ${PLACES_RANGE}.`,
   placesInvalid: `Enter a whole number of places ${PLACES_RANGE}.`,
+  placesBelowRegistered: (registeredCount: number) =>
+    `Use at least ${registeredCount} ${registeredCount === 1 ? 'place' : 'places'}. ${registeredCount} ${registeredCount === 1 ? 'is' : 'are'} registered.`,
+  classBelowRegistered: (date: string, registeredCount: number) =>
+    `${trainingClassDate(date)} has ${registeredCount} registered, so it needs at least ${registeredCount} places. Nothing was changed.`,
+  noUpcomingClass: 'No class is coming up. Change the places of a class on its own row.',
   alreadyScheduled: 'Classes are already scheduled for this training program.',
   hasRegistrations: (registeredCount: number) =>
     `${registeredCount} ${registeredCount === 1 ? 'registration is' : 'registrations are'} in this class, so it cannot be cancelled.`,
@@ -291,6 +297,36 @@ export function checkTrainingPattern(values: TrainingPatternValues, today: strin
   const places = countError('placesPerClass', values.placesPerClass);
   if (places) errors.placesPerClass = places;
   return errors;
+}
+
+export interface TrainingPlacesError {
+  field: 'places';
+  code:
+    | Extract<TrainingPatternCode, 'placesEmpty' | 'placesInvalid' | 'placesBelowRegistered'>
+    | 'noUpcomingClass';
+  message: string;
+}
+
+export function checkTrainingClassPlaces(
+  places: number | undefined,
+  registeredCount: number,
+): TrainingPlacesError | null {
+  const outOfRange = countError('placesPerClass', places);
+  if (outOfRange) {
+    return {
+      field: 'places',
+      code: outOfRange.code === 'placesEmpty' ? 'placesEmpty' : 'placesInvalid',
+      message: outOfRange.message,
+    };
+  }
+  if (places !== undefined && places < registeredCount) {
+    return {
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: TRAINING_PATTERN_MESSAGES.placesBelowRegistered(registeredCount),
+    };
+  }
+  return null;
 }
 
 export function firstTrainingPatternError(errors: Errors): TrainingPatternError | null {

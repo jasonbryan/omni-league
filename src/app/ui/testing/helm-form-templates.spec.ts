@@ -173,6 +173,13 @@ const FORMS: Record<string, Parts> = {
     errors: 4,
     handWritten: [],
   },
+  'src/app/organizations/admin/places-editor.ts': {
+    inputs: 1,
+    fields: 1,
+    labels: 1,
+    descriptions: 1,
+    errors: 1,
+  },
   'src/app/organizations/league/league-details-form.ts': {
     inputs: 1,
     fields: 1,

@@ -171,11 +171,12 @@ describe('CampManagement registrants', () => {
     ]);
   });
 
-  it('keeps Delete beside the count on a session with no registrations', () => {
+  it('keeps Delete beside the count on a session with no registrations, ahead of its places field', () => {
     const buttons = items()[1].querySelectorAll('button');
     expect([...buttons].map((button) => text(button))).toEqual([
       '0 of 20 registered in Week 2',
       'Delete Week 2',
+      'Save places for Week 2',
     ]);
   });
 });

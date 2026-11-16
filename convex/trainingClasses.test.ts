@@ -617,6 +617,365 @@ describe('trainingClasses.cancel and restore', () => {
   });
 });
 
+describe('trainingClasses.updatePlaces', () => {
+  async function scheduled(s: Setup) {
+    await s.adminA.mutation(api.trainingClasses.schedule, { ...valid(s), weeks: 3 });
+    return (await classesOf(s)).sort((x, y) => (x.date < y.date ? -1 : 1));
+  }
+  const placesOf = async (s: Setup, id: Id<'trainingClasses'>) =>
+    (await s.t.run((ctx) => ctx.db.get('trainingClasses', id)))?.places;
+  const register = (s: Setup, id: Id<'trainingClasses'>, registeredCount: number) =>
+    s.t.run((ctx) => ctx.db.patch('trainingClasses', id, { registeredCount }));
+
+  test('sets one class’s places, answers the places it replaced, and leaves the other classes and fields alone', async () => {
+    const s = await setup();
+    const [first, second] = await scheduled(s);
+    await register(s, first._id, 4);
+    expect(
+      await s.adminA.mutation(api.trainingClasses.updatePlaces, {
+        trainingClassId: first._id,
+        places: 16,
+      }),
+    ).toEqual({ previousPlaces: 12 });
+    expect(await s.t.run((ctx) => ctx.db.get('trainingClasses', first._id))).toEqual({
+      ...first,
+      places: 16,
+      registeredCount: 4,
+    });
+    expect(await placesOf(s, second._id)).toBe(12);
+  });
+
+  test('refuses places below the registered count, under Places, with the count, and keeps the places', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await register(s, first._id, 12);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.trainingClasses.updatePlaces, {
+          trainingClassId: first._id,
+          places: 11,
+        }),
+      ),
+    ).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: TRAINING_PATTERN_MESSAGES.placesBelowRegistered(12),
+    });
+    expect(await placesOf(s, first._id)).toBe(12);
+    await s.adminA.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: first._id,
+      places: 12,
+    });
+  });
+
+  test.each([0, 201, 2.5, Number.NaN, -1])(
+    'refuses %s places as outside the range, and keeps the places',
+    async (places) => {
+      const s = await setup();
+      const [first] = await scheduled(s);
+      expect(
+        await refusal(
+          s.adminA.mutation(api.trainingClasses.updatePlaces, {
+            trainingClassId: first._id,
+            places,
+          }),
+        ),
+      ).toMatchObject({ field: 'places', code: 'placesInvalid' });
+      expect(await placesOf(s, first._id)).toBe(12);
+    },
+  );
+
+  test('Undo sets the previous places back while they still cover the registrations, and is refused after', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await register(s, first._id, 12);
+    const { previousPlaces } = await s.adminA.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: first._id,
+      places: 14,
+    });
+    await s.adminA.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: first._id,
+      places: previousPlaces,
+    });
+    expect(await placesOf(s, first._id)).toBe(12);
+
+    await s.adminA.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: first._id,
+      places: 14,
+    });
+    await register(s, first._id, 13);
+    expect(
+      await refusal(
+        s.adminA.mutation(api.trainingClasses.updatePlaces, {
+          trainingClassId: first._id,
+          places: previousPlaces,
+        }),
+      ),
+    ).toMatchObject({ code: 'placesBelowRegistered' });
+    expect(await placesOf(s, first._id)).toBe(14);
+  });
+
+  test('lets a league organizer assigned to the program change the places', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await s.assignedA.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: first._id,
+      places: 20,
+    });
+    expect(await placesOf(s, first._id)).toBe(20);
+  });
+
+  test('refuses every caller who may not organize the training program, and keeps the places', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.mutation(api.trainingClasses.updatePlaces, {
+          trainingClassId: first._id,
+          places: 20,
+        }),
+        label,
+      ).rejects.toThrow(message);
+    }
+    expect(await placesOf(s, first._id)).toBe(12);
+  });
+
+  test('refuses a class of another organization’s training program', async () => {
+    const s = await setup();
+    await s.adminB.mutation(api.trainingClasses.schedule, {
+      ...valid(s),
+      trainingId: s.trainingB.trainingId,
+    });
+    const [other] = await classesOf(s);
+    await expect(
+      s.adminA.mutation(api.trainingClasses.updatePlaces, {
+        trainingClassId: other._id,
+        places: 20,
+      }),
+    ).rejects.toThrow('Not allowed');
+  });
+});
+
+describe('trainingClasses.updateAllPlaces and restorePlaces', () => {
+  async function scheduled(s: Setup, weeks = 4) {
+    await s.adminA.mutation(api.trainingClasses.schedule, { ...valid(s), weeks });
+    return (await classesOf(s)).sort((x, y) => (x.date < y.date ? -1 : 1));
+  }
+  const placesByDate = async (s: Setup) =>
+    Object.fromEntries((await classesOf(s)).map((row) => [row.date, row.places]));
+  const patch = (
+    s: Setup,
+    id: Id<'trainingClasses'>,
+    change: Partial<{
+      places: number;
+      registeredCount: number;
+      date: string;
+      status: 'scheduled' | 'cancelled';
+    }>,
+  ) => s.t.run((ctx) => ctx.db.patch('trainingClasses', id, change));
+  const all = (s: Setup, places: number) =>
+    s.adminA.mutation(api.trainingClasses.updateAllPlaces, {
+      trainingId: s.serving.trainingId,
+      places,
+    });
+
+  test('gives every upcoming class the places, counts them, and answers each class’s previous places', async () => {
+    const s = await setup();
+    const [first, second, third, fourth] = await scheduled(s);
+    await patch(s, second._id, { places: 9 });
+    const result = await all(s, 14);
+    expect(result.classCount).toBe(4);
+    expect([...result.previous].sort((a, b) => (a.places < b.places ? -1 : 1))).toEqual([
+      { trainingClassId: second._id, places: 9 },
+      { trainingClassId: first._id, places: 12 },
+      { trainingClassId: third._id, places: 12 },
+      { trainingClassId: fourth._id, places: 12 },
+    ]);
+    expect(Object.values(await placesByDate(s))).toEqual([14, 14, 14, 14]);
+  });
+
+  test('leaves a class before today alone, and includes one today', async () => {
+    const s = await setup();
+    const [first, second] = await scheduled(s);
+    await patch(s, first._id, { date: '2026-11-14' });
+    await patch(s, second._id, { date: '2026-11-15' });
+    const result = await all(s, 14);
+    expect(result.classCount).toBe(3);
+    const byDate = await placesByDate(s);
+    expect(byDate['2026-11-14']).toBe(12);
+    expect(byDate['2026-11-15']).toBe(14);
+  });
+
+  test('gives a cancelled class the places too, so Restore brings back the series’ places, and does not count it', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await s.adminA.mutation(api.trainingClasses.cancel, { trainingClassId: first._id });
+    const result = await all(s, 14);
+    expect(result.classCount).toBe(3);
+    expect(Object.values(await placesByDate(s))).toEqual([14, 14, 14, 14]);
+  });
+
+  test('changes only the classes of that training program', async () => {
+    const s = await setup();
+    await scheduled(s, 2);
+    await s.adminA.mutation(api.trainingClasses.schedule, {
+      ...valid(s),
+      trainingId: s.passing.trainingId,
+      weeks: 2,
+    });
+    await all(s, 14);
+    const places = (await classesOf(s)).map((row) => [
+      row.trainingId === s.serving.trainingId,
+      row.places,
+    ]);
+    expect(places).toEqual(
+      expect.arrayContaining([
+        [true, 14],
+        [true, 14],
+        [false, 12],
+        [false, 12],
+      ]),
+    );
+  });
+
+  test('takes places equal to the most registered in a class', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await patch(s, first._id, { registeredCount: 14 });
+    await all(s, 14);
+    expect(Object.values(await placesByDate(s))).toEqual([14, 14, 14, 14]);
+  });
+
+  test('refuses a class registered above the places, names its date, and changes no class', async () => {
+    const s = await setup();
+    const [, second, third] = await scheduled(s);
+    await patch(s, second._id, { registeredCount: 15 });
+    await patch(s, third._id, { registeredCount: 16 });
+    expect(await refusal(all(s, 14))).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: TRAINING_PATTERN_MESSAGES.classBelowRegistered(second.date, 15),
+    });
+    expect(Object.values(await placesByDate(s))).toEqual([12, 12, 12, 12]);
+  });
+
+  test('is not stopped by a class before today that is registered above the places', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s);
+    await patch(s, first._id, { date: '2026-11-14', registeredCount: 30 });
+    await all(s, 14);
+    expect((await placesByDate(s))['2026-11-14']).toBe(12);
+  });
+
+  test.each([0, 201, 2.5, Number.NaN])('refuses %s places as outside the range', async (places) => {
+    const s = await setup();
+    await scheduled(s);
+    expect(await refusal(all(s, places))).toMatchObject({ field: 'places', code: 'placesInvalid' });
+    expect(Object.values(await placesByDate(s))).toEqual([12, 12, 12, 12]);
+  });
+
+  test('refuses when no scheduled class is coming up', async () => {
+    const s = await setup();
+    expect(await refusal(all(s, 14))).toEqual({
+      field: 'places',
+      code: 'noUpcomingClass',
+      message: TRAINING_PATTERN_MESSAGES.noUpcomingClass,
+    });
+    const [first] = await scheduled(s, 1);
+    await s.adminA.mutation(api.trainingClasses.cancel, { trainingClassId: first._id });
+    expect((await refusal(all(s, 14))).code).toBe('noUpcomingClass');
+    expect(Object.values(await placesByDate(s))).toEqual([12]);
+  });
+
+  test('Undo restores each class’s own previous places', async () => {
+    const s = await setup();
+    const [, second] = await scheduled(s);
+    await patch(s, second._id, { places: 9 });
+    const { previous } = await all(s, 14);
+    expect(
+      await s.adminA.mutation(api.trainingClasses.restorePlaces, {
+        trainingId: s.serving.trainingId,
+        classes: previous,
+      }),
+    ).toEqual({ classCount: 4 });
+    expect(Object.values(await placesByDate(s)).sort()).toEqual([12, 12, 12, 9]);
+  });
+
+  test('Undo is refused with the class’s date once registrations have used the added places, and restores no class', async () => {
+    const s = await setup();
+    const [first, second] = await scheduled(s);
+    await patch(s, first._id, { registeredCount: 12 });
+    const { previous } = await all(s, 14);
+    await patch(s, second._id, { registeredCount: 13 });
+    expect(
+      await refusal(
+        s.adminA.mutation(api.trainingClasses.restorePlaces, {
+          trainingId: s.serving.trainingId,
+          classes: previous,
+        }),
+      ),
+    ).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: TRAINING_PATTERN_MESSAGES.classBelowRegistered(second.date, 13),
+    });
+    expect(Object.values(await placesByDate(s))).toEqual([14, 14, 14, 14]);
+  });
+
+  test('restorePlaces refuses a class of another training program', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s, 1);
+    await s.adminA.mutation(api.trainingClasses.schedule, {
+      ...valid(s),
+      trainingId: s.passing.trainingId,
+      weeks: 1,
+    });
+    await expect(
+      s.adminA.mutation(api.trainingClasses.restorePlaces, {
+        trainingId: s.passing.trainingId,
+        classes: [{ trainingClassId: first._id, places: 5 }],
+      }),
+    ).rejects.toThrow('Not allowed');
+    expect((await classesOf(s)).map((row) => row.places)).toEqual([12, 12]);
+  });
+
+  test('lets a league organizer assigned to the program change and restore the series', async () => {
+    const s = await setup();
+    await scheduled(s, 2);
+    const { previous } = await s.assignedA.mutation(api.trainingClasses.updateAllPlaces, {
+      trainingId: s.serving.trainingId,
+      places: 14,
+    });
+    await s.assignedA.mutation(api.trainingClasses.restorePlaces, {
+      trainingId: s.serving.trainingId,
+      classes: previous,
+    });
+    expect(Object.values(await placesByDate(s))).toEqual([12, 12]);
+  });
+
+  test('refuses every caller who may not organize the training program, for both functions, and keeps the places', async () => {
+    const s = await setup();
+    const [first] = await scheduled(s, 2);
+    for (const [label, caller, message] of refusedCallers(s)) {
+      await expect(
+        caller.mutation(api.trainingClasses.updateAllPlaces, {
+          trainingId: s.serving.trainingId,
+          places: 14,
+        }),
+        label,
+      ).rejects.toThrow(message);
+      await expect(
+        caller.mutation(api.trainingClasses.restorePlaces, {
+          trainingId: s.serving.trainingId,
+          classes: [{ trainingClassId: first._id, places: 14 }],
+        }),
+        label,
+      ).rejects.toThrow(message);
+    }
+    expect(Object.values(await placesByDate(s))).toEqual([12, 12]);
+  });
+});
+
 describe('trainings.getForManagement', () => {
   const get = (
     caller: Setup['adminA'],

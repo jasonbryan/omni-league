@@ -20,6 +20,7 @@ export const GET_CAMP = 'camps:getForManagement';
 export const LIST_SESSIONS = 'campSessions:listForCamp';
 export const ADD_SESSION = 'campSessions:add';
 export const REMOVE_SESSION = 'campSessions:remove';
+export const UPDATE_PLACES = 'campSessions:updatePlaces';
 export const PUBLISH_CAMP = 'camps:publish';
 export const LIST_MINE = 'organizations:listMine';
 export const CAMP_ARGS = { orgSlug: COASTAL.slug, campSlug: 'junior-beach-volleyball-camp' };

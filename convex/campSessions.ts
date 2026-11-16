@@ -5,6 +5,7 @@ import {
   CAMP_SESSION_MESSAGES,
   MAX_CAMP_SESSIONS,
   checkCampSessionFields,
+  checkCampSessionPlaces,
   firstCampSessionError,
   type CampSessionInputError,
 } from './lib/campSessionInput';
@@ -79,6 +80,18 @@ export const listForCamp = query({
       registrationDeadline: session.registrationDeadline,
       registeredCount: session.registeredCount,
     }));
+  },
+});
+
+export const updatePlaces = mutation({
+  args: { campSessionId: v.id('campSessions'), places: v.number() },
+  returns: v.object({ previousPlaces: v.number() }),
+  handler: async (ctx, { campSessionId, places }) => {
+    const { campSession: session } = await requireCampSessionOrganizer(ctx, campSessionId);
+    const refusal = checkCampSessionPlaces(places, session.registeredCount);
+    if (refusal) refuse(refusal);
+    await ctx.db.patch('campSessions', campSessionId, { places });
+    return { previousPlaces: session.places };
   },
 });
 

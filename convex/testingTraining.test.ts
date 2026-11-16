@@ -75,3 +75,75 @@ describe('testing:seedTraining', () => {
     );
   });
 });
+
+describe('testing:setTrainingClassRegistered', () => {
+  const REGISTER = {
+    organizationSlug: 'e2e-org-t7k2',
+    trainingSlug: 'tuesday-serving-clinic',
+    date: '2027-01-12',
+    registeredCount: 5,
+  };
+
+  async function seededWithClasses() {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTraining, TRAINING);
+    await t.run(async (ctx) => {
+      const [training] = await ctx.db.query('trainings').collect();
+      for (const date of ['2027-01-05', '2027-01-12']) {
+        await ctx.db.insert('trainingClasses', {
+          trainingId: training._id,
+          organizationId: training.organizationId,
+          date,
+          startTime: '18:00',
+          endTime: '19:00',
+          places: 12,
+          registeredCount: 0,
+          status: 'scheduled',
+        });
+      }
+    });
+    return t;
+  }
+
+  const registeredByDate = (t: Awaited<ReturnType<typeof seeded>>) =>
+    t.run(async (ctx) =>
+      Object.fromEntries(
+        (await ctx.db.query('trainingClasses').collect()).map((row) => [
+          row.date,
+          row.registeredCount,
+        ]),
+      ),
+    );
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+    ['empty', ''],
+  ])('throws with IS_TEST %s and changes nothing', async (_, value) => {
+    const t = await seededWithClasses();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.setTrainingClassRegistered, REGISTER)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await registeredByDate(t)).toEqual({ '2027-01-05': 0, '2027-01-12': 0 });
+  });
+
+  test('sets the registered count of the class on that date, and no other', async () => {
+    const t = await seededWithClasses();
+    await t.mutation(internal.testing.setTrainingClassRegistered, REGISTER);
+    expect(await registeredByDate(t)).toEqual({ '2027-01-05': 0, '2027-01-12': 5 });
+  });
+
+  test('refuses an unknown training program and a date with no class', async () => {
+    const t = await seededWithClasses();
+    await expect(
+      t.mutation(internal.testing.setTrainingClassRegistered, {
+        ...REGISTER,
+        trainingSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No training program/);
+    await expect(
+      t.mutation(internal.testing.setTrainingClassRegistered, { ...REGISTER, date: '2027-02-02' }),
+    ).rejects.toThrow(/No class/);
+  });
+});

@@ -178,6 +178,7 @@ describe('convex/testing.ts exports', () => {
       'setTournamentMaximumTeams',
       'setTournamentSetsPerGame',
       'setTournamentStructure',
+      'setTrainingClassRegistered',
     ]);
     for (const [name, fn] of exports) {
       const markers = fn as FunctionRegistrationMarkers;

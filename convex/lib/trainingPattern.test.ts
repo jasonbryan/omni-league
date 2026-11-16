@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  checkTrainingClassPlaces,
   checkTrainingPattern,
   classDates,
   firstTrainingPatternError,
@@ -337,5 +338,54 @@ describe('trainingClassDate', () => {
   test('names the weekday before the date', () => {
     expect(trainingClassDate('2027-01-05')).toBe('Tue, Jan 5, 2027');
     expect(trainingClassDate('2027-02-28')).toBe('Sun, Feb 28, 2027');
+  });
+});
+
+describe('checkTrainingClassPlaces', () => {
+  test.each([
+    [12, 12],
+    [14, 12],
+    [1, 0],
+    [MAX_TRAINING_CLASS_PLACES, 12],
+  ])('accepts %s places with %s registered', (places, registered) => {
+    expect(checkTrainingClassPlaces(places, registered)).toBeNull();
+  });
+
+  test('refuses places below the registered count, under Places, and says how many to use', () => {
+    expect(checkTrainingClassPlaces(11, 12)).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: 'Use at least 12 places. 12 are registered.',
+    });
+  });
+
+  test('says one place and one registered in the singular', () => {
+    expect(TRAINING_PATTERN_MESSAGES.placesBelowRegistered(1)).toBe(
+      'Use at least 1 place. 1 is registered.',
+    );
+  });
+
+  test.each([0, MAX_TRAINING_CLASS_PLACES + 1, 2.5, Number.NaN, -3])(
+    'refuses %s places as outside the range before it compares with the registered count',
+    (places) => {
+      expect(checkTrainingClassPlaces(places, 3)).toMatchObject({
+        field: 'places',
+        code: 'placesInvalid',
+        message: 'Enter a whole number of places from 1 to 200.',
+      });
+    },
+  );
+
+  test('says when the places are missing', () => {
+    expect(checkTrainingClassPlaces(undefined, 3)).toMatchObject({
+      field: 'places',
+      code: 'placesEmpty',
+    });
+  });
+
+  test('names the class and its registered count when a series change would go below it', () => {
+    expect(TRAINING_PATTERN_MESSAGES.classBelowRegistered('2027-01-12', 15)).toBe(
+      'Tue, Jan 12, 2027 has 15 registered, so it needs at least 15 places. Nothing was changed.',
+    );
   });
 });

@@ -7,6 +7,7 @@ import {
   MAX_CAMP_SESSION_PLACES,
   campSessionTimes,
   checkCampSessionFields,
+  checkCampSessionPlaces,
   firstCampSessionError,
   formatDailyTime,
   type CampSessionValues,
@@ -197,5 +198,43 @@ describe('the limit of sessions in a camp', () => {
     expect(CAMP_SESSION_MESSAGES.sessionLimit).toBe(
       'A camp takes up to 200 sessions. Delete one before adding another.',
     );
+  });
+});
+
+describe('checkCampSessionPlaces', () => {
+  test.each([
+    [20, 20],
+    [22, 20],
+    [1, 0],
+    [MAX_CAMP_SESSION_PLACES, 20],
+  ])('accepts %s places with %s registered', (places, registered) => {
+    expect(checkCampSessionPlaces(places, registered)).toBeNull();
+  });
+
+  test('refuses places below the registered count, under Places, and says how many to use', () => {
+    expect(checkCampSessionPlaces(19, 20)).toEqual({
+      field: 'places',
+      code: 'placesBelowRegistered',
+      message: 'Use at least 20 places. 20 are registered.',
+    });
+    expect(checkCampSessionPlaces(1, 2)?.message).toBe('Use at least 2 places. 2 are registered.');
+    expect(checkCampSessionPlaces(1, 3)?.message).toBe('Use at least 3 places. 3 are registered.');
+  });
+
+  test('says one place and one registered in the singular', () => {
+    expect(CAMP_SESSION_MESSAGES.placesBelowRegistered(1)).toBe(
+      'Use at least 1 place. 1 is registered.',
+    );
+  });
+
+  test.each([0, MAX_CAMP_SESSION_PLACES + 1, 2.5, Number.NaN, -1])(
+    'refuses %s places as outside the range before it compares with the registered count',
+    (places) => {
+      expect(checkCampSessionPlaces(places, 3)?.code).toBe('placesInvalid');
+    },
+  );
+
+  test('says when the places are missing', () => {
+    expect(checkCampSessionPlaces(undefined, 3)?.code).toBe('placesEmpty');
   });
 });
