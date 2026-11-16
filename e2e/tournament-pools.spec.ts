@@ -1431,8 +1431,6 @@ test.describe('Tournaments: bracket from pools', () => {
     await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
     await expect(groupB.getByRole('alert')).toHaveCount(0);
 
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Shift+Tab');
     await ace.focus();
     await page.keyboard.press('Space');
     await expect(groupA.getByRole('alert')).toHaveCount(0);
