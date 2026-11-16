@@ -558,7 +558,6 @@ export class PoolBracketPanel {
       new Set([...(previous?.value ?? [])].filter((pool) => issues.has(pool))),
   });
 
-  /** A pool's count error shows once focus has left the pool or Create was pressed, and goes when the count is right. */
   protected readonly poolIssues = computed(
     () => new Map([...this.countIssues()].filter(([pool]) => this.shownPools().has(pool))),
   );
