@@ -558,9 +558,10 @@ export class PoolBracketPanel {
       new Set([...(previous?.value ?? [])].filter((pool) => issues.has(pool))),
   });
 
-  protected readonly poolIssues = computed(
-    () => new Map([...this.countIssues()].filter(([pool]) => this.shownPools().has(pool))),
-  );
+  protected readonly poolIssues = computed(() => {
+    const shown = this.shownPools();
+    return new Map([...this.countIssues()].filter(([pool]) => shown.has(pool)));
+  });
 
   /** A pool whose tie sits on the advance line gets one line saying what decided who advances. */
   protected readonly tieLines = computed(() => {

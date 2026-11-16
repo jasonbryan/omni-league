@@ -675,6 +675,19 @@ describe('PoolBracketPanel', () => {
         expect(fieldset().querySelector('[role="alert"]')).toBeNull();
         expect(fieldset().getAttribute('aria-describedby')).toBeNull();
       });
+
+      it('waits for focus to leave again when the count goes wrong again after it was fixed', async () => {
+        await open(tied([1, 2]));
+        await tick(5);
+        await leave(null);
+        await tick(3);
+        expect(fieldset().querySelector('[role="alert"]')).toBeNull();
+        await tick(3);
+        expect(fieldset().querySelector('[role="alert"]')).toBeNull();
+        expect(fieldset().getAttribute('aria-describedby')).toBeNull();
+        await leave(null);
+        expect(fieldset().querySelector('[role="alert"]')).not.toBeNull();
+      });
     });
   });
 });
