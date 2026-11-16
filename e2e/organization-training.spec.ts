@@ -726,6 +726,42 @@ test.describe('who may open a training program', () => {
   });
 });
 
+test.describe('Training: the first class date against today', () => {
+  const dayName = (date: string) =>
+    new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+
+  test('a first date before today is refused under the first date and creates no class, and today itself schedules', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await openTraining(page);
+    await page.goto(path);
+    const yesterday = dateFromToday(-1);
+    await chipLabel(page, dayName(yesterday)).click();
+    await page.locator('#first-date').fill(yesterday);
+    await page.locator('#first-date').blur();
+    await expect(page.locator('#first-date-error')).toContainText('The first class must be today,');
+    await page.locator('#start-time').fill('18:00');
+    await page.locator('#end-time').fill('19:00');
+    await page.locator('#weeks').fill('2');
+    await page.locator('#places-per-class').fill('12');
+    await page.locator('#registration-deadline').fill(yesterday);
+    await scheduleSubmit(page).click();
+    await expect(page.locator('#first-date-error')).toBeVisible();
+    await expect(classRows(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'training-page-first-date-past');
+    await expectAccessible(page);
+
+    const today = dateFromToday(0);
+    await chipLabel(page, dayName(today)).click();
+    await page.locator('#first-date').fill(today);
+    await page.locator('#registration-deadline').fill(today);
+    await expect(page.locator('#first-date-error')).toHaveCount(0);
+    await scheduleSubmit(page).click();
+    await expect(page.locator('[data-slot="class-status"]')).toHaveText('2 classes scheduled.');
+    await expect(classRows(page)).toHaveCount(2);
+  });
+});
+
 test.describe('Training: names with no break', () => {
   const UNBROKEN = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(3).slice(0, 100);
 
@@ -755,7 +791,7 @@ test.describe('Training: names with no break', () => {
     expect(await checkReflow(page)).toMatchObject({ passed: true });
 
     await page.locator('#weeks').fill('');
-    await fillPattern(page, firstTuesday());
+    await fillPattern(page, firstTuesdayTwoWeeksOut());
     await scheduleSubmit(page).click();
     await expect(classRows(page)).toHaveCount(8);
     await classRows(page)
