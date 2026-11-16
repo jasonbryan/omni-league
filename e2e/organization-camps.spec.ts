@@ -895,7 +895,7 @@ test.describe('Camp sessions: changing the places', () => {
     const row = sessionRows(page).first();
     await placesField(row).focus();
     await expect(placesField(row)).toHaveAttribute('aria-describedby', /^places-.+-description$/);
-    await page.keyboard.press('Control+A');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type('19');
     await page.keyboard.press('Tab');
     await expect(savePlaces(row)).toBeFocused();
@@ -903,7 +903,7 @@ test.describe('Camp sessions: changing the places', () => {
     await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
 
     await page.keyboard.press('Shift+Tab');
-    await page.keyboard.press('Control+A');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type('21');
     await page.keyboard.press('Enter');
     await expect(placesStatus(row)).toContainText('Places saved.');
