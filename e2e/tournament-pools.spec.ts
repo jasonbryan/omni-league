@@ -1338,8 +1338,8 @@ test.describe('Tournaments: bracket from pools', () => {
     await page.goto(managePath);
     await expect(seedOrder(page)).toHaveText(['Bay', 'Eddy', 'Ace', 'Cove']);
     await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toHaveCount(1);
-    await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toContainText(
-      /^Pool A is tied for 1st between .*The team that scored more points in the games between them advances\.$/,
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toHaveText(
+      'Pool A is tied for 1st between Eddy, Ace, and Dune. The team that scored more points in the games between them advances.',
     );
     await expect(bracketPanel(page).locator('[data-slot="place"]')).toHaveText([
       'Pool B, 1st',
@@ -1425,7 +1425,7 @@ test.describe('Tournaments: bracket from pools', () => {
       ).toHaveText('Game 1: Ace v Cove');
       await expect(
         bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').nth(1),
-      ).toHaveText('Game 2: Eddy v Bay');
+      ).toHaveText('Game 2: Bay v Eddy');
     });
   });
 });
