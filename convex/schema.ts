@@ -154,6 +154,8 @@ export default defineSchema({
     ageGroup: ageGroupValidator,
     /** Set on a program of the league type. */
     leagueId: v.optional(v.id('leagues')),
+    /** The words a search finds the program by: its name, sport, division, organization's name, locations' names, and City, state. Absent on camp and training programs. */
+    searchText: v.optional(v.string()),
   })
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
     .index('by_customLevelId', ['customLevelId'])
@@ -162,7 +164,12 @@ export default defineSchema({
       'type',
       'status',
       'sortName',
-    ]),
+    ])
+    .index('by_status_and_type_and_sport_and_sortName', ['status', 'type', 'sport', 'sortName'])
+    .searchIndex('search_searchText', {
+      searchField: 'searchText',
+      filterFields: ['status', 'type', 'sport'],
+    }),
 
   // The tournament part of a program of type `tournament`; `programs` holds its name, slug, and division. Written only by `convex/lib/tenantWrites.ts`.
   tournaments: defineTable({
