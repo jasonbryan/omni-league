@@ -114,7 +114,9 @@ type Outcome =
             />
             <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
               <div class="min-w-0">
-                <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                <h1
+                  class="mt-1 text-2xl font-semibold tracking-tight text-balance wrap-anywhere md:text-3xl"
+                >
                   {{ training.name }}
                 </h1>
                 <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -166,7 +168,7 @@ type Outcome =
                       aria-hidden="true"
                     />Coach
                   </dt>
-                  <dd class="mt-1 font-medium">{{ training.coachName }}</dd>
+                  <dd class="mt-1 font-medium wrap-anywhere">{{ training.coachName }}</dd>
                 </div>
                 <div class="px-4 py-3.5 md:px-5">
                   <dt class="flex items-center gap-2 text-sm text-muted-foreground">
@@ -185,8 +187,8 @@ type Outcome =
                     </dt>
                     @for (location of training.locations; track location.name) {
                       <dd class="mt-1">
-                        <span class="font-medium">{{ location.name }}</span>
-                        <span class="block text-sm text-muted-foreground">{{
+                        <span class="font-medium wrap-anywhere">{{ location.name }}</span>
+                        <span class="block text-sm wrap-anywhere text-muted-foreground">{{
                           location.address
                         }}</span>
                       </dd>
