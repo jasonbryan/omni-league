@@ -625,21 +625,56 @@ describe('PoolBracketPanel', () => {
       ]);
     });
 
-    it('says under the pool how many to choose, keeps Create, and a press focuses that pool without sending', async () => {
-      await open(tied([1, 2]));
-      await tick(5);
-      const fieldset = panel().querySelector<HTMLElement>('#advancing-pool-A')!;
-      expect(text(fieldset.querySelector('[role="alert"]'))).toBe(
-        'Choose 2 teams from Pool A. 3 are chosen.',
-      );
-      expect(fieldset.getAttribute('aria-describedby')).toBe('advancing-error-A');
-      expect(panel().querySelector('#advancing-pool-B [role="alert"]')).toBeNull();
-      createButton()!.click();
-      await o.flush();
-      expect(calls()).toEqual([]);
-      expect(document.activeElement).toBe(fieldset);
-      await tick(5);
-      expect(fieldset.querySelector('[role="alert"]')).toBeNull();
+    describe('the count of a pool', () => {
+      const fieldset = () => panel().querySelector<HTMLElement>('#advancing-pool-A')!;
+      const leave = async (to: Element | null) => {
+        page
+          .querySelector<HTMLElement>('#advancing-tm_3')!
+          .dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
+        await o.flush();
+      };
+
+      it('shows no error and no alert on a first change', async () => {
+        await open(tied([1, 2]));
+        await tick(3);
+        expect(fieldset().querySelector('[role="alert"]')).toBeNull();
+        expect(fieldset().getAttribute('aria-describedby')).toBeNull();
+        await leave(page.querySelector('#advancing-tm_5'));
+        expect(fieldset().querySelector('[role="alert"]')).toBeNull();
+      });
+
+      it('shows the error under the pool when focus leaves it with the wrong count', async () => {
+        await open(tied([1, 2]));
+        await tick(5);
+        await leave(null);
+        expect(text(fieldset().querySelector('[role="alert"]'))).toBe(
+          'Choose 2 teams from Pool A. 3 are chosen.',
+        );
+        expect(fieldset().getAttribute('aria-describedby')).toBe('advancing-error-A');
+        expect(panel().querySelector('#advancing-pool-B [role="alert"]')).toBeNull();
+      });
+
+      it('shows it on a Create press, which focuses that pool and sends nothing', async () => {
+        await open(tied([1, 2]));
+        await tick(5);
+        createButton()!.click();
+        await o.flush();
+        expect(text(fieldset().querySelector('[role="alert"]'))).toBe(
+          'Choose 2 teams from Pool A. 3 are chosen.',
+        );
+        expect(calls()).toEqual([]);
+        expect(document.activeElement).toBe(fieldset());
+      });
+
+      it('clears the error once a change makes the count right', async () => {
+        await open(tied([1, 2]));
+        await tick(5);
+        await leave(null);
+        expect(fieldset().querySelector('[role="alert"]')).not.toBeNull();
+        await tick(3);
+        expect(fieldset().querySelector('[role="alert"]')).toBeNull();
+        expect(fieldset().getAttribute('aria-describedby')).toBeNull();
+      });
     });
   });
 });

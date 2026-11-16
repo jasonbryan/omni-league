@@ -1174,10 +1174,11 @@ test.describe('Tournaments: bracket from pools', () => {
     await expectAccessible(page);
 
     await bracketPanel(page).getByRole('checkbox', { name: /^Dune/ }).click();
+    await expect(bracketPanel(page).locator('#advancing-pool-A [role="alert"]')).toHaveCount(0);
+    await createBracket(page).click();
     await expect(bracketPanel(page).locator('#advancing-pool-A [role="alert"]')).toHaveText(
       'Choose 2 teams from Pool A. 1 is chosen.',
     );
-    await createBracket(page).click();
     await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
     await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
     await bracketPanel(page).getByRole('checkbox', { name: /^Eddy/ }).click();
@@ -1354,16 +1355,17 @@ test.describe('Tournaments: bracket from pools', () => {
     await page.keyboard.press('Space');
     await expect(eddy).not.toBeChecked();
     await expect(bracketStatus(page)).toHaveText('Eddy does not advance.');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expectAccessible(page);
+
+    await createBracket(page).focus();
+    await page.keyboard.press('Enter');
     await expect(groupA).toHaveAccessibleDescription('Choose 2 teams from Pool A. 1 is chosen.');
     await expect(groupA.getByRole('alert')).toHaveText('Choose 2 teams from Pool A. 1 is chosen.');
     await expect(bracketPanel(page).getByRole('group', { name: 'Pool B' })).not.toHaveAttribute(
       'aria-describedby',
       /.+/,
     );
-    await expectAccessible(page);
-
-    await createBracket(page).focus();
-    await page.keyboard.press('Enter');
     await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
     await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
     await page.keyboard.press('Tab');

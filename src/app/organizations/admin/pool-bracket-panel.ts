@@ -25,6 +25,7 @@ import { POOL_MESSAGES, type Pool } from '../../../../convex/lib/pools';
 import { registrationIsOpen } from '../../../../convex/lib/registration';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { focusLeftGroup } from '../../core/forms/shown-errors';
 import { injectNow } from '../../core/now';
 import { Checkbox } from '../../ui/checkbox';
 import { HlmCard } from '../../ui/card';
@@ -258,6 +259,7 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                     class="mt-3 focus:outline-none"
                     [id]="'advancing-pool-' + group.pool"
                     [attr.data-pool]="group.pool"
+                    (focusout)="leftPool(group.pool, $event)"
                     [attr.aria-describedby]="
                       poolIssues().has(group.pool) ? 'advancing-error-' + group.pool : null
                     "
@@ -538,7 +540,7 @@ export class PoolBracketPanel {
     return [...groups].map(([pool, teams]) => ({ pool, teams }));
   });
 
-  protected readonly poolIssues = computed(() => {
+  private readonly countIssues = computed(() => {
     const ranked = new Map((this.setup()?.ranked ?? []).map((team) => [team.teamId, team]));
     const advance = this.advance();
     const chosen = this.order().flatMap((teamId) => ranked.get(teamId) ?? []);
@@ -549,6 +551,17 @@ export class PoolBracketPanel {
     }
     return issues;
   });
+
+  private readonly shownPools = linkedSignal<ReadonlyMap<Pool, string>, ReadonlySet<Pool>>({
+    source: this.countIssues,
+    computation: (issues, previous) =>
+      new Set([...(previous?.value ?? [])].filter((pool) => issues.has(pool))),
+  });
+
+  /** A pool's count error shows once focus has left the pool or Create was pressed, and goes when the count is right. */
+  protected readonly poolIssues = computed(
+    () => new Map([...this.countIssues()].filter(([pool]) => this.shownPools().has(pool))),
+  );
 
   /** A pool whose tie sits on the advance line gets one line saying what decided who advances. */
   protected readonly tieLines = computed(() => {
@@ -639,10 +652,17 @@ export class PoolBracketPanel {
     this.refocusUnlessMoved(button);
   }
 
+  protected leftPool(pool: Pool, event: FocusEvent): void {
+    if (focusLeftGroup(event) && this.countIssues().has(pool)) {
+      this.shownPools.set(new Set([...this.shownPools(), pool]));
+    }
+  }
+
   protected async create(): Promise<void> {
     if (this.creating()) return;
-    const [invalid] = this.poolIssues().keys();
+    const [invalid] = this.countIssues().keys();
     if (invalid !== undefined) {
+      this.shownPools.set(new Set(this.countIssues().keys()));
       this.host.nativeElement.querySelector<HTMLElement>(`#advancing-pool-${invalid}`)?.focus();
       return;
     }
