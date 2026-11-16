@@ -1899,8 +1899,8 @@ export const insertDemoTeams = internalMutation({
     await insertDemoPartners(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains);
-    await insertDemoPools(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS);
-    await insertDemoPools(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS);
+    await insertDemoPools(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS.length);
+    await insertDemoPools(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS.length);
     await insertDemoPoolResults(ctx, captains);
     await insertDemoHarvestResults(ctx, captains);
     await insertDemoHarvestBracket(ctx);
@@ -2020,12 +2020,12 @@ async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
 async function insertDemoPools(
   ctx: MutationCtx,
   slugs: { orgSlug: string; tournamentSlug: string },
-  teams: readonly unknown[],
+  teamCount: number,
 ): Promise<void> {
   const tournament = await demoTournament(ctx, slugs);
   if (!tournament || (await poolGames(ctx, tournament._id)).length > 0) return;
   const setup = await poolSetup(ctx, tournament);
-  if (setup.seeds.length < teams.length) return;
+  if (setup.seeds.length < teamCount) return;
   await assignPools(ctx, setup, DEMO_POOL_COUNT);
   await replacePoolGames(ctx, tournament._id, (await poolSetup(ctx, tournament)).pools, []);
 }

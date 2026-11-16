@@ -1,6 +1,6 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
-import { roundName } from './bracket';
+import { roundName, seedOrderOfBracket } from './bracket';
 import type { PublicBracket } from './publicPage';
 import { bracketGames, gameHasResult } from './tournamentBracket';
 
@@ -15,10 +15,12 @@ export async function publicBracket(
   const games = await bracketGames(ctx, tournamentId);
   if (games.length === 0) return undefined;
   const teams = await teamsOf(ctx, games);
+  const seedOf = new Map(seedOrderOfBracket(games).map((teamId, index) => [teamId, index + 1]));
   const placeOf = (teamId: Id<'teams'> | null): Place => {
     const team = teamId && teams.get(teamId);
     if (!team) return null;
-    return { name: team.name, ...(team.seed !== undefined && { seed: team.seed }) };
+    const seed = seedOf.get(team._id);
+    return { name: team.name, ...(seed !== undefined && { seed }) };
   };
   const roundTotal = Math.max(...games.map((game) => game.round));
   const final = games.find((game) => game.round === roundTotal);

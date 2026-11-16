@@ -60,6 +60,7 @@ const setupOf = (more: object = {}) => ({
   gamesCreated: true,
   gamesWithoutResult: 0,
   ranked: SIX,
+  bracketSeeds: [],
   bracket: null,
   ...more,
 });
@@ -75,6 +76,7 @@ const game = (gameId: string, slot: number, one: number | null, other: number | 
   locked: false,
   reports: [],
 });
+const FOUR = ['tm_1', 'tm_2', 'tm_3', 'tm_4'];
 const BRACKET = {
   hasResult: false,
   winner: null,
@@ -284,6 +286,25 @@ describe('PoolBracketPanel', () => {
       expect(names()).toEqual(['Team 01', 'Team 03', 'Team 02', 'Team 04']);
     });
 
+    it('says so when the pool results change the teams after a move', async () => {
+      moveButton('Team 03', 'up').click();
+      await o.flush();
+      o.subscription(POOL_BRACKET)!.emit(
+        setupOf({
+          ranked: ranked(
+            [2, 'B', 1],
+            [1, 'A', 1],
+            [3, 'A', 2],
+            [4, 'B', 2],
+            [5, 'A', 3],
+            [6, 'B', 3],
+          ),
+        }),
+      );
+      await o.flush();
+      expect(seedStatus()).toBe('The pool results changed, so the seeds start again from them.');
+    });
+
     it('starts again from the pool results when they change the teams', async () => {
       moveButton('Team 03', 'up').click();
       await o.flush();
@@ -301,6 +322,21 @@ describe('PoolBracketPanel', () => {
       );
       await o.flush();
       expect(names()).toEqual(['Team 02', 'Team 01', 'Team 03', 'Team 04']);
+    });
+  });
+
+  describe('registration still open', () => {
+    it('gives the reason and no Create action', async () => {
+      await open(setupOf(), {
+        ...TOURNAMENT,
+        startDate: '2099-01-16',
+        endDate: '2099-01-17',
+        registrationDeadline: '2099-01-09',
+      });
+      expect(reason()).toBe(
+        'Registration is open until Jan 9, 2099. Create the bracket after it closes.',
+      );
+      expect(createButton()).toBeNull();
     });
   });
 
@@ -418,7 +454,7 @@ describe('PoolBracketPanel', () => {
   });
 
   describe('recreating the bracket', () => {
-    beforeEach(() => open(setupOf({ bracket: BRACKET })));
+    beforeEach(() => open(setupOf({ bracket: BRACKET, bracketSeeds: FOUR })));
 
     it('asks for a confirmation first, and sends nothing on Cancel', async () => {
       expect(text(createButton())).toBe('Recreate bracket');
@@ -456,10 +492,31 @@ describe('PoolBracketPanel', () => {
       );
     });
 
-    it('tells the organizer a moved seed changes the bracket only when it is recreated', () => {
+    it('shows the bracket’s own advance and seeds, and no note while the list matches it', () => {
+      expect(advanceRadio(2)!.checked).toBe(true);
+      expect(names()).toEqual(['Team 01', 'Team 02', 'Team 03', 'Team 04']);
+      expect(panel().querySelector('[data-slot="seed-note"]')).toBeNull();
+    });
+
+    it('tells the organizer a moved seed changes the bracket only when it is recreated', async () => {
+      moveButton('Team 03', 'up').click();
+      await o.flush();
       expect(text(panel().querySelector('[data-slot="seed-note"]'))).toBe(
         'The bracket keeps the seeds it was created with. Recreate it to use this order.',
       );
+    });
+
+    it('starts from a bracket created with 1 from each pool and a reorder, after a reload', async () => {
+      o.subscription(POOL_BRACKET)!.emit(
+        setupOf({
+          bracket: { ...BRACKET, rounds: [BRACKET.rounds[1]] },
+          bracketSeeds: ['tm_2', 'tm_1'],
+        }),
+      );
+      await o.flush();
+      expect(advanceRadio(1)!.checked).toBe(true);
+      expect(names()).toEqual(['Team 02', 'Team 01']);
+      expect(panel().querySelector('[data-slot="seed-note"]')).toBeNull();
     });
 
     it('with a result entered gives the reason, and no Recreate, no choice, and no seeds', async () => {

@@ -16,8 +16,10 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowDown, lucideArrowUp, lucideRefreshCw, lucideTrophy } from '@ng-icons/lucide';
 import { BRACKET_MESSAGES, roundCount } from '../../../../convex/lib/bracket';
 import { POOL_MESSAGES } from '../../../../convex/lib/pools';
+import { registrationIsOpen } from '../../../../convex/lib/registration';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { injectNow } from '../../core/now';
 import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
@@ -43,6 +45,7 @@ import {
   placeText,
   SEEDS_HINT,
   SEEDS_NOT_SAVED_NOTE,
+  SEEDS_RESET_TEXT,
 } from './pool-bracket-text';
 import type { ManagedTournament, PoolBracketView } from './tournament-context';
 
@@ -206,7 +209,7 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                   </li>
                 }
               </ol>
-              @if (hasBracket() && canMove()) {
+              @if (differsFromBracket() && canMove()) {
                 <p
                   [class]="hint + ' border-t border-border px-4 py-3 md:px-5'"
                   data-slot="seed-note"
@@ -303,6 +306,7 @@ export class PoolBracketPanel {
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly now = injectNow();
   private readonly createCall = injectMutation(api.tournamentGames.createBracketFromPools);
   protected readonly online = injectOnline();
 
@@ -323,7 +327,6 @@ export class PoolBracketPanel {
   protected readonly skeletonRows = [1, 2, 3];
 
   protected readonly creating = signal(false);
-  protected readonly announcement = signal('');
   protected readonly notice = signal<Notice | null>(null);
   protected readonly dialogAlert = signal<ConfirmAlertView | null>(null);
   private readonly chosenAdvance = signal<number | null>(null);
@@ -348,20 +351,30 @@ export class PoolBracketPanel {
     const setup = this.setup();
     if (!setup) return null;
     if (!setup.gamesCreated) return POOL_MESSAGES.noPoolGames;
-    return setup.gamesWithoutResult > 0
-      ? POOL_MESSAGES.poolGamesPending(setup.gamesWithoutResult)
+    if (setup.gamesWithoutResult > 0) {
+      return POOL_MESSAGES.poolGamesPending(setup.gamesWithoutResult);
+    }
+    const tournament = this.tournament();
+    return registrationIsOpen(tournament, this.now())
+      ? BRACKET_MESSAGES.registrationOpen(tournament.registrationDeadline)
       : null;
   });
 
   private readonly smallestPool = computed(() => this.setup()?.smallestPool ?? 0);
   protected readonly advanceChoices = computed(() => advanceOptions(this.smallestPool()));
   protected readonly advanceText = computed(() => advanceDescription(this.smallestPool()));
+  private readonly bracketSeeds = computed(() => this.setup()?.bracketSeeds ?? []);
+  /** What the existing bracket was created with, so the page starts from it. */
+  private readonly bracketAdvance = computed(() => {
+    const poolCount = this.setup()?.poolCount ?? 0;
+    const count = this.bracketSeeds().length;
+    return poolCount > 0 && count > 0 && count % poolCount === 0 ? count / poolCount : null;
+  });
   protected readonly advance = computed(() => {
     const chosen = this.chosenAdvance();
     const smallest = this.smallestPool();
-    return chosen !== null && chosen >= 1 && chosen <= smallest
-      ? chosen
-      : Math.min(DEFAULT_ADVANCE, smallest);
+    if (chosen !== null && chosen >= 1 && chosen <= smallest) return chosen;
+    return this.bracketAdvance() ?? Math.min(DEFAULT_ADVANCE, smallest);
   });
 
   private readonly proposed = computed(
@@ -378,13 +391,30 @@ export class PoolBracketPanel {
     },
   );
 
-  /** The advancing teams in the order the organizer set, which starts from the pool results and starts again when they change. */
-  private readonly order = linkedSignal<readonly Id<'teams'>[]>(() =>
-    this.proposed().map((team) => team.teamId),
+  private readonly startOrder = computed(
+    () =>
+      this.advance() === this.bracketAdvance()
+        ? this.bracketSeeds()
+        : this.proposed().map((team) => team.teamId),
+    { equal: sameIds },
   );
 
+  private readonly state = linkedSignal<
+    readonly Id<'teams'>[],
+    { order: readonly Id<'teams'>[]; moved: boolean; text: string }
+  >({
+    source: this.startOrder,
+    computation: (order, previous) => ({
+      order,
+      moved: false,
+      text: previous?.value.moved ? SEEDS_RESET_TEXT : '',
+    }),
+  });
+  protected readonly announcement = computed(() => this.state().text);
+  private readonly order = computed(() => this.state().order);
+
   protected readonly rows = computed<SeedRow[]>(() => {
-    const byId = new Map(this.proposed().map((team) => [team.teamId, team]));
+    const byId = new Map((this.setup()?.ranked ?? []).map((team) => [team.teamId, team]));
     const order = this.order().filter((teamId) => byId.has(teamId));
     return order.map((teamId, index) => {
       const team = byId.get(teamId)!;
@@ -400,9 +430,16 @@ export class PoolBracketPanel {
   });
   protected readonly canMove = computed(() => this.rows().length > 1 && !this.hasResult());
 
+  /** True when the bracket was created with another advance or another order than the list shows. */
+  protected readonly differsFromBracket = computed(
+    () =>
+      this.hasBracket() &&
+      (this.advance() !== this.bracketAdvance() || !sameIds(this.order(), this.bracketSeeds())),
+  );
+
   protected chooseAdvance(key: string): void {
+    this.state.update((state) => ({ ...state, moved: false, text: '' }));
     this.chosenAdvance.set(Number(key));
-    this.announcement.set('');
   }
 
   protected moveDisabled(row: SeedRow, direction: SeedDirection): boolean {
@@ -416,16 +453,19 @@ export class PoolBracketPanel {
     const index = order.indexOf(row.teamId);
     const target = direction === 'up' ? index - 1 : index + 1;
     [order[index], order[target]] = [order[target], order[index]];
-    this.order.set(order);
+    this.state.set({
+      order,
+      moved: true,
+      text: movedText(row.name, direction, target + 1, order.length),
+    });
     this.notice.set(null);
-    this.announcement.set(movedText(row.name, direction, target + 1, order.length));
     this.refocusUnlessMoved(button);
   }
 
   protected async create(): Promise<void> {
     if (this.creating()) return;
     this.notice.set(null);
-    this.announcement.set('');
+    this.state.update((state) => ({ ...state, text: '' }));
     if (this.hasBracket()) {
       this.dialogAlert.set(null);
       this.dialog().open();
@@ -463,6 +503,7 @@ export class PoolBracketPanel {
         seedOrder: [...this.order()],
         ...(replace && { replace }),
       });
+      this.state.update((state) => ({ ...state, moved: false }));
       this.notice.set({
         kind: 'created',
         text: createdText(result.replaced, result.gameCount, roundCount(result.teamCount)),

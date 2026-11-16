@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { POOL_MESSAGES } from './pools';
 import { seedsFromPools, type PoolSeed, type PoolStanding } from './poolBracket';
 import type { Sport } from './sports';
-import { gameHasResult, replaceBracket } from './tournamentBracket';
+import { gameHasResult, replaceBracketGames } from './tournamentBracket';
 import { poolGames, poolSetup, refusePool } from './tournamentPools';
 
 export interface PoolResults {
@@ -11,7 +11,6 @@ export interface PoolResults {
   withoutResult: number;
   poolSizes: number[];
   ranked: (PoolSeed & { team: Doc<'teams'> })[];
-  unassigned: Doc<'teams'>[];
 }
 
 export async function poolResults(
@@ -40,7 +39,6 @@ export async function poolResults(
       ...seed,
       team: teamOf.get(seed.teamId)!,
     })),
-    unassigned: setup.unassigned,
   };
 }
 
@@ -69,10 +67,7 @@ export async function replaceBracketFromPools(
   const advancingCount = advancePerPool * results.poolSizes.length;
   const advancing = results.ranked.slice(0, advancingCount).map((seed) => seed.team);
   const seeds = seedOrder ? chosenOrder(advancing, seedOrder) : advancing;
-  const others = [
-    ...results.ranked.slice(advancingCount).map((seed) => seed.team),
-    ...results.unassigned,
-  ];
-  const gameCount = await replaceBracket(ctx, tournament._id, seeds, replaced, others);
+  // `teams.seed` stays the split's order, which the pool tables keep for teams that nothing separates.
+  const gameCount = await replaceBracketGames(ctx, tournament._id, seeds, replaced);
   return { gameCount, teamCount: seeds.length };
 }

@@ -7,7 +7,7 @@ import {
   requireStaffOrForbidden,
   requireTournamentOrganizer,
 } from './lib/access';
-import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, roundName } from './lib/bracket';
+import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, roundName, seedOrderOfBracket } from './lib/bracket';
 import {
   POOL_MESSAGES,
   checkPoolSizes,
@@ -43,6 +43,7 @@ import {
   restorePools,
 } from './lib/tournamentPools';
 import {
+  bracketExists,
   bracketGames,
   bracketHasResult,
   clearResult,
@@ -328,6 +329,8 @@ const poolsValidator = v.object({
           /** `null` for a game with no result, and for a tie. */
           winnerTeamId: v.union(v.null(), v.id('teams')),
           result: v.union(v.null(), resultViewValidator),
+          /** The bracket exists, so the result cannot change. */
+          locked: v.boolean(),
           reports: v.array(reportViewValidator),
         }),
       ),
@@ -365,6 +368,7 @@ export const getPools = query({
       [...setup.seeds, ...setup.unconfirmed].map((team) => [team._id, team.name]),
     );
     const reports = await reportViewsByGame(ctx, games, names);
+    const bracketMade = await bracketExists(ctx, tournament._id);
     const teamView = (team: Doc<'teams'>) => ({
       teamId: team._id,
       name: team.name,
@@ -388,6 +392,7 @@ export const getPools = query({
             ),
             winnerTeamId: game.winnerTeamId ?? null,
             result: gameHasResult(game) ? resultViewOf(game) : null,
+            locked: bracketMade,
             reports: reports.get(game._id) ?? [],
           })),
       })),
@@ -587,6 +592,8 @@ export const getPoolBracket = query({
       gamesWithoutResult: v.number(),
       /** The seeds when every pool game has a confirmed result, else empty: the pool winners, then the runners-up, and so on, up to the smallest pool's size from each pool. */
       ranked: v.array(rankedTeamValidator),
+      /** The existing bracket's teams in seed order, else empty, so the page starts from the bracket it shows. */
+      bracketSeeds: v.array(v.id('teams')),
       bracket: setupValidator.fields.bracket,
     }),
   ),
@@ -619,6 +626,7 @@ export const getPoolBracket = query({
             place: seed.place,
           }))
         : [],
+      bracketSeeds: seedOrderOfBracket(games) as Id<'teams'>[],
       bracket:
         games.length === 0
           ? null
@@ -654,6 +662,12 @@ export const createBracketFromPools = mutation({
       refusePool({
         code: 'poolGamesPending',
         message: POOL_MESSAGES.poolGamesPending(results.withoutResult),
+      });
+    }
+    if (registrationIsOpen(tournament, Date.now())) {
+      refuseBracket({
+        code: 'registrationOpen',
+        message: BRACKET_MESSAGES.registrationOpen(tournament.registrationDeadline),
       });
     }
     const issue = checkAdvance(results.poolSizes, advancePerPool);

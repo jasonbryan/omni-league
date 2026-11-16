@@ -164,21 +164,26 @@ describe('tournamentGames.createBracketFromPools', () => {
     ]);
   });
 
-  test('saves the bracket seeds, then the teams that did not advance in order after them', async () => {
+  test('leaves every team’s seed as the split had it, so the pool tables keep their order', async () => {
     const { s, teamIds } = await world();
     await playPoolGames(s, teamIds);
-    await create(s, { advancePerPool: 2 });
-    const seeds = await s.t.run(async (ctx) =>
-      (await ctx.db.query('teams').collect()).map((team) => [team.name, team.seed]),
-    );
-    expect(seeds.sort()).toEqual([
-      ['Team 01', 1],
-      ['Team 02', 2],
-      ['Team 03', 4],
-      ['Team 04', 3],
-      ['Team 05', 5],
-      ['Team 06', 6],
-    ]);
+    const seedsOf = () =>
+      s.t.run(async (ctx) =>
+        (await ctx.db.query('teams').collect())
+          .map((team) => [team.name, team.seed ?? null])
+          .sort(),
+      );
+    await s.t.run(async (ctx) => {
+      for (const [index, teamId] of teamIds.entries()) {
+        await ctx.db.patch('teams', teamId, { seed: index + 1 });
+      }
+    });
+    const before = await seedsOf();
+    await create(s, {
+      advancePerPool: 2,
+      seedOrder: [teamIds[1], teamIds[0], teamIds[2], teamIds[3]],
+    });
+    expect(await seedsOf()).toEqual(before);
   });
 
   test('uses the order the organizer chose when it holds the same teams', async () => {
@@ -294,6 +299,35 @@ describe('tournamentGames.createBracketFromPools', () => {
       { name: 'Team 01', seed: 1 },
       { name: 'Team 03', seed: 4 },
     ]);
+    expect(page.bracket?.rounds[0].games[1].teams).toEqual([
+      { name: 'Team 02', seed: 2 },
+      { name: 'Team 04', seed: 3 },
+    ]);
+  });
+
+  test('refuses while registration is open', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    await s.t.run((ctx) =>
+      ctx.db.patch('tournaments', s.gulf, { registrationDeadline: '2031-01-01' }),
+    );
+    expect(await create(s, { advancePerPool: 2 }).catch(refusalOf)).toMatchObject({
+      code: 'registrationOpen',
+    });
+  });
+
+  test('numbers the seeds on the public page from the organizer’s order', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    await create(s, {
+      advancePerPool: 2,
+      seedOrder: [teamIds[1], teamIds[0], teamIds[2], teamIds[3]],
+    });
+    const page = (await s.t.query(api.tournaments.getPublicPage, TOURNAMENT_SLUGS))!;
+    expect(page.bracket?.rounds[0].games[0].teams).toEqual([
+      { name: 'Team 02', seed: 1 },
+      { name: 'Team 04', seed: 4 },
+    ]);
   });
 
   test('shows the bracket with its games in the view', async () => {
@@ -302,6 +336,17 @@ describe('tournamentGames.createBracketFromPools', () => {
     await create(s, { advancePerPool: 2 });
     const shown = (await view(s))!;
     expect(shown.bracket?.rounds.map((round) => round.name)).toEqual(['Semifinals', 'Final']);
+  });
+
+  test('returns the bracket’s teams in seed order, empty before a bracket exists', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    expect((await view(s))!.bracketSeeds).toEqual([]);
+    await create(s, {
+      advancePerPool: 2,
+      seedOrder: [teamIds[1], teamIds[0], teamIds[2], teamIds[3]],
+    });
+    expect((await view(s))!.bracketSeeds).toEqual([teamIds[1], teamIds[0], teamIds[2], teamIds[3]]);
   });
 });
 
@@ -361,6 +406,18 @@ describe('pool results once the bracket exists', () => {
     ).toMatchObject(frozen);
   });
 
+  test('marks every pool game locked in the pools view, and none before the bracket', async () => {
+    const { s, teamIds } = await world();
+    await playPoolGames(s, teamIds);
+    const lockedOf = async () =>
+      (await s.as(s.admin).query(api.tournamentGames.getPools, TOURNAMENT_SLUGS))!.pools.flatMap(
+        (pool) => pool.games.map((game) => game.locked),
+      );
+    expect(await lockedOf()).toEqual(Array(6).fill(false));
+    await create(s, { advancePerPool: 2 });
+    expect(await lockedOf()).toEqual(Array(6).fill(true));
+  });
+
   test('leaves the pool results as they were', async () => {
     const { s, game } = await withBracket();
     await s
@@ -379,6 +436,46 @@ describe('pool results once the bracket exists', () => {
       .mutation(api.tournamentGames.enterResult, { gameId: semi._id, score: set(21, 10) });
     const stored = (await s.t.run((ctx) => ctx.db.get('tournamentGames', semi._id)))!;
     expect(stored.winnerTeamId).toBe(semi.teamIds[0]);
+  });
+});
+
+describe('a pool whose teams nothing separates', () => {
+  async function levelWorld() {
+    const { s, teamIds } = await world();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('tournaments', s.gulf, { sport: 'soccer' });
+      const tournament = (await ctx.db.get('tournaments', s.gulf))!;
+      await ctx.db.patch('programs', tournament.programId, { sport: 'soccer' });
+    });
+    for (const game of await poolGames(s)) {
+      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+        gameId: game._id,
+        score: { kind: 'goals', a: 1, b: 1 },
+      });
+    }
+    return { s, teamIds };
+  }
+
+  const tableOf = async (s: TournamentWorld) =>
+    (await s.t.query(api.tournaments.getPublicPage, TOURNAMENT_SLUGS))!.pools!.map((pool) =>
+      pool.standings.map((row) => row.name),
+    );
+
+  test('keeps the pool table and the advancing team when the organizer swaps two pool-mates in the bracket', async () => {
+    const { s, teamIds } = await levelWorld();
+    const before = await tableOf(s);
+    expect(before).toEqual([
+      ['Team 01', 'Team 04', 'Team 05'],
+      ['Team 02', 'Team 03', 'Team 06'],
+    ]);
+    await create(s, {
+      advancePerPool: 2,
+      seedOrder: [teamIds[3], teamIds[1], teamIds[0], teamIds[2]],
+    });
+    expect(await tableOf(s)).toEqual(before);
+    await create(s, { advancePerPool: 1, replace: true });
+    const [final] = await bracketGames(s);
+    expect(await teamNames(s, final.teamIds)).toEqual(['Team 01', 'Team 02']);
   });
 });
 

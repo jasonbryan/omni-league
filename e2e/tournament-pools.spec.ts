@@ -1143,29 +1143,29 @@ test.describe('Tournaments: bracket from pools', () => {
 
     await page.reload();
     await expect(createBracket(page)).toHaveText('Recreate bracket');
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Dune', 'Bay', 'Cove']);
+    await expect(bracketPanel(page).locator('[data-slot="seed-note"]')).toHaveCount(0);
     await expect(
       bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').first(),
     ).toHaveText('Game 1: Ace v Cove');
   });
 
-  test.describe('a pool result after the bracket exists', () => {
-    test.use({ expectedConvexErrors: ['tournamentGames:correctResult'] });
-
-    test('cannot be corrected, and the refusal says why', async ({ page }) => {
-      const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
-      await seedPoolPlay(tenant, SLUG, 2);
-      await playPools(tenant);
-      await seedPoolBracket(tenant, SLUG, 2);
-      await page.goto(managePath);
-      const game = poolGame(page, ROUND_ONE_OF_A);
-      await correctButton(game).click();
-      await scoreInput(game, 'a1').fill('20');
-      await saveButton(game).click();
-      await expect(game.getByRole('alert')).toContainText(
-        'The bracket is created, so pool results cannot change.',
-      );
-      await expect(gameResult(game)).toHaveText('Dune 21–5 Eddy. Dune won.');
-    });
+  test('once the bracket exists a pool game shows why it cannot change, with no Correct result or Clear result', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant);
+    await seedPoolBracket(tenant, SLUG, 2);
+    await page.goto(managePath);
+    const game = poolGame(page, ROUND_ONE_OF_A);
+    await expect(game.locator('[data-slot="locked"]')).toHaveText(
+      'The bracket is created, so pool results cannot change.',
+    );
+    await expect(gameResult(game)).toHaveText('Dune 21–5 Eddy. Dune won.');
+    await expect(correctButton(game)).toHaveCount(0);
+    await expect(clearButton(game)).toHaveCount(0);
+    await expectAccessible(page);
   });
 
   test(
