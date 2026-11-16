@@ -128,6 +128,14 @@ describe('the sport view queries', () => {
         .map(({ name, args }) => ({ name, args }))
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
+      {
+        name: 'camps:listOpenForOrganization',
+        args: { organizationSlug: 'gulf-coast-sport-social', sport: 'soccer' },
+      },
+      {
+        name: 'camps:listPublic',
+        args: { organizationSlug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' },
+      },
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
       {
         name: 'organizations:listPublicLeagueFacets',

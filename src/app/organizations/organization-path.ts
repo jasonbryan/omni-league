@@ -24,6 +24,10 @@ export type PublicOpenTournamentRows = FunctionReturnType<
   typeof api.tournaments.listOpenForOrganization
 >;
 
+export type PublicCampRows = FunctionReturnType<typeof api.camps.listPublic>['rows'];
+
+export type PublicOpenCampRows = FunctionReturnType<typeof api.camps.listOpenForOrganization>;
+
 export type PublicLeagueFacets = FunctionReturnType<
   typeof api.organizations.listPublicLeagueFacets
 >;
@@ -34,6 +38,8 @@ export type PublicOrganizationPage = PublicOrganizationHeader & {
   openSeasons?: PublicOpenSeasonRows;
   tournaments?: PublicTournamentRows;
   openTournaments?: PublicOpenTournamentRows;
+  camps?: PublicCampRows;
+  openCamps?: PublicOpenCampRows;
   facets?: PublicLeagueFacets;
 };
 
@@ -49,11 +55,12 @@ export function sportViewPath(orgSlug: string, segment: string): string {
   return `${organizationPath(orgSlug)}/sports/${encodeURIComponent(segment)}`;
 }
 
-export type PagedList = 'leagues' | 'locations' | 'tournaments';
+export type PagedList = 'leagues' | 'locations' | 'tournaments' | 'camps';
 
-/** A caller that lists no tournaments page leaves it out, which is page 1. */
+/** A caller that lists no tournaments or camps page leaves it out, which is page 1. */
 export type ListPages = Readonly<Record<'leagues' | 'locations', number>> & {
   readonly tournaments?: number;
+  readonly camps?: number;
 };
 
 /** The sport view names its leagues page `page`, which links already shared use. */
@@ -67,6 +74,7 @@ export function listPagesQuery(
     ...(pages.leagues > 1 && { [sportView ? 'page' : 'leagues']: pages.leagues }),
     ...(pages.locations > 1 && { locations: pages.locations }),
     ...((pages.tournaments ?? 1) > 1 && { tournamentsPage: pages.tournaments }),
+    ...((pages.camps ?? 1) > 1 && { campsPage: pages.camps }),
   };
 }
 

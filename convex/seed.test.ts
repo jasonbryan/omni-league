@@ -40,7 +40,7 @@ const ROWS = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 5,
+  tournaments: 6,
   camps: 3,
   campSessions: 4,
   trainings: 1,
@@ -56,6 +56,7 @@ const NONE = {
   staffCounts: 0,
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
+  campFields: 0,
 };
 const NO_ROWS = {
   organizations: 0,
@@ -874,6 +875,7 @@ describe('seed:demo', () => {
         staffCounts: 2,
         staffInviteCounts: 2,
         draftLeagueCounts: 2,
+        campFields: 0,
       },
     });
 
@@ -1056,6 +1058,7 @@ describe('seed:demo', () => {
       DEMO_SEASONS,
       DEMO_RUN_SEASONS,
       DEMO_TOURNAMENTS,
+      DEMO_CAMPS,
       DEMO_ACCOUNTS,
       DEMO_ACCOUNT_DOMAIN,
       DEMO_TEAM_SEASON,
@@ -1067,6 +1070,8 @@ describe('seed:demo', () => {
       DEMO_BRACKET_TEAMS,
       DEMO_POOL_TOURNAMENT,
       DEMO_POOL_TEAMS,
+      DEMO_HARVEST_TOURNAMENT,
+      DEMO_HARVEST_TEAMS,
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
       DEMO_WAITLIST_ENTRY,
@@ -1081,6 +1086,7 @@ describe('seed:demo', () => {
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_TOURNAMENTS)).toBe(true);
+    expect(Array.isArray(DEMO_CAMPS)).toBe(true);
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual([
       'admin',
       'organizer',
@@ -1097,6 +1103,8 @@ describe('seed:demo', () => {
     expect(DEMO_BRACKET_TEAMS).toHaveLength(6);
     expect(DEMO_POOL_TOURNAMENT.tournamentSlug).toBe('fall-pool-play-open');
     expect(DEMO_POOL_TEAMS).toHaveLength(8);
+    expect(DEMO_HARVEST_TOURNAMENT.tournamentSlug).toBe('harvest-pools-classic');
+    expect(DEMO_HARVEST_TEAMS).toHaveLength(6);
     expect(DEMO_TOURNAMENT_TEAMS.map((team) => team.name)).toEqual([
       'Sand Crabs',
       'Beach Bombers',
@@ -1233,7 +1241,7 @@ describe('seed:demo tournaments', () => {
     expect(second.tournaments).toBe(0);
     const { organizationId, location, program, tournaments, tournament } =
       await winterDoublesClassic(t);
-    expect(tournaments).toHaveLength(5);
+    expect(tournaments).toHaveLength(6);
     expect(program).toMatchObject({
       organizationId,
       type: 'tournament',
@@ -1301,8 +1309,13 @@ describe('seed:demo tournaments', () => {
     const beach = { organizationSlug: slug, page: 1, sport: 'beachVolleyball' as const };
     const names = (rows: { name: string }[]) => rows.map((row) => row.name);
     const OPEN = ['Gulf Coast Beach Open', 'Gulf Coast King of the Beach'];
-    // The Labor Day Sand Slam and the Fall Pool Play Open have closed registration and end first, so only the lists of upcoming tournaments hold them.
-    const UPCOMING = ['Labor Day Sand Slam', 'Fall Pool Play Open', ...OPEN];
+    // The Labor Day Sand Slam, the Fall Pool Play Open, and the Harvest Pools Classic have closed registration and end first, so only the lists of upcoming tournaments hold them.
+    const UPCOMING = [
+      'Labor Day Sand Slam',
+      'Fall Pool Play Open',
+      'Harvest Pools Classic',
+      ...OPEN,
+    ];
     expect(
       names((await t.query(api.tournaments.listPublic, { organizationSlug: slug, page: 1 })).rows),
     ).toEqual(UPCOMING);
@@ -1332,9 +1345,9 @@ describe('seed:demo tournaments', () => {
       });
     });
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.tournaments).toBe(4);
+    expect(result.tournaments).toBe(5);
     const held = await winterDoublesClassic(t);
-    expect(held.tournaments).toHaveLength(4);
+    expect(held.tournaments).toHaveLength(5);
     expect(held.program?.type).toBe('league');
   });
 });
@@ -1392,6 +1405,40 @@ describe('seed:demo camps', () => {
     const fall = byName('Fall Break Camp');
     expect(fall.program).toMatchObject({ type: 'camp', status: 'draft', slug: 'fall-break-camp' });
     expect(fall.camp.minimumAge).toBeLessThanOrEqual(fall.camp.maximumAge);
+  });
+
+  test('lists the published camps on the organization page with Junior Beach Volleyball Camp’s open sessions, and not the draft', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const args = { organizationSlug: 'gulf-coast-sport-social' };
+    const listed = await t.query(api.camps.listPublic, { ...args, page: 1 });
+    expect(listed.rows.map((row) => row.name).sort()).toEqual([
+      'Adult Beach Skills Camp',
+      'Junior Beach Volleyball Camp',
+    ]);
+    const open = await t.query(api.camps.listOpenForOrganization, args);
+    expect(
+      open.filter((card) => card.name === 'Junior Beach Volleyball Camp').map((c) => c.sessionName),
+    ).toEqual(['Week 1', 'Week 2', 'Week 3']);
+  });
+
+  test('sets the status, sport, and last session end of camps written before they were kept, and a second run changes none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      for (const camp of await ctx.db.query('camps').collect()) {
+        await ctx.db.patch('camps', camp._id, {
+          status: undefined,
+          sport: undefined,
+          lastSessionEndDate: undefined,
+        });
+      }
+    });
+    const args = { organizationSlug: 'gulf-coast-sport-social', page: 1 };
+    expect((await t.query(api.camps.listPublic, args)).rows).toEqual([]);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.campFields).toBe(3);
+    expect((await t.query(api.camps.listPublic, args)).rows).toHaveLength(2);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.campFields).toBe(0);
   });
 
   test('adds only the camp whose web address is free where a program holds the other', async () => {
@@ -1749,6 +1796,7 @@ describe('seed:demo backfill against a recount', () => {
       staffCounts: 1,
       staffInviteCounts: 1,
       draftLeagueCounts: 1,
+      campFields: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({

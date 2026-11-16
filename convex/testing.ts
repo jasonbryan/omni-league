@@ -59,6 +59,7 @@ import {
   type LeagueSeedInput,
 } from './lib/tenantWrites';
 import { poolValidator } from './lib/pools';
+import { checkAdvance } from './lib/poolBracket';
 import { throttleKey } from './lib/signInThrottle';
 import { teamSortName } from './lib/teamInput';
 import {
@@ -66,6 +67,7 @@ import {
   setsPerGameValidator,
   structureValidator,
 } from './lib/tournamentEdit';
+import { poolResults, replaceBracketFromPools } from './lib/tournamentPoolBracket';
 import {
   assignPools,
   moveToPool,
@@ -891,6 +893,40 @@ export const seedTournamentPools = internalMutation({
     await assignPools(ctx, await poolSetup(ctx, tournament), poolCount);
     const { pools } = await poolSetup(ctx, tournament);
     return { gameCount: await replacePoolGames(ctx, tournament._id, pools, []) };
+  },
+});
+
+/** The bracket from the pool finish, through the writer `tournamentGames.createBracketFromPools` uses. Every pool game needs a result. Skips the organizer check. */
+export const seedPoolBracket = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    tournamentSlug: v.string(),
+    advancePerPool: v.number(),
+  },
+  returns: v.object({ gameCount: v.number() }),
+  handler: async (ctx, { organizationSlug, tournamentSlug, advancePerPool }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
+    if (!found) throw new Error(`No tournament has the slug ${JSON.stringify(tournamentSlug)}`);
+    const { tournament, program } = found;
+    if (await bracketExists(ctx, tournament._id)) {
+      throw new Error(`The tournament ${JSON.stringify(tournamentSlug)} has a bracket already`);
+    }
+    const results = await poolResults(ctx, tournament, program.sport);
+    if (results.gameCount === 0 || results.withoutResult > 0) {
+      throw new Error('Every pool game needs a result first');
+    }
+    const issue = checkAdvance(results.poolSizes, advancePerPool);
+    if (issue) throw new Error(issue.message);
+    const { gameCount } = await replaceBracketFromPools(
+      ctx,
+      tournament,
+      results,
+      advancePerPool,
+      [],
+    );
+    return { gameCount };
   },
 });
 

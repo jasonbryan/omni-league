@@ -176,7 +176,7 @@ async function refusal(call: Promise<unknown>) {
 }
 
 describe('camps.publish', () => {
-  test('an org admin publishes a camp with a session: its program reads published and nothing else changes', async () => {
+  test('an org admin publishes a camp with a session: its program and its camp row read published and nothing else changes', async () => {
     const s = await setup();
     await addSession(s, s.junior);
     const before = await snapshot(s.t);
@@ -187,10 +187,14 @@ describe('camps.publish', () => {
     ).toMatchObject([{ _id: s.junior.programId, type: 'camp' }]);
     expect({
       ...after,
+      camps: after.camps.map((camp) =>
+        camp._id === s.junior.campId ? { ...camp, status: 'draft' as const } : camp,
+      ),
       programs: after.programs.map((program) =>
         program._id === s.junior.programId ? { ...program, status: 'draft' as const } : program,
       ),
     }).toEqual(before);
+    expect(after.camps.find((camp) => camp._id === s.junior.campId)?.status).toBe('published');
   });
 
   test('refuses a camp with no session as "Add a session first." and keeps the draft', async () => {

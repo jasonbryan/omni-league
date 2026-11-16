@@ -142,6 +142,25 @@ export function planBracket(teamCount: number): PlannedGame[] {
   return placeByes(games);
 }
 
+/** The teams in seed order, read from where each stands in the first round, so the order needs no stored seed. */
+export function seedOrderOfBracket(
+  games: readonly { round: number; slot: number; teamIds: readonly (string | null)[] }[],
+): string[] {
+  const first = games.filter((game) => game.round === 1);
+  const teamCount = first.flatMap((game) => game.teamIds).filter((id) => id !== null).length;
+  if (teamCount < MIN_BRACKET_TEAMS) return [];
+  const order: string[] = [];
+  for (const planned of planBracket(teamCount)) {
+    if (planned.round !== 1) continue;
+    const game = first.find((row) => row.slot === planned.slot);
+    for (const [side, seed] of planned.entrants.entries()) {
+      const teamId = game?.teamIds[side];
+      if (seed !== null && teamId) order[seed - 1] = teamId;
+    }
+  }
+  return order.filter((teamId) => teamId !== undefined);
+}
+
 function placeByes(games: PlannedGame[]): PlannedGame[] {
   return games.map((game) => {
     if (game.round === 1) return game;

@@ -7,6 +7,7 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
+import { seedTenantWithCamps } from './support/camp';
 import { RAW_HTTP } from './support/raw-http';
 import {
   dateFromToday,
@@ -379,6 +380,83 @@ test.describe('the sport view: tournaments', () => {
       const softball = await fetchRawHtml(request, `${tenant.path}/sports/softball`);
       expect(softball.status).toBe(200);
       expect(softball.html).not.toContain('id="tournaments"');
+    },
+  );
+});
+
+test.describe('the sport view: camps', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  const textOfSection = (html: string, id: string) => {
+    const at = html.indexOf(`id="${id}"`);
+    return at === -1
+      ? undefined
+      : textOf(html.slice(html.indexOf('>', at) + 1, html.indexOf('</section>', at)));
+  };
+
+  const camp = (
+    name: string,
+    sport: 'beachVolleyball' | 'soccer',
+    place: string,
+    starts: number,
+  ) => ({
+    name,
+    slug: name.toLowerCase().replace(/ /g, '-'),
+    sport,
+    locations: [place],
+    minimumAge: 9,
+    maximumAge: 14,
+    sessions: [
+      {
+        name: 'Week 1',
+        startDate: dateFromToday(starts),
+        endDate: dateFromToday(starts + 4),
+        places: 20,
+        registrationDeadline: dateFromToday(starts - 3),
+      },
+    ],
+  });
+
+  test(
+    'lists only the camps of the sport under a heading that names it, and no section for a sport with none',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenantWithCamps(
+        {
+          name: 'E2E Sport Camps',
+          locations: [BAYSIDE, NORTH_BEACH],
+          leagues: [
+            { name: 'Coed 7v7 Rec', sport: 'soccer', locations: [BAYSIDE.name] },
+            { name: 'Thursday Coed 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
+            { name: 'Slow Pitch', sport: 'softball', locations: [BAYSIDE.name] },
+          ],
+        },
+        [
+          camp('Junior Beach Volleyball Camp', 'beachVolleyball', NORTH_BEACH.name, 14),
+          camp('Bayside Soccer Camp', 'soccer', BAYSIDE.name, 21),
+        ],
+      );
+
+      const beach = await fetchRawHtml(request, `${tenant.path}/sports/beach-volleyball`);
+      expect(beach.status).toBe(200);
+      expect(textOfSection(beach.html, 'camps')).toMatch(
+        /^Beach volleyball camps Junior Beach Volleyball Camp Ages 9 to 14 Beach volleyball · North Beach Sand Courts Registration open /,
+      );
+      expect(textOfSection(beach.html, 'camps')).not.toContain('Bayside Soccer Camp');
+      expect(beach.html).toMatch(
+        new RegExp(`<a\\b[^>]*href="${tenant.path}/camps/junior-beach-volleyball-camp#sessions"`),
+      );
+      const open = textOfSection(beach.html, 'registration-open');
+      expect(open).toContain('Junior Beach Volleyball Camp');
+      expect(open).not.toContain('Bayside Soccer Camp');
+
+      const soccer = await fetchRawHtml(request, `${tenant.path}/sports/soccer`);
+      expect(textOfSection(soccer.html, 'camps')).toMatch(/^Soccer camps Bayside Soccer Camp /);
+      expect(textOfSection(soccer.html, 'camps')).not.toContain('Junior Beach');
+
+      const softball = await fetchRawHtml(request, `${tenant.path}/sports/softball`);
+      expect(softball.status).toBe(200);
+      expect(softball.html).not.toContain('id="camps"');
     },
   );
 });

@@ -1,7 +1,13 @@
 import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { slugify } from '../../convex/lib/slugs';
 import { sportName } from '../../convex/lib/sports';
-import { DEMO, DEMO_RUN_SEASONS, DEMO_SEASONS, DEMO_TOURNAMENTS } from '../../convex/seed';
+import {
+  DEMO,
+  DEMO_CAMPS,
+  DEMO_RUN_SEASONS,
+  DEMO_SEASONS,
+  DEMO_TOURNAMENTS,
+} from '../../convex/seed';
 import type { PublicOpenSeasonRows } from '../../src/app/organizations/organization-path';
 import { compare, openSeasonsBySoonestDeadline } from '../../src/app/organizations/season-status';
 
@@ -81,6 +87,15 @@ export function expectedRegistrationOpenCards(orgSlug: string, nowMs: number): E
     if (tournament.organizationSlug !== orgSlug || tournament.status !== 'published') continue;
     if (today > deadline || today >= start) continue;
     cards.push({ deadline, title: tournament.name, subtitle: 'Tournament' });
+  }
+  for (const camp of DEMO_CAMPS) {
+    if (camp.organizationSlug !== orgSlug || camp.published !== true) continue;
+    for (const session of camp.sessions) {
+      const start = addCalendarDays(today, session.startDaysFromRun);
+      const deadline = addCalendarDays(start, -session.deadlineDaysBeforeStart);
+      if (today > deadline || today >= start) continue;
+      cards.push({ deadline, title: camp.name, subtitle: session.name });
+    }
   }
   return cards
     .sort(

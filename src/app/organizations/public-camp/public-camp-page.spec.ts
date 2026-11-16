@@ -133,7 +133,7 @@ describe('PublicCampPage skeleton names', () => {
     const skeleton = await loading(NAMES);
     expect(
       [...skeleton.querySelectorAll('[data-testid="skeleton-breadcrumb"] li > span')].map(text),
-    ).toEqual(['Gulf Coast Sport & Social']);
+    ).toEqual(['Gulf Coast Sport & Social', 'Camps']);
     expect(text(skeleton.querySelector('[data-testid="skeleton-heading"]'))).toBe(
       'Junior Beach Volleyball Camp',
     );
@@ -173,11 +173,14 @@ describe('PublicCampPage populated', () => {
     await settle(harness);
   });
 
-  it('renders the breadcrumb with the organization, and the camp as the only h1', () => {
+  it('renders the breadcrumb organization then Camps, and the camp as the only h1', () => {
     const main = host(harness).querySelector('main');
     const links = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] a') ?? [])];
-    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social']);
-    expect(links.map((a) => a.getAttribute('href'))).toEqual([`/organizations/${ORG_SLUG}`]);
+    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Camps']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      `/organizations/${ORG_SLUG}`,
+      `/organizations/${ORG_SLUG}#camps`,
+    ]);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Junior Beach Volleyball Camp');
   });
@@ -186,6 +189,9 @@ describe('PublicCampPage populated', () => {
     expect(slotsOf(host(harness).querySelector('main nav[aria-label="Breadcrumb"]'))).toEqual([
       'breadcrumb',
       'breadcrumb-list',
+      'breadcrumb-item',
+      'breadcrumb-link',
+      'breadcrumb-separator',
       'breadcrumb-item',
       'breadcrumb-link',
     ]);

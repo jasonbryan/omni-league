@@ -1,11 +1,21 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { CAMP_MESSAGES } from './lib/campInput';
-import { defaultDivision, insertDraftTournament, insertTenant } from './lib/tenantWrites';
+import { PUBLIC_LIST_MAX_ROWS } from './lib/publicList';
+import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
+import {
+  defaultDivision,
+  deleteCampSession,
+  insertCampSession,
+  insertDraftCamp,
+  insertDraftTournament,
+  insertTenant,
+  publishCamp,
+} from './lib/tenantWrites';
 import schema from './schema';
 import { modules, tournamentProgramFields } from './test.setup';
 import { ADMIN_CAMPS_LIMIT } from './camps';
@@ -139,6 +149,8 @@ describe('camps.create', () => {
       _creationTime: camp._creationTime,
       programId: program?._id,
       organizationId: s.organizationA,
+      status: 'draft',
+      sport: 'beachVolleyball',
       minimumAge: 9,
       maximumAge: 14,
     });
@@ -479,5 +491,524 @@ describe('camps.listForOrganization', () => {
         label,
       ).rejects.toThrow(message);
     }
+  });
+});
+
+const inDays = (days: number) => addCalendarDays(dateAtUtcMinus12(Date.now()), days);
+
+interface DatedSession {
+  name?: string;
+  startInDays: number;
+  endInDays?: number;
+  deadlineInDays?: number;
+  places?: number;
+  registeredCount?: number;
+}
+
+interface DatedCamp {
+  slug: string;
+  name?: string;
+  organizationId?: Id<'organizations'>;
+  sport?: 'beachVolleyball' | 'soccer';
+  status?: 'draft' | 'published';
+  sessions?: readonly DatedSession[];
+}
+
+async function insertDated(s: Setup, camps: readonly DatedCamp[]) {
+  await s.t.run(async (ctx) => {
+    for (const camp of camps) {
+      const organizationId = camp.organizationId ?? s.organizationA;
+      const campId = await insertDraftCamp(ctx, organizationId, {
+        name: camp.name ?? camp.slug,
+        slug: camp.slug,
+        sport: camp.sport ?? 'beachVolleyball',
+        locationIds: organizationId === s.organizationA ? [s.bravo, s.alpha] : [s.bField],
+        minimumAge: 9,
+        maximumAge: 14,
+      });
+      for (const [i, session] of (camp.sessions ?? [{ startInDays: 10 }]).entries()) {
+        await insertCampSession(ctx, (await ctx.db.get('camps', campId))!, {
+          name: session.name ?? `Week ${i + 1}`,
+          startDate: inDays(session.startInDays),
+          endDate: inDays(session.endInDays ?? session.startInDays + 4),
+          places: session.places ?? 20,
+          registrationDeadline: inDays(session.deadlineInDays ?? session.startInDays - 3),
+        });
+      }
+      if ((camp.status ?? 'published') === 'published') {
+        await publishCamp(ctx, (await ctx.db.get('camps', campId))!);
+      }
+    }
+  });
+}
+
+const campSlugs = (list: { rows: readonly { slug: string }[] }) => list.rows.map((row) => row.slug);
+
+describe('camps.listPublic', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const listPublic = (s: Setup, args: object = {}) =>
+    s.t.query(api.camps.listPublic, { organizationSlug: 'org-a', page: 1, ...args });
+
+  test('gives a signed-out caller a published upcoming camp with its ages, sport, locations, and sessions', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'junior-beach-volleyball-camp',
+        name: 'Junior Beach Volleyball Camp',
+        sessions: [{ name: 'Week 1', startInDays: 14, endInDays: 18, deadlineInDays: 10 }],
+      },
+    ]);
+    expect(await listPublic(s)).toEqual({
+      rows: [
+        {
+          name: 'Junior Beach Volleyball Camp',
+          slug: 'junior-beach-volleyball-camp',
+          sportName: 'Beach volleyball',
+          minimumAge: 9,
+          maximumAge: 14,
+          locationNames: ['bravo Beach', 'Alpha Field'],
+          lastSessionEndDate: inDays(18),
+          sessions: [
+            {
+              name: 'Week 1',
+              startDate: inDays(14),
+              endDate: inDays(18),
+              registrationDeadline: inDays(10),
+              placesLeft: 20,
+            },
+          ],
+        },
+      ],
+      page: 1,
+      pageCount: 1,
+      total: 1,
+    });
+  });
+
+  test('gives every caller the same answer', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'open' }]);
+    const anonymous = await listPublic(s);
+    for (const caller of [s.adminA, s.adminB, s.t.withIdentity(identity('stranger'))]) {
+      expect(
+        await caller.query(api.camps.listPublic, { organizationSlug: 'org-a', page: 1 }),
+      ).toEqual(anonymous);
+    }
+  });
+
+  test('leaves out a draft, a camp whose sessions have all ended, and one with no session, and keeps one whose last session ends today', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'draft', status: 'draft' },
+      { slug: 'ended', sessions: [{ startInDays: -9, endInDays: -5 }] },
+      { slug: 'no-session', status: 'draft', sessions: [] },
+      { slug: 'ends-today', sessions: [{ startInDays: -4, endInDays: 0 }] },
+      { slug: 'upcoming' },
+    ]);
+    expect(campSlugs(await listPublic(s))).toEqual(['ends-today', 'upcoming']);
+  });
+
+  test('keeps a camp whose next session is full in the list with all its unended sessions, so the page can show a later open one, and gives the full one no open card', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'full',
+        sessions: [
+          { name: 'Week 1', startInDays: 10, places: 5 },
+          { name: 'Week 2', startInDays: 20 },
+        ],
+      },
+    ]);
+    await s.t.run(async (ctx) => {
+      const week1 = (await ctx.db.query('campSessions').collect()).find(
+        (session) => session.name === 'Week 1',
+      );
+      await ctx.db.patch('campSessions', week1!._id, { registeredCount: 5 });
+    });
+    const listed = await listPublic(s);
+    expect(campSlugs(listed)).toEqual(['full']);
+    expect(listed.rows[0].sessions.map((session) => [session.name, session.placesLeft])).toEqual([
+      ['Week 1', 0],
+      ['Week 2', 20],
+    ]);
+    expect(
+      (await s.t.query(api.camps.listOpenForOrganization, { organizationSlug: 'org-a' })).map(
+        (card) => card.sessionName,
+      ),
+    ).toEqual(['Week 2']);
+  });
+
+  test('lists the camp whose last session ends soonest first', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'late', sessions: [{ startInDays: 40 }] },
+      { slug: 'early', sessions: [{ startInDays: 5 }] },
+      {
+        slug: 'long',
+        sessions: [{ startInDays: 6 }, { name: 'Week 2', startInDays: 20 }],
+      },
+    ]);
+    expect(campSlugs(await listPublic(s))).toEqual(['early', 'long', 'late']);
+  });
+
+  test('puts 7 upcoming camps on two pages of 5 and 2, and shows page 1 for a page past the last', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: 7 }, (_, i) => ({
+        slug: `camp-${i + 1}`,
+        sessions: [{ startInDays: 10 + i }],
+      })),
+    );
+    const first = await listPublic(s);
+    expect(campSlugs(first)).toEqual(['camp-1', 'camp-2', 'camp-3', 'camp-4', 'camp-5']);
+    expect([first.page, first.pageCount, first.total]).toEqual([1, 2, 7]);
+    const second = await listPublic(s, { page: 2 });
+    expect(campSlugs(second)).toEqual(['camp-6', 'camp-7']);
+    expect([second.page, second.pageCount, second.total]).toEqual([2, 2, 7]);
+    for (const page of [3, 0, -1, 1.5]) {
+      expect(await listPublic(s, { page }), String(page)).toEqual(first);
+    }
+  });
+
+  test('is empty, with no pages, for an organization with no upcoming camp and for an unknown one', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'ended', sessions: [{ startInDays: -9, endInDays: -8 }] }]);
+    const empty = { rows: [], page: 1, pageCount: 0, total: 0 };
+    expect(await listPublic(s)).toEqual(empty);
+    expect(await s.t.query(api.camps.listPublic, { organizationSlug: 'nowhere', page: 1 })).toEqual(
+      empty,
+    );
+  });
+
+  test('lists only the organization’s own camps', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'a-camp' }, { slug: 'b-camp', organizationId: s.organizationB }]);
+    expect(campSlugs(await listPublic(s))).toEqual(['a-camp']);
+  });
+
+  test('narrows to one sport, with the count and pages of that sport', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'sand-1', sessions: [{ startInDays: 10 }] },
+      { slug: 'soccer-1', sport: 'soccer', sessions: [{ startInDays: 11 }] },
+      { slug: 'sand-2', sessions: [{ startInDays: 12 }] },
+    ]);
+    const sand = await listPublic(s, { sport: 'beachVolleyball' });
+    expect(campSlugs(sand)).toEqual(['sand-1', 'sand-2']);
+    expect(sand.total).toBe(2);
+    expect(campSlugs(await listPublic(s, { sport: 'soccer' }))).toEqual(['soccer-1']);
+  });
+
+  test('returns the sessions that had not ended when the query ran, in start order, so the page picks the next one by its own clock', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'three-weeks',
+        sessions: [
+          { name: 'Week 3', startInDays: 19, endInDays: 23, deadlineInDays: 15 },
+          { name: 'Week 1', startInDays: -6, endInDays: -2, deadlineInDays: -9 },
+          { name: 'Week 2', startInDays: 5, endInDays: 9, deadlineInDays: 1 },
+        ],
+      },
+    ]);
+    const names = async () => (await listPublic(s)).rows[0]?.sessions.map((row) => row.name);
+    expect(await names()).toEqual(['Week 2', 'Week 3']);
+
+    vi.useFakeTimers({ now: Date.now() + 10 * 24 * 60 * 60 * 1000 });
+    expect(await names()).toEqual(['Week 3']);
+    vi.setSystemTime(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    expect(campSlugs(await listPublic(s))).toEqual([]);
+  });
+
+  test('reads no further than the row limit', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: PUBLIC_LIST_MAX_ROWS + 3 }, (_, i) => ({
+        slug: `camp-${String(i).padStart(3, '0')}`,
+        sessions: [{ startInDays: 1, endInDays: 1 + i }],
+      })),
+    );
+    const lastPage = await listPublic(s, { page: PUBLIC_LIST_MAX_ROWS / 5 });
+    expect(lastPage.total).toBeLessThanOrEqual(PUBLIC_LIST_MAX_ROWS);
+    expect(lastPage.pageCount).toBe(PUBLIC_LIST_MAX_ROWS / 5);
+    expect(campSlugs(lastPage)).toEqual(
+      Array.from(
+        { length: 5 },
+        (_, i) => `camp-${String(PUBLIC_LIST_MAX_ROWS - 5 + i).padStart(3, '0')}`,
+      ),
+    );
+  });
+
+  test('does not list a camp written before the status, sport, and last session end were kept, until it is brought up to date', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'legacy' }]);
+    await s.t.run(async (ctx) => {
+      const [camp] = await ctx.db.query('camps').collect();
+      await ctx.db.patch('camps', camp._id, {
+        status: undefined,
+        sport: undefined,
+        lastSessionEndDate: undefined,
+      });
+    });
+    expect(campSlugs(await listPublic(s))).toEqual([]);
+    expect(
+      await s.t.query(api.camps.getPublicPage, { orgSlug: 'org-a', campSlug: 'legacy' }),
+    ).not.toBeNull();
+  });
+});
+
+describe('camps.listOpenForOrganization', () => {
+  const listOpen = (s: Setup, args: object = {}) =>
+    s.t.query(api.camps.listOpenForOrganization, { organizationSlug: 'org-a', ...args });
+  const cards = async (s: Setup, args: object = {}) =>
+    (await listOpen(s, args)).map((card) => `${card.slug}/${card.sessionName}`);
+
+  test('gives a signed-out caller each open session of a published camp with its deadline and places left', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'junior-beach-volleyball-camp',
+        name: 'Junior Beach Volleyball Camp',
+        sessions: [{ name: 'Week 1', startInDays: 14, endInDays: 18, deadlineInDays: 10 }],
+      },
+    ]);
+    expect(await listOpen(s)).toEqual([
+      {
+        name: 'Junior Beach Volleyball Camp',
+        slug: 'junior-beach-volleyball-camp',
+        sportName: 'Beach volleyball',
+        minimumAge: 9,
+        maximumAge: 14,
+        locationNames: ['bravo Beach', 'Alpha Field'],
+        sessionName: 'Week 1',
+        startDate: inDays(14),
+        endDate: inDays(18),
+        registrationDeadline: inDays(10),
+        placesLeft: 20,
+      },
+    ]);
+  });
+
+  test('gives every caller the same answer', async () => {
+    const s = await setup();
+    await insertDated(s, [{ slug: 'open' }]);
+    const anonymous = await listOpen(s);
+    for (const caller of [s.adminA, s.adminB, s.t.withIdentity(identity('stranger'))]) {
+      expect(
+        await caller.query(api.camps.listOpenForOrganization, { organizationSlug: 'org-a' }),
+      ).toEqual(anonymous);
+    }
+  });
+
+  test('leaves out a draft, a session whose deadline has passed, one that has started, and one with no place left, and keeps one whose deadline is today', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      { slug: 'draft', status: 'draft' },
+      {
+        slug: 'mixed',
+        sessions: [
+          { name: 'Started', startInDays: -2, endInDays: 2, deadlineInDays: -5 },
+          { name: 'Closed', startInDays: 5, deadlineInDays: -1 },
+          { name: 'Full', startInDays: 6, places: 5 },
+          { name: 'Deadline today', startInDays: 7, deadlineInDays: 0 },
+          { name: 'Open', startInDays: 20 },
+        ],
+      },
+    ]);
+    await s.t.run(async (ctx) => {
+      const full = (await ctx.db.query('campSessions').collect()).find(
+        (row) => row.name === 'Full',
+      );
+      await ctx.db.patch('campSessions', full!._id, { registeredCount: 5 });
+    });
+    expect(await cards(s)).toEqual(['mixed/Deadline today', 'mixed/Open']);
+  });
+
+  test('lists the soonest deadline first, and only the organization’s own camps, narrowed to a sport', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'sand',
+        sessions: [
+          { name: 'Week 2', startInDays: 20 },
+          { name: 'Week 1', startInDays: 10 },
+        ],
+      },
+      { slug: 'soccer', sport: 'soccer', sessions: [{ startInDays: 11 }] },
+      { slug: 'other-org', organizationId: s.organizationB },
+    ]);
+    expect(await cards(s)).toEqual(['sand/Week 1', 'soccer/Week 1', 'sand/Week 2']);
+    expect(await cards(s, { sport: 'soccer' })).toEqual(['soccer/Week 1']);
+    expect(await cards(s, { sport: 'beachVolleyball' })).toEqual(['sand/Week 1', 'sand/Week 2']);
+  });
+
+  test('reads the 25 camps whose last session ends soonest, and leaves out the 26th', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: 26 }, (_, i) => ({
+        slug: `camp-${String(i + 1).padStart(2, '0')}`,
+        sessions: [{ startInDays: 10 + i, deadlineInDays: 5 }],
+      })),
+    );
+    const slugs = (await listOpen(s)).map((card) => card.slug);
+    expect(slugs).toHaveLength(25);
+    expect(slugs).toContain('camp-25');
+    expect(slugs).not.toContain('camp-26');
+  });
+
+  test('keeps the 30 sessions with the soonest deadlines of 31, whatever the order of their camps and start dates', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'one-camp',
+        sessions: Array.from({ length: 31 }, (_, i) => ({
+          name: `Session ${String(i).padStart(2, '0')}`,
+          startInDays: 60 + i,
+          deadlineInDays: 50 - i,
+        })),
+      },
+    ]);
+    const open = await listOpen(s);
+    expect(open).toHaveLength(30);
+    expect(open[0]?.sessionName).toBe('Session 30');
+    expect(open.map((card) => card.sessionName)).not.toContain('Session 00');
+    const deadlines = open.map((card) => card.registrationDeadline);
+    expect(deadlines).toEqual([...deadlines].sort());
+  });
+
+  test('keeps a sooner deadline from a later camp over a later deadline from an earlier camp when it cuts to 30', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'ends-first',
+        sessions: Array.from({ length: 30 }, (_, i) => ({
+          name: `Early ${String(i).padStart(2, '0')}`,
+          startInDays: 50,
+          endInDays: 51,
+          deadlineInDays: 20 + (i % 10),
+        })),
+      },
+      {
+        slug: 'ends-later',
+        sessions: [{ name: 'Soonest', startInDays: 40, endInDays: 60, deadlineInDays: 2 }],
+      },
+    ]);
+    const names = (await listOpen(s)).map((card) => card.sessionName);
+    expect(names).toHaveLength(30);
+    expect(names[0]).toBe('Soonest');
+  });
+
+  test('is empty for an unknown organization', async () => {
+    const s = await setup();
+    expect(
+      await s.t.query(api.camps.listOpenForOrganization, { organizationSlug: 'nowhere' }),
+    ).toEqual([]);
+  });
+});
+
+describe('the camp’s status, sport, and last session end', () => {
+  const camp = (s: Setup, campId: Id<'camps'>) => s.t.run((ctx) => ctx.db.get('camps', campId));
+  const fields = async (s: Setup, campId: Id<'camps'>) => {
+    const row = await camp(s, campId);
+    return [row?.status, row?.sport, row?.lastSessionEndDate];
+  };
+  const session = (name: string, startDate: string, endDate: string) => ({
+    name,
+    startDate,
+    endDate,
+    places: 10,
+    registrationDeadline: startDate,
+  });
+
+  test('are set by create: a draft of the camp’s sport with no session end', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    expect(await fields(s, campId)).toEqual(['draft', 'beachVolleyball', undefined]);
+  });
+
+  test('follow the sessions added and deleted: the latest end date of any session, and none after the last is deleted', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    const add = (name: string, start: string, end: string) =>
+      s.adminA.mutation(api.campSessions.add, { campId, ...session(name, start, end) });
+    const long = await add('Long', '2027-07-05', '2027-07-30');
+    expect((await fields(s, campId))[2]).toBe('2027-07-30');
+    const short = await add('Short', '2027-07-12', '2027-07-16');
+    expect((await fields(s, campId))[2]).toBe('2027-07-30');
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId: long.campSessionId });
+    expect((await fields(s, campId))[2]).toBe('2027-07-16');
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId: short.campSessionId });
+    expect((await fields(s, campId))[2]).toBeUndefined();
+  });
+
+  test('match again after Undo of a deleted session adds it back', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 1', '2027-07-05', '2027-07-09'),
+    });
+    const week2 = await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 2', '2027-07-12', '2027-07-16'),
+    });
+    await s.adminA.mutation(api.campSessions.remove, { campSessionId: week2.campSessionId });
+    expect((await fields(s, campId))[2]).toBe('2027-07-09');
+    await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 2', '2027-07-12', '2027-07-16'),
+    });
+    expect((await fields(s, campId))[2]).toBe('2027-07-16');
+  });
+
+  test('turn to published with the camp, and a session added after that keeps them', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 1', '2027-07-05', '2027-07-09'),
+    });
+    await s.adminA.mutation(api.camps.publish, { campId });
+    expect(await fields(s, campId)).toEqual(['published', 'beachVolleyball', '2027-07-09']);
+    await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 2', '2027-07-12', '2027-07-16'),
+    });
+    expect(await fields(s, campId)).toEqual(['published', 'beachVolleyball', '2027-07-16']);
+  });
+
+  test('are set on a camp written before they were kept by the next session write or publish', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    await s.adminA.mutation(api.campSessions.add, {
+      campId,
+      ...session('Week 1', '2027-07-05', '2027-07-09'),
+    });
+    await s.t.run((ctx) =>
+      ctx.db.patch('camps', campId, {
+        status: undefined,
+        sport: undefined,
+        lastSessionEndDate: undefined,
+      }),
+    );
+    await s.adminA.mutation(api.camps.publish, { campId });
+    expect(await fields(s, campId)).toEqual(['published', 'beachVolleyball', '2027-07-09']);
+  });
+
+  test('stay equal to the program’s status and sport through deleteCampSession', async () => {
+    const s = await setup();
+    const { campId } = await s.adminA.mutation(api.camps.create, valid(s));
+    await s.t.run(async (ctx) => {
+      const row = (await ctx.db.get('camps', campId))!;
+      const id = await insertCampSession(ctx, row, session('Week 1', '2027-07-05', '2027-07-09'));
+      await deleteCampSession(ctx, (await ctx.db.get('campSessions', id))!);
+    });
+    expect(await fields(s, campId)).toEqual(['draft', 'beachVolleyball', undefined]);
   });
 });

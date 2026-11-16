@@ -27,6 +27,15 @@ export function organizationTournamentSavedKeys(slug: string, sport?: string): s
   ];
 }
 
+/** Saved with the page but not required by it: a copy saved before the Camps section existed opens offline with none. */
+export function organizationCampSavedKeys(slug: string, sport?: string): string[] {
+  const sportArg = sport === undefined ? {} : { sport };
+  return [
+    savedCopyKey(api.camps.listPublic, { organizationSlug: slug, page: 1, ...sportArg }),
+    savedCopyKey(api.camps.listOpenForOrganization, { organizationSlug: slug, ...sportArg }),
+  ];
+}
+
 function missingSavedCopies(page: Page, keys: readonly string[]): Promise<string[]> {
   return page.evaluate((all) => all.filter((key) => localStorage.getItem(key) === null), keys);
 }

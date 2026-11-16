@@ -181,12 +181,30 @@ test.describe('public camp page: in the browser', () => {
     expect(await checkReflow(page)).toMatchObject({ passed: true });
   });
 
-  test('the breadcrumb leads to the organization page', async ({ page, consoleGuard }) => {
+  test('the breadcrumb leads to the organization page, and its Camps crumb opens the Camps section', async ({
+    page,
+    consoleGuard,
+  }) => {
     const { tenant, published } = await seed();
     await page.goto(published);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').click();
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await crumbs.getByRole('link', { name: 'E2E Camp Page' }).click();
     await expect(page).toHaveURL(tenant.path);
+
+    await page.goBack();
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const campsCrumb = crumbs.getByRole('link', { name: 'Camps' });
+    const campsHref = await campsCrumb.getAttribute('href');
+    await campsCrumb.click();
+    await expect(page).toHaveURL(`${tenant.path}#camps`);
+    const section = page.locator('#camps');
+    await expect(section.getByRole('link', { name: JUNIOR.name, exact: true })).toBeVisible();
+
+    // Opened as a link, in a new tab or from a shared URL, the browser scrolls to the section.
+    await page.goto(campsHref!);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(section.getByRole('heading', { level: 2, name: 'Camps' })).toBeInViewport();
   });
 
   test.describe('a draft camp', () => {

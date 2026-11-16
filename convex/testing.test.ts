@@ -157,6 +157,7 @@ describe('convex/testing.ts exports', () => {
       'seedFreeAgent',
       'seedLeague',
       'seedPendingInvites',
+      'seedPoolBracket',
       'seedPoolResult',
       'seedSeason',
       'seedSeasons',

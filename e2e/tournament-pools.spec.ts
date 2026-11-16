@@ -5,7 +5,13 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
-import { seedPoolPlay, seedPoolResult, seedPoolsStructure, seedTeamPool } from './support/pools';
+import {
+  seedPoolBracket,
+  seedPoolPlay,
+  seedPoolResult,
+  seedPoolsStructure,
+  seedTeamPool,
+} from './support/pools';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -1058,6 +1064,422 @@ test.describe('Tournaments: pool score reports', () => {
       } finally {
         await reader.close();
       }
+    });
+  });
+});
+
+/** Pool A is Ace, Dune, and Eddy, and Pool B is Bay, Cove, and Flow. Ace and Bay win both of their games; Dune and Cove each win one. */
+const FINISH: [readonly [string, string], { a: number; b: number }][] = [
+  [['Ace', 'Dune'], { a: 21, b: 10 }],
+  [['Ace', 'Eddy'], { a: 21, b: 10 }],
+  [['Dune', 'Eddy'], { a: 21, b: 5 }],
+  [['Bay', 'Cove'], { a: 21, b: 19 }],
+  [['Bay', 'Flow'], { a: 21, b: 19 }],
+  [['Cove', 'Flow'], { a: 21, b: 19 }],
+];
+
+async function playPools(tenant: Tenant, results = FINISH) {
+  for (const [teams, { a, b }] of results) {
+    await seedPoolResult(tenant, SLUG, teams, { score: { kind: 'sets', sets: [{ a, b }] } });
+  }
+}
+
+test.describe('Tournaments: bracket from pools', () => {
+  const bracketPanel = (page: Page) => page.locator('#pool-bracket');
+  const seedOrder = (page: Page) => bracketPanel(page).locator('#pool-bracket-seeds > li h3');
+  const createBracket = (page: Page) => bracketPanel(page).locator('#create-pool-bracket');
+  const bracketStatus = (page: Page) => bracketPanel(page).locator('[data-slot="seed-status"]');
+
+  test('waits for every pool game, then seeds the winners before the runners-up, takes a reorder, and creates the bracket', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant, FINISH.slice(0, 3));
+    await page.goto(managePath);
+    await expect(bracketPanel(page).locator('[data-slot="create-reason"]')).toHaveText(
+      '3 pool games still need a confirmed result.',
+    );
+    await expect(createBracket(page)).toHaveCount(0);
+    await screenshot(page, testInfo, 'pool-bracket-waiting');
+    await expectAccessible(page);
+
+    await playPools(tenant, FINISH.slice(3));
+    await page.reload();
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+    await expect(bracketPanel(page).locator('app-chip-radio-group label')).toHaveText([
+      '1 team',
+      '2 teams',
+      '3 teams',
+    ]);
+    await chooseChip(chipLabel(bracketPanel(page), '3 teams'));
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove', 'Flow', 'Eddy']);
+    await chooseChip(chipLabel(bracketPanel(page), '2 teams'));
+    await screenshot(page, testInfo, 'pool-bracket-seeds');
+    await expectAccessible(page);
+
+    const moveDune = bracketPanel(page).getByRole('button', { name: 'Move up Dune' });
+    await moveDune.focus();
+    await page.keyboard.press('Enter');
+    await expect(bracketStatus(page)).toHaveText('Dune moved up to seed 2 of 4.');
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Dune', 'Bay', 'Cove']);
+    await expect(moveDune).toBeFocused();
+
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+    ).toContainText('3 games in 2 rounds.');
+    await expect(createBracket(page)).toHaveText('Recreate bracket');
+    await expect(createBracket(page)).toBeFocused();
+    await expect(
+      bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]'),
+    ).toHaveText([
+      'Game 1: Ace v Cove',
+      'Game 2: Dune v Bay',
+      'Game 1: To be decided v To be decided',
+    ]);
+    await screenshot(page, testInfo, 'pool-bracket-created');
+    await expectAccessible(page);
+
+    await page.reload();
+    await expect(createBracket(page)).toHaveText('Recreate bracket');
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Dune', 'Bay', 'Cove']);
+    await expect(bracketPanel(page).locator('[data-slot="seed-note"]')).toHaveCount(0);
+    await expect(
+      bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').first(),
+    ).toHaveText('Game 1: Ace v Cove');
+  });
+
+  test('says what decided a tie on the advance line, and the organizer puts the other tied team through', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX), sport: 'soccer' });
+    await seedPoolPlay(tenant, SLUG, 2);
+    for (const [one, other] of [
+      ['Ace', 'Dune'],
+      ['Ace', 'Eddy'],
+      ['Dune', 'Eddy'],
+      ['Bay', 'Cove'],
+      ['Bay', 'Flow'],
+      ['Cove', 'Flow'],
+    ] as const) {
+      await seedPoolResult(tenant, SLUG, [one, other], { score: { kind: 'goals', a: 1, b: 1 } });
+    }
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toHaveText(
+      'Pool A is tied for 1st between Ace, Dune, and Eddy. They scored the same points against each other, or did not play, so seed order decides.',
+    );
+    await screenshot(page, testInfo, 'pool-bracket-tie');
+    await expectAccessible(page);
+
+    await bracketPanel(page).getByRole('checkbox', { name: /^Dune/ }).click();
+    await expect(bracketPanel(page).locator('#advancing-pool-A [role="alert"]')).toHaveCount(0);
+    await createBracket(page).click();
+    await expect(bracketPanel(page).locator('#advancing-pool-A [role="alert"]')).toHaveText(
+      'Choose 2 teams from Pool A. 1 is chosen.',
+    );
+    await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
+    await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
+    await bracketPanel(page).getByRole('checkbox', { name: /^Eddy/ }).click();
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Cove', 'Eddy']);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toContainText(
+      'Your choice decides who advances.',
+    );
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').first(),
+    ).toHaveText('Game 1: Ace v Eddy');
+    await page.reload();
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Cove', 'Eddy']);
+    await expect(bracketPanel(page).locator('[data-slot="seed-note"]')).toHaveCount(0);
+  });
+
+  test('once the bracket exists a pool game shows why it cannot change, with no Correct result or Clear result', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant);
+    await seedPoolBracket(tenant, SLUG, 2);
+    await page.goto(managePath);
+    const game = poolGame(page, ROUND_ONE_OF_A);
+    await expect(game.locator('[data-slot="locked"]')).toHaveText(
+      'The bracket is created, so pool results cannot change.',
+    );
+    await expect(gameResult(game)).toHaveText('Dune 21–5 Eddy. Dune won.');
+    await expect(correctButton(game)).toHaveCount(0);
+    await expect(clearButton(game)).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
+  test(
+    'a bracket created from pools, fetched without JavaScript, has the Pools section and the Bracket section in the raw HTML',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenant({ name: 'E2E Pool Bracket', locations: [LOCATION] });
+      const path = await seedTournament(tenant, {
+        name: 'Fall Pool Play Open',
+        slug: SLUG,
+        sport: 'beachVolleyball',
+        locations: [LOCATION.name],
+        startDate: dateFromToday(30),
+        endDate: dateFromToday(31),
+        registrationDeadline: dateFromToday(-2),
+        maximumTeams: 16,
+      });
+      await seedPoolsStructure(tenant, SLUG);
+      await convexRun('testing:seedTournamentRosters', {
+        organizationSlug: tenant.slug,
+        tournamentSlug: SLUG,
+        teams: full(SIX),
+      });
+      await seedPoolPlay(tenant, SLUG, 2);
+      await playPools(tenant);
+      await seedPoolBracket(tenant, SLUG, 2);
+      const { status, html } = await fetchRawHtml(request, path);
+      expect(status).toBe(200);
+      const pools = html.slice(html.indexOf('id="pools"'), html.indexOf('id="bracket"'));
+      expect(
+        [...pools.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, h3]) => textOf(h3)),
+      ).toEqual(['Pool A', 'Pool B']);
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      expect(
+        [...bracket.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, h3]) => textOf(h3)),
+      ).toEqual(['Semifinals', 'Final']);
+      expect(
+        [...bracket.matchAll(/data-testid="bracket-game"[\s\S]*?<\/li>/g)]
+          .slice(0, 2)
+          .map(([game]) => textOf(game)),
+      ).toEqual([expect.stringContaining('Ace'), expect.stringContaining('Bay')]);
+    },
+  );
+
+  test('the waiting note, the seeds, and the created bracket do not scroll sideways at 320px', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant, FINISH.slice(0, 3));
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await expect(bracketPanel(page).locator('[data-slot="create-reason"]')).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await playPools(tenant, FINISH.slice(3));
+    await page.reload();
+    await expect(createBracket(page)).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+    ).toBeVisible();
+    await expectNoSidewaysScroll(page);
+
+    await createBracket(page).click();
+    await expect(page.getByRole('alertdialog', { name: 'Recreate the bracket?' })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+  });
+
+  test('long team names and a name with no space keep the seeds, the bracket, and the dialog inside 320px', async ({
+    page,
+  }, testInfo) => {
+    const spaced = 'Intergalactic Wanderers Volleyball Club of the Gulf Coast';
+    const unbroken = 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch';
+    const names = [spaced, 'Bay', 'Cove', unbroken, 'Eddy', 'Flow'];
+    const { tenant, managePath } = await adminOf(page, { teams: full(names) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    // The snake split puts seeds 1, 4, and 5 in Pool A, and seeds 2, 3, and 6 in Pool B.
+    const [one, two, three, four, five, six] = names;
+    const wins: [readonly [string, string], { a: number; b: number }][] = [
+      [[one, four], { a: 21, b: 10 }],
+      [[one, five], { a: 21, b: 10 }],
+      [[four, five], { a: 21, b: 5 }],
+      [[two, three], { a: 21, b: 19 }],
+      [[two, six], { a: 21, b: 19 }],
+      [[three, six], { a: 21, b: 19 }],
+    ];
+    await playPools(tenant, wins);
+    const projectViewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText([one, two, four, three]);
+    await expectNoSidewaysScroll(page);
+    await screenshot(page, testInfo, 'pool-bracket-long-names-320');
+
+    await createBracket(page).click();
+    await expect(
+      bracketPanel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+    ).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await createBracket(page).click();
+    await expect(page.getByRole('alertdialog', { name: 'Recreate the bracket?' })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await page.keyboard.press('Escape');
+    await page.setViewportSize(projectViewport);
+    await expectAccessible(page);
+  });
+
+  test('names the points rule when a tie of three sits on the advance line, and the Who advances groups work from the keyboard with the count read from the group', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    // Pool A is a circle, each team a game up and a game down by 2 points, so only the points scored between them separate Ace, Dune, and Eddy.
+    const circle: [readonly [string, string], { a: number; b: number }][] = [
+      [['Ace', 'Dune'], { a: 21, b: 19 }],
+      [['Dune', 'Eddy'], { a: 22, b: 20 }],
+      [['Eddy', 'Ace'], { a: 22, b: 20 }],
+      [['Bay', 'Cove'], { a: 21, b: 19 }],
+      [['Bay', 'Flow'], { a: 21, b: 19 }],
+      [['Cove', 'Flow'], { a: 21, b: 19 }],
+    ];
+    await playPools(tenant, circle);
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Bay', 'Eddy', 'Ace', 'Cove']);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toHaveCount(1);
+    await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toHaveText(
+      'Pool A is tied for 1st between Eddy, Ace, and Dune. The team that scored more points in the games between them advances.',
+    );
+    await expect(bracketPanel(page).locator('[data-slot="place"]')).toHaveText([
+      'Pool B, 1st',
+      'Pool A, 1st, tied',
+      'Pool A, 1st, tied',
+      'Pool B, 2nd',
+    ]);
+
+    const groupA = bracketPanel(page).getByRole('group', { name: 'Pool A' });
+    const eddy = groupA.getByRole('checkbox', { name: /^Eddy/ });
+    await eddy.focus();
+    await page.keyboard.press('Space');
+    await expect(eddy).not.toBeChecked();
+    await expect(bracketStatus(page)).toHaveText('Eddy does not advance.');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expectAccessible(page);
+
+    await createBracket(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(groupA).toHaveAccessibleDescription('Choose 2 teams from Pool A. 1 is chosen.');
+    await expect(groupA.getByRole('alert')).toHaveText('Choose 2 teams from Pool A. 1 is chosen.');
+    await expect(bracketPanel(page).getByRole('group', { name: 'Pool B' })).not.toHaveAttribute(
+      'aria-describedby',
+      /.+/,
+    );
+    await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
+    await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    await expect(groupA.getByRole('checkbox').first()).toBeFocused();
+
+    await eddy.focus();
+    await page.keyboard.press('Space');
+    await expect(bracketStatus(page)).toHaveText('Eddy advances.');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).not.toHaveAttribute('aria-describedby', /.+/);
+
+    await groupA.getByRole('checkbox', { name: /^Eddy/ }).focus();
+    await page.keyboard.press('Space');
+    const reflowViewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 800 });
+    await expectNoSidewaysScroll(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await page.setViewportSize(reflowViewport);
+  });
+
+  test('shows a pool’s count error only once focus leaves the pool or Create is pressed, and clears it when the count is right', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant);
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+    const groupA = bracketPanel(page).getByRole('group', { name: 'Pool A' });
+    const groupB = bracketPanel(page).getByRole('group', { name: 'Pool B' });
+    const count = 'Choose 2 teams from Pool A. 1 is chosen.';
+
+    const ace = groupA.getByRole('checkbox', { name: /^Ace/ });
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(ace).not.toBeChecked();
+    await expect(bracketStatus(page)).toHaveText('Ace does not advance.');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+    await expect(groupA).not.toHaveAttribute('data-invalid', 'true');
+
+    await groupA.getByRole('checkbox').last().focus();
+    await page.keyboard.press('Tab');
+    await expect(groupA.getByRole('alert')).toHaveText(count);
+    await expect(groupA).toHaveAccessibleDescription(count);
+    await expect(groupA).toHaveAttribute('data-invalid', 'true');
+    await expect(groupB.getByRole('alert')).toHaveCount(0);
+
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(ace).toBeChecked();
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+
+    await page.keyboard.press('Space');
+    await expect(ace).not.toBeChecked();
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+
+    await createBracket(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(groupA.getByRole('alert')).toHaveText(count);
+    await expect(groupA).toHaveAccessibleDescription(count);
+    await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
+    await expect(groupB.getByRole('alert')).toHaveCount(0);
+
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+    await expectAccessible(page);
+  });
+
+  test.describe('a result corrected after the page loaded', () => {
+    test.use({ expectedConvexErrors: ['tournamentGames:createBracketFromPools'] });
+
+    test('refuses Create on the old standings, and creates from the new ones once the page has them', async ({
+      page,
+    }) => {
+      const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+      await seedPoolPlay(tenant, SLUG, 2);
+      await playPools(tenant);
+      const held = await holdQueries(page, ['tournamentGames:getPoolBracket'], {
+        holdFromStart: false,
+      });
+      await page.goto(managePath);
+      await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+      held.holdNextAnswer();
+
+      const other = await page.context().newPage();
+      await other.goto(managePath);
+      const game = poolGame(other, ROUND_ONE_OF_A);
+      await correctButton(game).click();
+      await scoreInput(game, 'a1').fill('5');
+      await scoreInput(game, 'b1').fill('21');
+      await saveButton(game).click();
+      await expect(gameResult(game)).toHaveText('Dune 5–21 Eddy. Eddy won.');
+      await other.close();
+      await expect.poll(() => held.isHolding()).toBe(true);
+
+      await createBracket(page).click();
+      await expect(bracketPanel(page).getByRole('alert')).toContainText(
+        'The pool results changed since this page loaded. Check who advances and try again.',
+      );
+      await expect(bracketPanel(page).locator('#pool-bracket-rounds')).toHaveCount(0);
+
+      held.release();
+      await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Eddy', 'Cove']);
+      await createBracket(page).click();
+      await expect(
+        bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').first(),
+      ).toHaveText('Game 1: Ace v Cove');
+      await expect(
+        bracketPanel(page).locator('#pool-bracket-rounds [data-slot="game-label"]').nth(1),
+      ).toHaveText('Game 2: Bay v Eddy');
     });
   });
 });

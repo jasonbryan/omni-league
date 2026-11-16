@@ -16,6 +16,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideEraser, lucidePencil, lucideUndo2 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
 import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
+import { POOL_MESSAGES } from '../../../../convex/lib/pools';
 import { POOL_PLAY_TIES, scoresEqual } from '../../../../convex/lib/sports';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { HlmBadge } from '../../ui/badge';
@@ -217,7 +218,7 @@ const TEXT_BUTTON =
         </button>
       } @else if (played()) {
         @if (locked()) {
-          <p data-slot="locked" class="mt-2 text-muted-foreground">{{ lockedText }}</p>
+          <p data-slot="locked" class="mt-2 text-muted-foreground">{{ lockedText() }}</p>
         } @else {
           <div class="mt-2 flex flex-wrap gap-2">
             <button
@@ -343,7 +344,6 @@ export class BracketGame {
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly textButton = TEXT_BUTTON;
   protected readonly saveOffline = SAVE_OFFLINE;
-  protected readonly lockedText = BRACKET_MESSAGES.nextGamePlayed;
 
   protected readonly formMode = signal<'enter' | 'correct' | null>(null);
   protected readonly status = signal<Status | null>(null);
@@ -398,6 +398,9 @@ export class BracketGame {
   );
 
   protected readonly locked = computed(() => this.game().locked === true);
+  protected readonly lockedText = computed(() =>
+    this.stage() === 'pool' ? POOL_MESSAGES.poolsFrozen : BRACKET_MESSAGES.nextGamePlayed,
+  );
 
   protected readonly canEnter = computed(
     () => this.bothTeams() !== null && this.game().result === null,
