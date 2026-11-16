@@ -5,7 +5,13 @@ import { api, internal } from './_generated/api';
 import { registrationIsOpen } from './lib/registration';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
-import { DEMO_ACCOUNTS, DEMO_POOL_TEAMS, DEMO_POOL_TOURNAMENT } from './seed';
+import {
+  DEMO_ACCOUNTS,
+  DEMO_HARVEST_TEAMS,
+  DEMO_HARVEST_TOURNAMENT,
+  DEMO_POOL_TEAMS,
+  DEMO_POOL_TOURNAMENT,
+} from './seed';
 import { modules } from './test.setup';
 
 function setup() {
@@ -311,5 +317,130 @@ describe('seed:demo: the Fall Pool Play Open has a pool game for player@ to repo
     });
     await t.mutation(internal.seed.insertDemoTeams, { captains: people() });
     expect(await reportsOf(t)).toEqual([]);
+  });
+});
+
+describe('seed:demo: the Harvest Pools Classic has every pool game confirmed and its bracket from the pools', () => {
+  async function harvest(t: T) {
+    return t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === DEMO_HARVEST_TOURNAMENT.tournamentSlug,
+      )!;
+      const tournament = (await ctx.db
+        .query('tournaments')
+        .withIndex('by_programId', (q) => q.eq('programId', program._id))
+        .unique())!;
+      const teams = (await ctx.db.query('teams').collect()).filter(
+        (team) => team.tournamentId === tournament._id,
+      );
+      const games = (await ctx.db.query('tournamentGames').collect()).filter(
+        (game) => game.tournamentId === tournament._id,
+      );
+      return { program, tournament, teams, games };
+    });
+  }
+
+  const admin = (t: T) =>
+    t.withIdentity({
+      subject: ADMIN.authUserId,
+      issuer: 'http://127.0.0.1:3211',
+      name: 'admin',
+      sessionId: 's1',
+    });
+
+  test('is a published Pools, then bracket tournament with registration closed and 6 confirmed teams', async () => {
+    const t = setup();
+    await seedDemo(t);
+    const { program, tournament, teams } = await harvest(t);
+    expect(program).toMatchObject({ name: 'Harvest Pools Classic', status: 'published' });
+    expect(tournament.structure).toBe('pools');
+    expect(registrationIsOpen(tournament, Date.now())).toBe(false);
+    expect(teams.map((team) => [team.name, team.rosterCount]).sort()).toEqual(
+      DEMO_HARVEST_TEAMS.map((team) => [team.name, tournament.minimumRosterSize]).sort(),
+    );
+    expect(tournament.teamCount).toBe(6);
+  });
+
+  test('has 2 pools of 3 teams and a confirmed result for each of the 6 pool games, entered by the demo admin', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { games, teams } = await harvest(t);
+    const user = await t.run(async (ctx) =>
+      (await ctx.db.query('users').collect()).find((row) => row.authUserId === ADMIN.authUserId),
+    );
+    const poolGames = games.filter((game) => game.stage === 'pool');
+    expect(poolGames).toHaveLength(6);
+    expect(poolGames.every((game) => game.score !== undefined)).toBe(true);
+    expect(poolGames.every((game) => game.resultEnteredBy === user?._id)).toBe(true);
+    expect(teams.filter((team) => team.pool === 'A')).toHaveLength(3);
+    expect(teams.filter((team) => team.pool === 'B')).toHaveLength(3);
+  });
+
+  test('has a 4-team bracket from the pool finish: A1, B1, A2, B2, with A1 against B2', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { games, teams } = await harvest(t);
+    const nameOf = (id: string | null) => teams.find((team) => team._id === id)?.name;
+    const bracket = games.filter((game) => game.stage === 'bracket');
+    expect(bracket).toHaveLength(3);
+    expect(
+      bracket
+        .filter((game) => game.round === 1)
+        .map((game) => game.teamIds.map(nameOf))
+        .sort(),
+    ).toEqual([
+      ['Pelican Point', 'Sunset Sets'],
+      ['Sea Oats', 'Low Tide'],
+    ]);
+  });
+
+  test('shows admin@ the bracket with the pools frozen, and the public page holds both sections', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    await t.run(async (ctx) => {
+      const user = (await ctx.db.query('users').collect()).find(
+        (row) => row.authUserId === ADMIN.authUserId,
+      )!;
+      const organization = (await ctx.db.query('organizations').collect()).find(
+        (row) => row.slug === DEMO_HARVEST_TOURNAMENT.orgSlug,
+      )!;
+      await ctx.db.insert('memberships', {
+        userId: user._id,
+        organizationId: organization._id,
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+    });
+    const view = await admin(t).query(api.tournamentGames.getPoolBracket, DEMO_HARVEST_TOURNAMENT);
+    expect(view).toMatchObject({ gamesWithoutResult: 0, poolCount: 2, smallestPool: 3 });
+    expect(view?.bracket?.rounds.map((round) => round.name)).toEqual(['Semifinals', 'Final']);
+    const page = await t.query(api.tournaments.getPublicPage, DEMO_HARVEST_TOURNAMENT);
+    expect(page?.pools).toHaveLength(2);
+    expect(page?.bracket?.rounds).toHaveLength(2);
+  });
+
+  test('makes no bracket while no admin account exists to confirm the pool games', async () => {
+    const t = setup();
+    await seedDemo(t);
+    const { games } = await harvest(t);
+    expect(games.filter((game) => game.stage === 'pool')).toHaveLength(6);
+    expect(games.filter((game) => game.stage === 'bracket')).toHaveLength(0);
+    expect(games.every((game) => game.score === undefined)).toBe(true);
+  });
+
+  test('is made once, so a second run changes nothing', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const first = await harvest(t);
+    await t.mutation(internal.seed.insertDemoTeams, { captains: WITH_ADMIN });
+    expect(await harvest(t)).toEqual(first);
+  });
+
+  test('leaves the Fall Pool Play Open with half its pool games played and no bracket', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const { games } = await fallPoolPlay(t);
+    expect(games.filter((game) => game.score !== undefined)).toHaveLength(6);
+    expect(games.filter((game) => game.stage === 'bracket')).toHaveLength(0);
   });
 });

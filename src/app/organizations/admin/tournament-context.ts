@@ -36,6 +36,13 @@ export type PoolsSetup = NonNullable<FunctionReturnType<typeof api.tournamentGam
 export type PoolsView =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: PoolsSetup };
 
+export type PoolBracketSetup = NonNullable<
+  FunctionReturnType<typeof api.tournamentGames.getPoolBracket>
+>;
+
+export type PoolBracketView =
+  { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: PoolBracketSetup };
+
 export type TournamentState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
 /**
@@ -88,6 +95,10 @@ export class TournamentContext {
     this.playsPools() ? this.params() : skipToken,
   );
 
+  private readonly poolBracketQuery = injectQuery(api.tournamentGames.getPoolBracket, () =>
+    this.playsPools() ? this.params() : skipToken,
+  );
+
   readonly state = computed<TournamentState>(() => {
     const frame = this.frameState();
     if (frame !== 'ready') return frame;
@@ -116,6 +127,13 @@ export class TournamentContext {
     if (this.state() !== 'ready') return { status: 'loading' };
     const setup = this.poolsQuery.value();
     if (this.poolsQuery.error() || setup === null) return { status: 'error' };
+    return setup === undefined ? { status: 'loading' } : { status: 'ready', setup };
+  });
+
+  readonly poolBracket = computed<PoolBracketView>(() => {
+    if (this.state() !== 'ready') return { status: 'loading' };
+    const setup = this.poolBracketQuery.value();
+    if (this.poolBracketQuery.error() || setup === null) return { status: 'error' };
     return setup === undefined ? { status: 'loading' } : { status: 'ready', setup };
   });
 }

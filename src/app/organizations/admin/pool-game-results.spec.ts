@@ -246,6 +246,22 @@ describe('Pool game results', () => {
     expect(row('g_1').querySelector('[data-slot="locked"]')).toBeNull();
   });
 
+  it('once the bracket exists shows why a played pool game cannot change, in place of Correct result and Clear result', async () => {
+    const pools = poolsOf(stored(goals(2, 2)));
+    await open({
+      ...pools,
+      pools: pools.pools.map((pool) => ({
+        ...pool,
+        games: pool.games.map((game) => ({ ...game, locked: true })),
+      })),
+    });
+    expect(text(row('g_1').querySelector('[data-slot="locked"]'))).toBe(
+      'The bracket is created, so pool results cannot change.',
+    );
+    expect(row('g_1').textContent).not.toContain('Correct result');
+    expect(row('g_1').textContent).not.toContain('Clear result');
+  });
+
   it('corrects a tied result to a win', async () => {
     await open(poolsOf(stored(goals(2, 2))));
     await press(button('g_1', 'Correct result'));

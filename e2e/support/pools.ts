@@ -55,3 +55,16 @@ export async function seedPoolResult(
     ...result,
   });
 }
+
+/** Creates the bracket from the pool finish as the organizer's Create bracket does, without its order. Every pool game needs a result. Local runs only. */
+export async function seedPoolBracket(
+  tenant: Tenant,
+  tournamentSlug: string,
+  advancePerPool: number,
+): Promise<void> {
+  await convexRun('testing:seedPoolBracket', {
+    organizationSlug: tenant.slug,
+    tournamentSlug,
+    advancePerPool,
+  });
+}
