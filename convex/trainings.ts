@@ -1,6 +1,14 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireOrgAdmin } from './lib/access';
+import {
+  requireOrgAdmin,
+  requireProgramOrganizerOrForbidden,
+  requireStaffOrForbidden,
+} from './lib/access';
+import { roleValidator } from './lib/roles';
+import { findOrganizationBySlug } from './lib/seasonLookup';
+import { findTrainingBySlugs, trainingDetails } from './lib/trainingLookup';
+import { trainingPatternValidator } from './lib/trainingPattern';
 import { programStatusValidator } from './lib/programs';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
@@ -123,5 +131,45 @@ export const listForOrganization = query({
       });
     }
     return rows;
+  },
+});
+
+export const getForManagement = query({
+  args: { orgSlug: v.string(), trainingSlug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      trainingId: v.id('trainings'),
+      organizationId: v.id('organizations'),
+      organization: v.object({ name: v.string(), slug: v.string() }),
+      role: roleValidator,
+      name: v.string(),
+      slug: v.string(),
+      status: programStatusValidator,
+      sportName: v.string(),
+      coachName: v.string(),
+      minimumAge: v.optional(v.number()),
+      maximumAge: v.optional(v.number()),
+      pattern: v.optional(trainingPatternValidator),
+      locations: v.array(v.object({ name: v.string(), address: v.string() })),
+    }),
+  ),
+  handler: async (ctx, { orgSlug, trainingSlug }) => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    // Null for any caller: the public page already shows whether the organization exists.
+    if (!organization) return null;
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found) {
+      // Only staff learn that a web address is unused.
+      await requireStaffOrForbidden(ctx, organization._id);
+      return null;
+    }
+    const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
+    return {
+      trainingId: found.training._id,
+      organizationId: organization._id,
+      role: membership.role,
+      ...(await trainingDetails(ctx, organization, found)),
+    };
   },
 });

@@ -15,6 +15,7 @@ import {
 import { searchWords } from './lib/searchQuery';
 import { checkCampSessionFields } from './lib/campSessionInput';
 import { checkSeasonFields } from './lib/seasonInput';
+import { WEEKDAY_NAMES, checkTrainingPattern, weekdayOf } from './lib/trainingPattern';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { sportName } from './lib/sports';
 import { insertLeague, insertLocation, insertTenant, defaultDivision } from './lib/tenantWrites';
@@ -43,6 +44,7 @@ const ROWS = {
   camps: 3,
   campSessions: 4,
   trainings: 1,
+  trainingClasses: 8,
 };
 const NONE = {
   organizations: 0,
@@ -65,6 +67,7 @@ const NO_ROWS = {
   camps: 0,
   campSessions: 0,
   trainings: 0,
+  trainingClasses: 0,
 };
 const FULL = { ...ROWS, backfilled: NONE };
 
@@ -79,6 +82,7 @@ async function counts(t: T) {
     camps: (await ctx.db.query('camps').collect()).length,
     campSessions: (await ctx.db.query('campSessions').collect()).length,
     trainings: (await ctx.db.query('trainings').collect()).length,
+    trainingClasses: (await ctx.db.query('trainingClasses').collect()).length,
   }));
 }
 
@@ -692,6 +696,7 @@ describe('seed:demo', () => {
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
       trainings: ROWS.trainings,
+      trainingClasses: ROWS.trainingClasses,
       backfilled: NONE,
     });
 
@@ -828,6 +833,7 @@ describe('seed:demo', () => {
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
       trainings: ROWS.trainings,
+      trainingClasses: ROWS.trainingClasses,
     });
   });
 
@@ -857,6 +863,7 @@ describe('seed:demo', () => {
       camps: ROWS.camps,
       campSessions: ROWS.campSessions,
       trainings: ROWS.trainings,
+      trainingClasses: ROWS.trainingClasses,
       backfilled: {
         organizations: 2,
         locations: 3,
@@ -1470,6 +1477,79 @@ describe('seed:demo training', () => {
       });
     });
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
+  });
+});
+
+describe('seed:demo training classes', () => {
+  const classesOfServing = (t: T) =>
+    t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'tuesday-serving-clinic',
+      )!;
+      const training = (await ctx.db
+        .query('trainings')
+        .withIndex('by_programId', (q) => q.eq('programId', program._id))
+        .unique())!;
+      const rows = await ctx.db
+        .query('trainingClasses')
+        .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', training._id))
+        .collect();
+      return { training, rows };
+    });
+
+  test('gives the Tuesday Serving Clinic 8 weekly classes on Tuesdays, 6 to 7 PM, 12 places each, the first on or after 14 days after the run, and a second run adds none', async () => {
+    const t = setup();
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(8);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(0);
+    const { training, rows } = await classesOfServing(t);
+    const today = dateAtUtcMinus12(Date.now());
+    const first = rows[0].date;
+    expect(weekdayOf(first)).toBe(WEEKDAY_NAMES.indexOf('Tuesday'));
+    expect(first >= addCalendarDays(today, 14)).toBe(true);
+    expect(first <= addCalendarDays(today, 20)).toBe(true);
+    expect(rows.map((row) => row.date)).toEqual(
+      Array.from({ length: 8 }, (_, week) => addCalendarDays(first, week * 7)),
+    );
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        trainingId: training._id,
+        organizationId: training.organizationId,
+        startTime: '18:00',
+        endTime: '19:00',
+        places: 12,
+        registeredCount: 0,
+        status: 'scheduled',
+      });
+      expect(weekdayOf(row.date)).toBe(weekdayOf(first));
+    }
+    expect(training.pattern).toEqual({
+      weekday: weekdayOf(first),
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: first,
+      weeks: 8,
+      placesPerClass: 12,
+      registrationDeadline: addCalendarDays(today, 7),
+      allowSingleRegistration: false,
+    });
+    expect(checkTrainingPattern(training.pattern!, today)).toEqual({});
+  });
+
+  test('gives classes to a training program an earlier run made without them', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      for (const row of await ctx.db.query('trainingClasses').collect()) {
+        await ctx.db.delete('trainingClasses', row._id);
+      }
+      const training = (await ctx.db.query('trainings').first())!;
+      await ctx.db.replace('trainings', training._id, {
+        programId: training.programId,
+        organizationId: training.organizationId,
+        coachName: training.coachName,
+      });
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(8);
   });
 });
 

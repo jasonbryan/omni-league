@@ -290,6 +290,7 @@ describe('every writer sets the required fields', () => {
         'organizations',
         'seasons',
         'tournaments',
+        'trainingClasses',
         'trainings',
       ].sort(),
     );

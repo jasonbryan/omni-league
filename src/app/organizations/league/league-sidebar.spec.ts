@@ -301,22 +301,23 @@ describe('LeagueSidebar', () => {
           ],
         },
       ];
-      const rows = () => [
-        ...page.querySelectorAll<HTMLElement>('nav ul[aria-label="Your training programs"] li'),
+      const links = () => [
+        ...page.querySelectorAll<HTMLAnchorElement>(
+          'nav ul[aria-label="Your training programs"] a',
+        ),
       ];
 
-      it('lists the assigned training programs after the camps as text rows with the dumbbell icon and no link', async () => {
+      it('lists the assigned training programs after the camps as links to their pages, none marked on a league page, with the dumbbell icon', async () => {
         await open(COED_AS_ORGANIZER);
         await answer(WITH_TRAINING);
-        expect(rows().map((li) => text(li))).toEqual([
-          'Adult Passing Clinic',
-          'Tuesday Serving Clinic',
+        const base = `/app/organizations/${GULF.slug}/training`;
+        expect(links().map(row)).toEqual([
+          ['Adult Passing Clinic', `${base}/adult-passing-clinic`, null],
+          ['Tuesday Serving Clinic', `${base}/tuesday-serving-clinic`, null],
         ]);
-        expect(page.querySelectorAll('nav ul[aria-label="Your training programs"] a')).toHaveLength(
-          0,
-        );
-        for (const li of rows()) {
-          expect(li.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideDumbbell');
+        for (const link of links()) {
+          expect(tokens(link.className)).toEqual(tokens(OTHER_CLASS));
+          expect(link.querySelector('ng-icon')!.getAttribute('name')).toBe('lucideDumbbell');
         }
         const lists = [...page.querySelectorAll('nav ul[aria-label]')].map((ul) =>
           ul.getAttribute('aria-label'),
@@ -339,7 +340,7 @@ describe('LeagueSidebar', () => {
             trainings: [{ name: 'Lakeside Clinic', slug: 'lakeside-clinic' }],
           },
         ]);
-        expect(page.querySelector('nav ul[aria-label="Your training programs"]')).toBeNull();
+        expect(links()).toEqual([]);
         expect(page.querySelector('nav')!.textContent).not.toContain('Lakeside Clinic');
       });
     });

@@ -36,6 +36,8 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { TrainingCreateForm } from './training-create-form';
 import { CreateFormLanding } from './create-form-landing';
+import { ROW_TITLE_LINK } from './link-classes';
+import { trainingPath } from './training-path';
 import { injectSectionJump } from './section-jump';
 
 const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="alert"]'];
@@ -102,7 +104,11 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 @for (row of rows; track row.trainingId) {
                   <li class="px-4 py-3.5 md:px-5">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                      <h3 class="me-1 font-medium">{{ row.name }}</h3>
+                      <h3 class="me-1 font-medium">
+                        <a [routerLink]="trainingHref(row.slug)" [class]="rowLink">{{
+                          row.name
+                        }}</a>
+                      </h3>
                       @if (row.status === 'published') {
                         <span hlmBadge variant="default"
                           ><ng-icon
@@ -183,6 +189,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               <app-training-create-form
                 [organizationId]="organization.organizationId"
                 [organizationName]="organization.name"
+                [organizationSlug]="organization.slug"
                 [locations]="locations"
               />
             } @else {
@@ -248,6 +255,8 @@ export class AdminTraining {
   protected readonly placeholders = [1, 2, 3];
   protected readonly skeletonFields = [1, 2, 3];
   protected readonly ages = trainingAgesLabel;
+  protected readonly rowLink = ROW_TITLE_LINK;
+  protected readonly trainingHref = (slug: string) => trainingPath(this.context.slug(), slug);
 
   private readonly list = injectQuery(api.trainings.listForOrganization, () => {
     const organization = this.context.organization();
