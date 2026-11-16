@@ -27,12 +27,14 @@ const WAITING = 'campWaitlist:listMineForCamp';
 const REGISTER_PATH = `/app/organizations/${ORG_SLUG}/camps/${CAMP_SLUG}/register`;
 
 let client: FakeConvexClient;
+let answered: Set<string>;
 let harness: RouterTestingHarness;
 
 async function open({ signedIn = false, now = '2027-06-01' } = {}) {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(at(now));
   client = new FakeConvexClient();
+  answered = new Set();
   const auth = new FakeAuthClient();
   if (!signedIn) auth.storedCookie = '';
   TestBed.configureTestingModule({
@@ -62,7 +64,25 @@ async function settle(): Promise<void> {
   }
 }
 
+const VIEWER_QUERIES = [MINE, MINORS, WAITING];
+
+/** The rows apply the caller's three answers together, so answering one answers the others with nothing. */
 async function emit(name: string, value: unknown): Promise<void> {
+  client.activeSubscriptions.find((s) => s.name === name)!.emit(value);
+  if (VIEWER_QUERIES.includes(name)) {
+    for (const other of VIEWER_QUERIES) {
+      if (other !== name && !answered.has(other)) {
+        client.activeSubscriptions.find((s) => s.name === other)?.emit([]);
+        answered.add(other);
+      }
+    }
+    answered.add(name);
+  }
+  await settle();
+}
+
+/** One answer alone, as a connection that answers the queries one at a time. */
+async function emitAlone(name: string, value: unknown): Promise<void> {
   client.activeSubscriptions.find((s) => s.name === name)!.emit(value);
   await settle();
 }
@@ -205,7 +225,13 @@ describe('PublicCampPage registration, signed in', () => {
     await emit(CAMP, ADULT_CAMP);
     const before = actions(0)?.className;
     expect(before?.split(' ')).toEqual(
-      expect.arrayContaining(['mt-3', 'h-9', 'flex', 'items-center', 'pointer-coarse:min-h-11']),
+      expect.arrayContaining([
+        'mt-3',
+        'min-h-9',
+        'flex',
+        'items-center',
+        'pointer-coarse:min-h-11',
+      ]),
     );
     await emit(MINE, [WEEK_1]);
     expect(actions(0)?.className).toBe(before);
@@ -266,7 +292,7 @@ describe('PublicCampPage registration, a guardian’s children', () => {
     async (_label, camp, mine) => {
       await emit(CAMP, camp);
       const before = rows().map((_row, index) => actions(index)?.className);
-      expect(before[0]?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'h-9']));
+      expect(before[0]?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'min-h-9']));
       await emit(MINE, mine);
       await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
       expect(rows().map((_row, index) => actions(index)?.className)).toEqual(before);
@@ -316,10 +342,29 @@ describe('PublicCampPage waitlist', () => {
     await emit(CAMP, JUNIOR_CAMP);
   });
 
+  it('shows no registered or waiting line until all three of the caller’s answers are in, then shows them together', async () => {
+    await emitAlone(MINORS, [{ sessionId: WEEK_1, minorName: 'Zoe R.' }]);
+    await emitAlone(WAITING, [entry(WEEK_3, MAYA, 1)]);
+    expect(registered(0)).toBeNull();
+    expect(waiting(2)).toEqual([]);
+    expect(joinLink(2)).toBeDefined();
+    await emitAlone(MINE, []);
+    expect(text(registered(0))).toBe('Zoe R. is registered');
+    expect(waiting(2)).toEqual(['Maya R. is on the waitlist, position 1']);
+  });
+
+  it('shows the lines once an answer fails, so a failed query holds nothing back for ever', async () => {
+    await emitAlone(MINORS, []);
+    await emitAlone(WAITING, [entry(WEEK_3, MAYA, 1)]);
+    client.activeSubscriptions.find((s) => s.name === MINE)!.fail(new Error('x'));
+    await settle();
+    expect(waiting(2)).toEqual(['Maya R. is on the waitlist, position 1']);
+  });
+
   it('puts the waiting line in the row the Join link already holds, so its answer changes no row', async () => {
     await emit(CAMP, ADULT_CAMP);
     const before = actions(2)?.className;
-    expect(before?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'h-10', 'flex']));
+    expect(before?.split(' ')).toEqual(expect.arrayContaining(['mt-3', 'min-h-10', 'flex']));
     await emit(WAITING, [entry(WEEK_3, { kind: 'self' }, 1)]);
     expect(actions(2)?.className).toBe(before);
     expect(rows()[2].querySelectorAll('[data-slot="session-actions"]')).toHaveLength(1);

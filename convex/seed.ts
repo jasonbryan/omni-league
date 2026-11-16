@@ -1682,7 +1682,7 @@ const CAMP_REGISTRATION_ACCOUNTS = ['player', 'guardian'] as const;
  * Week 4 of the Junior Beach Volleyball Camp has one place, held by guardian@'s child "Sam R.", so the session reads Full and
  * "Maya R." (guardian@) waits at position 1. Inserted once: any registration or entry of the account in the session means it was.
  */
-export const DEMO_CAMP_WAITLIST = {
+const DEMO_CAMP_WAITLIST = {
   organizationSlug: 'gulf-coast-sport-social',
   campSlug: 'junior-beach-volleyball-camp',
   sessionName: 'Week 4',

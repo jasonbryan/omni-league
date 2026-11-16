@@ -191,7 +191,7 @@ function waitingLine(participant: Participant, position: number): string {
                                 name="lucideListOrdered"
                                 class="shrink-0 text-base"
                                 aria-hidden="true"
-                              /><span class="line-clamp-2 wrap-anywhere">{{ line }}</span>
+                              /><span class="wrap-anywhere">{{ line }}</span>
                             </p>
                           }
                         </div>
@@ -268,8 +268,8 @@ export class PublicCampContent {
   >([]);
 
   protected readonly registerButton = OUTLINE_BUTTON;
-  protected readonly actionsRow = ACTIONS_ROW + ' h-9';
-  protected readonly fullActionsRow = ACTIONS_ROW + ' h-10';
+  protected readonly actionsRow = ACTIONS_ROW + ' min-h-9';
+  protected readonly fullActionsRow = ACTIONS_ROW + ' min-h-10';
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 

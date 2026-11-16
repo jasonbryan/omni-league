@@ -1,20 +1,12 @@
-import { expectedOpenCards, expectedRegistrationOpenCards } from '../support/open-seasons';
+import {
+  campSessionKey,
+  expectedOpenCards,
+  expectedRegistrationOpenCards,
+} from '../support/open-seasons';
 import { expect, test } from '../support/fixtures';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
 const GULF_COAST = 'gulf-coast-sport-social';
-
-function withDemoPassword<T>(password: string | undefined, run: () => T): T {
-  const before = process.env['DEMO_ACCOUNT_PASSWORD'];
-  if (password === undefined) delete process.env['DEMO_ACCOUNT_PASSWORD'];
-  else process.env['DEMO_ACCOUNT_PASSWORD'] = password;
-  try {
-    return run();
-  } finally {
-    if (before === undefined) delete process.env['DEMO_ACCOUNT_PASSWORD'];
-    else process.env['DEMO_ACCOUNT_PASSWORD'] = before;
-  }
-}
 
 test.describe('expected Registration open cards from the demo data', VIEWPORT_AGNOSTIC, () => {
   test('lists the published Summer 2027 seasons by soonest deadline on 2026-10-30', () => {
@@ -66,9 +58,7 @@ test.describe(
     const RUN = Date.parse('2026-10-30T17:00:00Z');
 
     test('puts the open sessions of the published camps and the published tournaments, soonest deadline first, ahead of the Summer 2027 seasons, whose deadlines are later', () => {
-      expect(
-        withDemoPassword(undefined, () => expectedRegistrationOpenCards(GULF_COAST, RUN)),
-      ).toEqual([
+      expect(expectedRegistrationOpenCards(GULF_COAST, RUN)).toEqual([
         { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 1' },
         { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 2' },
         { title: 'Adult Beach Skills Camp', subtitle: 'Week 1' },
@@ -82,10 +72,9 @@ test.describe(
       ]);
     });
 
-    test('leaves out Week 4 of the Junior Beach Volleyball Camp when the demo accounts are seeded, because guardian@’s child takes its one place', () => {
-      const cards = withDemoPassword('a throwaway demo passphrase', () =>
-        expectedRegistrationOpenCards(GULF_COAST, RUN),
-      );
+    test('leaves out a camp session that has no place left on the backend, such as Week 4 once guardian@’s child holds its one place', () => {
+      const filled = new Set([campSessionKey('junior-beach-volleyball-camp', 'Week 4')]);
+      const cards = expectedRegistrationOpenCards(GULF_COAST, RUN, filled);
       expect(cards).not.toContainEqual({
         title: 'Junior Beach Volleyball Camp',
         subtitle: 'Week 4',

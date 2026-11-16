@@ -14,7 +14,7 @@ import { initials } from '../src/app/organizations/initials';
 import { expectAccessible } from './support/a11y';
 import { baseURL, LOCAL_CONVEX_SITE_URL, LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
 import { expect, failedRequests, test } from './support/fixtures';
-import { expectedRegistrationOpenCards } from './support/open-seasons';
+import { expectedRegistrationOpenCards, filledDemoCampSessions } from './support/open-seasons';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { expectLogoLoaded } from './support/organization-mark';
 import {
@@ -830,7 +830,11 @@ test.describe('saved copies (production build with seed:demo data)', () => {
         await expect(locationList.getByText(location.address)).toBeVisible();
       }
       const registrationOpen = page.locator('#registration-open');
-      const expectedCards = expectedRegistrationOpenCards(organization.slug, Date.now());
+      const expectedCards = expectedRegistrationOpenCards(
+        organization.slug,
+        Date.now(),
+        await filledDemoCampSessions(organization.slug),
+      );
       if (expectedCards.length === 0) {
         await expect(registrationOpen.getByText(/^No season is open/)).toBeVisible();
       } else {

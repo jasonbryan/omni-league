@@ -95,19 +95,32 @@ export class PublicCampPage {
       ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
       : skipToken,
   );
-  protected readonly registeredSessionIds = computed(() => this.registrations.value() ?? []);
+  protected readonly registeredSessionIds = computed(() =>
+    this.viewerReady() ? (this.registrations.value() ?? []) : [],
+  );
   private readonly minors = injectQuery(api.campRegistrations.listMyMinorsForCamp, () =>
     this.auth.signedIn() && this.auth.convexAuthenticated()
       ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
       : skipToken,
   );
-  protected readonly registeredMinors = computed(() => this.minors.value() ?? []);
+  protected readonly registeredMinors = computed(() =>
+    this.viewerReady() ? (this.minors.value() ?? []) : [],
+  );
   private readonly waiting = injectQuery(api.campWaitlist.listMineForCamp, () =>
     this.auth.signedIn() && this.auth.convexAuthenticated()
       ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
       : skipToken,
   );
-  protected readonly waitlist = computed(() => this.waiting.value() ?? []);
+  protected readonly waitlist = computed(() =>
+    this.viewerReady() ? (this.waiting.value() ?? []) : [],
+  );
+  /** The three answers apply together, so each row changes once and not once for each answer. */
+  private readonly viewerReady = computed(() => {
+    if (!this.auth.signedIn() || !this.auth.convexAuthenticated()) return true;
+    return [this.registrations, this.minors, this.waiting].every(
+      (query) => query.value() !== undefined || query.error() !== undefined,
+    );
+  });
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 
