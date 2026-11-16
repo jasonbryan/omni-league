@@ -687,3 +687,87 @@ describe('testing:seedTournamentPools and testing:seedPoolResult', () => {
     ).rejects.toThrow(/No team is named/);
   });
 });
+
+describe('testing:seedPoolBracket', () => {
+  const ARGS = { organizationSlug: 'e2e-org-t1u2', tournamentSlug: 'gulf-coast-beach-open' };
+  const names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
+  const score = { kind: 'sets' as const, sets: [{ a: 21, b: 15 }] };
+
+  async function played(complete: boolean) {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, { ...TOURNAMENT, status: 'published' });
+    await t.mutation(internal.testing.setTournamentStructure, { ...ARGS, structure: 'pools' });
+    await t.mutation(internal.testing.seedTournamentRosters, {
+      ...ARGS,
+      teams: names.map((name) => ({ name })),
+    });
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    const pairs = [
+      ['Alpha', 'Delta'],
+      ['Alpha', 'Echo'],
+      ['Delta', 'Echo'],
+      ['Bravo', 'Charlie'],
+      ['Bravo', 'Foxtrot'],
+      ['Charlie', 'Foxtrot'],
+    ];
+    for (const teams of complete ? pairs : pairs.slice(1)) {
+      await t.mutation(internal.testing.seedPoolResult, { ...ARGS, teams, score });
+    }
+    return t;
+  }
+
+  test('throws with IS_TEST unset and writes nothing', async () => {
+    const t = await played(true);
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 2 }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await t.run((ctx) => ctx.db.query('tournamentGames').collect())).toHaveLength(6);
+  });
+
+  test('creates the bracket from the pool finish, which the public page then shows with the pools', async () => {
+    const t = await played(true);
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 2 }),
+    ).resolves.toEqual({ gameCount: 3 });
+    const page = await t.query(api.tournaments.getPublicPage, {
+      orgSlug: ARGS.organizationSlug,
+      tournamentSlug: ARGS.tournamentSlug,
+    });
+    expect(page?.pools).toHaveLength(2);
+    expect(page?.bracket?.rounds.map((round) => round.name)).toEqual(['Semifinals', 'Final']);
+  });
+
+  test('refuses while a pool game has no result, a second bracket, and an advance above the smallest pool', async () => {
+    const open = await played(false);
+    await expect(
+      open.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 2 }),
+    ).rejects.toThrow(/Every pool game needs a result/);
+    const t = await played(true);
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 4 }),
+    ).rejects.toThrow(/Choose 1 to 3 teams/);
+    await t.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 2 });
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, { ...ARGS, advancePerPool: 2 }),
+    ).rejects.toThrow(/has a bracket already/);
+  });
+
+  test('refuses an unknown organization and an unknown tournament', async () => {
+    const t = await played(true);
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, {
+        ...ARGS,
+        organizationSlug: 'nowhere',
+        advancePerPool: 2,
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.seedPoolBracket, {
+        ...ARGS,
+        tournamentSlug: 'nowhere',
+        advancePerPool: 2,
+      }),
+    ).rejects.toThrow(/No tournament/);
+  });
+});

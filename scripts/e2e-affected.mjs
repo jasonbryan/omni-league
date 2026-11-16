@@ -1205,9 +1205,11 @@ export const AREAS = [
       named('convex/lib/', [
         'bracket',
         'gameResults',
+        'poolBracket',
         'pools',
         'scoreReports',
         'tournamentBracket',
+        'tournamentPoolBracket',
         'tournamentPools',
       ])(file),
     specs: [

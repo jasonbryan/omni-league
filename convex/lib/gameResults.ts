@@ -3,6 +3,7 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { requireGameOrganizer } from './access';
 import { BRACKET_MESSAGES, roundName } from './bracket';
+import { POOL_MESSAGES } from './pools';
 import {
   POOL_PLAY_TIES,
   checkScore,
@@ -14,6 +15,7 @@ import {
 } from './sports';
 import { DEFAULT_SETS_PER_GAME } from './tournamentEdit';
 import {
+  bracketExists,
   bracketGames,
   gameHasResult,
   nextGameOf,
@@ -105,6 +107,9 @@ export async function refuseUnlessReady(
   game: Doc<'tournamentGames'>,
   expectResult: boolean,
 ): Promise<void> {
+  if (game.stage === 'pool' && (await bracketExists(ctx, game.tournamentId))) {
+    refuseBracket({ code: 'poolsFrozen', message: POOL_MESSAGES.poolsFrozen });
+  }
   if (game.teamIds.some((teamId) => teamId === null)) {
     refuseBracket({ code: 'gameNotReady', message: BRACKET_MESSAGES.gameNotReady });
   }

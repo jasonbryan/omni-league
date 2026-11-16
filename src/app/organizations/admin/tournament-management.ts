@@ -35,6 +35,7 @@ import { AdminAlert } from './admin-alert';
 import { adminPath } from './admin-path';
 import { BracketPanel } from './bracket-panel';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { PoolBracketPanel } from './pool-bracket-panel';
 import { PoolsPanel } from './pools-panel';
 import {
   PublishTournamentDialog,
@@ -59,6 +60,7 @@ import { PageTitle } from '../../core/page-title';
     HlmSkeleton,
     NgIcon,
     NotFoundView,
+    PoolBracketPanel,
     PoolsPanel,
     PublishTournamentDialog,
     RouterLink,
@@ -260,6 +262,12 @@ import { PageTitle } from '../../core/page-title';
                 [view]="pools()"
                 [retryHref]="retryHref()"
               />
+              <app-pool-bracket-panel
+                class="mt-4 max-w-2xl md:mt-6"
+                [tournament]="tournament"
+                [view]="poolBracket()"
+                [retryHref]="retryHref()"
+              />
             } @else {
               <app-bracket-panel
                 class="mt-4 max-w-2xl md:mt-6"
@@ -337,6 +345,7 @@ export class TournamentManagement {
   protected readonly waitlist = this.context.waitlist;
   protected readonly bracket = this.context.bracket;
   protected readonly pools = this.context.pools;
+  protected readonly poolBracket = this.context.poolBracket;
   protected readonly dates = computed(() => {
     const tournament = this.tournament();
     return tournament ? seasonDates(tournament.startDate, tournament.endDate) : '';
@@ -369,12 +378,15 @@ export class TournamentManagement {
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
   private readonly bracketPanel = viewChild(BracketPanel);
   private readonly poolsPanel = viewChild(PoolsPanel);
+  private readonly poolBracketPanel = viewChild(PoolBracketPanel);
 
   protected readonly published = signal(false);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
   protected readonly recreateOpen = computed(
     () =>
-      (this.bracketPanel()?.dialogOpen() ?? false) || (this.poolsPanel()?.dialogOpen() ?? false),
+      (this.bracketPanel()?.dialogOpen() ?? false) ||
+      (this.poolsPanel()?.dialogOpen() ?? false) ||
+      (this.poolBracketPanel()?.dialogOpen() ?? false),
   );
 
   constructor() {
