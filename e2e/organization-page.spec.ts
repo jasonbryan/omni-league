@@ -2319,7 +2319,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
     RAW_HTTP,
     async ({ request }, testInfo) => {
       test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
-      const camp = sandCamp('Full First Camp', [
+      const camp = sandCamp('Crowded Week Camp', [
         { name: 'Week 1', startsInDays: 5 },
         { name: 'Week 2', startsInDays: 20 },
       ]);
@@ -2331,7 +2331,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
       expect(row).toContain(monthDay(20));
       expect(row).not.toContain(monthDay(5));
       expect(row).not.toContain('Full');
-      expect(row).toContain('Register for Full First Camp');
+      expect(row).toContain('Register for Crowded Week Camp');
     },
   );
 
