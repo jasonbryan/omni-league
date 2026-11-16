@@ -2328,7 +2328,8 @@ test.describe('organization page: Camps, raw server HTML', () => {
       const { html } = await fetchRawHtml(request, tenant.path);
       const row = plainText(sectionWithId(html, 'camps'));
       expect(row).toContain('Registration open');
-      expect(row).toContain(monthDay(5));
+      expect(row).toContain(monthDay(20));
+      expect(row).not.toContain(monthDay(5));
       expect(row).not.toContain('Full');
       expect(row).toContain('Register for Full First Camp');
     },
