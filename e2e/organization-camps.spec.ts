@@ -6,6 +6,7 @@ import { seedCamp, seedCampSession, seedPublishedCamp } from './support/camp';
 import { seedCampRegistration } from './support/camp-registrations';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
+import { MAX_CAMP_SESSION_NAME_LENGTH } from '../convex/lib/campSessionInput';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
 import { failMutation } from './support/fail-mutation';
@@ -884,6 +885,70 @@ test.describe('Camp sessions: changing the places', () => {
     await savePlaces(row).click();
     await expect(placesStatus(row)).toContainText('Places saved.');
     await expect(row.locator('[data-slot="session-places"]')).toHaveText('1 place');
+  });
+
+  test('the field is reached, filled, and saved by keyboard, and its hint and error are linked to it', async ({
+    page,
+  }) => {
+    const { camp } = await fullSession(page);
+    await page.goto(camp);
+    const row = sessionRows(page).first();
+    await placesField(row).focus();
+    await expect(placesField(row)).toHaveAttribute('aria-describedby', /^places-.+-description$/);
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('19');
+    await page.keyboard.press('Tab');
+    await expect(savePlaces(row)).toBeFocused();
+    await expect(placesField(row)).toHaveAttribute('aria-describedby', /description .+-error$/);
+    await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
+
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('21');
+    await page.keyboard.press('Enter');
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await expect(row.locator('[data-slot="session-places"]')).toHaveText('21 places');
+  });
+
+  test('a session name of 100 letters with no break wraps, and its places field, error, and status fit at 320px', async ({
+    page,
+  }, testInfo) => {
+    const unbroken = 'Wolfeschlegelsteinhausenbergerdorff'
+      .repeat(3)
+      .slice(0, MAX_CAMP_SESSION_NAME_LENGTH);
+    const { tenant } = await memberOf(page, 'orgAdmin');
+    await seedPublishedCamp(tenant, {
+      ...JUNIOR,
+      locations: [PELICAN],
+      minimumAge: 9,
+      maximumAge: 14,
+      sessions: [
+        {
+          name: unbroken,
+          startDate: dateFromToday(14),
+          endDate: dateFromToday(18),
+          places: 20,
+          registrationDeadline: dateFromToday(11),
+          registeredCount: 20,
+        },
+      ],
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(campPage(tenant));
+    const row = sessionRows(page).first();
+    const field = row.getByLabel(`Places for ${unbroken}`);
+    await expect(field).toHaveValue('20');
+    await field.fill('19');
+    await field.blur();
+    await expect(fieldError(row)).toHaveText('Use at least 20 places. 20 are registered.');
+    await screenshot(page, testInfo, 'camp-places-long-name-error');
+    await expectAccessible(page);
+
+    await field.fill('21');
+    await row.getByRole('button', { name: `Save places for ${unbroken}` }).click();
+    await expect(placesStatus(row)).toContainText('Places saved.');
+    await screenshot(page, testInfo, 'camp-places-long-name-saved');
+    await expectAccessible(page);
   });
 
   test('pressing Save places offline shows the offline alert and keeps the text', async ({

@@ -520,6 +520,34 @@ describe('campSessions.updatePlaces', () => {
       s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 25 }),
     ).rejects.toThrow('Not allowed');
   });
+
+  test('a registration and a places edit racing for the last place leave the places at or above the registered count', async () => {
+    const s = await setup();
+    const campSessionId = await added(s);
+    await s.adminA.mutation(api.camps.publish, { campId: s.junior.campId });
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('campSessions', campSessionId, {
+        startDate: '2099-07-05',
+        endDate: '2099-07-09',
+        registrationDeadline: '2099-07-01',
+        places: 5,
+        registeredCount: 4,
+      });
+      await ctx.db.insert('users', { authUserId: 'parent', name: 'parent', adultConfirmedAt: 1 });
+    });
+    const parent = s.t.withIdentity(identity('parent'));
+    const results = await Promise.allSettled([
+      parent.mutation(api.campRegistrations.register, {
+        sessionId: campSessionId,
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        ageConfirmed: true,
+      }),
+      s.adminA.mutation(api.campSessions.updatePlaces, { campSessionId, places: 4 }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const [row] = await sessionsOf(s);
+    expect(row.places).toBeGreaterThanOrEqual(row.registeredCount);
+  });
 });
 
 describe('camps.getForManagement', () => {
