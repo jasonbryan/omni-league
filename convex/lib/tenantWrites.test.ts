@@ -8,7 +8,9 @@ import { modules, tournamentProgramFields } from '../test.setup';
 import {
   defaultDivision,
   insertCustomLevel,
+  insertDraftCamp,
   insertDraftLeague,
+  insertDraftTraining,
   insertDraftTournament,
   insertLeague,
   insertLocation,
@@ -792,6 +794,96 @@ describe('programs.searchText', () => {
         )
         .collect();
       expect(browsed.map((program) => program.slug)).toEqual(['autumn-cup']);
+    });
+  });
+
+  test('camp and training programs get no text from a location rename or a City, state change', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      await insertDraftCamp(ctx, organizationId, {
+        name: 'Sand Camp',
+        slug: 'sand-camp',
+        sport: 'beachVolleyball',
+        locationIds: [alpha._id],
+        minimumAge: 9,
+        maximumAge: 14,
+      });
+      await insertDraftTraining(ctx, organizationId, {
+        name: 'Serving Clinic',
+        slug: 'serving-clinic',
+        sport: 'beachVolleyball',
+        locationIds: [alpha._id],
+        coachName: 'Dana Ruiz',
+      });
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+      await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
+
+      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBeUndefined();
+      expect(
+        (await programNamed(ctx, organizationId, 'serving-clinic')).searchText,
+      ).toBeUndefined();
+    });
+  });
+
+  test('camp and training programs do not count toward the bound of a rename', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= MAX_PROGRAMS_SEARCH_UPDATED; i++) {
+        await ctx.db.insert('programs', {
+          ...tournamentProgramFields(organizationId, `camp-${i}`),
+          type: 'camp',
+          locationIds: [alpha._id],
+        });
+        await ctx.db.insert('programs', {
+          ...tournamentProgramFields(organizationId, `training-${i}`),
+          type: 'training',
+          locationIds: [alpha._id],
+        });
+      }
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+      await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
+
+      expect((await ctx.db.get('locations', alpha._id))!.name).toBe('Omega Field');
+      const programs = await ctx.db.query('programs').collect();
+      expect(programs.every((program) => program.searchText === undefined)).toBe(true);
+    });
+  });
+
+  test('a City, state change on an organization with 201 tournament programs is refused with the bound, and writes nothing', async () => {
+    const { t, organizationId } = await world();
+    await t.run(async (ctx) => {
+      for (let i = 0; i <= MAX_PROGRAMS_SEARCH_UPDATED; i++) {
+        await ctx.db.insert('programs', tournamentProgramFields(organizationId, `bulk-${i}`));
+      }
+    });
+    await expect(
+      t.run((ctx) => updateOrganizationCityState(ctx, organizationId, 'Galveston, TX')),
+    ).rejects.toThrow(/more than 200 tournament programs/);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get('organizations', organizationId))!.cityState).toBe(
+        'Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('a location rename leaves the tournament programs of another location as they were', async () => {
+    const { t, organizationId, alpha, bravo } = await world();
+    await t.run(async (ctx) => {
+      await insertDraftTournament(ctx, organizationId, {
+        ...TOURNAMENT,
+        locationIds: [bravo._id],
+      });
+      await ctx.db.patch('programs', (await programNamed(ctx, organizationId, 'spring-cup'))._id, {
+        searchText: 'kept as it was',
+      });
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+
+      expect((await programNamed(ctx, organizationId, 'spring-cup')).searchText).toBe(
+        'kept as it was',
+      );
     });
   });
 });
