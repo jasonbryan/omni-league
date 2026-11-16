@@ -82,7 +82,20 @@ export const REGISTER_CAMP_MESSAGES = {
   registeredDescription: 'Your place is held. You’ll find it on the camp page.',
   closedTitle: 'Registration for this session is closed.',
   fullTitle: 'This session is full.',
-  fullDescription: 'Every place is taken. Choose another session on the camp page.',
+  fullDescription:
+    'Its last place was taken while you were registering. You can join the waitlist instead.',
+  joinWaitlist: 'Join the waitlist',
+  hasPlaceTitle: 'This session has a place free.',
+  hasPlaceDescription: 'Register for it instead.',
+  registerInstead: 'Register',
+  waitlistNoteTitle: 'This session is full.',
+  waitlistNoteDescription:
+    'Join the waitlist. If a place opens, the organizer offers it to the first person waiting.',
+  joinFailedTitle: 'You could not be added to the waitlist.',
+  joinFailedDescription: 'You were not added. Check your connection and try again.',
+  waitlistedTitle: (session: string) => `You're on the waitlist for ${session}.`,
+  waitlistedDescription:
+    'The organizer offers the next place to the first person waiting. Your position is on the camp page.',
   adultNotAllowedTitle: (minimumAge: number, maximumAge: number) =>
     `This camp is for ages ${minimumAge} to ${maximumAge}.`,
   adultNotAllowedDescription: 'An adult cannot register themself for it.',
@@ -97,22 +110,34 @@ const ATTENDING_LABELS: Readonly<Record<Attending, string>> = { self: 'Me', mino
 
 /** What the page shows after a refused submit, before the query catches up. */
 type Refusal =
-  'closed' | 'full' | 'registered' | 'adult-not-allowed' | 'minor-not-allowed' | 'no-session';
+  | 'closed'
+  | 'full'
+  | 'has-place'
+  | 'registered'
+  | 'waitlisted'
+  | 'adult-not-allowed'
+  | 'minor-not-allowed'
+  | 'no-session';
 
 type FormAlert = 'offline' | 'failed';
 
-type NoticeState = Exclude<RegisterCampState, 'loading' | 'not-found' | 'signed-out' | 'form'>;
+type NoticeState =
+  | Exclude<RegisterCampState, 'loading' | 'not-found' | 'signed-out' | 'form' | 'waitlist'>
+  | 'has-place';
 
 interface Notice {
   icon: string;
   title: string;
   description: string;
+  action?: string;
 }
 
 const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   registrationClosed: 'closed',
   sessionFull: 'full',
+  sessionHasPlace: 'has-place',
   alreadyRegistered: 'registered',
+  alreadyWaiting: 'waitlisted',
   adultNotAllowed: 'adult-not-allowed',
   minorNotAllowed: 'minor-not-allowed',
   campNotFound: 'no-session',
@@ -186,6 +211,16 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                     <div hlmAlertTitle>{{ notice.title }}</div>
                     <div hlmAlertDescription>{{ notice.description }}</div>
                   </div>
+                  @if (notice.action; as action) {
+                    <button
+                      type="button"
+                      data-slot="refusal-action"
+                      [class]="primaryButton + ' mt-4 w-full'"
+                      (click)="showForm()"
+                    >
+                      {{ action }}
+                    </button>
+                  }
                   <a
                     [routerLink]="campHref()"
                     data-slot="button"
@@ -205,6 +240,13 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                   class="px-4 pt-5 pb-4 md:px-8 md:pb-8"
                   (submit)="submit($event)"
                 >
+                  @if (joining()) {
+                    <div hlmAlert role="note" class="mb-5">
+                      <ng-icon name="lucideUsers" aria-hidden="true" />
+                      <div hlmAlertTitle>{{ messages.waitlistNoteTitle }}</div>
+                      <div hlmAlertDescription>{{ messages.waitlistNoteDescription }}</div>
+                    </div>
+                  }
                   @if (formAlert(); as alert) {
                     @if (alert === 'offline') {
                       <app-admin-offline-alert
@@ -216,8 +258,10 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       <app-admin-alert
                         #formAlertBox
                         kind="error"
-                        [title]="messages.failedTitle"
-                        [description]="messages.failedDescription"
+                        [title]="joining() ? messages.joinFailedTitle : messages.failedTitle"
+                        [description]="
+                          joining() ? messages.joinFailedDescription : messages.failedDescription
+                        "
                         class="mb-5"
                       />
                     }
@@ -327,14 +371,16 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
                     >
                       @if (submitting()) {
-                        <hlm-spinner data-icon="inline-start" />Registering…
+                        <hlm-spinner data-icon="inline-start" />{{
+                          joining() ? 'Joining…' : 'Registering…'
+                        }}
                       } @else {
-                        Register
+                        {{ joining() ? messages.joinWaitlist : 'Register' }}
                       }
                     </button>
                   </div>
                   <p role="status" class="sr-only">
-                    {{ submitting() ? 'Registering for ' + session.name + '.' : '' }}
+                    {{ submitting() ? pendingStatus(session.name) : '' }}
                   </p>
                 </form>
               }
@@ -351,6 +397,7 @@ export class RegisterCampPage {
   private readonly injector = inject(Injector);
   private readonly pageTitle = inject(PageTitle);
   private readonly register = injectMutation(api.campRegistrations.register);
+  private readonly join = injectMutation(api.campWaitlist.join);
 
   protected readonly messages = REGISTER_CAMP_MESSAGES;
   protected readonly attendingLabels = ATTENDING_LABELS;
@@ -409,13 +456,14 @@ export class RegisterCampPage {
   );
 
   /** Signed out, the page stays on its skeleton while it sends the visitor to sign in. */
-  protected readonly state = computed<RegisterCampState | 'error'>(() => {
+  protected readonly state = computed<RegisterCampState | 'has-place' | 'error'>(() => {
     if (this.registration.error()) return 'error';
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
     const refusal = this.refusal();
-    return state === 'form' && refusal !== null ? refusal : state;
+    return (state === 'form' || state === 'waitlist') && refusal !== null ? refusal : state;
   });
+  protected readonly joining = computed(() => this.state() === 'waitlist');
 
   protected readonly notice = computed<Notice | null>(() => {
     const state = this.state();
@@ -453,6 +501,18 @@ export class RegisterCampPage {
         icon: 'lucideUsers',
         title: messages.fullTitle,
         description: messages.fullDescription,
+        action: messages.joinWaitlist,
+      }),
+      'has-place': () => ({
+        icon: 'lucideCircleCheck',
+        title: messages.hasPlaceTitle,
+        description: messages.hasPlaceDescription,
+        action: messages.registerInstead,
+      }),
+      waitlisted: () => ({
+        icon: 'lucideCircleCheck',
+        title: messages.waitlistedTitle(session?.name ?? ''),
+        description: messages.waitlistedDescription,
       }),
     };
     return state in byState ? byState[state as NoticeState]() : null;
@@ -533,7 +593,8 @@ export class RegisterCampPage {
       const camp = this.camp();
       const session = this.session();
       if (camp && session) {
-        this.pageTitle.set([`Register for ${session.name}`, camp.name]);
+        const verb = this.joining() ? 'Join the waitlist for' : 'Register for';
+        this.pageTitle.set([`${verb} ${session.name}`, camp.name]);
       }
     });
     effect(() => {
@@ -566,12 +627,13 @@ export class RegisterCampPage {
       return;
     }
     this.submitting.set(true);
+    const request = {
+      sessionId: session.sessionId,
+      participant: minorName === null ? participant : ({ kind: 'minor', minorName } as const),
+      ageConfirmed: this.model().ageConfirmed,
+    };
     try {
-      await this.register.run({
-        sessionId: session.sessionId,
-        participant: minorName === null ? participant : { kind: 'minor', minorName },
-        ageConfirmed: this.model().ageConfirmed,
-      });
+      await (this.joining() ? this.join.run(request) : this.register.run(request));
     } catch (failure) {
       this.submitting.set(false);
       this.showFailure(failure);
@@ -580,6 +642,14 @@ export class RegisterCampPage {
     // A finished one-time form is replaced in history, so Back returns to where the visitor came from.
     await this.router.navigateByUrl(this.campHref(), { replaceUrl: true });
     this.submitting.set(false);
+  }
+
+  protected pendingStatus(session: string): string {
+    return this.joining() ? `Joining the waitlist for ${session}.` : `Registering for ${session}.`;
+  }
+
+  protected showForm(): void {
+    this.refusal.set(null);
   }
 
   protected choose(kind: string): void {

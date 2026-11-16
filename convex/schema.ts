@@ -289,6 +289,8 @@ export default defineSchema({
     registrationDeadline: v.string(),
     /** The registrations in the session; a session with any cannot be deleted. */
     registeredCount: v.number(),
+    /** The `waiting` entries in `campWaitlistEntries`, kept by `convex/lib/campWaitlistWrites.ts`; absent on a session written before the waitlist existed, which has none. A session with any takes no new registration. */
+    waitlistCount: v.optional(v.number()),
   }).index('by_campId_and_startDate', ['campId', 'startDate']),
 
   // One row per participant in a camp session, written only by `convex/lib/campRegistrationWrites.ts`, which keeps `campSessions.registeredCount`. Deleting the account deletes its rows and frees their places.
@@ -304,6 +306,27 @@ export default defineSchema({
     ageConfirmedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
+    .index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey'])
+    .index('by_userId', ['userId']),
+
+  // People waiting for a place in a full camp session, written only by `convex/lib/campWaitlistWrites.ts`, which keeps `campSessions.waitlistCount`.
+  // A waiting entry holds no place; promotion writes the registration and sets `registrationId`. Deleting the account deletes its rows.
+  campWaitlistEntries: defineTable({
+    sessionId: v.id('campSessions'),
+    campId: v.id('camps'),
+    organizationId: v.id('organizations'),
+    /** The account holder, who is the participant for `self` and the guardian for `minor`. */
+    userId: v.id('users'),
+    participant: participantValidator,
+    /** As on `campRegistrations`, so the one-per-participant check is an index read. */
+    participantKey: v.string(),
+    ageConfirmedAt: v.optional(v.number()),
+    status: waitlistEntryStatusValidator,
+    requestedAt: v.number(),
+    promotedAt: v.optional(v.number()),
+    registrationId: v.optional(v.id('campRegistrations')),
+  })
+    .index('by_sessionId_and_status_and_requestedAt', ['sessionId', 'status', 'requestedAt'])
     .index('by_sessionId_and_userId_and_participantKey', ['sessionId', 'userId', 'participantKey'])
     .index('by_userId', ['userId']),
 

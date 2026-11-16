@@ -18,3 +18,22 @@ export async function minorRegistrationsOf(
     )
     .take(MAX_MINORS_PER_SESSION);
 }
+
+/** The guardian's children still waiting; a promoted entry is already a registration, which `minorRegistrationsOf` counts. */
+export async function minorWaitlistEntriesOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  sessionId: Id<'campSessions'>,
+  userId: Id<'users'>,
+): Promise<Doc<'campWaitlistEntries'>[]> {
+  const entries = await ctx.db
+    .query('campWaitlistEntries')
+    .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
+      q
+        .eq('sessionId', sessionId)
+        .eq('userId', userId)
+        .gte('participantKey', MINOR_KEY_PREFIX)
+        .lt('participantKey', MINOR_KEY_END),
+    )
+    .take(MAX_MINORS_PER_SESSION);
+  return entries.filter((entry) => entry.status === 'waiting');
+}

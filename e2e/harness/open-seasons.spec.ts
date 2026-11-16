@@ -60,6 +60,7 @@ test.describe(
         { title: 'Adult Beach Skills Camp', subtitle: 'Week 1' },
         { title: 'Gulf Coast Beach Open', subtitle: 'Tournament' },
         { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 3' },
+        { title: 'Junior Beach Volleyball Camp', subtitle: 'Week 4' },
         { title: 'Gulf Coast King of the Beach', subtitle: 'Tournament' },
         { title: 'Coed 7v7 Rec', subtitle: 'Summer 2027' },
         { title: 'Thursday Night Coed 2s', subtitle: 'Summer 2027' },

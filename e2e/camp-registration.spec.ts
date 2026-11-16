@@ -61,7 +61,7 @@ async function seed() {
   });
   const youth = await seedPublishedCamp(tenant, {
     ...YOUTH,
-    sessions: [week('Week 1', 30, 23)],
+    sessions: [week('Week 1', 30, 23), { ...week('Full week', 37, 30, 1), registeredCount: 1 }],
   });
   const mixed = await seedPublishedCamp(tenant, {
     ...MIXED,
@@ -94,6 +94,8 @@ const ageBox = (page: Page) =>
   page.getByRole('checkbox', { name: /^(I am|.+ is) \d+ to \d+ years old/ });
 const childName = (page: Page) => page.getByRole('textbox', { name: "Child's name" });
 const registerButton = (page: Page) => page.getByRole('button', { name: 'Register', exact: true });
+const joinButton = (page: Page) =>
+  page.getByRole('button', { name: 'Join the waitlist', exact: true });
 const alert = (page: Page) => page.locator('main [data-slot="alert"]');
 
 test.describe('register for a camp session', () => {
@@ -135,7 +137,7 @@ test.describe('register for a camp session', () => {
     );
     await expect(row(page, 'Week 1')).toContainText('11 places left');
     await expect(row(page, 'Week 1').getByRole('link')).toHaveCount(0);
-    await expect(row(page, 'Last place').getByRole('link')).toHaveCount(0);
+    await expect(row(page, 'Last place').getByRole('link', { name: /^Register/ })).toHaveCount(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, '355-camp-registered');
 
@@ -178,19 +180,21 @@ test.describe('register for a camp session', () => {
     await expect(ageBox(page)).toBeVisible();
   });
 
-  test('a full session, a closed one, and an unknown one show their reason with a link back and no form', async ({
+  test('a closed session and an unknown one show their reason with a link back and no form', async ({
     page,
   }, testInfo) => {
     const { tenant, adult } = await seed();
     const ids = await sessionIds(tenant, ADULT.slug);
     await page.goto(adult);
     await expect(row(page, 'Last place')).toContainText('Full');
-    await expect(row(page, 'Last place').getByRole('link')).toHaveCount(0);
+    await expect(row(page, 'Last place').getByRole('link')).toHaveCount(1);
+    await expect(
+      row(page, 'Last place').getByRole('link', { name: 'Join the waitlist for Last place' }),
+    ).toBeVisible();
     await expect(row(page, 'Closed week').getByRole('link')).toHaveCount(0);
 
     await signUp(page, newUser('Late'));
     const cases = [
-      ['Last place', 'This session is full.', '355-register-full'],
       ['Closed week', 'Registration for this session is closed.', '355-register-closed'],
     ] as const;
     for (const [name, reason, shot] of cases) {
@@ -543,7 +547,7 @@ test.describe('places and refusals between people', () => {
     await expect(row(page, 'Week 1')).toContainText('11 places left');
   });
 
-  test('a form left open while the last place goes turns into "This session is full." and takes nothing', async ({
+  test('a form left open while the last place goes turns into the waitlist form, keeps the ticked box, and takes nothing', async ({
     page,
     browser,
   }) => {
@@ -565,11 +569,9 @@ test.describe('places and refusals between people', () => {
       await expect(page).toHaveURL(`${baseURL}${camp}`, { timeout: 20_000 });
 
       await expect(alert(late)).toContainText('This session is full.');
-      await expect(ageBox(late)).toHaveCount(0);
-      await expect(late.getByRole('link', { name: 'Back to the camp page' })).toHaveAttribute(
-        'href',
-        camp,
-      );
+      await expect(joinButton(late)).toBeVisible();
+      await expect(registerButton(late)).toHaveCount(0);
+      await expect(ageBox(late)).toBeChecked();
       await late.goto(camp);
       await expect(row(late, 'Only week')).toContainText('Full');
       await expect(row(late, 'Only week').locator('[data-slot="session-registered"]')).toHaveCount(
@@ -859,4 +861,207 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       );
     });
   }
+});
+
+test.describe('the waitlist of a full session', () => {
+  const FULL_WEEK = 'Full week';
+  const waitingLine = (page: Page) =>
+    row(page, FULL_WEEK).locator('[data-slot="session-waitlist"]');
+
+  async function join(page: Page, path: string, name: string) {
+    await page.goto(path);
+    await childName(page).fill(name);
+    await ageBox(page).click();
+    await joinButton(page).click();
+  }
+
+  test('a guardian joins for "Maya R.", which takes no place, and the camp page reads her position, also after a reload', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    const path = registerPath(tenant, YOUTH.slug, ids[FULL_WEEK]);
+    await signUp(page, newUser('Guardian'));
+    await page.goto(youth);
+    await expect(row(page, FULL_WEEK)).toContainText('Full');
+    await expect(row(page, FULL_WEEK).getByRole('link', { name: /^Register/ })).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '358-camp-full');
+
+    await row(page, FULL_WEEK)
+      .getByRole('link', { name: 'Join the waitlist for Full week' })
+      .click();
+    await expect(page).toHaveURL(`${baseURL}${path}`);
+    await expect(alert(page)).toContainText('This session is full.');
+    await expect(registerButton(page)).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'My child' })).toBeChecked();
+    await expect(ageBox(page)).toHaveAccessibleName(/^My child is 9 to 17 years old on /);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '358-join-form');
+
+    await childName(page).fill('Maya R.');
+    await joinButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toHaveText(
+      "Confirm Maya R.'s age to continue.",
+    );
+    await expect(ageBox(page)).toBeFocused();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '358-join-age-error');
+
+    await ageBox(page).click();
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    await expect(waitingLine(page)).toHaveText('Maya R. is on the waitlist, position 1');
+    await expect(row(page, FULL_WEEK)).toContainText('Full');
+    await expect(row(page, FULL_WEEK).locator('[data-slot="session-registered"]')).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '358-camp-waiting');
+
+    await page.reload();
+    await expect(waitingLine(page)).toHaveText('Maya R. is on the waitlist, position 1');
+    await expectAccessible(page);
+
+    // The register page was replaced in history, so Back does not return to it.
+    await page.goBack();
+    expect(page.url()).not.toContain('/register');
+  });
+
+  test('the next person is at position 2, and another account sees neither name nor position', async ({
+    page,
+    browser,
+  }) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    const path = registerPath(tenant, YOUTH.slug, ids[FULL_WEEK]);
+    await signUp(page, newUser('First'));
+    await join(page, path, 'Maya R.');
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+
+    const second = await otherUser(browser, newUser('Second'));
+    try {
+      await join(second, path, 'Leo R.');
+      await expect(second).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+      await expect(waitingLine(second)).toHaveText('Leo R. is on the waitlist, position 2');
+      await expect(waitingLine(page)).toHaveText('Maya R. is on the waitlist, position 1');
+      await expect(second.locator('main')).not.toContainText('Maya');
+    } finally {
+      await second.context().close();
+    }
+    const signedOut = await browser.newContext();
+    try {
+      const visitor = await signedOut.newPage();
+      await visitor.goto(youth);
+      await expect(row(visitor, FULL_WEEK)).toContainText('Full');
+      await expect(
+        row(visitor, FULL_WEEK).getByRole('link', { name: /^Join the waitlist/ }),
+      ).toBeVisible();
+      await expect(visitor.locator('main')).not.toContainText('Maya');
+      await expect(visitor.locator('main')).not.toContainText('position');
+    } finally {
+      await signedOut.close();
+    }
+  });
+
+  test('an adult who waits sees the waitlist card instead of the form, and the camp page names her', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, adult } = await seed();
+    const ids = await sessionIds(tenant, ADULT.slug);
+    const path = registerPath(tenant, ADULT.slug, ids['Last place']);
+    await signUp(page, newUser('Adult'));
+    await page.goto(path);
+    await expect(alert(page)).toContainText('This session is full.');
+    await expect(page.getByRole('radio', { name: 'Me' })).toBeChecked();
+    await ageBox(page).click();
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${adult}`, { timeout: 20_000 });
+    await expect(row(page, 'Last place').locator('[data-slot="session-waitlist"]')).toHaveText(
+      'You are on the waitlist, position 1',
+    );
+    await expect(row(page, 'Last place').getByRole('link')).toHaveCount(0);
+
+    await page.goto(path);
+    await expect(alert(page)).toContainText("You're on the waitlist for Last place.");
+    await expect(ageBox(page)).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Back to the camp page' })).toHaveAttribute(
+      'href',
+      adult,
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '358-register-waiting');
+  });
+
+  test.describe('the same child twice', () => {
+    test.use({ expectedConvexErrors: ['campWaitlist:join'] });
+
+    test('with another case or spacing, the server refuses it under the name and adds no second entry', async ({
+      page,
+    }, testInfo) => {
+      const { tenant, youth } = await seed();
+      const ids = await sessionIds(tenant, YOUTH.slug);
+      const path = registerPath(tenant, YOUTH.slug, ids[FULL_WEEK]);
+      await signUp(page, newUser('Guardian'));
+      await join(page, path, 'Maya R.');
+      await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+
+      await join(page, path, '  maya   r. ');
+      await expect(page.locator('#minor-name-error')).toHaveText(
+        'Maya R. is already on the waitlist for this session.',
+      );
+      await expect(childName(page)).toBeFocused();
+      await expect(childName(page)).toHaveValue('  maya   r. ');
+      await expect(ageBox(page)).toBeChecked();
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '358-join-duplicate');
+      await page.goto(youth);
+      await expect(waitingLine(page)).toHaveCount(1);
+    });
+  });
+
+  test('offline, the Join button refuses to send, keeps the ticked box, and joins once the connection is back', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, youth } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Offline'));
+    await page.goto(registerPath(tenant, YOUTH.slug, ids[FULL_WEEK]));
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await page.context().setOffline(true);
+    try {
+      await expect(joinButton(page)).toHaveAttribute('aria-disabled', 'true');
+      await joinButton(page).click({ force: true });
+      await expect(page.locator('main [data-slot="alert"][role="alert"]')).toContainText(
+        "You're offline",
+      );
+      await expect(page.locator('main [data-slot="alert"][role="alert"]')).toBeFocused();
+      await expect(ageBox(page)).toBeChecked();
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '358-join-offline');
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await expect(joinButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
+    await expect(waitingLine(page)).toHaveText('Maya R. is on the waitlist, position 1');
+  });
+
+  test('on a phone the waitlist form keeps Join the waitlist at the bottom edge, and in the flow at 1280px', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const ids = await sessionIds(tenant, YOUTH.slug);
+    await signUp(page, newUser('Phone'));
+    const phone = testInfo.project.name === 'chromium-mobile';
+    await page.goto(registerPath(tenant, YOUTH.slug, ids[FULL_WEEK]));
+    await expect(page.locator('[data-slot="form-footer"]')).toHaveCSS(
+      'position',
+      phone ? 'sticky' : 'static',
+    );
+    if (phone) {
+      await expect(joinButton(page)).toBeInViewport({ ratio: 1 });
+      expect((await joinButton(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  });
 });

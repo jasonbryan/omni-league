@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp, seedCampSession, seedPublishedCamp } from './support/camp';
-import { seedCampRegistration } from './support/camp-registrations';
+import { seedCampRegistration, seedCampWaitlistEntry } from './support/camp-registrations';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { MAX_CAMP_SESSION_NAME_LENGTH } from '../convex/lib/campSessionInput';
@@ -1386,6 +1386,128 @@ test.describe('who may open a camp’s page', () => {
       main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
     ).toBeVisible();
     await screenshot(page, testInfo, 'camp-not-found');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('Camp sessions: the waitlist', () => {
+  const waitlistOf = (page: Page) => sessionRows(page).first().locator('app-camp-waitlist');
+  const waitingToggle = (page: Page) =>
+    sessionRows(page)
+      .first()
+      .getByRole('button', { name: /registered( \(\d+ waiting\))? in Week 1$/ });
+  const placesField = (page: Page) => sessionRows(page).first().getByLabel('Places for Week 1');
+  const savePlaces = (page: Page) =>
+    sessionRows(page).first().getByRole('button', { name: 'Save places for Week 1' });
+
+  async function fullWithTwoWaiting(page: Page) {
+    const admin = await adminWithCamp(page);
+    await seedCampSession(admin.tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+      places: 1,
+      registeredCount: 1,
+    });
+    const guardian = await seedUser(newUser('Guardian'));
+    const player = await seedUser(newUser('Player'));
+    await seedCampWaitlistEntry(admin.tenant, JUNIOR.slug, 'Week 1', guardian, MAYA);
+    await seedCampWaitlistEntry(admin.tenant, JUNIOR.slug, 'Week 1', player, { kind: 'self' });
+    return { ...admin, guardian, player };
+  }
+
+  test('lists who waits in the order they joined, with the guardian’s email, and offers no Promote while no place is free', async ({
+    page,
+  }, testInfo) => {
+    const { camp, guardian, player } = await fullWithTwoWaiting(page);
+    await page.goto(camp);
+    await expect(waitingToggle(page)).toHaveText('1 of 1 registered (2 waiting) in Week 1');
+    await expect(
+      sessionRows(page)
+        .first()
+        .getByRole('button', { name: /^Delete/ }),
+    ).toHaveCount(0);
+    await waitingToggle(page).click();
+    const rows = waitlistOf(page).getByRole('listitem');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Maya R.');
+    await expect(rows.nth(0)).toContainText(`Guardian: ${guardian.name}, ${guardian.email}`);
+    await expect(rows.nth(1)).toContainText(player.name);
+    await expect(rows.nth(1)).not.toContainText('Guardian');
+    await expect(waitlistOf(page).getByRole('button')).toHaveCount(0);
+    await expect(waitlistOf(page)).toContainText('No place is free. Raise the places first.');
+    await screenshot(page, testInfo, 'camp-waitlist');
+    await expectAccessible(page);
+  });
+
+  test('raising the places offers Promote on the first person, who then holds a place, and the next one is first', async ({
+    page,
+  }, testInfo) => {
+    const { camp } = await fullWithTwoWaiting(page);
+    await page.goto(camp);
+    await waitingToggle(page).click();
+    await placesField(page).fill('2');
+    await savePlaces(page).click();
+    await expect(waitingToggle(page)).toHaveText('1 of 2 registered (2 waiting) in Week 1');
+
+    const promote = waitlistOf(page).getByRole('button', { name: 'Promote Maya R.' });
+    await expect(waitlistOf(page).getByRole('button')).toHaveCount(1);
+    await expect(promote).toBeVisible();
+    await screenshot(page, testInfo, 'camp-waitlist-promote');
+    await expectAccessible(page);
+    await promote.click();
+
+    const status = waitlistOf(page).locator('[data-slot="alert"]');
+    await expect(status).toContainText('Maya R. has a place. Registered for Week 1.');
+    await expect(status).toBeFocused();
+    await expect(waitingToggle(page)).toHaveText('2 of 2 registered (1 waiting) in Week 1');
+    await expect(waitlistOf(page).getByRole('listitem')).toHaveCount(1);
+    await expect(waitlistOf(page).getByRole('button')).toHaveCount(0);
+    await screenshot(page, testInfo, 'camp-waitlist-promoted');
+    await expectAccessible(page);
+  });
+
+  test('a session with no one waiting says so', async ({ page }, testInfo) => {
+    const admin = await adminWithCamp(page);
+    await seedCampSession(admin.tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+    });
+    await page.goto(admin.camp);
+    await waitingToggle(page).click();
+    await expect(waitlistOf(page)).toContainText('No one is waiting.');
+    await screenshot(page, testInfo, 'camp-waitlist-empty');
+    await expectAccessible(page);
+  });
+
+  test('a long name with no break stays inside the list at 320px', async ({ page }, testInfo) => {
+    const admin = await adminWithCamp(page);
+    await seedCampSession(admin.tenant, JUNIOR.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+      places: 1,
+      registeredCount: 1,
+    });
+    const base = newUser('Guardian');
+    const guardian = await seedUser({
+      ...base,
+      email: `e2e-a-very-long-guardian-address-${base.email}`,
+    });
+    const unbroken = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
+    await seedCampWaitlistEntry(admin.tenant, JUNIOR.slug, 'Week 1', guardian, {
+      kind: 'minor',
+      minorName: unbroken,
+    });
+    await page.goto(admin.camp);
+    await waitingToggle(page).click();
+    await expect(waitlistOf(page)).toContainText(unbroken);
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await screenshot(page, testInfo, 'camp-waitlist-long-name');
     await expectAccessible(page);
   });
 });

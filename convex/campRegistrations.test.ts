@@ -742,6 +742,7 @@ describe('campRegistrations.getForRegistration', () => {
         placesLeft: 12,
       },
       registered: false,
+      waitlisted: false,
     });
   });
 

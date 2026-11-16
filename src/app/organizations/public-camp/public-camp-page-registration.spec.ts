@@ -17,11 +17,13 @@ import {
   CAMP_SLUG,
   WEEK_1,
   WEEK_2,
+  WEEK_3,
 } from './testing/camp-data';
 
 const CAMP = 'camps:getPublicPage';
 const MINE = 'campRegistrations:listMineForCamp';
 const MINORS = 'campRegistrations:listMyMinorsForCamp';
+const WAITING = 'campWaitlist:listMineForCamp';
 const REGISTER_PATH = `/app/organizations/${ORG_SLUG}/camps/${CAMP_SLUG}/register`;
 
 let client: FakeConvexClient;
@@ -71,6 +73,10 @@ const text = (el: Element | null | undefined) =>
 const rows = () => [...host().querySelectorAll('main #sessions li')];
 const registerLink = (index: number) =>
   [...rows()[index].querySelectorAll('a')].find((a) => text(a).startsWith('Register'));
+const joinLink = (index: number) =>
+  [...rows()[index].querySelectorAll('a')].find((a) => text(a).startsWith('Join the waitlist'));
+const waiting = (index: number) =>
+  [...rows()[index].querySelectorAll('[data-slot="session-waitlist"]')].map(text);
 const registered = (index: number) =>
   rows()[index].querySelector('[data-slot="session-registered"]');
 const actions = (index: number) => rows()[index].querySelector('[data-slot="session-actions"]');
@@ -86,7 +92,7 @@ describe('PublicCampPage registration, signed out', () => {
     await emit(CAMP, JUNIOR_CAMP);
   });
 
-  it('asks for the camp only, and not for registrations', () => {
+  it('asks for the camp only, and not for registrations or the waitlist', () => {
     expect(client.activeSubscriptions.map(({ name, args }) => ({ name, args }))).toEqual([
       { name: CAMP, args: CAMP_ARGS },
     ]);
@@ -103,8 +109,21 @@ describe('PublicCampPage registration, signed out', () => {
     expect(registerLink(0)?.querySelector('.sr-only')?.textContent).toBe(' for Week 1');
   });
 
-  it('leaves the link off a full session', () => {
+  it('leaves the Register link off a full session, and offers its waitlist while registration is open', () => {
     expect(registerLink(2)).toBeUndefined();
+    expect(joinLink(2)?.getAttribute('href')).toBe(`${REGISTER_PATH}?session=${WEEK_3}`);
+    expect(text(joinLink(2))).toBe('Join the waitlist for Week 3');
+    expect(joinLink(2)?.getAttribute('data-slot')).toBe('button');
+    expect(joinLink(2)?.querySelector('.sr-only')?.textContent).toBe(' for Week 3');
+    expect(joinLink(0)).toBeUndefined();
+    expect(joinLink(1)).toBeUndefined();
+  });
+
+  it('takes the waitlist link away once the deadline passes', async () => {
+    vi.setSystemTime(at('2027-07-16'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle();
+    expect(joinLink(2)).toBeUndefined();
   });
 
   it('shows no registered line to a signed-out visitor', () => {
@@ -281,5 +300,93 @@ describe('PublicCampPage registration, a guardian’s children', () => {
     await emit(MINORS, children(20));
     expect(registerLink(0)).toBeUndefined();
     expect(registerLink(1)).toBeDefined();
+  });
+});
+
+describe('PublicCampPage waitlist', () => {
+  const entry = (sessionId: string, participant: unknown, position: number) => ({
+    sessionId,
+    participant,
+    position,
+  });
+  const MAYA = { kind: 'minor', minorName: 'Maya R.' };
+
+  beforeEach(async () => {
+    await open({ signedIn: true, now: '2027-07-03' });
+    await emit(CAMP, JUNIOR_CAMP);
+  });
+
+  it('asks for the caller’s waiting entries in this camp with the route’s slugs', () => {
+    expect(client.activeSubscriptions.find(({ name }) => name === WAITING)?.args).toEqual(
+      CAMP_ARGS,
+    );
+  });
+
+  it('reads "<name> is on the waitlist, position N" on the session, as a plain line', async () => {
+    await emit(WAITING, [entry(WEEK_3, MAYA, 1)]);
+    expect(waiting(2)).toEqual(['Maya R. is on the waitlist, position 1']);
+    const line = rows()[2].querySelector('[data-slot="session-waitlist"]');
+    expect(line?.tagName).toBe('P');
+    expect(line?.hasAttribute('role')).toBe(false);
+    expect(waiting(0)).toEqual([]);
+  });
+
+  it('reads "You are on the waitlist" for the account holder, and one line for each entry in order', async () => {
+    await emit(CAMP, { ...JUNIOR_CAMP, minimumAge: 14, maximumAge: 30 });
+    await emit(WAITING, [entry(WEEK_3, { kind: 'self' }, 2), entry(WEEK_3, MAYA, 5)]);
+    expect(waiting(2)).toEqual([
+      'You are on the waitlist, position 2',
+      'Maya R. is on the waitlist, position 5',
+    ]);
+  });
+
+  it('keeps the waitlist link for another child, and drops it once the account holder waits on an adult camp', async () => {
+    await emit(WAITING, [entry(WEEK_3, MAYA, 1)]);
+    expect(joinLink(2)).toBeDefined();
+    await emit(CAMP, ADULT_CAMP);
+    await emit(WAITING, [entry(WEEK_3, { kind: 'self' }, 1)]);
+    expect(joinLink(2)).toBeUndefined();
+    expect(waiting(2)).toEqual(['You are on the waitlist, position 1']);
+  });
+
+  it('keeps the line after the deadline, with no link', async () => {
+    TestBed.resetTestingModule();
+    await open({ signedIn: true, now: '2027-07-20' });
+    await emit(CAMP, JUNIOR_CAMP);
+    await emit(WAITING, [entry(WEEK_3, MAYA, 1)]);
+    expect(waiting(2)).toEqual(['Maya R. is on the waitlist, position 1']);
+    expect(joinLink(2)).toBeUndefined();
+  });
+
+  it('takes the waitlist link away at 20 children counted between places and the waitlist', async () => {
+    await emit(
+      MINORS,
+      Array.from({ length: 10 }, (_value, index) => ({
+        sessionId: WEEK_3,
+        minorName: `Held ${index}`,
+      })),
+    );
+    await emit(
+      WAITING,
+      Array.from({ length: 9 }, (_value, index) =>
+        entry(WEEK_3, { kind: 'minor', minorName: `Wait ${index}` }, index + 1),
+      ),
+    );
+    expect(joinLink(2)).toBeDefined();
+    await emit(
+      WAITING,
+      Array.from({ length: 10 }, (_value, index) =>
+        entry(WEEK_3, { kind: 'minor', minorName: `Wait ${index}` }, index + 1),
+      ),
+    );
+    expect(joinLink(2)).toBeUndefined();
+  });
+
+  it('shows no waitlist line to a signed-out visitor', async () => {
+    TestBed.resetTestingModule();
+    await open({ now: '2027-07-03' });
+    await emit(CAMP, JUNIOR_CAMP);
+    expect(waiting(2)).toEqual([]);
+    expect(client.activeSubscriptions.some(({ name }) => name === WAITING)).toBe(false);
   });
 });

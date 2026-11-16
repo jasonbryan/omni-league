@@ -1181,14 +1181,17 @@ export const AREAS = [
   {
     name: 'convex camps',
     test: (file) =>
-      named('convex/', ['camps', 'campSessions', 'campRegistrations'])(file) ||
+      named('convex/', ['camps', 'campSessions', 'campRegistrations', 'campWaitlist'])(file) ||
       named('convex/lib/', [
         'campInput',
         'campLookup',
         'campSessionInput',
         'campRegistration',
         'campRegistrationReads',
+        'campRegistrationRules',
         'campRegistrationWrites',
+        'campWaitlist',
+        'campWaitlistWrites',
         'individualRegistration',
       ])(file),
     specs: ['organization-camps', ...CAMP_PAGE],

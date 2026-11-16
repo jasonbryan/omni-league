@@ -23,6 +23,7 @@ const OPEN: NonNullable<CampRegistrationAnswer> = {
   maximumAge: 99,
   session: SESSION,
   registered: false,
+  waitlisted: false,
 };
 const BEFORE = Date.parse('2027-06-01T00:00:00Z');
 const AFTER = Date.parse('2027-06-30T00:00:00Z');
@@ -58,7 +59,7 @@ describe('registerCampState: the first state that applies', () => {
       { ...OPEN, session: { ...SESSION, placesLeft: 0 } },
       true,
       BEFORE,
-      'full',
+      'waitlist',
     ],
     [
       'full after the deadline',
@@ -86,7 +87,7 @@ describe('registerCampState: the first state that applies', () => {
       { ...OPEN, minimumAge: 9, maximumAge: 14, session: { ...SESSION, placesLeft: 0 } },
       true,
       BEFORE,
-      'full',
+      'waitlist',
     ],
     [
       'registered for a camp that admits a child, the form for a child',
@@ -103,7 +104,7 @@ describe('registerCampState: the first state that applies', () => {
       'registered',
     ],
     [
-      'registered for a camp that admits a child, in a full session',
+      'registered for a camp that admits a child, in a full session: the waitlist for a child',
       {
         ...OPEN,
         minimumAge: 14,
@@ -113,6 +114,46 @@ describe('registerCampState: the first state that applies', () => {
       },
       true,
       BEFORE,
+      'waitlist',
+    ],
+    [
+      'waiting for a place, in a full session',
+      { ...OPEN, waitlisted: true, session: { ...SESSION, placesLeft: 0 } },
+      true,
+      BEFORE,
+      'waitlisted',
+    ],
+    [
+      'waiting for a place, after the deadline',
+      { ...OPEN, waitlisted: true, session: { ...SESSION, placesLeft: 0 } },
+      true,
+      AFTER,
+      'waitlisted',
+    ],
+    [
+      'waiting for a place in a camp that admits a child, in a full session: the waitlist for a child',
+      {
+        ...OPEN,
+        minimumAge: 14,
+        maximumAge: 30,
+        waitlisted: true,
+        session: { ...SESSION, placesLeft: 0 },
+      },
+      true,
+      BEFORE,
+      'waitlist',
+    ],
+    [
+      'registered and waiting for a child, once the session closes',
+      {
+        ...OPEN,
+        minimumAge: 14,
+        maximumAge: 30,
+        registered: true,
+        session: { ...SESSION, placesLeft: 0 },
+      },
+      true,
+      AFTER,
       'registered',
     ],
     [
@@ -139,6 +180,12 @@ describe('registrationOptions: who the form offers', () => {
       ['minor'],
     ],
     ['an adult camp, the adult registered: none', { registered: true }, []],
+    ['an adult camp, the adult waiting: none', { waitlisted: true }, []],
+    [
+      'both, the adult waiting: only a child',
+      { minimumAge: 14, maximumAge: 30, waitlisted: true },
+      ['minor'],
+    ],
   ])('%s', (_label, over, expected) => {
     expect(registrationOptions({ ...OPEN, ...over })).toEqual(expected);
   });

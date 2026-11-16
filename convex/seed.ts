@@ -15,6 +15,7 @@ import { authUserIdByEmail } from './lib/authUsers';
 import { CAMP_SESSIONS_LIMIT, campSessionTotal, findCampBySlugs } from './lib/campLookup';
 import { SELF_PARTICIPANT } from './lib/individualRegistration';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
+import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { backfillPendingInviteCounts, insertPendingInvite } from './lib/inviteWrites';
@@ -800,6 +801,7 @@ export const DEMO_CAMPS: readonly DemoCamp[] = [
       { name: 'Week 1', startDaysFromRun: 14, ...WEEK_OF_MORNINGS },
       { name: 'Week 2', startDaysFromRun: 21, ...WEEK_OF_MORNINGS },
       { name: 'Week 3', startDaysFromRun: 28, ...WEEK_OF_MORNINGS },
+      { name: 'Week 4', startDaysFromRun: 35, ...WEEK_OF_MORNINGS, places: 1 },
     ],
     published: true,
   },
@@ -1676,6 +1678,18 @@ const DEMO_CAMP_REGISTRATIONS = {
 
 const CAMP_REGISTRATION_ACCOUNTS = ['player', 'guardian'] as const;
 
+/**
+ * Week 4 of the Junior Beach Volleyball Camp has one place, held by guardian@'s child "Sam R.", so the session reads Full and
+ * "Maya R." (guardian@) waits at position 1. Inserted once: any registration or entry of the account in the session means it was.
+ */
+const DEMO_CAMP_WAITLIST = {
+  organizationSlug: 'gulf-coast-sport-social',
+  campSlug: 'junior-beach-volleyball-camp',
+  sessionName: 'Week 4',
+  holding: { kind: 'minor', minorName: 'Sam R.' },
+  waiting: { kind: 'minor', minorName: 'Maya R.' },
+} as const;
+
 const demoCampRegistrationValidator = v.union(v.literal('player'), v.literal('guardian'));
 
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
@@ -1712,6 +1726,7 @@ const demoResultValidator = v.object({
   teamInvites: v.number(),
   freeAgents: v.number(),
   campRegistrations: v.number(),
+  campWaitlistEntries: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -2556,6 +2571,54 @@ export const insertDemoCampRegistration = internalMutation({
   },
 });
 
+export const insertDemoCampWaitlist = internalMutation({
+  args: { authUserId: v.string() },
+  returns: v.number(),
+  handler: async (ctx, { authUserId }) => {
+    assertPreviewDeployment();
+    const demo = DEMO_CAMP_WAITLIST;
+    const organization = await organizationBySlug(ctx, demo.organizationSlug);
+    const found = organization && (await findCampBySlugs(ctx, organization, demo.campSlug));
+    if (!found) return 0;
+    const session = (
+      await ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+        .take(CAMP_SESSIONS_LIMIT)
+    ).find((row) => row.name === demo.sessionName);
+    if (!session) return 0;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user) return 0;
+    const heldPlace = await ctx.db
+      .query('campRegistrations')
+      .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
+        q.eq('sessionId', session._id).eq('userId', user._id),
+      )
+      .first();
+    const waiting = await ctx.db
+      .query('campWaitlistEntries')
+      .withIndex('by_sessionId_and_userId_and_participantKey', (q) =>
+        q.eq('sessionId', session._id).eq('userId', user._id),
+      )
+      .first();
+    if (heldPlace || waiting || session.registeredCount >= session.places) return 0;
+    await insertCampRegistration(ctx, session, {
+      userId: user._id,
+      participant: demo.holding,
+      ageConfirmedAt: Date.now(),
+    });
+    await insertCampWaitlistEntry(ctx, session._id, {
+      userId: user._id,
+      participant: demo.waiting,
+      ageConfirmedAt: Date.now(),
+    });
+    return 1;
+  },
+});
+
 /**
  * Inserts each demo free agent whose account is in `people` (auth user ids by address) and who has no
  * free-agent row and no roster entry in its season yet, through the roster writer. Returns the free
@@ -2753,6 +2816,7 @@ export const demo = internalAction({
     let teamInvites = 0;
     let freeAgents = 0;
     let campRegistrations = 0;
+    let campWaitlistEntries = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
       const people: { email: string; authUserId: string }[] = [];
@@ -2800,6 +2864,14 @@ export const demo = internalAction({
           });
           if (inserted) campRegistrations++;
         }
+        const waitingGuardian = people.find(
+          (person) => person.email === DEMO_CAMP_REGISTRATIONS.guardian.email,
+        );
+        if (waitingGuardian) {
+          campWaitlistEntries = await ctx.runMutation(internal.seed.insertDemoCampWaitlist, {
+            authUserId: waitingGuardian.authUserId,
+          });
+        }
       }
     }
     return {
@@ -2811,6 +2883,7 @@ export const demo = internalAction({
       teamInvites,
       freeAgents,
       campRegistrations,
+      campWaitlistEntries,
       accounts,
     };
   },

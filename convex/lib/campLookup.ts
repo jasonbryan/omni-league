@@ -1,6 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { MAX_CAMP_SESSIONS } from './campSessionInput';
+import { campSessionPlacesLeft } from './campWaitlist';
 import { leagueLocations } from './publicLeague';
 import { sportName } from './sports';
 
@@ -72,7 +73,7 @@ export async function publicCampSessions(ctx: Pick<QueryCtx, 'db'>, camp: Doc<'c
     endDate: session.endDate,
     ...(session.dailyStartTime !== undefined && { dailyStartTime: session.dailyStartTime }),
     ...(session.dailyEndTime !== undefined && { dailyEndTime: session.dailyEndTime }),
-    placesLeft: Math.max(0, session.places - session.registeredCount),
+    placesLeft: campSessionPlacesLeft(session),
     registrationDeadline: session.registrationDeadline,
   }));
 }

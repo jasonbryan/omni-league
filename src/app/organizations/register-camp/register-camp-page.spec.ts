@@ -25,6 +25,7 @@ const URL = `${PATH}?session=${SESSION_ID}`;
 const CAMP_PATH = `/organizations/${SLUGS.orgSlug}/camps/${SLUGS.campSlug}`;
 const GET = 'campRegistrations:getForRegistration';
 const REGISTER = 'campRegistrations:register';
+const JOIN = 'campWaitlist:join';
 const SESSION = {
   sessionId: SESSION_ID,
   name: 'Week 1',
@@ -42,8 +43,10 @@ const OPEN = {
   maximumAge: 99,
   session: SESSION,
   registered: false,
+  waitlisted: false,
 };
 const REGISTERED = { ...OPEN, registered: true };
+const WAITLISTED = { ...OPEN, waitlisted: true, session: { ...SESSION, placesLeft: 0 } };
 const FULL = { ...OPEN, session: { ...SESSION, placesLeft: 0 } };
 const YOUTH = { ...OPEN, minimumAge: 9, maximumAge: 17 };
 const BOTH = { ...OPEN, minimumAge: 14, maximumAge: 30 };
@@ -114,6 +117,7 @@ describe('RegisterCampPage', () => {
   const url = () => TestBed.inject(Router).url;
   const ageBox = () => page.querySelector<HTMLButtonElement>('#age-confirmed');
   const registers = () => convex.calls.filter((call) => call.name === REGISTER);
+  const joins = () => convex.calls.filter((call) => call.name === JOIN);
 
   async function tick() {
     ageBox()!.click();
@@ -210,14 +214,35 @@ describe('RegisterCampPage', () => {
       ).toBe(true);
     });
 
-    it('full: says so with a link back to the camp, and no form', async () => {
+    it('full: offers the form to join the waitlist, under a note that says the session is full', async () => {
       await open();
       await answer(FULL);
-      const alert = page.querySelector('[data-slot="alert"]');
-      expect(alertText(alert)).toBe(
-        'This session is full. Every place is taken. Choose another session on the camp page.',
+      const note = page.querySelector('form [data-slot="alert"]');
+      expect(note?.getAttribute('role')).toBe('note');
+      expectAlertSlots(note);
+      expect(alertText(note)).toBe(
+        'This session is full. Join the waitlist. If a place opens, the organizer offers it to the first person waiting.',
+      );
+      expect(ageBox()).not.toBeNull();
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
+      expect(document.title).toBe(
+        'Join the waitlist for Week 1 | Adult Beach Skills Camp | Omni League',
+      );
+    });
+
+    it('waiting for a place, even after the deadline: says so with a link back to the camp, and no form', async () => {
+      await open({ now: '2027-06-30T00:00:00Z' });
+      await answer(WAITLISTED);
+      const card = page.querySelector('[data-slot="alert"]');
+      expect(card?.getAttribute('role')).toBe('status');
+      expect(alertText(card)).toBe(
+        "You're on the waitlist for Week 1. The organizer offers the next place to the first person waiting. Your position is on the camp page.",
       );
       expect(page.querySelector('form')).toBeNull();
+      const back = [...page.querySelectorAll('main a')].find(
+        (a) => text(a) === 'Back to the camp page',
+      );
+      expect(back?.getAttribute('href')).toBe(CAMP_PATH);
     });
 
     it('a camp with one age labels the fact Age and gives the number', async () => {
@@ -607,7 +632,6 @@ describe('RegisterCampPage', () => {
         { code: 'registrationClosed', message: 'Registration for this session is closed.' },
         'Registration for this session is closed.',
       ],
-      ['full', { code: 'sessionFull', message: 'This session is full.' }, 'This session is full.'],
       [
         'adults not allowed',
         { code: 'adultNotAllowed', message: 'x' },
@@ -685,6 +709,160 @@ describe('RegisterCampPage', () => {
       expect(document.activeElement).toBe(alert);
       expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
       vi.restoreAllMocks();
+    });
+  });
+
+  describe('joining the waitlist', () => {
+    beforeEach(async () => {
+      await open();
+      await answer(FULL);
+    });
+
+    it('sends the session, the participant, and the age box, shows the pending state, then opens the camp page in place of this entry', async () => {
+      await tick();
+      await submit();
+      expect(joins().map((call) => call.args)).toEqual([
+        { sessionId: SESSION_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      expect(registers()).toEqual([]);
+      const button = page.querySelector('button[type="submit"]');
+      expect(text(button)).toBe('Joining…');
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
+      expect(text(page.querySelector('form > p[role="status"]'))).toBe(
+        'Joining the waitlist for Week 1.',
+      );
+      joins()[0].resolve({ campWaitlistEntryId: 'entry_1', position: 1 });
+      await flush();
+      expect(url()).toBe(CAMP_PATH);
+    });
+
+    it('asks for the age box like a registration, and sends nothing without it', async () => {
+      await submit();
+      expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+        'Confirm your age to continue.',
+      );
+      expect(document.activeElement).toBe(ageBox());
+      expect(joins()).toEqual([]);
+    });
+
+    it('a second press while pending sends nothing more', async () => {
+      await tick();
+      await submit();
+      await submit();
+      expect(joins()).toHaveLength(1);
+    });
+
+    it('any other failure shows the form alert, focused, and keeps the box ticked', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(new Error('network'));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"][role="alert"]');
+      expect(text(alert)).toBe(
+        'You could not be added to the waitlist. You were not added. Check your connection and try again.',
+      );
+      expect(document.activeElement).toBe(alert);
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
+    });
+
+    it('offline: refuses with the offline alert, focused, and sends nothing', async () => {
+      await tick();
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await harness.fixture.whenStable();
+      const button = page.querySelector('button[type="submit"]');
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      await submit();
+      expect(joins()).toEqual([]);
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"][role="alert"]');
+      expect(text(alert)).toBe(
+        "You're offline. Nothing was sent. Your answers are still here. Try again when you're connected.",
+      );
+      expect(document.activeElement).toBe(alert);
+      vi.restoreAllMocks();
+    });
+
+    it('a refusal as already waiting shows the waitlist card, whose alert takes focus', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(
+        new ConvexError({ code: 'alreadyWaiting', message: 'You are already on the waitlist.' }),
+      );
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toContain("You're on the waitlist for Week 1.");
+      expect(page.querySelector('form')).toBeNull();
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('a refusal because a place is free shows a card that returns to the registration form', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(new ConvexError({ code: 'sessionHasPlace', message: 'x' }));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alertText(alert)).toBe('This session has a place free. Register for it instead.');
+      expect(document.activeElement).toBe(alert);
+      await answer({ ...OPEN, session: { ...SESSION, placesLeft: 1 } });
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Register');
+    });
+
+    it('a name already waiting is refused under the name, with the input kept', async () => {
+      TestBed.resetTestingModule();
+      await open();
+      await answer({ ...YOUTH, session: { ...SESSION, placesLeft: 0 } });
+      const input = page.querySelector<HTMLInputElement>('#minor-name')!;
+      input.value = 'Maya R.';
+      input.dispatchEvent(new Event('input'));
+      await flush();
+      await tick();
+      await submit();
+      expect(joins()[0].args).toEqual({
+        sessionId: SESSION_ID,
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        ageConfirmed: true,
+      });
+      joins()[0].reject(
+        new ConvexError({
+          code: 'alreadyWaiting',
+          field: 'minorName',
+          message: 'Maya R. is already on the waitlist for this session.',
+        }),
+      );
+      await flush();
+      expect(text(page.querySelector('#minor-name-error'))).toBe(
+        'Maya R. is already on the waitlist for this session.',
+      );
+      expect(document.activeElement).toBe(input);
+      expect(input.value).toBe('Maya R.');
+    });
+
+    it('the last place taken while registering shows the full card, with a way to the waitlist form', async () => {
+      TestBed.resetTestingModule();
+      await open();
+      await answer(OPEN);
+      await tick();
+      await submit();
+      registers()[0].reject(
+        new ConvexError({ code: 'sessionFull', message: 'This session is full.' }),
+      );
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(alertText(alert)).toBe(
+        'This session is full. Its last place was taken while you were registering. You can join the waitlist instead.',
+      );
+      expect(document.activeElement).toBe(alert);
+      await answer(FULL);
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
     });
   });
 

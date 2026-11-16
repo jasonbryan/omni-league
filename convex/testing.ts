@@ -84,6 +84,7 @@ import {
 } from './lib/tournamentBracket';
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
+import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
 import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
@@ -562,6 +563,34 @@ export const seedCampRegistration = internalMutation({
     if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
     const user = await userByEmail(ctx, email);
     await insertCampRegistration(ctx, session, { userId: user._id, participant });
+    return null;
+  },
+});
+
+/** Skips every rule of `campWaitlist.join`, the places included, so a session can wait with a place free. */
+export const seedCampWaitlistEntry = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    campSlug: v.string(),
+    sessionName: v.string(),
+    email: v.string(),
+    participant: participantValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, campSlug, sessionName, email, participant }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findCampBySlugs(ctx, organization, campSlug);
+    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
+    const session = (
+      await ctx.db
+        .query('campSessions')
+        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+        .take(CAMP_SESSIONS_LIMIT)
+    ).find((row) => row.name === sessionName);
+    if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
+    const user = await userByEmail(ctx, email);
+    await insertCampWaitlistEntry(ctx, session._id, { userId: user._id, participant });
     return null;
   },
 });

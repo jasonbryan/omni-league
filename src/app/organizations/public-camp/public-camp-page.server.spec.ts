@@ -187,7 +187,7 @@ describe('PublicCampPage server render', () => {
     expect(sessions).toEqual([
       'Week 1 Registration open Jul 5 – Jul 9, 2027 9 AM to 12 PM 15 places left Registration closes Jul 1, 2027 Register for Week 1',
       'Week 2 Registration open Jul 12 – Jul 16, 2027 9 AM to 12 PM 1 place left Registration closes Jul 8, 2027 Register for Week 2',
-      'Week 3 Jul 19 – Jul 23, 2027 Full Registration closes Jul 15, 2027',
+      'Week 3 Jul 19 – Jul 23, 2027 Full Registration closes Jul 15, 2027 Join the waitlist for Week 3',
     ]);
     const markup = html.slice(html.indexOf('<body'));
     const order = [

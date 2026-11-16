@@ -51,6 +51,7 @@ function description(camp: PublicCampData): string {
           [now]="now()"
           [registeredSessionIds]="registeredSessionIds()"
           [registeredMinors]="registeredMinors()"
+          [waitlist]="waitlist()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -101,6 +102,12 @@ export class PublicCampPage {
       : skipToken,
   );
   protected readonly registeredMinors = computed(() => this.minors.value() ?? []);
+  private readonly waiting = injectQuery(api.campWaitlist.listMineForCamp, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), campSlug: this.campSlug() }
+      : skipToken,
+  );
+  protected readonly waitlist = computed(() => this.waiting.value() ?? []);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

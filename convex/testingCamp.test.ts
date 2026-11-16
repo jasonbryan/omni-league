@@ -238,6 +238,31 @@ describe('testing:seedCampRegistration', () => {
     ).toBe(1);
   });
 
+  test('puts the account on the session’s waitlist through the writer, whatever the places', async () => {
+    const t = await withSession();
+    await t.mutation(internal.testing.seedCampWaitlistEntry, REGISTRATION);
+    expect(await t.run((ctx) => ctx.db.query('campWaitlistEntries').collect())).toEqual([
+      expect.objectContaining({
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+        status: 'waiting',
+      }),
+    ]);
+    expect(
+      await t.run(async (ctx) => (await ctx.db.query('campSessions').first())!.waitlistCount),
+    ).toBe(1);
+    expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toEqual([]);
+  });
+
+  test('throws with IS_TEST unset when seeding a waitlist entry, and writes nothing', async () => {
+    const t = await withSession();
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(t.mutation(internal.testing.seedCampWaitlistEntry, REGISTRATION)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('campWaitlistEntries').collect())).toEqual([]);
+  });
+
   test('refuses an unknown account, a session the camp does not have, and a camp it does not have', async () => {
     const t = await withSession();
     await expect(
