@@ -1386,6 +1386,60 @@ test.describe('Tournaments: bracket from pools', () => {
     await page.setViewportSize(reflowViewport);
   });
 
+  test('shows a pool’s count error only once focus leaves the pool or Create is pressed, and clears it when the count is right', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant);
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
+    const groupA = bracketPanel(page).getByRole('group', { name: 'Pool A' });
+    const groupB = bracketPanel(page).getByRole('group', { name: 'Pool B' });
+    const count = 'Choose 2 teams from Pool A. 1 is chosen.';
+
+    const ace = groupA.getByRole('checkbox', { name: /^Ace/ });
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(ace).not.toBeChecked();
+    await expect(bracketStatus(page)).toHaveText('Ace does not advance.');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+    await expect(groupA).not.toHaveAttribute('data-invalid', 'true');
+
+    await groupA.getByRole('checkbox').last().focus();
+    await page.keyboard.press('Tab');
+    await expect(groupA.getByRole('alert')).toHaveText(count);
+    await expect(groupA).toHaveAccessibleDescription(count);
+    await expect(groupA).toHaveAttribute('data-invalid', 'true');
+    await expect(groupB.getByRole('alert')).toHaveCount(0);
+
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(ace).toBeChecked();
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+
+    await page.keyboard.press('Space');
+    await expect(ace).not.toBeChecked();
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+
+    await createBracket(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(groupA.getByRole('alert')).toHaveText(count);
+    await expect(groupA).toHaveAccessibleDescription(count);
+    await expect(bracketPanel(page).locator('#advancing-pool-A')).toBeFocused();
+    await expect(groupB.getByRole('alert')).toHaveCount(0);
+
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await ace.focus();
+    await page.keyboard.press('Space');
+    await expect(groupA.getByRole('alert')).toHaveCount(0);
+    await expect(groupA).toHaveAccessibleDescription('');
+    await expectAccessible(page);
+  });
+
   test.describe('a result corrected after the page loaded', () => {
     test.use({ expectedConvexErrors: ['tournamentGames:createBracketFromPools'] });
 
