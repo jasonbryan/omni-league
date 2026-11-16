@@ -34,7 +34,18 @@ export function nextCampSession(
   return sessions.find((session) => session.endDate >= today) ?? sessions.at(-1);
 }
 
-/** The status of the camp's next session, as a season's: its places only add Full once registration is open. */
+/** The row shows the earliest session open for registration with room, so a full or closed next session does not hide the Register link of a later one; with none open it shows the next. */
+export function shownCampSession(
+  sessions: readonly CampSession[],
+  nowMs: number,
+): CampSession | undefined {
+  return (
+    sessions.find((session) => registrationIsOpen(session, nowMs) && session.placesLeft > 0) ??
+    nextCampSession(sessions, nowMs)
+  );
+}
+
+/** The status of the camp's session, as a season's: its places only add Full once registration is open. */
 export function campStatus(next: CampSession, nowMs: number): CampStatusLine {
   const phase = seasonPhase(next, nowMs);
   const full = phase === 'registrationOpen' && next.placesLeft === 0;

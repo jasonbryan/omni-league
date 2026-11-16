@@ -2,6 +2,7 @@ import {
   campStatus,
   nextCampSession,
   openCampSessionsBySoonestDeadline,
+  shownCampSession,
   upcomingCamps,
 } from './camp-status';
 
@@ -45,6 +46,61 @@ describe('nextCampSession', () => {
     const sessions = [week('Week 1', '2027-07-09'), week('Week 2', '2027-07-16')];
     expect(nextCampSession(sessions, at('2027-08-01'))?.name).toBe('Week 2');
     expect(nextCampSession([], at('2027-08-01'))).toBeUndefined();
+  });
+});
+
+describe('shownCampSession', () => {
+  const session = (name: string, startDate: string, deadline: string, placesLeft = 10) => ({
+    name,
+    startDate,
+    endDate: startDate.replace(/\d\d$/, (day) => String(Number(day) + 4).padStart(2, '0')),
+    registrationDeadline: deadline,
+    placesLeft,
+  });
+  const WEEK_1 = session('Week 1', '2027-07-05', '2027-07-01');
+  const WEEK_2 = session('Week 2', '2027-07-12', '2027-07-08');
+  const WEEK_3 = session('Week 3', '2027-07-19', '2027-07-15');
+  const shown = (sessions: (typeof WEEK_1)[], date: string) =>
+    shownCampSession(sessions, at(date))?.name;
+
+  it('is the next session while its registration is open with room', () => {
+    expect(shown([WEEK_1, WEEK_2], '2027-06-20')).toBe('Week 1');
+  });
+
+  it('is the earliest session with registration open when the next is closed, in progress, or full', () => {
+    expect(shown([WEEK_1, WEEK_2, WEEK_3], '2027-07-02')).toBe('Week 2');
+    expect(shown([WEEK_1, WEEK_2, WEEK_3], '2027-07-06')).toBe('Week 2');
+    expect(shown([{ ...WEEK_1, placesLeft: 0 }, WEEK_2], '2027-06-20')).toBe('Week 2');
+  });
+
+  it('skips a full session with registration open, and a closed one, to the first with room', () => {
+    const sessions = [WEEK_1, { ...WEEK_2, placesLeft: 0 }, WEEK_3];
+    expect(shown(sessions, '2027-07-02')).toBe('Week 3');
+  });
+
+  it('keeps the next session when no session is open with room', () => {
+    expect(
+      shown(
+        [
+          { ...WEEK_1, placesLeft: 0 },
+          { ...WEEK_2, placesLeft: 0 },
+        ],
+        '2027-06-20',
+      ),
+    ).toBe('Week 1');
+    expect(shown([WEEK_1, WEEK_2], '2027-07-09')).toBe('Week 1');
+    expect(shown([WEEK_1, WEEK_2], '2027-07-10')).toBe('Week 2');
+  });
+
+  it('follows the page’s clock with the same sessions', () => {
+    const sessions = [WEEK_1, WEEK_2];
+    expect(shown(sessions, '2027-07-01')).toBe('Week 1');
+    expect(shown(sessions, '2027-07-02')).toBe('Week 2');
+    expect(shown(sessions, '2027-07-10')).toBe('Week 2');
+  });
+
+  it('is none for none', () => {
+    expect(shownCampSession([], at('2027-07-01'))).toBeUndefined();
   });
 });
 

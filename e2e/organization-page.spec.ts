@@ -2279,6 +2279,35 @@ test.describe('organization page: Camps, raw server HTML', () => {
   );
 
   test(
+    'a camp whose next session is closed shows the earliest session still open, with its dates and Register link, and one with none open keeps the next session’s status',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await campTenant([
+        sandCamp('Later Week Camp', [
+          { name: 'Week 1', startsInDays: 3, endsInDays: 7, deadlineInDays: -2 },
+          { name: 'Week 2', startsInDays: 20 },
+        ]),
+        sandCamp('Closed Camp', [
+          { name: 'Week 1', startsInDays: 3, endsInDays: 7, deadlineInDays: -2 },
+          { name: 'Week 2', startsInDays: 20, endsInDays: 24, deadlineInDays: -1 },
+        ]),
+      ]);
+      const { html } = await fetchRawHtml(request, tenant.path);
+      const rows = sectionWithId(html, 'camps').split('<li').slice(1);
+      const later = plainText(rows.find((row) => row.includes('Later Week Camp')) ?? '');
+      expect(later).toContain('Registration open');
+      const start = new Date(`${dateFromToday(20)}T00:00:00Z`);
+      const startText = `${new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(start)} ${start.getUTCDate()}`;
+      expect(later).toContain(startText);
+      expect(later).toContain('Register for Later Week Camp');
+      const closed = plainText(rows.find((row) => row.includes('Closed Camp')) ?? '');
+      expect(closed).toContain('Registration closed');
+      expect(closed).not.toContain('Register for Closed Camp');
+    },
+  );
+
+  test(
     '7 upcoming camps: page 1 holds 5, page 2 the last 2 with its range, links, and canonical, and a page past the last shows page 1',
     RAW_HTTP,
     async ({ request }, testInfo) => {
