@@ -528,6 +528,21 @@ describe('tournaments.updateDetails: the bracket type and the grand final', () =
     expect(result.written.grandFinal).toBe('single');
   });
 
+  test('Undo of a grand final save is refused once the grand final has a result, even when it held none before', async () => {
+    const { s, teamIds } = await world(6);
+    const saved = await editDetails(s, { grandFinal: 'single' }, await heldNow(s));
+    expect(saved.earlier).not.toHaveProperty('grandFinal');
+    await playOut(s, lowerSeedWins(teamIds, 1));
+    expect(
+      await s
+        .as(s.admin)
+        .mutation(api.tournaments.undoUpdateDetails, { tournamentId: s.gulf, ...saved })
+        .catch(refusalOf),
+    ).toMatchObject({ code: 'grandFinalLocked', field: 'grandFinal' });
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
+    expect(row.grandFinal).toBe('single');
+  });
+
   test('Undo restores the earlier bracket type and grand final while no bracket exists', async () => {
     const { s } = await world(6, { create: false });
     const held = await heldNow(s);

@@ -358,7 +358,11 @@ export const undoUpdateDetails = mutation({
       throw new Error('Not allowed');
     }
     await refuseLockedChanges(ctx, tournament, earlier);
-    await refuseLockedBracketChanges(ctx, tournament, earlier);
+    // An earlier save that held no grand final means the default, so undoing a change from it changes the setting.
+    await refuseLockedBracketChanges(ctx, tournament, {
+      ...earlier,
+      grandFinal: earlier.grandFinal ?? DEFAULT_GRAND_FINAL,
+    });
     checkedDetails(tournament, earlier, (error) =>
       error.code === 'maximumTeamsBelowTeams'
         ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
