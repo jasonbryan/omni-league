@@ -109,6 +109,35 @@ const BRACKET = {
   ],
 };
 
+const placed = (...names: (string | null)[]) =>
+  names.map((name) => name && { teamId: `tm_${name.toLowerCase()}`, name });
+
+const game = (gameId: string, slot: number, names: (string | null)[], more: object = {}) => ({
+  gameId,
+  slot,
+  teams: placed(...names),
+  winnerTeamId: null,
+  result: null,
+  locked: false,
+  reports: [],
+  ...more,
+});
+
+const DOUBLE_BRACKET = {
+  hasResult: false,
+  winner: null,
+  bracketType: 'double',
+  rounds: [
+    { round: 1, name: 'Winners’ semifinals', games: [game('w_1', 1, ['Alpha', 'Bravo'])] },
+    { round: 2, name: 'Winners’ final', games: [game('w_2', 1, [null, null])] },
+  ],
+  losersRounds: [{ round: 1, name: 'Losers’ final', games: [game('l_1', 1, [null, null])] }],
+  grandFinalRounds: [
+    { round: 1, name: 'Grand final', games: [game('f_1', 1, [null, null])] },
+    { round: 2, name: 'Grand final, deciding game', games: [game('f_2', 1, ['Alpha', 'Bravo'])] },
+  ],
+};
+
 describe('BracketPanel', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
   let o: Opened;
@@ -414,6 +443,45 @@ describe('BracketPanel', () => {
         ['Game 1: Alpha v Bye', 'Game 2: Bravo v Charlie'],
         ['Game 1: Alpha v To be decided'],
       ]);
+    });
+
+    it('lists the winners’ rounds, the losers’ rounds, and the grand final by name for double elimination', async () => {
+      await open({ ...CLOSED, bracketType: 'double' }, setupOf(THREE, { bracket: DOUBLE_BRACKET }));
+      const rounds = [...panel().querySelectorAll('#bracket-rounds section')];
+      expect(rounds.map((round) => text(round.querySelector('h4')))).toEqual([
+        'Winners’ semifinals',
+        'Winners’ final',
+        'Losers’ final',
+        'Grand final',
+        'Grand final, deciding game',
+      ]);
+      expect(
+        new Set([...panel().querySelectorAll('#bracket-rounds h4')].map((heading) => heading.id))
+          .size,
+      ).toBe(5);
+      expect(
+        rounds.map((round) =>
+          [...round.querySelectorAll('[data-slot="game-label"]')].map((label) => text(label)),
+        ),
+      ).toEqual([
+        ['Game 1: Alpha v Bravo'],
+        ['Game 1: To be decided v To be decided'],
+        ['Game 1: To be decided v To be decided'],
+        ['Game 1: To be decided v To be decided'],
+        ['Game 1: Alpha v Bravo'],
+      ]);
+    });
+
+    it('says a double-elimination bracket has a winners’ bracket, a losers’ bracket, and a grand final once created', async () => {
+      await open({ ...CLOSED, bracketType: 'double' }, setupOf(THREE));
+      createButton()!.click();
+      await o.flush();
+      o.convex.calls[0].resolve({ gameCount: 12, replaced: false });
+      o.subscription(SETUP)!.emit(setupOf(THREE, { bracket: DOUBLE_BRACKET }));
+      await o.flush();
+      expect(text(alerts()[0].querySelector('[data-slot="alert-description"]'))).toContain(
+        '12 games in a winners’ bracket, a losers’ bracket, and a grand final.',
+      );
     });
 
     it('shows a refusal in an alert that takes focus', async () => {

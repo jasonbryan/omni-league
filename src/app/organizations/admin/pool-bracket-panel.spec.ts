@@ -404,6 +404,45 @@ describe('PoolBracketPanel', () => {
       ]);
     });
 
+    it('says a double-elimination bracket has three brackets, and lists the losers’ rounds and the grand final after the winners’', async () => {
+      await open(setupOf(), { ...TOURNAMENT, bracketType: 'double' });
+      createButton()!.click();
+      await o.flush();
+      o.convex.calls[0].resolve({ gameCount: 6, replaced: false, teamCount: 4 });
+      o.subscription(POOL_BRACKET)!.emit(
+        setupOf({
+          bracket: {
+            ...BRACKET,
+            bracketType: 'double',
+            rounds: [
+              { round: 1, name: 'Winners’ semifinals', games: BRACKET.rounds[0].games },
+              { round: 2, name: 'Winners’ final', games: BRACKET.rounds[1].games },
+            ],
+            losersRounds: [
+              { round: 1, name: 'Losers’ round 1', games: [game('l_1', 1, null, null)] },
+              { round: 2, name: 'Losers’ final', games: [game('l_2', 1, null, null)] },
+            ],
+            grandFinalRounds: [
+              { round: 1, name: 'Grand final', games: [game('f_1', 1, null, null)] },
+            ],
+          },
+        }),
+      );
+      await o.flush();
+      expect(text(alerts()[0].querySelector('[data-slot="alert-description"]'))).toContain(
+        '6 games in a winners’ bracket, a losers’ bracket, and a grand final.',
+      );
+      const headings = [...panel().querySelectorAll('#pool-bracket-rounds h4')];
+      expect(headings.map((heading) => text(heading))).toEqual([
+        'Winners’ semifinals',
+        'Winners’ final',
+        'Losers’ round 1',
+        'Losers’ final',
+        'Grand final',
+      ]);
+      expect(new Set(headings.map((heading) => heading.id)).size).toBe(5);
+    });
+
     it('shows a refusal in an alert that takes focus, and keeps the order', async () => {
       await open(setupOf());
       moveButton('Team 03', 'up').click();

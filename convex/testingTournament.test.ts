@@ -435,6 +435,37 @@ describe('testing:seedTournamentResult', () => {
     expect(shown).not.toHaveProperty('score');
   });
 
+  test('writes a losers bracket result through the same writer when the stage is named', async () => {
+    const t = await withBracket();
+    await t.run(async (ctx) => {
+      const [tournament] = await ctx.db.query('tournaments').collect();
+      await ctx.db.patch('tournaments', tournament._id, { bracketType: 'double' });
+      for (const game of await ctx.db.query('tournamentGames').collect()) {
+        await ctx.db.delete('tournamentGames', game._id);
+      }
+    });
+    await t.mutation(internal.testing.seedTournamentBracket, ARGS);
+    await t.mutation(internal.testing.seedTournamentResult, { ...GAME, score: ONE_SET });
+    await t.mutation(internal.testing.seedTournamentResult, {
+      ...ARGS,
+      round: 2,
+      slot: 1,
+      score: ONE_SET,
+    });
+    await t.mutation(internal.testing.seedTournamentResult, {
+      ...ARGS,
+      stage: 'losers',
+      round: 1,
+      slot: 1,
+      score: ONE_SET,
+    });
+    const all = await games(t);
+    const losers = all.find((game) => game.stage === 'losers')!;
+    const grandFinal = all.find((game) => game.stage === 'grandFinal')!;
+    expect(losers.score).toEqual(ONE_SET);
+    expect(grandFinal.teamIds[1]).toBe(losers.winnerTeamId);
+  });
+
   test('refuses a score the product refuses, and writes nothing', async () => {
     const t = await withBracket();
     const refused = async (change: object, message: RegExp) => {

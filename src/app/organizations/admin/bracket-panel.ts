@@ -29,7 +29,7 @@ import { HlmSkeleton } from '../../ui/skeleton';
 import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
-import { BracketGame } from './bracket-game';
+import { BracketRounds } from './bracket-rounds';
 import type { AlertText } from './alert-text';
 import {
   bracketRefusalMessage,
@@ -74,7 +74,7 @@ interface SeedRow {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
-    BracketGame,
+    BracketRounds,
     ConfirmDialog,
     HlmCard,
     HlmSkeleton,
@@ -257,7 +257,7 @@ interface SeedRow {
               }
               <p role="status" class="sr-only">{{ creating() ? 'Creating the bracket.' : '' }}</p>
             </div>
-            @if (rounds(); as rounds) {
+            @if (bracket(); as bracket) {
               <div id="bracket-rounds" [class]="section">
                 <h3 class="font-semibold">Bracket</h3>
                 @if (winner(); as winner) {
@@ -266,25 +266,11 @@ interface SeedRow {
                     {{ winner.name }}
                   </p>
                 }
-                @for (round of rounds; track round.round) {
-                  <section [attr.aria-labelledby]="'round-' + round.round" class="mt-4">
-                    <h4
-                      [id]="'round-' + round.round"
-                      class="text-sm font-medium text-muted-foreground"
-                    >
-                      {{ round.name }}
-                    </h4>
-                    <ol role="list" class="mt-2 flex flex-col gap-2">
-                      @for (game of round.games; track game.gameId) {
-                        <app-bracket-game
-                          [game]="game"
-                          [round]="round.round"
-                          [tournament]="tournament()"
-                        />
-                      }
-                    </ol>
-                  </section>
-                }
+                <app-bracket-rounds
+                  [bracket]="bracket"
+                  [tournament]="tournament()"
+                  idPrefix="round"
+                />
               </div>
             }
           }
@@ -350,7 +336,7 @@ export class BracketPanel {
     return view.status === 'ready' ? view.setup : null;
   });
   protected readonly seeds = computed(() => this.setup()?.seeds ?? []);
-  private readonly bracket = computed(() => this.setup()?.bracket ?? null);
+  protected readonly bracket = computed(() => this.setup()?.bracket ?? null);
   protected readonly hasBracket = computed(() => this.bracket() !== null);
   private readonly hasResult = computed(() => this.bracket()?.hasResult ?? false);
   protected readonly canMove = computed(() => this.seeds().length > 1 && !this.hasResult());
@@ -385,7 +371,6 @@ export class BracketPanel {
     return this.hasResult() ? BRACKET_MESSAGES.resultEntered : null;
   });
 
-  protected readonly rounds = computed(() => this.bracket()?.rounds ?? null);
   protected readonly winner = computed(() => this.bracket()?.winner ?? null);
 
   protected isMoving(row: SeedRow, direction: SeedDirection): boolean {
@@ -471,7 +456,11 @@ export class BracketPanel {
       });
       this.notice.set({
         kind: 'created',
-        text: createdText(result.replaced, result.gameCount, roundCount(this.seeds().length)),
+        text: createdText(
+          result.replaced,
+          result.gameCount,
+          this.tournament().bracketType === 'double' ? null : roundCount(this.seeds().length),
+        ),
       });
       return true;
     } catch (error) {

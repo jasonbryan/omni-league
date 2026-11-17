@@ -70,7 +70,7 @@ import {
   poolSetup,
   replacePoolGames,
 } from './lib/tournamentPools';
-import type { Structure } from './lib/tournamentEdit';
+import type { BracketType, Structure } from './lib/tournamentEdit';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import { scoreWinnerSide, type Score, type Sport } from './lib/sports';
@@ -671,6 +671,7 @@ interface DemoTournament {
   deadlineDaysFromRun: number;
   maximumTeams: number;
   structure?: Structure;
+  bracketType?: BracketType;
   status: 'draft' | 'published';
 }
 
@@ -754,6 +755,20 @@ export const DEMO_TOURNAMENTS: readonly DemoTournament[] = [
     deadlineDaysFromRun: -3,
     maximumTeams: 8,
     structure: 'pools',
+    status: 'published',
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Double Trouble Doubles',
+    slug: 'double-trouble-doubles',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    division: division('coed', 2, 'open'),
+    startDaysFromRun: 10,
+    endDaysFromRun: 11,
+    deadlineDaysFromRun: -3,
+    maximumTeams: 8,
+    bracketType: 'double',
     status: 'published',
   },
 ];
@@ -1009,6 +1024,7 @@ async function ensureTournament(
     registrationDeadline: addCalendarDays(today, demo.deadlineDaysFromRun),
     maximumTeams: demo.maximumTeams,
     ...(demo.structure && { structure: demo.structure }),
+    ...(demo.bracketType && { bracketType: demo.bracketType }),
   });
   if (demo.status === 'published') {
     await publishTournament(ctx, (await ctx.db.get('tournaments', tournamentId))!);
@@ -1431,6 +1447,15 @@ const DEMO_BRACKET_REPORT = {
   score: { kind: 'sets', sets: [{ a: 21, b: 17 }] } satisfies Score,
 } as const;
 
+/**
+ * Registration is closed, so its teams are confirmed with two players each and its double-elimination bracket exists.
+ * Winners round 1 plays as in the Labor Day Sand Slam (`DEMO_BRACKET_RESULTS`), so both losers meet in losers round 1.
+ */
+export const DEMO_DOUBLE_TOURNAMENT = {
+  orgSlug: 'gulf-coast-sport-social',
+  tournamentSlug: 'double-trouble-doubles',
+} as const;
+
 /** Every pool game of the Harvest Pools Classic has a confirmed result, scored for the winner and the loser by name. */
 const DEMO_HARVEST_RESULTS: readonly { winner: string; loser: string; points: [number, number] }[] =
   [
@@ -1600,6 +1625,27 @@ export const DEMO_HARVEST_TEAMS: readonly {
     partnerEmail: DEMO_POOL_PARTNERS[1].email,
   },
 ];
+
+/**
+ * Each team is inserted by name in `DEMO_DOUBLE_TOURNAMENT`, in seed order, once both players' accounts exist.
+ * The people are those of `DEMO_HARVEST_TEAMS`, who play another tournament, so no demo account has a second place in this one.
+ */
+export const DEMO_DOUBLE_TEAMS: readonly {
+  name: string;
+  captainEmail: string;
+  partnerEmail: string;
+}[] = [
+  'Double Dippers',
+  'Twin Towers',
+  'Pair of Aces',
+  'Back to Back',
+  'Two Tides',
+  'Double Take',
+].map((name, index) => ({
+  name,
+  captainEmail: DEMO_HARVEST_TEAMS[index].captainEmail,
+  partnerEmail: DEMO_HARVEST_TEAMS[index].partnerEmail,
+}));
 
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
@@ -1961,19 +2007,23 @@ export const insertDemoTeams = internalMutation({
       )) +
       (await insertTournamentTeams(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains)) +
       (await insertTournamentTeams(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains)) +
-      (await insertTournamentTeams(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains));
+      (await insertTournamentTeams(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains)) +
+      (await insertTournamentTeams(ctx, DEMO_DOUBLE_TOURNAMENT, DEMO_DOUBLE_TEAMS, captains));
     await insertDemoPartners(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS, captains);
     await insertDemoPartners(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS, captains);
+    await insertDemoPartners(ctx, DEMO_DOUBLE_TOURNAMENT, DEMO_DOUBLE_TEAMS, captains);
     await insertDemoPools(ctx, DEMO_POOL_TOURNAMENT, DEMO_POOL_TEAMS.length);
     await insertDemoPools(ctx, DEMO_HARVEST_TOURNAMENT, DEMO_HARVEST_TEAMS.length);
     await insertDemoPoolResults(ctx, captains);
     await insertDemoHarvestResults(ctx, captains);
     await insertDemoHarvestBracket(ctx);
     await insertDemoPoolReport(ctx, captains);
-    await insertDemoBracket(ctx);
-    await insertDemoBracketResults(ctx, captains);
+    await insertDemoBracket(ctx, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_TEAMS.length);
+    await insertDemoBracketResults(ctx, captains, DEMO_BRACKET_TOURNAMENT, DEMO_BRACKET_RESULTS);
     await insertDemoBracketReport(ctx, captains);
+    await insertDemoBracket(ctx, DEMO_DOUBLE_TOURNAMENT, DEMO_DOUBLE_TEAMS.length);
+    await insertDemoBracketResults(ctx, captains, DEMO_DOUBLE_TOURNAMENT, DEMO_BRACKET_RESULTS);
     await insertDemoTournamentWaitlistEntry(ctx, captains);
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return tournamentTeams;
@@ -2074,12 +2124,16 @@ async function insertDemoPartners(
 }
 
 /** Once, and only with every demo team confirmed, so the bracket is never made from some of them and left out of date. */
-async function insertDemoBracket(ctx: MutationCtx): Promise<void> {
-  const tournament = await demoBracketTournament(ctx);
+async function insertDemoBracket(
+  ctx: MutationCtx,
+  slugs: { orgSlug: string; tournamentSlug: string },
+  teamCount: number,
+): Promise<void> {
+  const tournament = await demoTournament(ctx, slugs);
   if (!tournament || (await bracketExists(ctx, tournament._id))) return;
   const { seeds } = await seededTeamsOf(ctx, tournament);
-  if (seeds.length < DEMO_BRACKET_TEAMS.length) return;
-  await replaceBracket(ctx, tournament._id, seeds, []);
+  if (seeds.length < teamCount) return;
+  await replaceBracket(ctx, tournament, seeds, []);
 }
 
 /** Once, and only with every demo team confirmed, so the pools are never made from some of them and left out of date. */
@@ -2179,8 +2233,10 @@ async function insertDemoHarvestBracket(ctx: MutationCtx): Promise<void> {
 async function insertDemoBracketResults(
   ctx: MutationCtx,
   people: readonly { email: string; authUserId: string }[],
+  slugs: { orgSlug: string; tournamentSlug: string },
+  results: readonly { slot: number; score: Score }[],
 ): Promise<void> {
-  const tournament = await demoBracketTournament(ctx);
+  const tournament = await demoTournament(ctx, slugs);
   const authUserId = people.find(
     (person) => person.email === DEMO_ACCOUNTS.admin.email,
   )?.authUserId;
@@ -2191,7 +2247,7 @@ async function insertDemoBracketResults(
     .unique();
   const games = await bracketGames(ctx, tournament._id);
   if (!admin || bracketHasResult(games)) return;
-  for (const { slot, score } of DEMO_BRACKET_RESULTS) {
+  for (const { slot, score } of results) {
     const game = games.find((row) => row.round === 1 && row.slot === slot);
     const side = scoreWinnerSide(score);
     const winnerTeamId = side === null ? null : game?.teamIds[side];

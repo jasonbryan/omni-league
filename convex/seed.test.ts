@@ -40,7 +40,7 @@ const ROWS = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 6,
+  tournaments: 7,
   camps: 3,
   campSessions: 5,
   trainings: 1,
@@ -1072,6 +1072,8 @@ describe('seed:demo', () => {
       DEMO_POOL_TEAMS,
       DEMO_HARVEST_TOURNAMENT,
       DEMO_HARVEST_TEAMS,
+      DEMO_DOUBLE_TOURNAMENT,
+      DEMO_DOUBLE_TEAMS,
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
       DEMO_WAITLIST_ENTRY,
@@ -1105,6 +1107,8 @@ describe('seed:demo', () => {
     expect(DEMO_POOL_TEAMS).toHaveLength(8);
     expect(DEMO_HARVEST_TOURNAMENT.tournamentSlug).toBe('harvest-pools-classic');
     expect(DEMO_HARVEST_TEAMS).toHaveLength(6);
+    expect(DEMO_DOUBLE_TOURNAMENT.tournamentSlug).toBe('double-trouble-doubles');
+    expect(DEMO_DOUBLE_TEAMS).toHaveLength(6);
     expect(DEMO_TOURNAMENT_TEAMS.map((team) => team.name)).toEqual([
       'Sand Crabs',
       'Beach Bombers',
@@ -1242,7 +1246,7 @@ describe('seed:demo tournaments', () => {
     expect(second.tournaments).toBe(0);
     const { organizationId, location, program, tournaments, tournament } =
       await winterDoublesClassic(t);
-    expect(tournaments).toHaveLength(6);
+    expect(tournaments).toHaveLength(7);
     expect(program).toMatchObject({
       organizationId,
       type: 'tournament',
@@ -1310,17 +1314,21 @@ describe('seed:demo tournaments', () => {
     const beach = { organizationSlug: slug, page: 1, sport: 'beachVolleyball' as const };
     const names = (rows: { name: string }[]) => rows.map((row) => row.name);
     const OPEN = ['Gulf Coast Beach Open', 'Gulf Coast King of the Beach'];
-    // The Labor Day Sand Slam, the Fall Pool Play Open, and the Harvest Pools Classic have closed registration and end first, so only the lists of upcoming tournaments hold them.
+    // The Labor Day Sand Slam, the Fall Pool Play Open, the Harvest Pools Classic, and the Double Trouble Doubles have closed registration and end first, so only the lists of upcoming tournaments hold them. They fill the first page of 5 with the Gulf Coast Beach Open, and the King of the Beach is on page 2.
     const UPCOMING = [
       'Labor Day Sand Slam',
       'Fall Pool Play Open',
       'Harvest Pools Classic',
-      ...OPEN,
+      'Double Trouble Doubles',
+      'Gulf Coast Beach Open',
     ];
     expect(
       names((await t.query(api.tournaments.listPublic, { organizationSlug: slug, page: 1 })).rows),
     ).toEqual(UPCOMING);
     expect(names((await t.query(api.tournaments.listPublic, beach)).rows)).toEqual(UPCOMING);
+    expect(names((await t.query(api.tournaments.listPublic, { ...beach, page: 2 })).rows)).toEqual([
+      'Gulf Coast King of the Beach',
+    ]);
     expect((await t.query(api.tournaments.listPublic, { ...beach, sport: 'soccer' })).rows).toEqual(
       [],
     );
@@ -1346,9 +1354,9 @@ describe('seed:demo tournaments', () => {
       });
     });
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.tournaments).toBe(5);
+    expect(result.tournaments).toBe(6);
     const held = await winterDoublesClassic(t);
-    expect(held.tournaments).toHaveLength(5);
+    expect(held.tournaments).toHaveLength(6);
     expect(held.program?.type).toBe('league');
   });
 });

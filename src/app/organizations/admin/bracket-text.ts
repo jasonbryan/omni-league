@@ -49,10 +49,20 @@ export function createOfflineText(recreating: boolean): string {
     : 'No bracket was created. Try again when you’re connected.';
 }
 
-export function createdText(recreated: boolean, gameCount: number, roundCount: number): AlertText {
+/** `roundCount` is `null` for double elimination, whose games are in three brackets rather than one run of rounds. */
+export function createdText(
+  recreated: boolean,
+  gameCount: number,
+  roundCount: number | null,
+): AlertText {
+  const games = `${gameCount} ${gameCount === 1 ? 'game' : 'games'}`;
+  const where =
+    roundCount === null
+      ? `${games} in a winners’ bracket, a losers’ bracket, and a grand final`
+      : `${games} in ${roundCount} ${roundCount === 1 ? 'round' : 'rounds'}`;
   return {
     title: recreated ? 'Bracket recreated' : 'Bracket created',
-    description: `${gameCount} ${gameCount === 1 ? 'game' : 'games'} in ${roundCount} ${roundCount === 1 ? 'round' : 'rounds'}. Registration, the waitlist, and Sets per game are closed now. A moved seed changes the bracket when you recreate it.`,
+    description: `${where}. Registration, the waitlist, and Sets per game are closed now. A moved seed changes the bracket when you recreate it.`,
   };
 }
 

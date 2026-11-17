@@ -35,7 +35,7 @@ import { HlmSpinner } from '../../ui/spinner';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertText } from './alert-text';
-import { BracketGame } from './bracket-game';
+import { BracketRounds } from './bracket-rounds';
 import {
   bracketRefusalMessage,
   createdText,
@@ -96,7 +96,7 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
   imports: [
     AdminAlert,
     AdminOfflineAlert,
-    BracketGame,
+    BracketRounds,
     ChipRadioGroup,
     Checkbox,
     ConfirmDialog,
@@ -339,7 +339,7 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
               }
               <p role="status" class="sr-only">{{ creating() ? 'Creating the bracket.' : '' }}</p>
             </div>
-            @if (rounds(); as rounds) {
+            @if (bracket(); as bracket) {
               <div id="pool-bracket-rounds" [class]="section">
                 <h3 class="font-semibold">Games</h3>
                 @if (winner(); as winner) {
@@ -348,28 +348,11 @@ function sameIds(first: readonly string[], second: readonly string[]): boolean {
                     {{ winner.name }}
                   </p>
                 }
-                @for (round of rounds; track round.round) {
-                  <section
-                    [attr.aria-labelledby]="'pool-bracket-round-' + round.round"
-                    class="mt-4"
-                  >
-                    <h4
-                      [id]="'pool-bracket-round-' + round.round"
-                      class="text-sm font-medium text-muted-foreground"
-                    >
-                      {{ round.name }}
-                    </h4>
-                    <ol role="list" class="mt-2 flex flex-col gap-2">
-                      @for (game of round.games; track game.gameId) {
-                        <app-bracket-game
-                          [game]="game"
-                          [round]="round.round"
-                          [tournament]="tournament()"
-                        />
-                      }
-                    </ol>
-                  </section>
-                }
+                <app-bracket-rounds
+                  [bracket]="bracket"
+                  [tournament]="tournament()"
+                  idPrefix="pool-bracket-round"
+                />
               </div>
             }
           }
@@ -435,10 +418,9 @@ export class PoolBracketPanel {
     const view = this.view();
     return view.status === 'ready' ? view.setup : null;
   });
-  private readonly bracket = computed(() => this.setup()?.bracket ?? null);
+  protected readonly bracket = computed(() => this.setup()?.bracket ?? null);
   protected readonly hasBracket = computed(() => this.bracket() !== null);
   protected readonly hasResult = computed(() => this.bracket()?.hasResult ?? false);
-  protected readonly rounds = computed(() => this.bracket()?.rounds ?? null);
   protected readonly winner = computed(() => this.bracket()?.winner ?? null);
 
   /** Why there is no Create action yet, in the order the server checks. */
@@ -709,7 +691,11 @@ export class PoolBracketPanel {
       this.state.update((state) => ({ ...state, moved: false }));
       this.notice.set({
         kind: 'created',
-        text: createdText(result.replaced, result.gameCount, roundCount(result.teamCount)),
+        text: createdText(
+          result.replaced,
+          result.gameCount,
+          this.tournament().bracketType === 'double' ? null : roundCount(result.teamCount),
+        ),
       });
       return true;
     } catch (error) {

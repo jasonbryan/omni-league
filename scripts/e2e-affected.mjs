@@ -1210,6 +1210,7 @@ export const AREAS = [
       named('convex/', ['tournamentGames', 'scoreReports'])(file) ||
       named('convex/lib/', [
         'bracket',
+        'doubleBracket',
         'gameResults',
         'poolBracket',
         'pools',

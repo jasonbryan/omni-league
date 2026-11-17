@@ -26,7 +26,7 @@ export type ResultGameView = Pick<
   BracketGameView,
   'gameId' | 'slot' | 'teams' | 'winnerTeamId' | 'result'
 > &
-  Partial<Pick<BracketGameView, 'locked' | 'reports'>>;
+  Partial<Pick<BracketGameView, 'locked' | 'lockedBy' | 'reports'>>;
 
 export type BracketView =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; setup: BracketSetup };

@@ -7,7 +7,8 @@ import {
   requireStaffOrForbidden,
   requireTournamentOrganizer,
 } from './lib/access';
-import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, roundName, seedOrderOfBracket } from './lib/bracket';
+import { BRACKET_MESSAGES, MIN_BRACKET_TEAMS, seedOrderOfBracket } from './lib/bracket';
+import { playoffRoundName } from './lib/doubleBracket';
 import {
   POOL_MESSAGES,
   checkPoolSizes,
@@ -43,12 +44,16 @@ import {
   restorePools,
 } from './lib/tournamentPools';
 import {
+  allPlayoffGames,
   bracketExists,
   bracketGames,
   bracketHasResult,
+  championOf,
   clearResult,
+  type PlayoffGames,
   gameHasResult,
-  nonPoolGames,
+  playoffGames,
+  playoffRoundsOf,
   refuseBracket,
   replaceBracket,
   saveResult,
@@ -66,6 +71,25 @@ const resultViewValidator = v.object({
   resultEnteredAt: v.number(),
 });
 
+const bracketGameValidator = v.object({
+  gameId: v.id('tournamentGames'),
+  slot: v.number(),
+  teams: v.array(gameTeamValidator),
+  winnerTeamId: v.union(v.null(), v.id('teams')),
+  result: v.union(v.null(), resultViewValidator),
+  /** A later game has a result, so Undo, Clear, and Correct are refused. */
+  locked: v.boolean(),
+  /** Why the game is locked: the next game, or for a double-elimination bracket the game the loser went to; absent while it is not. */
+  lockedBy: v.optional(v.union(v.literal('next'), v.literal('loser'))),
+  reports: v.array(reportViewValidator),
+});
+
+const bracketRoundValidator = v.object({
+  round: v.number(),
+  name: v.string(),
+  games: v.array(bracketGameValidator),
+});
+
 const setupValidator = v.object({
   seeds: v.array(v.object({ teamId: v.id('teams'), name: v.string(), rosterCount: v.number() })),
   unconfirmedCount: v.number(),
@@ -73,25 +97,14 @@ const setupValidator = v.object({
     v.null(),
     v.object({
       hasResult: v.boolean(),
+      /** The team that wins the tournament, once it is decided. */
       winner: v.union(v.null(), gameTeamValidator),
-      rounds: v.array(
-        v.object({
-          round: v.number(),
-          name: v.string(),
-          games: v.array(
-            v.object({
-              gameId: v.id('tournamentGames'),
-              slot: v.number(),
-              teams: v.array(gameTeamValidator),
-              winnerTeamId: v.union(v.null(), v.id('teams')),
-              result: v.union(v.null(), resultViewValidator),
-              /** The next game has a result, so Undo, Clear, and Correct are refused. */
-              locked: v.boolean(),
-              reports: v.array(reportViewValidator),
-            }),
-          ),
-        }),
-      ),
+      /** The winners' bracket, which a single-elimination bracket is entirely. */
+      rounds: v.array(bracketRoundValidator),
+      /** Set for double elimination, with the losers' bracket and the grand final's one or two games. */
+      bracketType: v.optional(v.literal('double')),
+      losersRounds: v.optional(v.array(bracketRoundValidator)),
+      grandFinalRounds: v.optional(v.array(bracketRoundValidator)),
     }),
   ),
 });
@@ -108,52 +121,66 @@ function resultViewOf(game: Doc<'tournamentGames'>) {
   );
 }
 
-function nextHasResult(
-  game: Doc<'tournamentGames'>,
-  byId: ReadonlyMap<Id<'tournamentGames'>, Doc<'tournamentGames'>>,
-): boolean {
+type GamesById = ReadonlyMap<Id<'tournamentGames'>, Doc<'tournamentGames'>>;
+
+function nextHasResult(game: Doc<'tournamentGames'>, byId: GamesById): boolean {
   const next = game.nextGameId && byId.get(game.nextGameId);
+  return next ? gameHasResult(next) : false;
+}
+
+function loserGamePlayed(game: Doc<'tournamentGames'>, byId: GamesById): boolean {
+  const next = game.loserNextGameId && byId.get(game.loserNextGameId);
   return next ? gameHasResult(next) : false;
 }
 
 async function bracketView(
   ctx: QueryCtx,
-  games: readonly Doc<'tournamentGames'>[],
+  playoff: PlayoffGames,
   teamNames: ReadonlyMap<Id<'teams'>, string>,
-  { namesWinner }: { namesWinner: boolean },
 ) {
+  const games = allPlayoffGames(playoff);
   const names = new Map(teamNames);
   for (const teamId of games.flatMap((game) => game.teamIds)) {
     if (teamId === null || names.has(teamId)) continue;
     names.set(teamId, (await ctx.db.get('teams', teamId))?.name ?? '');
   }
   const reports = await reportViewsByGame(ctx, games, names);
-  const rounds = games.reduce((most, game) => Math.max(most, game.round), 0);
   const byId = new Map(games.map((game) => [game._id, game]));
-  const final = games.find((game) => game.round === rounds);
-  // The winners' final decides a single-elimination bracket only.
-  const winnerTeamId =
-    namesWinner && final && gameHasResult(final) ? final.winnerTeamId : undefined;
+  const rounds = playoffRoundsOf(playoff);
+  const gameView = (game: Doc<'tournamentGames'>) => {
+    const lockedByNext = nextHasResult(game, byId);
+    const lockedByLoser = loserGamePlayed(game, byId);
+    return {
+      gameId: game._id,
+      slot: game.slot,
+      teams: game.teamIds.map((teamId) =>
+        teamId === null ? null : { teamId, name: names.get(teamId) ?? '' },
+      ),
+      winnerTeamId: game.winnerTeamId ?? null,
+      result: gameHasResult(game) ? resultViewOf(game) : null,
+      locked: lockedByNext || lockedByLoser,
+      ...((lockedByNext || lockedByLoser) && {
+        lockedBy: lockedByNext ? ('next' as const) : ('loser' as const),
+      }),
+      reports: reports.get(game._id) ?? [],
+    };
+  };
+  const roundsOf = (stageGames: readonly Doc<'tournamentGames'>[], total: number) =>
+    Array.from({ length: total }, (_, index) => ({
+      round: index + 1,
+      name: playoffRoundName({ stage: stageGames[0].stage, round: index + 1 }, rounds),
+      games: stageGames.filter((game) => game.round === index + 1).map(gameView),
+    }));
+  const winnerTeamId = championOf(playoff);
   return {
     hasResult: bracketHasResult(games),
     winner: winnerTeamId ? { teamId: winnerTeamId, name: names.get(winnerTeamId) ?? '' } : null,
-    rounds: Array.from({ length: rounds }, (_, index) => ({
-      round: index + 1,
-      name: roundName(index + 1, rounds),
-      games: games
-        .filter((game) => game.round === index + 1)
-        .map((game) => ({
-          gameId: game._id,
-          slot: game.slot,
-          teams: game.teamIds.map((teamId) =>
-            teamId === null ? null : { teamId, name: names.get(teamId) ?? '' },
-          ),
-          winnerTeamId: game.winnerTeamId ?? null,
-          result: gameHasResult(game) ? resultViewOf(game) : null,
-          locked: nextHasResult(game, byId),
-          reports: reports.get(game._id) ?? [],
-        })),
-    })),
+    rounds: roundsOf(playoff.winners, rounds.winners),
+    ...(rounds.double && {
+      bracketType: 'double' as const,
+      losersRounds: playoff.losers.length > 0 ? roundsOf(playoff.losers, rounds.losers) : [],
+      grandFinalRounds: roundsOf(playoff.grandFinal, playoff.grandFinal.length),
+    }),
   };
 }
 
@@ -173,7 +200,7 @@ export const getSetup = query({
     await requireProgramOrganizerOrForbidden(ctx, found.program);
     const { tournament } = found;
     const { seeds, unconfirmed } = await tournamentTeams(ctx, tournament);
-    const games = await bracketGames(ctx, tournament._id);
+    const playoff = await playoffGames(ctx, tournament._id);
     return {
       seeds: seeds.map((team) => ({
         teamId: team._id,
@@ -182,11 +209,9 @@ export const getSetup = query({
       })),
       unconfirmedCount: unconfirmed.length,
       bracket:
-        games.length === 0
+        playoff.winners.length === 0
           ? null
-          : await bracketView(ctx, games, new Map(seeds.map((team) => [team._id, team.name])), {
-              namesWinner: tournament.bracketType === 'single',
-            }),
+          : await bracketView(ctx, playoff, new Map(seeds.map((team) => [team._id, team.name]))),
     };
   },
 });
@@ -247,14 +272,14 @@ export const createBracket = mutation({
         message: BRACKET_MESSAGES.registrationOpen(tournament.registrationDeadline),
       });
     }
-    const existing = await nonPoolGames(ctx, tournament._id);
+    const existing = allPlayoffGames(await playoffGames(ctx, tournament._id));
     if (bracketHasResult(existing)) {
       refuseBracket({ code: 'resultEntered', message: BRACKET_MESSAGES.resultEntered });
     }
     if (existing.length > 0 && replace !== true) {
       refuseBracket({ code: 'bracketExists', message: BRACKET_MESSAGES.bracketExists });
     }
-    const gameCount = await replaceBracket(ctx, tournament._id, seeds, existing);
+    const gameCount = await replaceBracket(ctx, tournament, seeds, existing);
     return { gameCount, replaced: existing.length > 0 };
   },
 });
@@ -620,7 +645,7 @@ export const getPoolBracket = query({
     const results = await poolResults(ctx, tournament, program.sport);
     const smallestPool = results.poolSizes.length > 0 ? Math.min(...results.poolSizes) : 0;
     const ready = results.gameCount > 0 && results.withoutResult === 0;
-    const games = await bracketGames(ctx, tournament._id);
+    const playoff = await playoffGames(ctx, tournament._id);
     return {
       poolCount: results.poolSizes.length,
       smallestPool,
@@ -635,15 +660,14 @@ export const getPoolBracket = query({
             tie: seed.tie,
           }))
         : [],
-      bracketSeeds: seedOrderOfBracket(games) as Id<'teams'>[],
+      bracketSeeds: seedOrderOfBracket(playoff.winners) as Id<'teams'>[],
       bracket:
-        games.length === 0
+        playoff.winners.length === 0
           ? null
           : await bracketView(
               ctx,
-              games,
+              playoff,
               new Map(results.ranked.map(({ team }) => [team._id, team.name])),
-              { namesWinner: tournament.bracketType === 'single' },
             ),
     };
   },
@@ -691,7 +715,7 @@ export const createBracketFromPools = mutation({
     }
     const issue = checkAdvance(results.poolSizes, advancePerPool);
     if (issue) refusePool(issue);
-    const existing = await nonPoolGames(ctx, tournament._id);
+    const existing = allPlayoffGames(await playoffGames(ctx, tournament._id));
     if (bracketHasResult(existing)) {
       refuseBracket({ code: 'resultEntered', message: BRACKET_MESSAGES.resultEntered });
     }

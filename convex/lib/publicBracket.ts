@@ -1,8 +1,9 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
-import { roundName, seedOrderOfBracket } from './bracket';
+import { seedOrderOfBracket } from './bracket';
+import { playoffRoundName } from './doubleBracket';
 import type { PublicBracket } from './publicPage';
-import { bracketGames, gameHasResult } from './tournamentBracket';
+import { championOf, gameHasResult, playoffGames, playoffRoundsOf } from './tournamentBracket';
 
 type Game = Doc<'tournamentGames'>;
 type PublicGame = PublicBracket['rounds'][number]['games'][number];
@@ -10,9 +11,11 @@ type Place = PublicGame['teams'][number];
 
 export async function publicBracket(
   ctx: Pick<QueryCtx, 'db'>,
-  tournament: Doc<'tournaments'>,
+  tournamentId: Id<'tournaments'>,
 ): Promise<PublicBracket | undefined> {
-  const games = await bracketGames(ctx, tournament._id);
+  const playoff = await playoffGames(ctx, tournamentId);
+  // The public page's validator has no section for the losers' bracket or the grand final.
+  const games = playoff.winners;
   if (games.length === 0) return undefined;
   const teams = await teamsOf(ctx, games);
   const seedOf = new Map(seedOrderOfBracket(games).map((teamId, index) => [teamId, index + 1]));
@@ -22,17 +25,13 @@ export async function publicBracket(
     const seed = seedOf.get(team._id);
     return { name: team.name, ...(seed !== undefined && { seed }) };
   };
-  const roundTotal = Math.max(...games.map((game) => game.round));
-  const final = games.find((game) => game.round === roundTotal);
-  // The winners' final decides a single-elimination bracket only.
-  const winner =
-    tournament.bracketType === 'single' && final && gameHasResult(final)
-      ? placeOf(final.winnerTeamId ?? null)
-      : null;
+  const rounds = playoffRoundsOf(playoff);
+  const roundTotal = rounds.winners;
+  const winner = placeOf(championOf(playoff) ?? null);
   return {
     ...(winner && { winner: winner.name }),
     rounds: Array.from({ length: roundTotal }, (_, index) => ({
-      name: roundName(index + 1, roundTotal),
+      name: playoffRoundName({ stage: 'bracket', round: index + 1 }, rounds),
       games: games
         .filter((game) => game.round === index + 1)
         .map((game) => {

@@ -76,6 +76,6 @@ export async function replaceBracketFromPools(
   const advancing = results.ranked.slice(0, advancingCount).map((seed) => seed.team);
   const seeds = seedOrder ? chosenOrder(results, advancePerPool, seedOrder) : advancing;
   // `teams.seed` stays the split's order, which the pool tables keep for teams that nothing separates.
-  const gameCount = await replaceBracketGames(ctx, tournament._id, seeds, replaced);
+  const gameCount = await replaceBracketGames(ctx, tournament, seeds, replaced);
   return { gameCount, teamCount: seeds.length };
 }

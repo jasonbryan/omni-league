@@ -11,7 +11,12 @@ import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { scoreValidator, sportCountsValidator, sportValidator } from './lib/sports';
-import { setsPerGameValidator, structureValidator } from './lib/tournamentEdit';
+import {
+  bracketTypeValidator,
+  grandFinalValidator,
+  setsPerGameValidator,
+  structureValidator,
+} from './lib/tournamentEdit';
 import { trainingClassStatusValidator, trainingPatternValidator } from './lib/trainingPattern';
 import { waitlistEntryStatusValidator } from './lib/waitlist';
 
@@ -191,7 +196,10 @@ export default defineSchema({
     minimumRosterSize: v.number(),
     /** Pools play a round robin in each pool before the bracket; changes only while no game exists. */
     structure: structureValidator,
-    bracketType: v.literal('single'),
+    /** Double elimination adds a losers' bracket and a grand final to the games; changes only while no bracket game exists. */
+    bracketType: bracketTypeValidator,
+    /** Absent reads as `ifNecessary`; changes only until the grand final has a result. */
+    grandFinal: v.optional(grandFinalValidator),
     /** Chosen only for beach volleyball; absent reads as 1. */
     setsPerGame: v.optional(setsPerGameValidator),
   })
@@ -213,7 +221,13 @@ export default defineSchema({
   // Written only through `convex/lib/tournamentBracket.ts`. A bye is a round 1 game with one team, already its winner.
   tournamentGames: defineTable({
     tournamentId: v.id('tournaments'),
-    stage: v.union(v.literal('bracket'), v.literal('pool')),
+    /** `bracket` is the winners' bracket, which a single-elimination bracket is entirely. */
+    stage: v.union(
+      v.literal('bracket'),
+      v.literal('losers'),
+      v.literal('grandFinal'),
+      v.literal('pool'),
+    ),
     /** The pool of a `pool` game; absent on a bracket game. */
     pool: v.optional(poolValidator),
     /** From 1, the first round played. */
@@ -226,6 +240,9 @@ export default defineSchema({
     /** The game the winner joins, on `nextSide`; both are absent on the Final. */
     nextGameId: v.optional(v.id('tournamentGames')),
     nextSide: v.optional(v.union(v.literal(0), v.literal(1))),
+    /** The game the loser joins, in a double-elimination bracket; absent on a bye, a losers' bracket game, and the grand final. */
+    loserNextGameId: v.optional(v.id('tournamentGames')),
+    loserNextSide: v.optional(v.union(v.literal(0), v.literal(1))),
     /** The result fields are set and cleared together with `winnerTeamId` of a played game; a bye has none. */
     score: v.optional(scoreValidator),
     /** The team that did not play; `score` then holds the sport's forfeit score. */

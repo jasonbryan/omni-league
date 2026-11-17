@@ -20,8 +20,11 @@ import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDi
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
 import {
+  DEFAULT_BRACKET_TYPE,
   DEFAULT_STRUCTURE,
   editableOf,
+  type BracketType,
+  type GrandFinal,
   type Structure,
   type TournamentEditable,
 } from './tournamentEdit';
@@ -490,6 +493,8 @@ export interface NewTournament {
   registrationDeadline: string;
   maximumTeams: number;
   structure?: Structure;
+  bracketType?: BracketType;
+  grandFinal?: GrandFinal;
 }
 
 // The caller has checked access, the input, and that the slug is free. The minimum roster size is the division's players per side, which a tournament cannot raise.
@@ -530,7 +535,8 @@ export async function insertDraftTournament(
     maximumTeams: tournament.maximumTeams,
     minimumRosterSize: division.playersPerSide,
     structure: tournament.structure ?? DEFAULT_STRUCTURE,
-    bracketType: 'single',
+    bracketType: tournament.bracketType ?? DEFAULT_BRACKET_TYPE,
+    ...(tournament.grandFinal && { grandFinal: tournament.grandFinal }),
   });
 }
 
@@ -752,8 +758,13 @@ export async function updateTournamentDetails(
   change: TournamentEditable,
 ): Promise<{ earlier: TournamentEditable; written: TournamentEditable }> {
   const earlier = editableOf(tournament);
-  // A patch with an undefined field removes it, which the required structure cannot lose.
-  const written = { ...change, structure: change.structure ?? earlier.structure };
+  // A patch with an undefined field removes it, which the required fields cannot lose; the optional grand final is removed when the caller sends none, as an Undo does for a tournament that held none.
+  const written = {
+    ...change,
+    structure: change.structure ?? earlier.structure,
+    bracketType: change.bracketType ?? earlier.bracketType,
+    grandFinal: change.grandFinal,
+  };
   await ctx.db.patch('tournaments', tournament._id, written);
   return { earlier, written };
 }
