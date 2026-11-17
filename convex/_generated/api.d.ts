@@ -40,6 +40,7 @@ import type * as lib_campWaitlist from "../lib/campWaitlist.js";
 import type * as lib_campWaitlistWrites from "../lib/campWaitlistWrites.js";
 import type * as lib_customLevelInput from "../lib/customLevelInput.js";
 import type * as lib_divisions from "../lib/divisions.js";
+import type * as lib_doubleBracket from "../lib/doubleBracket.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
 import type * as lib_freeAgent from "../lib/freeAgent.js";
 import type * as lib_gameResults from "../lib/gameResults.js";
@@ -172,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   "lib/campWaitlistWrites": typeof lib_campWaitlistWrites;
   "lib/customLevelInput": typeof lib_customLevelInput;
   "lib/divisions": typeof lib_divisions;
+  "lib/doubleBracket": typeof lib_doubleBracket;
   "lib/forbidden": typeof lib_forbidden;
   "lib/freeAgent": typeof lib_freeAgent;
   "lib/gameResults": typeof lib_gameResults;

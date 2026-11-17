@@ -22,6 +22,7 @@ import {
   sameEditable,
   setsPerGameIsChosen,
 } from '../../../../convex/lib/tournamentEdit';
+import { BRACKET_MESSAGES } from '../../../../convex/lib/bracket';
 import { POOL_MESSAGES } from '../../../../convex/lib/pools';
 import { MAX_MAXIMUM_TEAMS, MIN_MAXIMUM_TEAMS } from '../../../../convex/lib/tournamentInput';
 import {
@@ -62,6 +63,22 @@ const STRUCTURE_OPTIONS: readonly ChipOption[] = [
   { key: 'bracket', label: 'Bracket only' },
   { key: 'pools', label: 'Pools, then bracket' },
 ];
+
+const BRACKET_TYPE_OPTIONS: readonly ChipOption[] = [
+  { key: 'single', label: 'Single elimination' },
+  { key: 'double', label: 'Double elimination' },
+];
+
+const GRAND_FINAL_OPTIONS: readonly ChipOption[] = [
+  { key: 'ifNecessary', label: 'Deciding game if needed' },
+  { key: 'single', label: 'Single game' },
+];
+
+const GRAND_FINAL_DESCRIPTIONS = {
+  ifNecessary:
+    'When the losers’ bracket team wins the first game, a second game decides the tournament.',
+  single: 'The first game decides the tournament, whoever wins it.',
+} as const;
 
 const DATE_FIELDS = [
   { field: 'startDate', id: 'details-start-date', label: 'Start date', description: null },
@@ -221,6 +238,44 @@ const FIELD_IDS: Record<DetailsField, string> = {
             />
           </div>
         }
+        @if (bracketTypeLocked()) {
+          <div data-slot="bracket-type">
+            <span class="text-sm font-medium">Bracket type</span>
+            <p class="mt-1.5 text-sm">{{ storedBracketType() }}</p>
+            <p hlmFieldDescription class="mt-1.5">{{ bracketTypeLockedText }}</p>
+          </div>
+        } @else {
+          <div data-slot="bracket-type">
+            <app-chip-radio-group
+              name="bracket-type"
+              legend="Bracket type"
+              [options]="bracketTypeOptions"
+              [value]="details.bracketType()"
+              description="Double elimination gives every team a second game: a team goes out after its second loss."
+              (chosen)="chooseBracketType($event)"
+            />
+          </div>
+        }
+        @if (details.bracketType() === 'double') {
+          @if (tournament().grandFinalLocked) {
+            <div data-slot="grand-final">
+              <span class="text-sm font-medium">Grand final</span>
+              <p class="mt-1.5 text-sm">{{ storedGrandFinal() }}</p>
+              <p hlmFieldDescription class="mt-1.5">{{ grandFinalLockedText }}</p>
+            </div>
+          } @else {
+            <div data-slot="grand-final">
+              <app-chip-radio-group
+                name="grand-final"
+                legend="Grand final"
+                [options]="grandFinalOptions"
+                [value]="details.grandFinal()"
+                [description]="grandFinalDescription()"
+                (chosen)="chooseGrandFinal($event)"
+              />
+            </div>
+          }
+        }
         @if (hasSetsPerGame() && setsLocked()) {
           <div data-slot="sets-per-game">
             <span class="text-sm font-medium">Sets per game</span>
@@ -307,6 +362,10 @@ export class TournamentDetailsForm implements OnInit {
   protected readonly setsOptions = SETS_OPTIONS;
   protected readonly structureOptions = STRUCTURE_OPTIONS;
   protected readonly structureLockedText = POOL_MESSAGES.structureLocked;
+  protected readonly bracketTypeOptions = BRACKET_TYPE_OPTIONS;
+  protected readonly grandFinalOptions = GRAND_FINAL_OPTIONS;
+  protected readonly bracketTypeLockedText = BRACKET_MESSAGES.bracketTypeLocked;
+  protected readonly grandFinalLockedText = BRACKET_MESSAGES.grandFinalLocked;
 
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
@@ -324,6 +383,16 @@ export class TournamentDetailsForm implements OnInit {
   protected readonly structureLocked = this.gamesCreated;
   protected readonly storedStructure = computed(() =>
     this.tournament().structure === 'pools' ? 'Pools, then bracket' : 'Bracket only',
+  );
+  protected readonly bracketTypeLocked = computed(() => this.tournament().bracketCreated);
+  protected readonly storedBracketType = computed(() =>
+    this.tournament().bracketType === 'double' ? 'Double elimination' : 'Single elimination',
+  );
+  protected readonly storedGrandFinal = computed(() =>
+    this.tournament().grandFinal === 'single' ? 'Single game' : 'Deciding game if needed',
+  );
+  protected readonly grandFinalDescription = computed(
+    () => GRAND_FINAL_DESCRIPTIONS[this.details.grandFinal()],
   );
   protected readonly setsLockedText = computed(() =>
     this.tournament().bracketCreated
@@ -379,6 +448,14 @@ export class TournamentDetailsForm implements OnInit {
     this.details.setsPerGame.set(key === '3' ? 3 : 1);
   }
 
+  protected chooseBracketType(key: string): void {
+    this.details.bracketType.set(key === 'double' ? 'double' : 'single');
+  }
+
+  protected chooseGrandFinal(key: string): void {
+    this.details.grandFinal.set(key === 'single' ? 'single' : 'ifNecessary');
+  }
+
   protected chooseStructure(key: string): void {
     this.details.structure.set(key === 'pools' ? 'pools' : 'bracket');
   }
@@ -394,6 +471,8 @@ export class TournamentDetailsForm implements OnInit {
       {
         setsPerGame: this.hasSetsPerGame() && !this.setsLocked(),
         structure: !this.structureLocked(),
+        bracketType: !this.bracketTypeLocked(),
+        grandFinal: !this.tournament().grandFinalLocked,
       },
       (values, expected) => this.updateCall.run({ tournamentId, ...values, expected }),
     );

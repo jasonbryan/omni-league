@@ -3,8 +3,12 @@ import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import {
+  DEFAULT_BRACKET_TYPE,
+  DEFAULT_GRAND_FINAL,
   DEFAULT_SETS_PER_GAME,
   DEFAULT_STRUCTURE,
+  type BracketType,
+  type GrandFinal,
   type SetsPerGame,
   type Structure,
   type TournamentEditable,
@@ -42,6 +46,10 @@ export interface DetailsValues {
   setsPerGame?: SetsPerGame;
   /** Left out once games exist. */
   structure?: Structure;
+  /** Left out once bracket games exist. */
+  bracketType?: BracketType;
+  /** Left out once the grand final has a result. */
+  grandFinal?: GrandFinal;
 }
 
 export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
@@ -81,8 +89,16 @@ function currentOf(failure: unknown): TournamentEditable | null {
   if (typeof data !== 'object' || data === null) return null;
   const current = (data as Record<string, unknown>)['current'];
   if (typeof current !== 'object' || current === null) return null;
-  const { startDate, endDate, registrationDeadline, maximumTeams, setsPerGame, structure } =
-    current as Record<string, unknown>;
+  const {
+    startDate,
+    endDate,
+    registrationDeadline,
+    maximumTeams,
+    setsPerGame,
+    structure,
+    bracketType,
+    grandFinal,
+  } = current as Record<string, unknown>;
   if (
     typeof startDate !== 'string' ||
     typeof endDate !== 'string' ||
@@ -99,6 +115,8 @@ function currentOf(failure: unknown): TournamentEditable | null {
     maximumTeams,
     setsPerGame,
     structure: structure === 'pools' ? 'pools' : DEFAULT_STRUCTURE,
+    bracketType: bracketType === 'double' ? 'double' : DEFAULT_BRACKET_TYPE,
+    grandFinal: grandFinal === 'single' ? 'single' : DEFAULT_GRAND_FINAL,
   };
 }
 
@@ -113,6 +131,8 @@ export class TournamentDetails {
   readonly fields: FieldTree<DetailsText>;
   readonly setsPerGame = signal<SetsPerGame>(DEFAULT_SETS_PER_GAME);
   readonly structure = signal<Structure>(DEFAULT_STRUCTURE);
+  readonly bracketType = signal<BracketType>(DEFAULT_BRACKET_TYPE);
+  readonly grandFinal = signal<GrandFinal>(DEFAULT_GRAND_FINAL);
   readonly submitting = signal(false);
   readonly alert = signal<DetailsAlertKind | null>(null);
   readonly errors: Record<DetailsField, Signal<string | null>>;
@@ -131,7 +151,9 @@ export class TournamentDetails {
     return (
       DETAILS_FIELDS.some((field) => now[field] !== was[field]) ||
       this.setsPerGame() !== baseline.setsPerGame ||
-      this.structure() !== (baseline.structure ?? DEFAULT_STRUCTURE)
+      this.structure() !== (baseline.structure ?? DEFAULT_STRUCTURE) ||
+      this.bracketType() !== (baseline.bracketType ?? DEFAULT_BRACKET_TYPE) ||
+      this.grandFinal() !== (baseline.grandFinal ?? DEFAULT_GRAND_FINAL)
     );
   });
 
@@ -192,6 +214,8 @@ export class TournamentDetails {
     this.model.set(textOf(held));
     this.setsPerGame.set(held.setsPerGame);
     this.structure.set(held.structure ?? DEFAULT_STRUCTURE);
+    this.bracketType.set(held.bracketType ?? DEFAULT_BRACKET_TYPE);
+    this.grandFinal.set(held.grandFinal ?? DEFAULT_GRAND_FINAL);
     this.fields().reset();
     this.alert.set(null);
     for (const field of DETAILS_FIELDS) this.shown[field].hide();
@@ -214,6 +238,8 @@ export class TournamentDetails {
       maximumTeams: now.maximumTeams === was.maximumTeams,
       setsPerGame: this.setsPerGame() === baseline.setsPerGame,
       structure: this.structure() === (baseline.structure ?? DEFAULT_STRUCTURE),
+      bracketType: this.bracketType() === (baseline.bracketType ?? DEFAULT_BRACKET_TYPE),
+      grandFinal: this.grandFinal() === (baseline.grandFinal ?? DEFAULT_GRAND_FINAL),
     };
     const pick = <Key extends keyof TournamentEditable>(key: Key) =>
       untouched[key] ? newer[key] : baseline[key];
@@ -227,6 +253,8 @@ export class TournamentDetails {
     });
     if (untouched.setsPerGame) this.setsPerGame.set(newer.setsPerGame);
     if (untouched.structure) this.structure.set(newer.structure ?? DEFAULT_STRUCTURE);
+    if (untouched.bracketType) this.bracketType.set(newer.bracketType ?? DEFAULT_BRACKET_TYPE);
+    if (untouched.grandFinal) this.grandFinal.set(newer.grandFinal ?? DEFAULT_GRAND_FINAL);
     this.baseline.set({
       startDate: pick('startDate'),
       endDate: pick('endDate'),
@@ -234,6 +262,8 @@ export class TournamentDetails {
       maximumTeams: pick('maximumTeams'),
       setsPerGame: pick('setsPerGame'),
       structure: pick('structure'),
+      bracketType: pick('bracketType'),
+      grandFinal: pick('grandFinal'),
     });
   }
 
@@ -243,7 +273,7 @@ export class TournamentDetails {
 
   async submit<Result>(
     online: boolean,
-    sends: { setsPerGame: boolean; structure: boolean },
+    sends: { setsPerGame: boolean; structure: boolean; bracketType: boolean; grandFinal: boolean },
     send: (values: DetailsValues, expected: TournamentEditable) => Promise<Result>,
   ): Promise<DetailsSubmitOutcome<Result>> {
     const expected = this.baseline();
@@ -266,6 +296,8 @@ export class TournamentDetails {
       maximumTeams: limitFromText(model.maximumTeams)!,
       ...(sends.setsPerGame && { setsPerGame: this.setsPerGame() }),
       ...(sends.structure && { structure: this.structure() }),
+      ...(sends.bracketType && { bracketType: this.bracketType() }),
+      ...(sends.grandFinal && { grandFinal: this.grandFinal() }),
     };
     this.submitting.set(true);
     try {

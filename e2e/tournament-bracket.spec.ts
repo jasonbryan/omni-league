@@ -5,6 +5,8 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { expectLinkHeights, pointerOf } from './support/link-heights';
+import { BRACKET_MESSAGES } from '../convex/lib/bracket';
+import { seedResult, type SeededResult } from './support/bracket';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
@@ -1440,4 +1442,205 @@ test.describe('Tournaments: the Roster card while the Report score panel loads',
       });
     });
   }
+});
+
+const SIX = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
+
+const FIRST_TEAM_WINS: SeededResult = { score: { kind: 'sets', sets: [{ a: 21, b: 15 }] } };
+const SECOND_TEAM_WINS: SeededResult = { score: { kind: 'sets', sets: [{ a: 15, b: 21 }] } };
+
+test.describe('Tournaments: double elimination', () => {
+  const detailsForm = (page: Page) => page.locator('#edit-details form');
+  const choice = (page: Page, id: string) =>
+    detailsForm(page).locator('label', { has: page.locator(`#${id}`) });
+  const section = (page: Page, heading: string) =>
+    rounds(page).locator('section', {
+      has: page.locator('h4', { hasText: new RegExp(`^${heading}$`) }),
+    });
+
+  async function chooseAndSave(page: Page, ids: readonly string[]) {
+    for (const id of ids) await choice(page, id).click();
+    await detailsForm(page)
+      .getByRole('button', { name: /^Save changes/ })
+      .click();
+    await expect(detailsForm(page)).toContainText('Details saved.');
+  }
+
+  test('an organizer chooses Double elimination and Single game on the details, and the choices survive a reload', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(SIX), registration: 'closed' });
+    await page.goto(managePath);
+    await expect(page.locator('#bracket-type-single')).toBeChecked();
+    await expect(page.locator('[data-slot="grand-final"]')).toHaveCount(0);
+    await screenshot(page, testInfo, 'double-details-single');
+    await expectAccessible(page);
+
+    await choice(page, 'bracket-type-double').click();
+    await expect(page.locator('#grand-final-ifNecessary')).toBeChecked();
+    await expect(page.locator('#grand-final-description')).toHaveText(
+      'When the losers’ bracket team wins the first game, a second game decides the tournament.',
+    );
+    await screenshot(page, testInfo, 'double-details-double');
+    await expectAccessible(page);
+
+    await chooseAndSave(page, ['grand-final-single']);
+    await expectNoSidewaysScroll(page);
+    await page.reload();
+    await expect(page.locator('#bracket-type-double')).toBeChecked();
+    await expect(page.locator('#grand-final-single')).toBeChecked();
+    await expect(page.locator('#grand-final-description')).toHaveText(
+      'The first game decides the tournament, whoever wins it.',
+    );
+  });
+
+  test('creates a winners’ bracket, a losers’ bracket, and a grand final, and the bracket type is fixed from then on', async ({
+    page,
+  }, testInfo) => {
+    const { managePath } = await adminOf(page, { teams: full(SIX), registration: 'closed' });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+    await expect(
+      panel(page).getByRole('status').filter({ hasText: 'Bracket created' }),
+    ).toContainText('12 games in a winners’ bracket, a losers’ bracket, and a grand final.');
+    await expect(rounds(page).locator('h4')).toHaveText([
+      'Winners’ round 1',
+      'Winners’ semifinals',
+      'Winners’ final',
+      'Losers’ round 1',
+      'Losers’ round 2',
+      'Losers’ round 3',
+      'Losers’ final',
+      'Grand final',
+    ]);
+    await expect(gameLabels(page)).toHaveText([
+      'Game 1: Alpha v Bye',
+      'Game 2: Delta v Echo',
+      'Game 3: Bravo v Bye',
+      'Game 4: Charlie v Foxtrot',
+      'Game 1: Alpha v To be decided',
+      'Game 2: Bravo v To be decided',
+      'Game 1: To be decided v To be decided',
+      'Game 1: To be decided v To be decided',
+      'Game 1: To be decided v To be decided',
+      'Game 1: To be decided v To be decided',
+      'Game 1: To be decided v To be decided',
+      'Game 1: To be decided v To be decided',
+    ]);
+    await screenshot(page, testInfo, 'double-bracket-created');
+    await expectAccessible(page);
+
+    await expect(page.locator('#bracket-type-single')).toHaveCount(0);
+    await expect(detailsForm(page).locator('[data-slot="bracket-type"]')).toContainText(
+      'Double elimination' + BRACKET_MESSAGES.bracketTypeLocked,
+    );
+    await expect(page.locator('#grand-final-ifNecessary')).toBeChecked();
+  });
+
+  test('a winners’ bracket loss puts the loser in the losers’ bracket, and the result is fixed once the loser has played', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(SIX),
+      registration: 'closed',
+    });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+
+    await seedResult(tenant, SLUG, { round: 1, slot: 2 }, FIRST_TEAM_WINS);
+    await seedResult(tenant, SLUG, { round: 1, slot: 4 }, FIRST_TEAM_WINS);
+    await page.reload();
+    const losersGame = section(page, 'Losers’ round 1').locator('[data-game]');
+    await expect(losersGame.locator('[data-slot="game-label"]')).toHaveText(
+      'Game 1: Echo v Foxtrot',
+    );
+
+    const winnersGame = gameOf(page, 'Game 2: Delta v Echo');
+    await expect(correctButton(winnersGame)).toBeVisible();
+    await enterSet(losersGame, '21', '15');
+    await expect(savedStatus(losersGame, 'Result saved')).toContainText(
+      'Echo advances to the Losers’ round 2.',
+    );
+    await expect(section(page, 'Losers’ round 2').locator('[data-slot="game-label"]')).toHaveText(
+      'Game 1: Echo v To be decided',
+    );
+
+    await page.reload();
+    await expect(winnersGame.locator('[data-slot="locked"]')).toHaveText(
+      'The loser has played in the losers’ bracket, so this result cannot change.',
+    );
+    await expect(correctButton(winnersGame)).toHaveCount(0);
+    await expect(clearButton(winnersGame)).toHaveCount(0);
+    await screenshot(page, testInfo, 'double-bracket-loser-played');
+    await expectAccessible(page);
+  });
+
+  test('a grand final won by the losers’ bracket team adds a deciding game, whose winner wins the tournament, and the grand final setting is then fixed', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(SIX),
+      registration: 'closed',
+    });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+
+    const winners = [
+      { round: 1, slot: 2 },
+      { round: 1, slot: 4 },
+      { round: 2, slot: 1 },
+      { round: 2, slot: 2 },
+      { round: 3, slot: 1 },
+    ];
+    for (const game of winners) await seedResult(tenant, SLUG, game, FIRST_TEAM_WINS);
+    for (const round of [1, 2, 3, 4]) {
+      await seedResult(tenant, SLUG, { stage: 'losers', round, slot: 1 }, FIRST_TEAM_WINS);
+    }
+    await seedResult(tenant, SLUG, { stage: 'grandFinal', round: 1, slot: 1 }, SECOND_TEAM_WINS);
+    await page.reload();
+
+    await expect(rounds(page).locator('h4').last()).toHaveText('Grand final, deciding game');
+    const deciding = section(page, 'Grand final, deciding game').locator('[data-game]');
+    await expect(deciding.locator('[data-slot="game-label"]')).toHaveText('Game 1: Alpha v Echo');
+    await expect(panel(page).locator('[data-slot="winner"]')).toHaveCount(0);
+    await expect(detailsForm(page).locator('[data-slot="grand-final"]')).toContainText(
+      BRACKET_MESSAGES.grandFinalLocked,
+    );
+    await screenshot(page, testInfo, 'double-bracket-deciding-game');
+    await expectAccessible(page);
+
+    await enterSet(deciding, '21', '15');
+    await expect(savedStatus(deciding, 'Result saved')).toContainText('Alpha wins the tournament.');
+    await expect(panel(page).locator('[data-slot="winner"]')).toContainText('Winner: Alpha');
+    await screenshot(page, testInfo, 'double-bracket-winner');
+    await expectAccessible(page);
+  });
+
+  test('the details, the bracket, and the losers’ rounds do not scroll sideways at 320px', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(SIX),
+      registration: 'closed',
+    });
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await choice(page, 'bracket-type-double').click();
+    await expectNoSidewaysScroll(page);
+    await chooseAndSave(page, []);
+    await createBracket(page);
+    await expectNoSidewaysScroll(page);
+    await seedResult(tenant, SLUG, { round: 1, slot: 2 }, FIRST_TEAM_WINS);
+    await seedResult(tenant, SLUG, { round: 1, slot: 4 }, FIRST_TEAM_WINS);
+    await page.reload();
+    await expect(section(page, 'Losers’ round 1').locator('[data-slot="game-label"]')).toHaveText(
+      'Game 1: Echo v Foxtrot',
+    );
+    await expectNoSidewaysScroll(page);
+    await enterButton(section(page, 'Losers’ round 1').locator('[data-game]')).click();
+    await expectNoSidewaysScroll(page);
+  });
 });

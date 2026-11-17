@@ -328,6 +328,8 @@ const TEXT_BUTTON =
 export class BracketGame {
   readonly game = input.required<ResultGameView>();
   readonly round = input.required<number>();
+  /** Only the first round of a winners' bracket has byes; an empty place anywhere else waits for a result. */
+  readonly byes = input(true);
   readonly tournament = input.required<ManagedTournament>();
   readonly stage = input<GameStage>('bracket');
 
@@ -393,14 +395,19 @@ export class BracketGame {
 
   protected readonly label = computed(() =>
     this.game()
-      .teams.map((team) => team?.name ?? (this.round() === 1 ? 'Bye' : 'To be decided'))
+      .teams.map(
+        (team) => team?.name ?? (this.byes() && this.round() === 1 ? 'Bye' : 'To be decided'),
+      )
       .join(' v '),
   );
 
   protected readonly locked = computed(() => this.game().locked === true);
-  protected readonly lockedText = computed(() =>
-    this.stage() === 'pool' ? POOL_MESSAGES.poolsFrozen : BRACKET_MESSAGES.nextGamePlayed,
-  );
+  protected readonly lockedText = computed(() => {
+    if (this.stage() === 'pool') return POOL_MESSAGES.poolsFrozen;
+    return this.game().lockedBy === 'loser'
+      ? BRACKET_MESSAGES.loserGamePlayed
+      : BRACKET_MESSAGES.nextGamePlayed;
+  });
 
   protected readonly canEnter = computed(
     () => this.bothTeams() !== null && this.game().result === null,

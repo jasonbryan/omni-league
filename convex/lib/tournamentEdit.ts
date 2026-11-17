@@ -13,6 +13,19 @@ export type Structure = Infer<typeof structureValidator>;
 
 export const DEFAULT_STRUCTURE: Structure = 'bracket';
 
+export const bracketTypeValidator = v.union(v.literal('single'), v.literal('double'));
+
+export type BracketType = Infer<typeof bracketTypeValidator>;
+
+export const DEFAULT_BRACKET_TYPE: BracketType = 'single';
+
+/** `ifNecessary` plays a second grand final game when the losers' bracket team wins the first; `single` lets the first game decide. */
+export const grandFinalValidator = v.union(v.literal('ifNecessary'), v.literal('single'));
+
+export type GrandFinal = Infer<typeof grandFinalValidator>;
+
+export const DEFAULT_GRAND_FINAL: GrandFinal = 'ifNecessary';
+
 export const DEFAULT_SETS_PER_GAME: SetsPerGame = 1;
 
 export function setsPerGameIsChosen(sport: Sport): boolean {
@@ -27,6 +40,9 @@ export const tournamentEditableValidator = v.object({
   setsPerGame: setsPerGameValidator,
   // Optional: the previous release's form sends and reads no structure.
   structure: v.optional(structureValidator),
+  // Optional: the previous release's form sends and reads neither.
+  bracketType: v.optional(bracketTypeValidator),
+  grandFinal: v.optional(grandFinalValidator),
 });
 
 export type TournamentEditable = Infer<typeof tournamentEditableValidator>;
@@ -38,6 +54,8 @@ export function editableOf(tournament: {
   maximumTeams: number;
   setsPerGame?: SetsPerGame | undefined;
   structure?: Structure | undefined;
+  bracketType?: BracketType | undefined;
+  grandFinal?: GrandFinal | undefined;
 }): TournamentEditable {
   return {
     startDate: tournament.startDate,
@@ -46,12 +64,24 @@ export function editableOf(tournament: {
     maximumTeams: tournament.maximumTeams,
     setsPerGame: tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME,
     structure: tournament.structure ?? DEFAULT_STRUCTURE,
+    bracketType: tournament.bracketType ?? DEFAULT_BRACKET_TYPE,
+    grandFinal: tournament.grandFinal ?? DEFAULT_GRAND_FINAL,
   };
 }
 
 /** Details sent without a structure, as the previous release's form sends them, leave it as it is. */
 export function sameStructure(a: TournamentEditable, b: TournamentEditable): boolean {
   return a.structure === undefined || b.structure === undefined || a.structure === b.structure;
+}
+
+/** The same holds for the bracket type and the grand final. */
+function sameBracket(a: TournamentEditable, b: TournamentEditable): boolean {
+  return (
+    (a.bracketType === undefined ||
+      b.bracketType === undefined ||
+      a.bracketType === b.bracketType) &&
+    (a.grandFinal === undefined || b.grandFinal === undefined || a.grandFinal === b.grandFinal)
+  );
 }
 
 export function sameEditable(a: TournamentEditable, b: TournamentEditable): boolean {
@@ -61,6 +91,7 @@ export function sameEditable(a: TournamentEditable, b: TournamentEditable): bool
     a.registrationDeadline === b.registrationDeadline &&
     a.maximumTeams === b.maximumTeams &&
     a.setsPerGame === b.setsPerGame &&
-    sameStructure(a, b)
+    sameStructure(a, b) &&
+    sameBracket(a, b)
   );
 }

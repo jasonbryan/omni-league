@@ -167,6 +167,24 @@ describe('tournaments.create', () => {
     },
   );
 
+  test('keeps the bracket type and grand final that a copy of a double-elimination tournament sends', async () => {
+    const s = await setup();
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
+      ...valid(s),
+      bracketType: 'double',
+      grandFinal: 'single',
+    });
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId)))!;
+    expect([row.bracketType, row.grandFinal]).toEqual(['double', 'single']);
+  });
+
+  test('makes a single-elimination tournament with the default grand final when a copy sends neither', async () => {
+    const s = await setup();
+    const { tournamentId } = await s.adminA.mutation(api.tournaments.create, valid(s));
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', tournamentId)))!;
+    expect([row.bracketType, row.grandFinal]).toEqual(['single', undefined]);
+  });
+
   test('writes a draft tournament and its program of type tournament, in the right organization', async () => {
     const s = await setup();
     const { tournamentId } = await s.adminA.mutation(api.tournaments.create, {
@@ -852,6 +870,9 @@ describe('tournaments.getForManagement', () => {
       bracketCreated: false,
       structure: 'bracket',
       poolGamesCreated: false,
+      bracketType: 'single',
+      grandFinal: 'ifNecessary',
+      grandFinalLocked: false,
     });
   });
 
@@ -1048,6 +1069,18 @@ describe('tournaments.getForCopy', () => {
     const fields = object?.value as Record<string, { fieldType: Exported }>;
     const members = fields['structure'].fieldType.value as Exported[];
     expect(members.map((member) => member.value)).toEqual(['bracket', 'pools']);
+  });
+
+  test('returns the bracket type and grand final of a double-elimination tournament, so a copy keeps them', async () => {
+    const s = await setup();
+    const sourceId = await draftIn(s);
+    await s.t.run((ctx) =>
+      ctx.db.patch('tournaments', sourceId, { bracketType: 'double', grandFinal: 'single' }),
+    );
+    expect(await s.adminA.query(api.tournaments.getForCopy, args)).toMatchObject({
+      bracketType: 'double',
+      grandFinal: 'single',
+    });
   });
 
   test('carries a custom level, and copies a published tournament too', async () => {
@@ -1686,6 +1719,8 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     maximumTeams: 16,
     setsPerGame: 1,
     structure: 'bracket',
+    bracketType: 'single',
+    grandFinal: 'ifNecessary',
   };
 
   const changed: TournamentEditable = {
@@ -1695,6 +1730,8 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     maximumTeams: 24,
     setsPerGame: 3,
     structure: 'bracket',
+    bracketType: 'single',
+    grandFinal: 'ifNecessary',
   };
 
   const edit = (

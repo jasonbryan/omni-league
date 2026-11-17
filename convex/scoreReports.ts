@@ -1,7 +1,8 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireGameOrganizer, requireUser } from './lib/access';
-import { BRACKET_MESSAGES, roundName } from './lib/bracket';
+import { BRACKET_MESSAGES } from './lib/bracket';
+import { playoffRoundName } from './lib/doubleBracket';
 import {
   refuseInvalidScore,
   saveFor,
@@ -11,7 +12,13 @@ import {
 } from './lib/gameResults';
 import { reportableGamesOf } from './lib/scoreReports';
 import { scoreValidator, sportValidator } from './lib/sports';
-import { bracketGames, gameIsDecided, refuseBracket } from './lib/tournamentBracket';
+import {
+  allPlayoffGames,
+  gameIsDecided,
+  playoffGames,
+  playoffRoundsOf,
+  refuseBracket,
+} from './lib/tournamentBracket';
 import { poolGames } from './lib/tournamentPools';
 
 const reportedValidator = v.object({ score: scoreValidator, reportedAt: v.number() });
@@ -42,12 +49,12 @@ export const forTeam = query({
     if (team?.tournamentId === undefined || team.captainUserId !== user._id) return null;
     const tournament = await ctx.db.get('tournaments', team.tournamentId);
     if (!tournament) return null;
-    const bracket = await bracketGames(ctx, tournament._id);
+    const playoff = await playoffGames(ctx, tournament._id);
     const open = reportableGamesOf(
-      [...(await poolGames(ctx, tournament._id)), ...bracket],
+      [...(await poolGames(ctx, tournament._id)), ...allPlayoffGames(playoff)],
       team._id,
     );
-    const rounds = bracket.reduce((most, row) => Math.max(most, row.round), 0);
+    const rounds = playoffRoundsOf(playoff);
     const games = [];
     for (const game of open) {
       const reported = await ctx.db
@@ -61,9 +68,9 @@ export const forTeam = query({
       }
       games.push({
         gameId: game._id,
-        // A captain sees one kind of bracket game, whichever bracket type the tournament plays.
+        // The losers' bracket and the grand final are bracket games to a captain, as the previous frontend reads them.
         stage: game.stage === 'pool' ? ('pool' as const) : ('bracket' as const),
-        roundName: game.stage === 'pool' ? `Round ${game.round}` : roundName(game.round, rounds),
+        roundName: playoffRoundName(game, rounds),
         teams,
         report: reported && { score: reported.score, reportedAt: reported.reportedAt },
       });

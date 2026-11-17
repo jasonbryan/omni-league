@@ -2,19 +2,23 @@
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
-import { inSeedOrder, isConfirmedTeam, planBracket, type BracketRefusal } from './bracket';
+import { inSeedOrder, isConfirmedTeam, type BracketRefusal, type BracketSide } from './bracket';
+import {
+  planPlayoff,
+  type PlayoffGame,
+  type PlayoffRounds,
+  type PlayoffStage,
+} from './doubleBracket';
 import type { Score } from './sports';
+import { DEFAULT_GRAND_FINAL } from './tournamentEdit';
 import { MAX_MAXIMUM_TEAMS } from './tournamentInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
 
 const STAGE = 'bracket';
 
-// A bracket of the most teams a tournament takes has one game fewer than teams.
+// A bracket of the most teams a tournament takes has one game fewer than teams, and a losers' bracket has two fewer.
 const BRACKET_GAMES_READ_LIMIT = MAX_MAXIMUM_TEAMS;
-
-// The index lists the stages in name order, so a bracket's games come before any pool game; a winners' bracket and a losers' bracket of the most teams have 253 games, and a grand final 2.
-const NON_POOL_GAMES_READ_LIMIT = 2 * MAX_MAXIMUM_TEAMS;
 
 /** A team reports once for its game, and a game has two teams. */
 export const REPORTS_PER_GAME = 2;
@@ -24,30 +28,71 @@ export function refuseBracket(refusal: BracketRefusal, extra: object = {}): neve
   throw new ConvexError({ ...refusal, ...extra });
 }
 
-export function bracketGames(
+function gamesOfStage(
   ctx: ReadCtx,
   tournamentId: Id<'tournaments'>,
+  stage: PlayoffStage,
 ): Promise<Doc<'tournamentGames'>[]> {
   return ctx.db
     .query('tournamentGames')
     .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
-      q.eq('tournamentId', tournamentId).eq('stage', STAGE),
+      q.eq('tournamentId', tournamentId).eq('stage', stage),
     )
     .take(BRACKET_GAMES_READ_LIMIT);
 }
 
-/** Every game that is not a pool game, which for a bracket of the release that adds double elimination includes the losers' bracket and the grand final. */
-export async function nonPoolGames(
+export function bracketGames(
   ctx: ReadCtx,
   tournamentId: Id<'tournaments'>,
 ): Promise<Doc<'tournamentGames'>[]> {
-  const games = await ctx.db
-    .query('tournamentGames')
-    .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
-      q.eq('tournamentId', tournamentId),
-    )
-    .take(NON_POOL_GAMES_READ_LIMIT);
-  return games.filter((game) => game.stage !== 'pool');
+  return gamesOfStage(ctx, tournamentId, STAGE);
+}
+
+/** A double-elimination bracket's games by stage; the losers' bracket and the grand final are empty for a single-elimination bracket. */
+export interface PlayoffGames {
+  winners: Doc<'tournamentGames'>[];
+  losers: Doc<'tournamentGames'>[];
+  grandFinal: Doc<'tournamentGames'>[];
+}
+
+export async function playoffGames(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<PlayoffGames> {
+  return {
+    winners: await gamesOfStage(ctx, tournamentId, 'bracket'),
+    losers: await gamesOfStage(ctx, tournamentId, 'losers'),
+    grandFinal: await gamesOfStage(ctx, tournamentId, 'grandFinal'),
+  };
+}
+
+export const allPlayoffGames = ({ winners, losers, grandFinal }: PlayoffGames) => [
+  ...winners,
+  ...losers,
+  ...grandFinal,
+];
+
+const lastRound = (games: readonly Doc<'tournamentGames'>[]) =>
+  games.reduce((most, game) => Math.max(most, game.round), 0);
+
+export function playoffRoundsOf(playoff: PlayoffGames): PlayoffRounds {
+  return {
+    winners: lastRound(playoff.winners),
+    losers: lastRound(playoff.losers),
+    double: playoff.grandFinal.length > 0,
+  };
+}
+
+export function championOf(playoff: PlayoffGames): Id<'teams'> | undefined {
+  if (playoff.grandFinal.length === 0) {
+    const rounds = lastRound(playoff.winners);
+    const final = playoff.winners.find((game) => game.round === rounds);
+    return final && gameHasResult(final) ? final.winnerTeamId : undefined;
+  }
+  const decider = playoff.grandFinal.reduce((last, game) =>
+    game.round > last.round ? game : last,
+  );
+  return gameHasResult(decider) ? decider.winnerTeamId : undefined;
 }
 
 /** The stage of the tournament's first game: the index sorts by stage, so a bracket game comes before a pool game. */
@@ -127,20 +172,60 @@ export async function deleteReportsOfGame(
   }
 }
 
-async function placeInNextGame(
+async function placeIn(
   ctx: MutationCtx,
-  game: Doc<'tournamentGames'>,
+  gameId: Id<'tournamentGames'> | undefined,
+  side: BracketSide | undefined,
   teamId: Id<'teams'> | null,
 ): Promise<void> {
-  const next = await nextGameOf(ctx, game);
-  if (!next) return;
+  const target = gameId && (await ctx.db.get('tournamentGames', gameId));
+  if (!target || side === undefined) return;
   // A report names the score against the opponent the team had, so another team or an emptied place voids it, and an Undo of the feeder's Clear does not bring it back.
-  if (next.teamIds.some((placed, side) => side === game.nextSide && placed !== teamId)) {
-    await deleteReportsOfGame(ctx, next._id);
+  if (target.teamIds.some((placed, index) => index === side && placed !== teamId)) {
+    await deleteReportsOfGame(ctx, target._id);
   }
-  await ctx.db.patch('tournamentGames', next._id, {
-    teamIds: next.teamIds.map((placed, side) => (side === game.nextSide ? teamId : placed)),
+  await ctx.db.patch('tournamentGames', target._id, {
+    teamIds: target.teamIds.map((placed, index) => (index === side ? teamId : placed)),
   });
+}
+
+/** The first grand final game's winner is the losers' bracket team's, in a bracket that plays a deciding game, so a second game joins the same two teams. */
+async function syncDecidingGame(
+  ctx: MutationCtx,
+  first: Doc<'tournamentGames'>,
+  winnerTeamId: Id<'teams'> | null,
+): Promise<void> {
+  if (first.round !== 1) return;
+  const tournament = await ctx.db.get('tournaments', first.tournamentId);
+  const playsDeciding = (tournament?.grandFinal ?? DEFAULT_GRAND_FINAL) === 'ifNecessary';
+  const needed = playsDeciding && winnerTeamId !== null && winnerTeamId === first.teamIds[1];
+  const deciding = first.nextGameId && (await ctx.db.get('tournamentGames', first.nextGameId));
+  if (needed && !deciding) {
+    const nextGameId = await ctx.db.insert('tournamentGames', {
+      tournamentId: first.tournamentId,
+      stage: 'grandFinal',
+      round: 2,
+      slot: 1,
+      teamIds: first.teamIds,
+    });
+    await ctx.db.patch('tournamentGames', first._id, { nextGameId });
+  } else if (!needed && deciding) {
+    await deleteReportsOfGame(ctx, deciding._id);
+    await ctx.db.delete('tournamentGames', deciding._id);
+    await ctx.db.patch('tournamentGames', first._id, { nextGameId: undefined });
+  }
+}
+
+async function settle(
+  ctx: MutationCtx,
+  game: Doc<'tournamentGames'>,
+  winnerTeamId: Id<'teams'> | null,
+): Promise<void> {
+  if (game.stage === 'grandFinal') return syncDecidingGame(ctx, game, winnerTeamId);
+  await placeIn(ctx, game.nextGameId, game.nextSide, winnerTeamId);
+  const loser =
+    winnerTeamId === null ? null : (game.teamIds.find((id) => id !== winnerTeamId) ?? null);
+  await placeIn(ctx, game.loserNextGameId, game.loserNextSide, loser);
 }
 
 export async function saveResult(
@@ -157,7 +242,7 @@ export async function saveResult(
     resultEnteredAt,
     resultEnteredBy: result.enteredBy,
   });
-  await placeInNextGame(ctx, game, result.winnerTeamId ?? null);
+  await settle(ctx, game, result.winnerTeamId ?? null);
   return resultEnteredAt;
 }
 
@@ -169,7 +254,7 @@ export async function clearResult(ctx: MutationCtx, game: Doc<'tournamentGames'>
     resultEnteredAt: undefined,
     resultEnteredBy: undefined,
   });
-  await placeInNextGame(ctx, game, null);
+  await settle(ctx, game, null);
 }
 
 export interface TournamentTeams {
@@ -200,18 +285,18 @@ export async function saveSeeds(ctx: MutationCtx, seeds: readonly Doc<'teams'>[]
 
 export async function replaceBracket(
   ctx: MutationCtx,
-  tournamentId: Id<'tournaments'>,
+  tournament: Doc<'tournaments'>,
   seeds: readonly Doc<'teams'>[],
   replaced: readonly Doc<'tournamentGames'>[],
 ): Promise<number> {
   await saveSeeds(ctx, seeds);
-  return replaceBracketGames(ctx, tournamentId, seeds, replaced);
+  return replaceBracketGames(ctx, tournament, seeds, replaced);
 }
 
 /** The bracket's games for the seeds, leaving `teams.seed` as it is. */
 export async function replaceBracketGames(
   ctx: MutationCtx,
-  tournamentId: Id<'tournaments'>,
+  tournament: Doc<'tournaments'>,
   seeds: readonly Doc<'teams'>[],
   replaced: readonly Doc<'tournamentGames'>[],
 ): Promise<number> {
@@ -222,22 +307,26 @@ export async function replaceBracketGames(
   const teamOf = (seed: number | null): Id<'teams'> | null =>
     seed === null ? null : seeds[seed - 1]._id;
   const ids = new Map<string, Id<'tournamentGames'>>();
-  const plan = planBracket(seeds.length);
-  // The Final first, so each game knows the id of the one its winner joins.
+  const keyOf = (game: Pick<PlayoffGame, 'stage' | 'round' | 'slot'>) =>
+    `${game.stage}.${game.round}.${game.slot}`;
+  const plan = planPlayoff(seeds.length, tournament.bracketType);
+  // The last game first, so each game knows the ids of the ones its winner and loser join.
   for (const game of [...plan].reverse()) {
-    const next = game.next;
-    const nextGameId = next && ids.get(`${game.round + 1}.${next.slot}`);
+    const { winnerTo, loserTo } = game;
+    const nextGameId = winnerTo && ids.get(keyOf(winnerTo));
+    const loserNextGameId = loserTo && ids.get(keyOf(loserTo));
     const winnerTeamId = teamOf(game.advances);
     const id = await ctx.db.insert('tournamentGames', {
-      tournamentId,
-      stage: STAGE,
+      tournamentId: tournament._id,
+      stage: game.stage,
       round: game.round,
       slot: game.slot,
       teamIds: game.entrants.map(teamOf),
       ...(winnerTeamId && { winnerTeamId }),
-      ...(next && nextGameId && { nextGameId, nextSide: next.side }),
+      ...(winnerTo && nextGameId && { nextGameId, nextSide: winnerTo.side }),
+      ...(loserTo && loserNextGameId && { loserNextGameId, loserNextSide: loserTo.side }),
     });
-    ids.set(`${game.round}.${game.slot}`, id);
+    ids.set(keyOf(game), id);
   }
   return plan.length;
 }
