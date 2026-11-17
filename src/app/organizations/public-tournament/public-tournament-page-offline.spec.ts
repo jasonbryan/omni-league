@@ -18,6 +18,7 @@ import { PublicTournamentPage } from './public-tournament-page';
 import {
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_DOUBLE_BRACKET,
   BEACH_OPEN_POOLS,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
@@ -160,6 +161,23 @@ describe('PublicTournamentPage offline', () => {
     const section = host(harness).querySelector('main section#bracket');
     expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual(['Semifinals', 'Final']);
     expect(section?.querySelectorAll('li')).toHaveLength(3);
+    expect(note(harness)).not.toBeNull();
+  });
+
+  it('shows the winners’ bracket, the losers’ bracket, and the grand final from a saved copy opened offline', async () => {
+    plant(tournamentQueryResults({ ...BEACH_OPEN, bracket: BEACH_OPEN_DOUBLE_BRACKET }));
+    stubOnLine(false);
+    const harness = await open(TOURNAMENT_PATH, { socket: 'down' });
+    const section = host(harness).querySelector('main section#bracket');
+    expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    expect(section?.querySelectorAll('li')).toHaveLength(6);
+    expect(text(section?.querySelector('[data-testid="grand-final-note"]'))).toBe(
+      'Game 2 is played only if the losers’ bracket team wins game 1.',
+    );
     expect(note(harness)).not.toBeNull();
   });
 

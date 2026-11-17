@@ -592,7 +592,7 @@ export const getPublicPage = query({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published') return null;
-    const bracket = await publicBracket(ctx, found.tournament._id);
+    const bracket = await publicBracket(ctx, found.tournament);
     const pools = await publicPools(ctx, found.tournament, found.program.sport);
     return {
       ...(await tournamentDetails(ctx, organization, found)),

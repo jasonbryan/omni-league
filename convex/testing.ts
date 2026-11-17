@@ -64,6 +64,8 @@ import { throttleKey } from './lib/signInThrottle';
 import { teamSortName } from './lib/teamInput';
 import {
   DEFAULT_SETS_PER_GAME,
+  bracketTypeValidator,
+  grandFinalValidator,
   setsPerGameValidator,
   structureValidator,
 } from './lib/tournamentEdit';
@@ -448,6 +450,8 @@ export const seedTournament = internalMutation({
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
     status: v.optional(programStatusValidator),
+    bracketType: v.optional(bracketTypeValidator),
+    grandFinal: v.optional(grandFinalValidator),
   },
   returns: v.object({ slug: v.string() }),
   handler: async (ctx, { organizationSlug, locationNames, division, status, ...tournament }) => {

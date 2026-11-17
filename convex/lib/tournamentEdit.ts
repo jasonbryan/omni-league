@@ -26,6 +26,9 @@ export type GrandFinal = Infer<typeof grandFinalValidator>;
 
 export const DEFAULT_GRAND_FINAL: GrandFinal = 'ifNecessary';
 
+export const playsDecidingGame = ({ grandFinal }: { grandFinal?: GrandFinal | undefined }) =>
+  (grandFinal ?? DEFAULT_GRAND_FINAL) === 'ifNecessary';
+
 export const DEFAULT_SETS_PER_GAME: SetsPerGame = 1;
 
 export function setsPerGameIsChosen(sport: Sport): boolean {

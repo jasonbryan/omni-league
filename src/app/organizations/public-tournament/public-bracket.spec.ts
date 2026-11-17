@@ -158,7 +158,7 @@ describe('PublicBracket score line', () => {
     expect(text(games(host)[0])).toBe(
       'Game 1: (1) Sand Crabs Won against (8) Dig Dogs Score: 21–15',
     );
-    expect(games(host)[0].lastElementChild).toBe(line);
+    expect(games(host)[0].querySelector('app-public-bracket-game')?.lastElementChild).toBe(line);
   });
 
   it('reads every set of a best-of-3 score, the first team first in each', () => {
@@ -307,10 +307,198 @@ describe('PublicBracket scroll hint', () => {
     expect(hint(host).classList).not.toContain('invisible');
   });
 
+  it('shows the hint when any one of the sections’ rounds overflows', () => {
+    const { fixture, host } = create(DOUBLE);
+    const [winners, losers] = [...host.querySelectorAll('[data-testid="bracket-scroller"]')];
+    const size = (element: Element, wide: number, shown: number) => {
+      Object.defineProperty(element, 'scrollWidth', { configurable: true, value: wide });
+      Object.defineProperty(element, 'clientWidth', { configurable: true, value: shown });
+    };
+    size(winners, 700, 700);
+    size(losers, 700, 700);
+    for (const callback of callbacks) callback();
+    fixture.detectChanges();
+    expect(hint(host).classList).toContain('invisible');
+    size(losers, 1000, 700);
+    for (const callback of callbacks) callback();
+    fixture.detectChanges();
+    expect(hint(host).classList).not.toContain('invisible');
+  });
+
   it('watches the scroller, and stops when the page goes', () => {
     const { fixture, host } = create(BRACKET);
     expect(observed).toEqual([host.querySelector('[data-testid="bracket-scroller"]')]);
     fixture.destroy();
     expect(disconnects).toBeGreaterThan(0);
+  });
+});
+
+type GrandFinalData = NonNullable<PublicBracketData['grandFinal']>;
+
+const WINNERS_TEAMS = [team('Sand Crabs', 1), team('Net Results', 2)];
+
+const DOUBLE: PublicBracketData = {
+  rounds: [
+    { name: 'Winners’ semifinals', games: [QUARTER] },
+    { name: 'Winners’ final', games: [{ teams: [null, null], bye: false }] },
+  ],
+  losers: [
+    { name: 'Losers’ round 1', games: [{ teams: [team('Dig Dogs', 8), null], bye: false }] },
+    { name: 'Losers’ final', games: [{ teams: [null, null], bye: false }] },
+  ],
+  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGameIfNeeded: true },
+};
+
+const withGrandFinal = (grandFinal: GrandFinalData) => create({ ...DOUBLE, grandFinal });
+
+const sections = (host: HTMLElement) => [
+  ...host.querySelectorAll('section#bracket section[aria-labelledby$="-heading"]'),
+];
+
+const NOTE = 'Game 2 is played only if the losers’ bracket team wins game 1.';
+const note = (host: HTMLElement) => host.querySelector('[data-testid="grand-final-note"]');
+
+describe('PublicBracket for a double-elimination bracket', () => {
+  it('gives the winners’ bracket, the losers’ bracket, and the grand final a section each, under the Bracket heading', () => {
+    const { host } = create(DOUBLE);
+    const all = sections(host);
+    expect(all.map((section) => text(section.querySelector('h3')))).toEqual([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    for (const section of all) {
+      expect(section.getAttribute('aria-labelledby')).toBe(section.querySelector('h3')?.id);
+    }
+    expect(new Set(all.map((section) => section.querySelector('h3')?.id)).size).toBe(3);
+    expect(text(host.querySelector('h2'))).toBe('Bracket');
+  });
+
+  it('heads each round with an h4 under its section’s h3, and ids them apart', () => {
+    const { host } = create(DOUBLE);
+    const [winners, losers] = sections(host);
+    expect([...winners.querySelectorAll('h4')].map(text)).toEqual([
+      'Winners’ semifinals',
+      'Winners’ final',
+    ]);
+    expect([...losers.querySelectorAll('h4')].map(text)).toEqual([
+      'Losers’ round 1',
+      'Losers’ final',
+    ]);
+    const ids = [...host.querySelectorAll('h3, h4')].map((heading) => heading.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(host.querySelectorAll('section#bracket section section[aria-labelledby]')).toHaveLength(
+      4,
+    );
+  });
+
+  it('puts each of the two bracket sections’ rounds in its own labelled region a keyboard can focus', () => {
+    const { host } = create(DOUBLE);
+    const regions = [...host.querySelectorAll('[data-testid="bracket-scroller"]')];
+    expect(regions.map((region) => region.getAttribute('aria-label'))).toEqual([
+      'Winners’ bracket rounds',
+      'Losers’ bracket rounds',
+    ]);
+    for (const region of regions) {
+      expect(region.getAttribute('role')).toBe('region');
+      expect(region.getAttribute('tabindex')).toBe('0');
+    }
+  });
+
+  it('lists the games of every section with the markup of a single bracket', () => {
+    const { host } = create(DOUBLE);
+    expect(games(host).map(text)).toEqual([
+      'Game 1: (1) Sand Crabs against (8) Dig Dogs',
+      'Game 1: To be decided against To be decided',
+      'Game 1: (8) Dig Dogs against To be decided',
+      'Game 1: To be decided against To be decided',
+      'Game 1 To be decided against To be decided',
+    ]);
+  });
+
+  it('leaves the losers’ bracket out when a bracket of two teams has none', () => {
+    const twoTeams = { rounds: DOUBLE.rounds, grandFinal: DOUBLE.grandFinal };
+    const { host } = create(twoTeams);
+    expect(sections(host).map((section) => text(section.querySelector('h3')))).toEqual([
+      'Winners’ bracket',
+      'Grand final',
+    ]);
+  });
+
+  it('shows the winner above the sections', () => {
+    const { host } = create({ ...DOUBLE, winner: 'Sand Crabs' });
+    const winner = host.querySelector('[data-testid="bracket-winner"]')!;
+    expect(text(winner)).toBe('Winner: Sand Crabs');
+    expect(
+      winner.compareDocumentPosition(sections(host)[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps a single-elimination bracket to its rounds, with no sections and no h4', () => {
+    const { host } = create(BRACKET);
+    expect(sections(host)).toHaveLength(0);
+    expect(host.querySelectorAll('h4')).toHaveLength(0);
+    expect(host.textContent).not.toContain('Grand final');
+  });
+});
+
+describe('PublicBracket grand final', () => {
+  const first = { teams: WINNERS_TEAMS, bye: false };
+  const grandFinalSection = (host: HTMLElement) => sections(host)[2];
+
+  it('waiting: names game 1 and says game 2 is played only if the losers’ bracket team wins it', () => {
+    const { host } = withGrandFinal({ games: [first], decidingGameIfNeeded: true });
+    const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
+    expect(items.map(text)).toEqual(['Game 1 (1) Sand Crabs against (2) Net Results']);
+    expect(text(note(host))).toBe(NOTE);
+  });
+
+  it('not needed: the winners’ bracket team won game 1, so there is no game 2 and no note', () => {
+    const { host } = withGrandFinal({
+      games: [{ ...first, winner: 0 }],
+      decidingGameIfNeeded: true,
+    });
+    const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
+    expect(items).toHaveLength(1);
+    expect(text(items[0])).toBe('Game 1 (1) Sand Crabs Won against (2) Net Results');
+    expect(host.textContent).not.toContain('Game 2');
+    expect(note(host)).toBeNull();
+  });
+
+  it('played: shows Game 2 with its teams after game 1, and no note', () => {
+    const { host } = withGrandFinal({
+      games: [{ ...first, winner: 1 }, first],
+      decidingGameIfNeeded: true,
+    });
+    const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
+    expect(items.map(text)).toEqual([
+      'Game 1 (1) Sand Crabs against (2) Net Results Won',
+      'Game 2 (1) Sand Crabs against (2) Net Results',
+    ]);
+    expect(note(host)).toBeNull();
+  });
+
+  it('played: shows the score and the winner of Game 2', () => {
+    const { host } = withGrandFinal({
+      games: [
+        { ...first, winner: 1 },
+        { ...first, winner: 0, score: { kind: 'sets', sets: [{ a: 21, b: 15 }] } },
+      ],
+      decidingGameIfNeeded: true,
+    });
+    const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
+    expect(text(items[1])).toBe('Game 2 (1) Sand Crabs Won against (2) Net Results Score: 21–15');
+  });
+
+  it('a single game: no game number and no note, played or not', () => {
+    for (const played of [{}, { winner: 1 } as const]) {
+      const { host } = withGrandFinal({
+        games: [{ ...first, ...played }],
+        decidingGameIfNeeded: false,
+      });
+      const item = grandFinalSection(host).querySelector('li[data-testid="bracket-game"]')!;
+      expect(text(item)).toMatch(/^Game 1: /);
+      expect(note(host)).toBeNull();
+    }
   });
 });

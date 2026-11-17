@@ -10,7 +10,7 @@ import {
   type PlayoffStage,
 } from './doubleBracket';
 import type { Score } from './sports';
-import { DEFAULT_GRAND_FINAL } from './tournamentEdit';
+import { playsDecidingGame } from './tournamentEdit';
 import { MAX_MAXIMUM_TEAMS } from './tournamentInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
@@ -196,8 +196,10 @@ async function syncDecidingGame(
 ): Promise<void> {
   if (first.round !== 1) return;
   const tournament = await ctx.db.get('tournaments', first.tournamentId);
-  const playsDeciding = (tournament?.grandFinal ?? DEFAULT_GRAND_FINAL) === 'ifNecessary';
-  const needed = playsDeciding && winnerTeamId !== null && winnerTeamId === first.teamIds[1];
+  const needed =
+    playsDecidingGame(tournament ?? {}) &&
+    winnerTeamId !== null &&
+    winnerTeamId === first.teamIds[1];
   const deciding = first.nextGameId && (await ctx.db.get('tournamentGames', first.nextGameId));
   if (needed && !deciding) {
     const nextGameId = await ctx.db.insert('tournamentGames', {
