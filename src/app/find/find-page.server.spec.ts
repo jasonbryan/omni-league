@@ -28,6 +28,7 @@ import {
   GIRLS_ROOKIES_ROW,
   GIRLS_SELECT_ROW,
   GULF_OPEN_ROW,
+  JUNIOR_CAMP_ROW,
   NO_RESULTS,
   OPEN_DAY,
   SATURDAY_6S_ROW,
@@ -246,7 +247,7 @@ describe('FindPage server render', () => {
     const { html, body, head, responseInit, queries } = await render(
       '/programs?q=coed&ott=SECRET&utm_source=CANARYabc',
     );
-    expect(queries).toEqual([{ name: 'search:programs', args: { q: 'coed' } }]);
+    expect(queries).toEqual([{ name: 'search:programs', args: { q: 'coed', withCamps: true } }]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
     expect(text(body.querySelector('main section [role="status"]'))).toBe(
@@ -301,11 +302,11 @@ describe('FindPage server render', () => {
   });
 
   it.each([
-    ['?q=a&q=b', { q: 'a' }],
-    [`?q=${'x'.repeat(300)}`, { q: 'x'.repeat(100) }],
+    ['?q=a&q=b', { q: 'a', withCamps: true }],
+    [`?q=${'x'.repeat(300)}`, { q: 'x'.repeat(100), withCamps: true }],
     [
       `?q=${Array.from({ length: 20 }, (_, i) => `w${i + 1}`).join('+')}`,
-      { q: Array.from({ length: 16 }, (_, i) => `w${i + 1}`).join(' ') },
+      { q: Array.from({ length: 16 }, (_, i) => `w${i + 1}`).join(' '), withCamps: true },
     ],
   ])('%s asks %j with 200', async (query, args) => {
     const { responseInit, queries } = await render(`/programs${query}`);
@@ -370,7 +371,7 @@ describe('FindPage server render by sport', () => {
     expect(queries).toEqual([
       {
         name: BY_SPORT,
-        args: { sport: 'soccer', gender: ['womens'], ageGroup: ['u10'], page: 1 },
+        args: { sport: 'soccer', withCamps: true, gender: ['womens'], ageGroup: ['u10'], page: 1 },
       },
     ]);
     expect(responseInit.status).toBeUndefined();
@@ -450,7 +451,9 @@ describe('FindPage server render by sport', () => {
       '/programs?sport=softball&level=bb',
       answer(browseResults([], {}, [{ gender: 'coed', playersPerSide: 10, level: 'rec' }])),
     );
-    expect(queries).toEqual([{ name: BY_SPORT, args: { sport: 'softball', page: 1 } }]);
+    expect(queries).toEqual([
+      { name: BY_SPORT, args: { sport: 'softball', withCamps: true, page: 1 } },
+    ]);
     expect(body.querySelector('main')!.innerHTML).not.toContain('bb');
   });
 
@@ -502,7 +505,7 @@ describe('FindPage server render by type', () => {
 
   it('renders a league and a tournament with their badges and the tournament’s dates and status in the raw HTML', async () => {
     const { body, queries } = await render('/programs?q=beach', answer(mixed));
-    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach' } }]);
+    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach', withCamps: true } }]);
     const [league, tournament] = [...body.querySelectorAll('main section ul > li')];
     expect(text(league.querySelector('[data-slot="badge"]'))).toBe('League');
     expect(text(tournament.querySelector('[data-slot="badge"]'))).toBe('Tournament');
@@ -529,7 +532,10 @@ describe('FindPage server render by type', () => {
       }),
     );
     expect(queries).toEqual([
-      { name: BROWSE, args: { type: 'tournament', sport: 'beachVolleyball', page: 1 } },
+      {
+        name: BROWSE,
+        args: { type: 'tournament', sport: 'beachVolleyball', withCamps: true, page: 1 },
+      },
     ]);
     expect(responseInit.status).toBeUndefined();
     expect([...body.querySelectorAll('main section ul > li h3')].map(text)).toEqual([
@@ -574,12 +580,38 @@ describe('FindPage server render by type', () => {
 
   it('ignores an unknown type: no argument, no chip, and the value nowhere in the HTML', async () => {
     const { html, body, queries } = await render('/programs?type=zzz&q=beach', answer(mixed));
-    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach' } }]);
+    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach', withCamps: true } }]);
     expect(typeChips(body).map(([name]) => name)).toEqual(['All', 'Leagues', 'Tournaments']);
     expect(html).not.toContain('zzz');
   });
 
-  it('shows a known type with no programs as the current chip with no results, and answers 200', async () => {
+  it('renders a camp with its badge, ages, and the next session’s dates and status in the raw HTML', async () => {
+    const { body, queries } = await render(
+      '/programs?q=junior',
+      answer({
+        more: false,
+        rows: [JUNIOR_CAMP_ROW],
+        facets: [],
+        typeCounts: [{ type: 'camp', count: 1 }],
+      }),
+    );
+    expect(queries).toEqual([{ name: SEARCH, args: { q: 'junior', withCamps: true } }]);
+    const [camp] = [...body.querySelectorAll('main section ul > li')];
+    expect(text(camp.querySelector('[data-slot="badge"]'))).toBe('Camp');
+    expect(text(camp)).toContain('Ages 9 to 14');
+    expect(text(camp.querySelector('p:last-of-type'))).toBe(
+      'Registration openJul 5 – Jul 9, 2027 · closes Jul 1',
+    );
+    expect(path(camp.querySelector('h3 a')!)).toBe(
+      '/organizations/gulf-coast-sport-social/camps/junior-beach-volleyball-camp',
+    );
+    expect(typeChips(body)).toEqual([
+      ['All', '/programs?q=junior', 'page'],
+      ['Camps', '/programs?type=camp&q=junior', null],
+    ]);
+  });
+
+  it('shows a type with no program as the current chip with the no-programs state, and answers 200', async () => {
     const { body, responseInit } = await render(
       '/programs?type=camp',
       answer({ ...browseResults([], {}, []), typeCounts: [{ type: 'league', count: 2 }] }),
@@ -591,7 +623,21 @@ describe('FindPage server render by type', () => {
       ['Camps', '/programs?type=camp', 'page'],
     ]);
     expect(text(body.querySelector('main section [role="status"]'))).toBe(
-      'Find a program does not list camps yet',
+      'No camps are published yet',
+    );
+  });
+
+  it('says training programs are not listed and names the types that are, and answers 200', async () => {
+    const { body, responseInit } = await render(
+      '/programs?type=training',
+      answer({ ...browseResults([], {}, []), typeCounts: [] }),
+    );
+    expect(responseInit.status).toBeUndefined();
+    expect(text(body.querySelector('main section [role="status"]'))).toBe(
+      'Find a program does not list training programs yet',
+    );
+    expect(text(body.querySelector('main section [role="status"] + p'))).toBe(
+      'Search the leagues, tournaments, and camps instead.',
     );
   });
 });

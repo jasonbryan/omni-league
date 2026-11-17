@@ -8,20 +8,26 @@ import {
 import type { Sport, SportCounts } from '../../../convex/lib/sports';
 import { divisionFilterQuery, type FilterParam, type LeagueFacet } from './division-filters';
 
-/** The facets query returns at most `PUBLIC_LIST_MAX_ROWS` leagues, so with no filter the count is the total, not the number of facets. */
+/**
+ * The facets query returns at most `PUBLIC_LIST_MAX_ROWS` leagues, so with no filter the count is the total, not the number of facets.
+ * `unfiltered` counts what the total holds that no filter narrows, which stays in the count with a filter.
+ */
 export function draftLeagueCount(
   facets: readonly LeagueFacet[] | undefined,
   draft: DivisionFilters,
   sportLeagueCounts: SportCounts | undefined,
   sport: Sport | undefined,
   total: number,
+  unfiltered = 0,
 ): number | undefined {
   if (facets === undefined) return undefined;
   const filters = scopedFilters(sportLeagueCounts, sport, draft);
   if (!hasDivisionFilters(filters)) return total;
   // A facet's strings are only compared with the standard values a parsed draft holds.
-  return facets.filter((facet) => matchesDivisionFilters(facet as LeagueDivisionValues, filters))
-    .length;
+  return (
+    facets.filter((facet) => matchesDivisionFilters(facet as LeagueDivisionValues, filters))
+      .length + unfiltered
+  );
 }
 
 export interface ListedKind {

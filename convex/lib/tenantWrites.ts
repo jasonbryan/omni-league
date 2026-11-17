@@ -27,7 +27,13 @@ import {
 } from './tournamentEdit';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
-import { ROSTER_SIZE_INPUT_MAX, sportValidator, type Sport, type SportCounts } from './sports';
+import {
+  ROSTER_SIZE_INPUT_MAX,
+  sportName,
+  sportValidator,
+  type Sport,
+  type SportCounts,
+} from './sports';
 
 export const divisionSeedValidator = v.object({
   gender: genderValidator,
@@ -87,28 +93,61 @@ export const MAX_LEAGUES_SEARCH_UPDATED = 200;
 
 export const MAX_PROGRAMS_SEARCH_UPDATED = 200;
 
-const SEARCHED_PROGRAM_TYPES = ['league', 'tournament'] as const;
+const SEARCHED_PROGRAM_TYPES = ['league', 'tournament', 'camp'] as const;
 
 type ProgramSearchFields = LeagueDivisionFields & Pick<Doc<'programs'>, 'name' | 'locationIds'>;
 
-// Every writer of a league's or tournament's name, sport, division, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
+async function locationNamesOf(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  locationIds: readonly Id<'locations'>[],
+): Promise<string[]> {
+  const names: string[] = [];
+  for (const id of locationIds) {
+    const location = await ctx.db.get('locations', id);
+    if (location?.organizationId === organization._id) names.push(location.name);
+  }
+  return names;
+}
+
+// Every writer of a league's or tournament's name, sport, division, or locations, of a camp's name, sport, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
 async function programSearchText(
   ctx: Pick<MutationCtx, 'db'>,
   organization: Doc<'organizations'>,
   program: ProgramSearchFields,
 ): Promise<string> {
-  const locationNames: string[] = [];
-  for (const id of program.locationIds) {
-    const location = await ctx.db.get('locations', id);
-    if (location?.organizationId === organization._id) locationNames.push(location.name);
-  }
   return joinSearchText([
     program.name,
     ...(await leagueDivisionSearchWords(ctx, program)),
     organization.name,
-    ...locationNames,
+    ...(await locationNamesOf(ctx, organization, program.locationIds)),
     organization.cityState,
   ]);
+}
+
+// The `programs` row of a camp holds the sport's default division for the schema's sake, so its words stay out and a division search never finds a camp.
+async function campSearchText(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  camp: Pick<Doc<'programs'>, 'name' | 'sport' | 'locationIds'>,
+): Promise<string> {
+  return joinSearchText([
+    camp.name,
+    sportName(camp.sport),
+    organization.name,
+    ...(await locationNamesOf(ctx, organization, camp.locationIds)),
+    organization.cityState,
+  ]);
+}
+
+function searchTextOfProgram(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  program: Doc<'programs'>,
+): Promise<string> {
+  return program.type === 'camp'
+    ? campSearchText(ctx, organization, program)
+    : programSearchText(ctx, organization, program);
 }
 
 async function organizationOf(
@@ -176,7 +215,7 @@ async function refreshProgramsSearchText(
   }
   for (const program of programs) {
     if (locationId !== undefined && !program.locationIds.includes(locationId)) continue;
-    const searchText = await programSearchText(ctx, organization, program);
+    const searchText = await searchTextOfProgram(ctx, organization, program);
     if (program.searchText !== searchText) {
       await ctx.db.patch('programs', program._id, { searchText });
     }
@@ -549,6 +588,7 @@ export async function insertDraftCamp(
   organizationId: Id<'organizations'>,
   camp: NewCamp,
 ): Promise<Id<'camps'>> {
+  const searchText = await campSearchText(ctx, await organizationOf(ctx, organizationId), camp);
   const programId = await ctx.db.insert('programs', {
     organizationId,
     type: 'camp',
@@ -559,6 +599,7 @@ export async function insertDraftCamp(
     status: 'draft',
     locationIds: camp.locationIds,
     ...defaultDivision(camp.sport),
+    searchText,
   });
   return ctx.db.insert('camps', {
     programId,
@@ -705,8 +746,13 @@ export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise
   if (program?.organizationId !== camp.organizationId) {
     throw new Error(`Camp ${camp._id} has no program of its organization`);
   }
-  if (program.status !== 'published') {
-    await ctx.db.patch('programs', program._id, { status: 'published' });
+  const searchText = await campSearchText(
+    ctx,
+    await organizationOf(ctx, program.organizationId),
+    program,
+  );
+  if (program.status !== 'published' || program.searchText !== searchText) {
+    await ctx.db.patch('programs', program._id, { status: 'published', searchText });
   }
   await refreshCamp(ctx, camp._id, 0);
 }

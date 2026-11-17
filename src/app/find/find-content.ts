@@ -23,6 +23,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
+import { campAgesLabel } from '../../../convex/lib/campInput';
 import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
@@ -33,10 +34,13 @@ import { hiddenDraftInputs } from '../organizations/filter-draft';
 import { noMatchSentence, removalSuggestions } from '../organizations/no-match-suggestions';
 import { OrganizationMark } from '../organizations/organization-mark';
 import { PageControl } from '../organizations/page-control';
+import { publicCampNames } from '../organizations/public-camp/public-camp-names';
+import { publicCampPath } from '../organizations/public-camp/public-camp-path';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { publicPageNames } from '../organizations/public-league/public-page-names';
 import { publicTournamentNames } from '../organizations/public-tournament/public-tournament-names';
 import { publicTournamentPath } from '../organizations/public-tournament/public-tournament-path';
+import { campStatus, shownCampSession, upcomingCamps } from '../organizations/camp-status';
 import { leagueSeasonStatus } from '../organizations/season-status';
 import { tournamentStatus } from '../organizations/tournament-status';
 import { HlmAlertImports } from '../ui/alert';
@@ -48,6 +52,10 @@ import { FindSkeleton } from './find-skeleton';
 import { PROGRAM_TYPE_WORDS } from './program-type';
 
 export type FindStatus = 'start' | 'searching' | 'results' | 'error';
+
+const LISTED_TYPES = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format(
+  SEARCHABLE_PROGRAM_TYPES.map((type) => PROGRAM_TYPE_WORDS[type].chip.toLowerCase()),
+);
 
 /** What a search finds, named once so the page's copy follows the noun. */
 const RESULT_NOUN = 'program';
@@ -95,7 +103,7 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
     <div class="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 md:px-8 md:pt-14 md:pb-8">
       <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
       <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
-        Beach volleyball, soccer, and softball leagues and tournaments on Omni League.
+        Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.
       </p>
       @if (savedAt(); as savedAt) {
         <app-saved-copy-note [savedAt]="savedAt" />
@@ -200,8 +208,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                           </h3>
                           <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                             <span hlmBadge size="fit" variant="outline">{{ row.typeLabel }}</span>
-                            @if (row.divisionLabel) {
-                              <span class="font-medium">{{ row.divisionLabel }}</span>
+                            @if (row.detail) {
+                              <span class="font-medium">{{ row.detail }}</span>
                             }
                           </p>
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ row.where }}</p>
@@ -444,7 +452,7 @@ export class FindContent {
   });
 
   protected readonly emptySentence = computed(() => {
-    if (this.unlistedType() !== undefined) return 'Search the leagues and tournaments instead.';
+    if (this.unlistedType() !== undefined) return `Search the ${LISTED_TYPES} instead.`;
     const type = this.type();
     const noun = type === undefined ? RESULT_NOUN : PROGRAM_TYPE_WORDS[type].noun;
     return `A ${noun} appears here once its organization publishes it.`;
@@ -505,24 +513,40 @@ export class FindContent {
   }
 
   protected readonly rows = computed(() =>
-    (this.results()?.rows ?? []).map((row) => {
+    (this.results()?.rows ?? []).flatMap((row) => {
       const shared = {
         typeLabel: PROGRAM_TYPE_WORDS[row.type].badge,
         name: row.name,
         organizationName: row.organization.name,
         logoUrl: row.organization.logoUrl,
-        divisionLabel: row.divisionLabel,
         where: [row.organization.name, row.locationNames.join(', ')].filter(Boolean).join(' · '),
       };
+      if (row.type === 'camp') {
+        // The query keeps the camps that had not ended when it ran; the clock here drops one that has ended since.
+        const [camp] = upcomingCamps([row], this.now());
+        if (!camp) return [];
+        return {
+          ...shared,
+          detail: campAgesLabel(camp.minimumAge, camp.maximumAge),
+          href: publicCampPath(camp.organization.slug, camp.slug),
+          names: publicCampNames({ organization: camp.organization, camp }),
+          status: campStatus(
+            shownCampSession(camp.sessions, this.now()) ?? camp.sessions[0],
+            this.now(),
+          ),
+        };
+      }
       return row.type === 'league'
         ? {
             ...shared,
+            detail: row.divisionLabel,
             href: publicLeaguePath(row.organization.slug, row.slug),
             names: publicPageNames({ organization: row.organization, league: row }),
             status: leagueSeasonStatus(row.seasons, this.now()),
           }
         : {
             ...shared,
+            detail: row.divisionLabel,
             href: publicTournamentPath(row.organization.slug, row.slug),
             names: publicTournamentNames({ organization: row.organization, tournament: row }),
             status: tournamentStatus(row, this.now()),

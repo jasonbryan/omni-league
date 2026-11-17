@@ -1,6 +1,8 @@
 import type {
   FindBrowseResults,
+  FindCampRow,
   FindLeagueRow,
+  FindResultRow,
   FindResults,
   FindTournamentRow,
 } from '../find-types';
@@ -66,6 +68,34 @@ export const GULF_OPEN_ROW: FindTournamentRow = {
   isFull: false,
 };
 
+export const JUNIOR_CAMP_ROW: FindCampRow = {
+  type: 'camp',
+  organization: GULF,
+  name: 'Junior Beach Volleyball Camp',
+  slug: 'junior-beach-volleyball-camp',
+  sportName: 'Beach volleyball',
+  minimumAge: 9,
+  maximumAge: 14,
+  locationNames: ['North Beach Sand Courts'],
+  lastSessionEndDate: '2027-07-16',
+  sessions: [
+    {
+      name: 'Week 1',
+      startDate: '2027-07-05',
+      endDate: '2027-07-09',
+      registrationDeadline: '2027-07-01',
+      placesLeft: 12,
+    },
+    {
+      name: 'Week 2',
+      startDate: '2027-07-12',
+      endDate: '2027-07-16',
+      registrationDeadline: '2027-07-08',
+      placesLeft: 20,
+    },
+  ],
+};
+
 export const COED_RESULTS: FindResults = {
   more: false,
   rows: [SUNDAY_4S_ROW, THURSDAY_2S_ROW, SATURDAY_6S_ROW],
@@ -119,7 +149,7 @@ export const SOCCER_FACETS: NonNullable<FindBrowseResults['facets']> = [
 ];
 
 export function browseResults(
-  rows: (FindLeagueRow | FindTournamentRow)[],
+  rows: FindResultRow[],
   paging: { page?: number; pageCount?: number; total?: number } = {},
   facets: FindBrowseResults['facets'] = SOCCER_FACETS,
 ): FindBrowseResults {

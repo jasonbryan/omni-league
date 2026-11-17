@@ -3,18 +3,24 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import {
   defaultDivision,
+  insertCampSession,
+  insertDraftCamp,
   insertDraftTournament,
   insertSeason,
   insertTenant,
+  publishCamp,
   publishTournament,
+  updateLocation,
+  updateOrganizationCityState,
   type NewSeason,
   type NewTournament,
 } from './lib/tenantWrites';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
-import { insertCampProgram, insertLeagueWithProgram, modules, setTeamCounts } from './test.setup';
+import { insertLeagueWithProgram, modules, setTeamCounts } from './test.setup';
 
 const OPEN_SEASON: NewSeason = {
   name: 'Summer 2027',
@@ -317,16 +323,13 @@ describe('search.programs suggestions', () => {
 
   test('count only programs of the chosen type, so a word only a league holds is not offered for camps', async () => {
     const { t, gulf } = await setup();
-    await t.run(async (ctx) => {
-      const programId = await insertCampProgram(ctx, gulf, 'Sand Camp', 'sand-camp');
-      await ctx.db.patch('programs', programId, { searchText: 'Sand Camp Gulf Beach' });
-    });
-    const forCamps = await search(t, 'sunday austin', { type: 'camp' });
+    await insertCamp(t, gulf, { name: 'Sand Camp', slug: 'sand-camp' });
+    const forCamps = await searchWithCamps(t, 'sunday austin', { type: 'camp' });
     expect(forCamps.rows).toEqual([]);
     expect(forCamps.suggestions).toBeUndefined();
-    const forLeagues = await search(t, 'sunday austin');
+    const forLeagues = await searchWithCamps(t, 'sunday austin');
     expect(forLeagues.suggestions).toEqual(['sunday']);
-    const campWord = await search(t, 'camp austin', { type: 'camp' });
+    const campWord = await searchWithCamps(t, 'camp austin', { type: 'camp' });
     expect(campWord.suggestions).toEqual(['camp']);
   });
 
@@ -466,5 +469,377 @@ describe('search.programsBrowse', () => {
     const none = await browse(t, { type: 'tournament', ageGroup: ['u10'] });
     expect(none.rows).toEqual([]);
     expect(none.facets).toHaveLength(1);
+  });
+});
+
+interface CampSessionDates {
+  name: string;
+  startInDays: number;
+  endInDays: number;
+  places?: number;
+}
+
+const FROM_TODAY = () => dateAtUtcMinus12(Date.now());
+const inDays = (days: number) => addCalendarDays(FROM_TODAY(), days);
+
+const JUNIOR_CAMP = {
+  name: 'Junior Beach Volleyball Camp',
+  slug: 'junior-beach-volleyball-camp',
+  sessions: [{ name: 'Week 1', startInDays: 14, endInDays: 18 }] as CampSessionDates[],
+};
+
+async function insertCamp(
+  t: Harness,
+  organizationId: Id<'organizations'>,
+  camp: Partial<typeof JUNIOR_CAMP> & {
+    published?: boolean;
+    sport?: 'beachVolleyball' | 'soccer';
+  } = {},
+) {
+  const { published = true, sport = 'beachVolleyball', ...rest } = camp;
+  const { name, slug, sessions } = { ...JUNIOR_CAMP, ...rest };
+  await t.run(async (ctx) => {
+    const location = (await ctx.db.query('locations').collect()).find(
+      (row) => row.organizationId === organizationId,
+    )!;
+    const campId = await insertDraftCamp(ctx, organizationId, {
+      name,
+      slug,
+      sport,
+      locationIds: [location._id],
+      minimumAge: 9,
+      maximumAge: 14,
+    });
+    for (const session of sessions) {
+      await insertCampSession(ctx, (await ctx.db.get('camps', campId))!, {
+        name: session.name,
+        startDate: inDays(session.startInDays),
+        endDate: inDays(session.endInDays),
+        places: session.places ?? 20,
+        registrationDeadline: inDays(session.startInDays - 3),
+      });
+    }
+    if (published) await publishCamp(ctx, (await ctx.db.get('camps', campId))!);
+  });
+}
+
+const withCamps = { withCamps: true } as const;
+
+const searchWithCamps = (t: Harness, q: string, rest: Record<string, unknown> = {}) =>
+  t.query(api.search.programs, { q, ...withCamps, ...rest });
+
+const browseWithCamps = (t: Harness, rest: Record<string, unknown> = {}) =>
+  t.query(api.search.programsBrowse, { page: 1, ...withCamps, ...rest });
+
+describe('search.programs and camps', () => {
+  test('finds a camp by a word of its name, with its ages, locations, and the sessions that have not ended', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      sessions: [
+        { name: 'Week 0', startInDays: -9, endInDays: -5 },
+        { name: 'Week 1', startInDays: 14, endInDays: 18 },
+        { name: 'Week 2', startInDays: 21, endInDays: 25, places: 8 },
+      ],
+    });
+    const result = await searchWithCamps(t, 'junior');
+    expect(result.rows).toEqual([
+      {
+        type: 'camp',
+        organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf' },
+        name: 'Junior Beach Volleyball Camp',
+        slug: 'junior-beach-volleyball-camp',
+        sportName: 'Beach volleyball',
+        minimumAge: 9,
+        maximumAge: 14,
+        locationNames: ['North Beach Sand Courts'],
+        lastSessionEndDate: inDays(25),
+        sessions: [
+          {
+            name: 'Week 1',
+            startDate: inDays(14),
+            endDate: inDays(18),
+            registrationDeadline: inDays(11),
+            placesLeft: 20,
+          },
+          {
+            name: 'Week 2',
+            startDate: inDays(21),
+            endDate: inDays(25),
+            registrationDeadline: inDays(18),
+            placesLeft: 8,
+          },
+        ],
+      },
+    ]);
+    expect(result.typeCounts).toEqual([{ type: 'camp', count: 1 }]);
+  });
+
+  test('finds a camp by its sport name, its organization, its location, and its City, state', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    for (const q of ['volleyball', 'gulf', 'north beach', 'corpus christi']) {
+      expect(names(await searchWithCamps(t, q, { type: 'camp' })), q).toEqual([
+        'Junior Beach Volleyball Camp',
+      ]);
+    }
+  });
+
+  test('counts a camp among the types, and a search for a league word counts no camp', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    expect((await searchWithCamps(t, 'beach')).typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+      { type: 'camp', count: 1 },
+    ]);
+    expect((await searchWithCamps(t, 'sunday')).typeCounts).toEqual([{ type: 'league', count: 1 }]);
+  });
+
+  test('a search only a camp matches, with the league type chosen, has no rows and counts the camp', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const result = await searchWithCamps(t, 'junior', { type: 'league' });
+    expect(result.rows).toEqual([]);
+    expect(result.typeCounts).toEqual([{ type: 'camp', count: 1 }]);
+  });
+
+  test('the division words of a camp’s program row are not in its text, after create, publish, a location rename, and a City, state change', async () => {
+    const { t, gulf } = await setup();
+    const campText = () =>
+      t.run(async (ctx) => {
+        const camp = (await ctx.db.query('camps').collect())[0];
+        return (await ctx.db.get('programs', camp.programId))!.searchText;
+      });
+    const divisionSearchesFindNothing = async () => {
+      expect(names(await searchWithCamps(t, 'adult', { type: 'camp' }))).toEqual([]);
+      expect(names(await searchWithCamps(t, 'coed', { type: 'camp' }))).toEqual([]);
+    };
+    await insertCamp(t, gulf, { published: false });
+    expect(await campText()).not.toMatch(/coed|adult/i);
+
+    await t.run(async (ctx) => {
+      await publishCamp(ctx, (await ctx.db.query('camps').collect())[0]);
+    });
+    expect(names(await searchWithCamps(t, 'junior', { type: 'camp' }))).toHaveLength(1);
+    await divisionSearchesFindNothing();
+
+    await t.run(async (ctx) => {
+      const location = (await ctx.db.query('locations').collect())[0];
+      await updateLocation(ctx, location, { name: 'Omega Courts', address: location.address });
+    });
+    expect(names(await searchWithCamps(t, 'omega', { type: 'camp' }))).toHaveLength(1);
+    await divisionSearchesFindNothing();
+
+    await t.run((ctx) => updateOrganizationCityState(ctx, gulf, 'Galveston, TX'));
+    expect(names(await searchWithCamps(t, 'galveston', { type: 'camp' }))).toHaveLength(1);
+    await divisionSearchesFindNothing();
+  });
+
+  test('a camp stays listed and counted under a division filter, which narrows leagues and tournaments', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const filtered = await searchWithCamps(t, 'beach', { gender: ['coed'], ageGroup: ['u12'] });
+    expect(filtered.rows.map((row) => [row.type, row.name])).toEqual([
+      ['camp', 'Junior Beach Volleyball Camp'],
+    ]);
+    expect(filtered.typeCounts).toEqual([{ type: 'camp', count: 1 }]);
+    const coed = await searchWithCamps(t, 'beach', { gender: ['coed'] });
+    expect(coed.rows.map((row) => row.type).sort()).toEqual([
+      'camp',
+      'league',
+      'league',
+      'tournament',
+    ]);
+    expect(coed.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+      { type: 'camp', count: 1 },
+    ]);
+  });
+
+  test('a camp adds no division facet, so the camp type offers no division filter', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    expect((await searchWithCamps(t, 'junior', { type: 'camp' })).facets).toEqual([]);
+    expect((await searchWithCamps(t, 'beach')).facets).toHaveLength(3);
+    expect((await browseWithCamps(t, { type: 'camp' })).facets).toEqual([]);
+    expect((await browseWithCamps(t)).facets).toHaveLength(3);
+  });
+
+  test('never lists or counts a draft camp, in a search or a browse, and a camp row holds no id', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Fall Break Camp',
+      slug: 'fall-break-camp',
+      sessions: [],
+      published: false,
+    });
+    await insertCamp(t, gulf);
+    const found = await searchWithCamps(t, 'fall');
+    expect(found.rows).toEqual([]);
+    expect(found.typeCounts).toEqual([]);
+    const campsBrowse = await browseWithCamps(t, { type: 'camp' });
+    expect(names(campsBrowse)).toEqual(['Junior Beach Volleyball Camp']);
+    expect(campsBrowse.total).toBe(1);
+    expect(campsBrowse.typeCounts.find(({ type }) => type === 'camp')?.count).toBe(1);
+    expect(JSON.stringify([await searchWithCamps(t, 'junior'), campsBrowse])).not.toMatch(
+      /_id|_creationTime|Id"|status|searchText|programId|campId|sessionId/,
+    );
+  });
+
+  test('drops a camp whose last session has ended before the counts, and keeps one that ends today', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Ended Junior Camp',
+      slug: 'ended-junior-camp',
+      sessions: [{ name: 'Week 1', startInDays: -9, endInDays: -1 }],
+    });
+    await insertCamp(t, gulf, {
+      name: 'Today Junior Camp',
+      slug: 'today-junior-camp',
+      sessions: [{ name: 'Week 1', startInDays: -4, endInDays: 0 }],
+    });
+    const result = await searchWithCamps(t, 'junior');
+    expect(names(result)).toEqual(['Today Junior Camp']);
+    expect(result.typeCounts).toEqual([{ type: 'camp', count: 1 }]);
+  });
+
+  test('a search only an ended camp matches has no row, no count, and no suggestion', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Ended Zebra Camp',
+      slug: 'ended-zebra-camp',
+      sessions: [{ name: 'Week 1', startInDays: -9, endInDays: -1 }],
+    });
+    const result = await searchWithCamps(t, 'zebra');
+    expect(result).toEqual({ rows: [], more: false, facets: [], typeCounts: [] });
+  });
+
+  test('drops a published camp with no session', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Empty Junior Camp',
+      slug: 'empty-junior-camp',
+      sessions: [],
+    });
+    expect((await searchWithCamps(t, 'junior')).typeCounts).toEqual([]);
+    expect((await browseWithCamps(t, { type: 'camp' })).total).toBe(0);
+  });
+
+  test('a call with the previous release’s arguments gets no camp row and no camp in the counts', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const previous = await search(t, 'beach');
+    expect(previous.rows.map((row) => row.type).sort()).toEqual(['league', 'league', 'tournament']);
+    expect(previous.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+    ]);
+    const onlyCamp = await search(t, 'junior');
+    expect(onlyCamp).toEqual({ rows: [], more: false, facets: [], typeCounts: [] });
+    const camps = await search(t, 'junior', { type: 'camp' });
+    expect(camps.rows).toEqual([]);
+    expect(camps.typeCounts).toEqual([]);
+    expect((await search(t, 'junior austin')).suggestions).toBeUndefined();
+  });
+
+  test('a camp does not push a league or a tournament out of the previous release’s counts or its suggestions', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, { name: 'Sunday Camp', slug: 'sunday-camp' });
+    const result = await search(t, 'sunday austin');
+    expect(result.suggestions).toEqual(['sunday']);
+  });
+});
+
+describe('search.programsBrowse and camps', () => {
+  test('lists a published camp of a sport by name, with its row and the camp count', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const result = await browseWithCamps(t, { type: 'camp', sport: 'beachVolleyball' });
+    expect(names(result)).toEqual(['Junior Beach Volleyball Camp']);
+    expect(result.rows[0]).toMatchObject({
+      type: 'camp',
+      minimumAge: 9,
+      maximumAge: 14,
+      sessions: [{ name: 'Week 1' }],
+    });
+    expect(result.total).toBe(1);
+    expect(result.pageCount).toBe(1);
+    expect(result.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+      { type: 'camp', count: 1 },
+    ]);
+  });
+
+  test('with no type lists camps with leagues and tournaments by name', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const result = await browseWithCamps(t);
+    expect(result.rows.map((row) => [row.type, row.name])).toEqual([
+      ['tournament', 'Gulf Coast Beach Open'],
+      ['camp', 'Junior Beach Volleyball Camp'],
+      ['league', 'Saturday Coed 6s'],
+      ['league', 'Sunday Reverse Coed 4s'],
+    ]);
+    expect(result.total).toBe(4);
+  });
+
+  test('a camp of another sport is not listed for a sport', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Bayside Soccer Camp',
+      slug: 'bayside-soccer-camp',
+      sport: 'soccer',
+    });
+    expect(names(await browseWithCamps(t, { type: 'camp', sport: 'beachVolleyball' }))).toEqual([]);
+    expect(names(await browseWithCamps(t, { type: 'camp', sport: 'soccer' }))).toEqual([
+      'Bayside Soccer Camp',
+    ]);
+  });
+
+  test('a camp stays listed and counted under a division filter, in the rows, the total, and the counts', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf);
+    const result = await browseWithCamps(t, { gender: ['coed'], ageGroup: ['u12'] });
+    expect(result.rows.map((row) => row.type)).toEqual(['camp']);
+    expect(result.total).toBe(1);
+    expect(result.typeCounts).toEqual([{ type: 'camp', count: 1 }]);
+    const camps = await browseWithCamps(t, { type: 'camp', ageGroup: ['u12'] });
+    expect(camps.total).toBe(1);
+    expect(camps.facets).toEqual([]);
+  });
+
+  test('drops an ended camp before the total, the page count, and the type counts', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Ended Junior Camp',
+      slug: 'ended-junior-camp',
+      sessions: [{ name: 'Week 1', startInDays: -9, endInDays: -1 }],
+    });
+    const result = await browseWithCamps(t, { type: 'camp' });
+    expect(result).toMatchObject({ rows: [], total: 0, pageCount: 0 });
+    expect(result.typeCounts.map(({ type }) => type)).toEqual(['league', 'tournament']);
+    expect((await browseWithCamps(t)).total).toBe(3);
+  });
+
+  test('a call with the previous release’s arguments gets no camp row, no camp count, and none in the total or page count', async () => {
+    const { t, gulf } = await setup();
+    for (let i = 0; i < 6; i++) {
+      await insertCamp(t, gulf, { name: `Camp ${i}`, slug: `camp-${i}` });
+    }
+    const previous = await t.query(api.search.programsBrowse, { page: 1 });
+    expect(previous.rows.map((row) => row.type).sort()).toEqual(['league', 'league', 'tournament']);
+    expect(previous.total).toBe(3);
+    expect(previous.pageCount).toBe(1);
+    expect(previous.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+    ]);
+    const camps = await t.query(api.search.programsBrowse, { page: 1, type: 'camp' });
+    expect(camps).toMatchObject({ rows: [], total: 0, pageCount: 0 });
+    expect(camps.typeCounts).toEqual(previous.typeCounts);
+    expect((await browseWithCamps(t)).total).toBe(9);
+    expect((await browseWithCamps(t)).pageCount).toBe(2);
   });
 });

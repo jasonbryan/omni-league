@@ -15,6 +15,7 @@ import {
   at,
   browseResults,
   GULF_OPEN_ROW,
+  JUNIOR_CAMP_ROW,
   NO_RESULTS,
   OPEN_DAY,
   SUNDAY_4S_ROW,
@@ -185,7 +186,7 @@ describe('Find a program type', () => {
 
   it('asks the search with the type and carries it in the form, before the words', async () => {
     const harness = await open('/programs?type=tournament&q=beach');
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament' });
+    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament', withCamps: true });
     const names = [...host(harness).querySelectorAll('main form[role="search"] input')].map((i) =>
       i.getAttribute('name'),
     );
@@ -202,6 +203,7 @@ describe('Find a program type', () => {
     expect(subscription(BROWSE).args).toEqual({
       type: 'tournament',
       sport: 'beachVolleyball',
+      withCamps: true,
       page: 1,
     });
     expect(client.activeSubscriptions.map((s) => s.name)).not.toContain(SEARCH);
@@ -222,10 +224,10 @@ describe('Find a program type', () => {
   it('browses by type alone, across sports, rather than listing organizations', async () => {
     await open('/programs?type=league');
     expect(client.activeSubscriptions.map((s) => s.name)).toEqual([BROWSE]);
-    expect(subscription(BROWSE).args).toEqual({ type: 'league', page: 1 });
+    expect(subscription(BROWSE).args).toEqual({ type: 'league', withCamps: true, page: 1 });
   });
 
-  it('shows a known type with no programs as the current chip, with no results', async () => {
+  it('shows a type no program has as the current chip, with the no-programs state', async () => {
     const harness = await open('/programs?type=camp');
     subscription(BROWSE).emit({
       ...browseResults([], {}, []),
@@ -239,13 +241,25 @@ describe('Find a program type', () => {
     ]);
     expect(rows(harness)).toEqual([]);
     expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
-      'Find a program does not list camps yet',
+      'No camps are published yet',
     );
     expect(text(results(harness)!.querySelector('p + p'))).toBe(
-      'Search the leagues and tournaments instead.',
+      'A camp appears here once its organization publishes it.',
     );
     const all = [...results(harness)!.querySelectorAll('a')].find((a) => text(a) === 'All types');
     expect(all?.getAttribute('href')).toBe('/programs');
+  });
+
+  it('says training programs are not listed, and names the types that are', async () => {
+    const harness = await open('/programs?type=training');
+    subscription(BROWSE).emit({ ...browseResults([], {}, []), typeCounts: [] });
+    await settle(harness);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'Find a program does not list training programs yet',
+    );
+    expect(text(results(harness)!.querySelector('p + p'))).toBe(
+      'Search the leagues, tournaments, and camps instead.',
+    );
   });
 
   it('says other types match when a search has no program of the chosen type, and links to every type', async () => {
@@ -270,7 +284,7 @@ describe('Find a program type', () => {
 
   it('ignores an unknown type: no chip, no argument, and nowhere in the page', async () => {
     const harness = await open('/programs?type=zzz&q=beach');
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach' });
+    expect(subscription(SEARCH).args).toEqual({ q: 'beach', withCamps: true });
     subscription(SEARCH).emit(MIXED);
     await settle(harness);
     expect(host(harness).querySelector('main')?.innerHTML).not.toContain('zzz');
@@ -306,7 +320,7 @@ describe('Find a program type', () => {
       )!
       .click();
     await settle(harness);
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament' });
+    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament', withCamps: true });
     expect(typeChips(harness).map((chip) => [chip.name, chip.current])).toEqual([
       ['All', null],
       ['Leagues', null],
@@ -335,7 +349,12 @@ describe('Find a program type', () => {
 
   it('offers a chip for each type a search lists before any search, without asking a query for the counts', async () => {
     const harness = await open('/programs');
-    expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues', 'Tournaments']);
+    expect(typeChips(harness).map((chip) => chip.name)).toEqual([
+      'All',
+      'Leagues',
+      'Tournaments',
+      'Camps',
+    ]);
     expect(client.activeSubscriptions.map((s) => s.name)).toEqual(['search:organizations']);
   });
 
@@ -346,7 +365,12 @@ describe('Find a program type', () => {
     field.dispatchEvent(new Event('input', { bubbles: true }));
     host(harness).querySelector<HTMLButtonElement>('main form button[type="submit"]')!.click();
     await settle(harness);
-    expect(subscription(SEARCH).args).toEqual({ q: 'open', type: 'tournament', sport: 'soccer' });
+    expect(subscription(SEARCH).args).toEqual({
+      q: 'open',
+      type: 'tournament',
+      sport: 'soccer',
+      withCamps: true,
+    });
   });
 });
 
@@ -390,6 +414,183 @@ describe('Find a program page meta', () => {
     await settle(harness);
     expect(TestBed.inject(Title).getTitle()).toBe(
       'Soccer tournaments | Find a program | Omni League',
+    );
+  });
+});
+
+const CAMP_SEARCH: FindResults = {
+  more: false,
+  rows: [JUNIOR_CAMP_ROW],
+  facets: [],
+  typeCounts: [{ type: 'camp', count: 1 }],
+};
+
+describe('Find a program camps', () => {
+  it('shows a camp with the Camp badge, its ages, and the next session’s dates and status, linking to the camp page', async () => {
+    const harness = await open('/programs?q=junior');
+    subscription(SEARCH).emit(CAMP_SEARCH);
+    await settle(harness);
+    const [camp] = rows(harness);
+    expect(text(camp.querySelector('h3'))).toBe('Junior Beach Volleyball Camp');
+    expect(text(camp.querySelector('[data-slot="badge"]'))).toBe('Camp');
+    expect(text(camp)).toContain('Ages 9 to 14');
+    expect(text(camp)).toContain('Gulf Coast Sport & Social · North Beach Sand Courts');
+    const status = camp.querySelector('p:last-of-type [data-slot="badge"]');
+    expect(text(status)).toBe('Registration open');
+    expectBadge(status, 'secondary', 'fit');
+    expect(text(camp.querySelector('p:last-of-type'))).toBe(
+      'Registration openJul 5 – Jul 9, 2027 · closes Jul 1',
+    );
+    expect(camp.querySelector('h3 a')?.getAttribute('href')).toBe(
+      '/organizations/gulf-coast-sport-social/camps/junior-beach-volleyball-camp',
+    );
+    const link = harness.fixture.debugElement.queryAll(By.css('ul > li h3 a'))[0];
+    expect(link.injector.get(RouterLink).state).toEqual({
+      organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+      camp: { slug: 'junior-beach-volleyball-camp', name: 'Junior Beach Volleyball Camp' },
+    });
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      '1 program matches “junior”',
+    );
+  });
+
+  it('shows the earliest session open with room, so a full next session does not hide a later one', async () => {
+    const harness = await open('/programs?q=junior');
+    const [week1, week2] = JUNIOR_CAMP_ROW.sessions;
+    subscription(SEARCH).emit({
+      ...CAMP_SEARCH,
+      rows: [{ ...JUNIOR_CAMP_ROW, sessions: [{ ...week1, placesLeft: 0 }, week2] }],
+    });
+    await settle(harness);
+    expect(text(rows(harness)[0].querySelector('p:last-of-type'))).toBe(
+      'Registration openJul 12 – Jul 16, 2027 · closes Jul 8',
+    );
+  });
+
+  it('moves to the next session as the page’s clock passes, with no new answer', async () => {
+    const harness = await open('/programs?q=junior');
+    subscription(SEARCH).emit(CAMP_SEARCH);
+    await settle(harness);
+    vi.setSystemTime(at('2027-07-10'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle(harness);
+    expect(text(rows(harness)[0].querySelector('p:last-of-type'))).toBe(
+      'Registration closedJul 12 – Jul 16, 2027',
+    );
+  });
+
+  it('drops a camp whose last session has ended at the page’s time, and shows the no-camps state', async () => {
+    vi.setSystemTime(at('2027-07-17'));
+    const harness = await open('/programs?type=camp');
+    subscription(BROWSE).emit({
+      ...browseResults([JUNIOR_CAMP_ROW]),
+      typeCounts: [{ type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(rows(harness)).toEqual([]);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No camps are published yet',
+    );
+  });
+
+  it('lists a camp in the browse of the camp type, by name', async () => {
+    const harness = await open('/programs?type=camp&sport=beach-volleyball');
+    subscription(BROWSE).emit({
+      ...browseResults([JUNIOR_CAMP_ROW], {}, []),
+      typeCounts: [{ type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(rows(harness).map((row) => text(row.querySelector('h3')))).toEqual([
+      'Junior Beach Volleyball Camp',
+    ]);
+    expect(
+      host(harness).querySelector('nav[aria-label="Program type"] a[aria-current]')?.textContent,
+    ).toBe('Camps');
+  });
+
+  it('offers a Camps chip when a search has a camp match, and no count on any chip', async () => {
+    const harness = await open('/programs?q=beach');
+    subscription(SEARCH).emit({
+      ...MIXED,
+      rows: [...MIXED.rows, JUNIOR_CAMP_ROW],
+      typeCounts: [...MIXED.typeCounts, { type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(typeChips(harness)).toEqual([
+      { name: 'All', href: '/programs?q=beach', current: 'page' },
+      { name: 'Leagues', href: '/programs?type=league&q=beach', current: null },
+      { name: 'Tournaments', href: '/programs?type=tournament&q=beach', current: null },
+      { name: 'Camps', href: '/programs?type=camp&q=beach', current: null },
+    ]);
+  });
+
+  it('offers a Camps chip when a browse has a camp match', async () => {
+    const harness = await open('/programs?sport=beach-volleyball');
+    subscription(BROWSE).emit({
+      ...browseResults([JUNIOR_CAMP_ROW, SUNDAY_4S_ROW]),
+      typeCounts: [
+        { type: 'league', count: 1 },
+        { type: 'camp', count: 1 },
+      ],
+    });
+    await settle(harness);
+    expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues', 'Camps']);
+  });
+
+  it('offers no Camps chip when a search or a browse has no camp match but another type', async () => {
+    const harness = await open('/programs?q=beach');
+    subscription(SEARCH).emit(MIXED);
+    await settle(harness);
+    expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues', 'Tournaments']);
+
+    TestBed.resetTestingModule();
+    const browse = await open('/programs?sport=soccer');
+    subscription(BROWSE).emit(browseResults([SUNDAY_4S_ROW]));
+    await settle(browse);
+    expect(typeChips(browse).map((chip) => chip.name)).toEqual(['All', 'Leagues']);
+  });
+
+  it('says no camps match, and that a program of another type does, with a link to every type', async () => {
+    const harness = await open('/programs?type=camp&q=sunday');
+    subscription(SEARCH).emit({
+      rows: [],
+      more: false,
+      facets: [],
+      typeCounts: [{ type: 'league', count: 1 }],
+    });
+    await settle(harness);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No camps match “sunday”',
+    );
+    expect(text(results(harness))).toContain('1 program of another type matches.');
+    const all = [...results(harness)!.querySelectorAll('a')].find(
+      (a) => text(a) === 'Show all types',
+    );
+    expect(all?.getAttribute('href')).toBe('/programs?q=sunday');
+  });
+
+  it('counts a camp on the other-types line of a league search only the camp matches', async () => {
+    const harness = await open('/programs?type=league&q=junior');
+    subscription(SEARCH).emit({
+      rows: [],
+      more: false,
+      facets: [],
+      typeCounts: [{ type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No leagues match “junior”',
+    );
+    expect(text(results(harness))).toContain('1 program of another type matches.');
+  });
+
+  it('names camps in the intro and in the description of a link preview', async () => {
+    const harness = await open('/programs');
+    expect(text(host(harness).querySelector('main p'))).toBe(
+      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
+    );
+    expect(head().querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(
+      'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
     );
   });
 });

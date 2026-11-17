@@ -98,4 +98,44 @@ describe('FindTypeChips', () => {
     expect(chips[0].href).toBe('/programs');
     expect(chips[1].href).toBe('/programs?type=league&gender=coed');
   });
+
+  it('shows a Camps chip only when camps match, and no chip carries a count', () => {
+    const withCamps = render({ query: 'x', offered: ['league', 'camp'] });
+    expect(withCamps.chips.map((chip) => [chip.name, chip.href])).toEqual([
+      ['All', '/programs?q=x'],
+      ['Leagues', '/programs?type=league&q=x'],
+      ['Camps', '/programs?type=camp&q=x'],
+    ]);
+    expect(withCamps.chips.every((chip) => !/\d/.test(chip.name ?? ''))).toBe(true);
+    expect(
+      render({ query: 'x', offered: ['league', 'tournament'] }).chips.map((chip) => chip.name),
+    ).not.toContain('Camps');
+  });
+
+  it('keeps the filters in the Camps link, which they do not narrow', () => {
+    const filters = { ...NO_DIVISION_FILTERS, gender: ['coed'] } as const;
+    const { chips } = render({ query: 'x', filters, offered: ['camp'] });
+    expect(chips[1].href).toBe('/programs?type=camp&q=x&gender=coed');
+  });
+
+  it('holds a hidden list of every type a search offers, which is no link and no landmark content', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(FindTypeChips);
+    fixture.componentRef.setInput('query', 'x');
+    fixture.componentRef.setInput('offered', ['league']);
+    fixture.detectChanges();
+    const nav = (fixture.nativeElement as HTMLElement).querySelector('nav')!;
+    const sizer = nav.querySelector('[data-chip-sizer]')!;
+    expect(sizer.getAttribute('aria-hidden')).toBe('true');
+    expect(sizer.classList.contains('invisible')).toBe(true);
+    expect([...sizer.querySelectorAll('li')].map((item) => item.textContent?.trim())).toEqual([
+      'All',
+      'Leagues',
+      'Tournaments',
+      'Camps',
+    ]);
+    expect(sizer.querySelector('a, button, input')).toBeNull();
+    expect(nav.querySelectorAll('a')).toHaveLength(2);
+  });
 });

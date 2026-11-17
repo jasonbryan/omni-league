@@ -11,6 +11,8 @@ export type FindLeagueRow = Extract<FindResultRow, { type: 'league' }>;
 
 export type FindTournamentRow = Extract<FindResultRow, { type: 'tournament' }>;
 
+export type FindCampRow = Extract<FindResultRow, { type: 'camp' }>;
+
 export type FindOrganizations = FunctionReturnType<typeof api.search.organizations>;
 
 export type FindOrganizationRow = FindOrganizations['rows'][number];

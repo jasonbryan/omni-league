@@ -1,7 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NO_DIVISION_FILTERS, type DivisionFilters } from '../../../convex/lib/leagueFilters';
-import { PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
+import {
+  PROGRAM_TYPES,
+  SEARCHABLE_PROGRAM_TYPES,
+  type ProgramType,
+} from '../../../convex/lib/programs';
 import type { Sport } from '../../../convex/lib/sports';
 import { chipLinkClasses } from '../ui/chip/chip-classes';
 import { FIND_PATH, findQuery } from './find-path';
@@ -16,9 +20,10 @@ import { PROGRAM_TYPE_WORDS } from './program-type';
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
+  // The hidden list shares the cell with the chips and holds every chip a search can offer, so the row is as tall as it wraps on a narrow screen before the answer arrives and nothing below it moves.
   template: `
-    <nav aria-label="Program type" class="mt-4">
-      <ul role="list" class="flex flex-wrap gap-2">
+    <nav aria-label="Program type" class="mt-4 grid">
+      <ul role="list" class="col-start-1 row-start-1 flex flex-wrap gap-2 self-start">
         @for (chip of chips(); track chip.name) {
           <li>
             <a
@@ -28,6 +33,17 @@ import { PROGRAM_TYPE_WORDS } from './program-type';
               [class]="chip.classes"
               >{{ chip.name }}</a
             >
+          </li>
+        }
+      </ul>
+      <ul
+        aria-hidden="true"
+        data-chip-sizer
+        class="invisible col-start-1 row-start-1 flex flex-wrap gap-2"
+      >
+        @for (name of sizerNames; track name) {
+          <li>
+            <span [class]="sizerClasses">{{ name }}</span>
           </li>
         }
       </ul>
@@ -44,6 +60,11 @@ export class FindTypeChips {
   readonly offered = input<readonly ProgramType[] | undefined>(undefined);
 
   protected readonly path = FIND_PATH;
+  protected readonly sizerNames = [
+    'All',
+    ...SEARCHABLE_PROGRAM_TYPES.map((type) => PROGRAM_TYPE_WORDS[type].chip),
+  ];
+  protected readonly sizerClasses = chipLinkClasses(false);
 
   protected readonly chips = computed(() => {
     const offered = this.offered() ?? [];

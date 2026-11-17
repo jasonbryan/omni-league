@@ -97,7 +97,7 @@ describe('FindPage before a search', () => {
     const main = host(harness).querySelector('main')!;
     expect(text(main.querySelector('h1'))).toBe('Find a program');
     expect(text(main.querySelector('h1 + p'))).toBe(
-      'Beach volleyball, soccer, and softball leagues and tournaments on Omni League.',
+      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
     );
     const form = main.querySelector('form')!;
     expect(form.getAttribute('role')).toBe('search');
@@ -129,22 +129,22 @@ describe('FindPage before a search', () => {
 describe('FindPage query', () => {
   it('asks the parsed q only, and keeps it in the field', async () => {
     const harness = await open('/programs?q=%20north%20%20beach%20&utm_source=x&ott=SECRET');
-    expect(subscription().args).toEqual({ q: 'north beach' });
+    expect(subscription().args).toEqual({ q: 'north beach', withCamps: true });
     expect(input(harness).value).toBe('north beach');
   });
 
   it('uses the first value of a repeated q', async () => {
     await open('/programs?q=a&q=b');
-    expect(subscription().args).toEqual({ q: 'a' });
+    expect(subscription().args).toEqual({ q: 'a', withCamps: true });
   });
 
   it('cuts q to 100 characters and 16 words', async () => {
     await open(`/programs?q=${'x'.repeat(300)}`);
-    expect(subscription().args).toEqual({ q: 'x'.repeat(100) });
+    expect(subscription().args).toEqual({ q: 'x'.repeat(100), withCamps: true });
     TestBed.resetTestingModule();
     const words = Array.from({ length: 20 }, (_, i) => `w${i + 1}`);
     await open(`/programs?q=${words.join('+')}`);
-    expect(subscription().args).toEqual({ q: words.slice(0, 16).join(' ') });
+    expect(subscription().args).toEqual({ q: words.slice(0, 16).join(' '), withCamps: true });
   });
 });
 
@@ -340,7 +340,7 @@ describe('FindPage suggestions', () => {
     results(harness)!.querySelector<HTMLAnchorElement>('ul a')!.click();
     await settle(harness);
     expect(TestBed.inject(Router).url).toBe('/programs?q=coed%204s');
-    expect(subscription().args).toEqual({ q: 'coed 4s' });
+    expect(subscription().args).toEqual({ q: 'coed 4s', withCamps: true });
     expect(input(harness).value).toBe('coed 4s');
   });
 
@@ -445,7 +445,7 @@ describe('FindPage searching', () => {
 
     await search(harness, '  north   beach ');
     expect(TestBed.inject(Router).url).toBe('/programs?q=north%20beach');
-    expect(subscription().args).toEqual({ q: 'north beach' });
+    expect(subscription().args).toEqual({ q: 'north beach', withCamps: true });
     expect(results(harness)!.querySelector('[data-testid="find-skeleton"]')).not.toBeNull();
     expect(results(harness)!.querySelector('ul')).toBeNull();
 
@@ -478,7 +478,7 @@ describe('FindPage searching', () => {
     await TestBed.inject(Router).navigateByUrl('/programs?q=coed');
     await settle(harness);
     expect(input(harness).value).toBe('coed');
-    expect(subscription().args).toEqual({ q: 'coed' });
+    expect(subscription().args).toEqual({ q: 'coed', withCamps: true });
   });
 });
 

@@ -105,6 +105,7 @@ const TITLE = 'Find a program | Omni League';
                 [groups]="filterGroupsOffered()"
                 [total]="leagueTotal()"
                 [matching]="matchingCount()"
+                [unfiltered]="campCount()"
                 [facets]="facets()"
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
@@ -169,6 +170,7 @@ export class FindPage {
       q: this.query(),
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
+      withCamps: true,
       ...this.filterArgs(),
     };
   });
@@ -185,6 +187,7 @@ export class FindPage {
     return {
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
+      withCamps: true,
       ...this.filterArgs(),
       page: this.requestedPage(),
     };
@@ -250,7 +253,16 @@ export class FindPage {
     const value = this.shownResults();
     return value && (value.facets ?? []);
   });
-  protected readonly leagueTotal = computed(() => this.shownResults()?.facets?.length);
+  // The division filters never narrow a camp, which adds no facet, so the camps are added to each count the form shows.
+  private readonly campCount = computed(() => {
+    const type = this.type();
+    if (type !== undefined && type !== 'camp') return 0;
+    return this.shownResults()?.typeCounts.find((entry) => entry.type === 'camp')?.count ?? 0;
+  });
+  protected readonly leagueTotal = computed(() => {
+    const facets = this.shownResults()?.facets;
+    return facets && facets.length + this.campCount();
+  });
   protected readonly filterGroupsOffered = computed(() => {
     const facets = this.facets();
     return facets && filterGroups(facets, this.filters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
@@ -262,7 +274,14 @@ export class FindPage {
     if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.filters())) {
       return undefined;
     }
-    return draftLeagueCount(facets, this.filters(), undefined, this.sport(), facets.length);
+    return draftLeagueCount(
+      facets,
+      this.filters(),
+      undefined,
+      this.sport(),
+      facets.length + this.campCount(),
+      this.campCount(),
+    );
   });
 
   protected readonly queryBuilder = computed(() => {
@@ -345,7 +364,7 @@ export class FindPage {
         ogTitle: 'Find a program',
         ogDescription:
           this.mode() === 'organizations'
-            ? 'Find beach volleyball, soccer, and softball leagues and tournaments on Omni League.'
+            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.'
             : `Find ${this.noun()}s on Omni League.`,
         ogType: 'website',
         // The page of the query result, never the request's, so the canonical holds only an integer.

@@ -15,6 +15,7 @@ import {
   COED_RESULTS,
   GIRLS_ROOKIES_ROW,
   GIRLS_SELECT_ROW,
+  JUNIOR_CAMP_ROW,
   NO_RESULTS,
   OPEN_DAY,
   SOCCER_FACETS,
@@ -130,19 +131,28 @@ describe('FindPage queries by sport', () => {
   it('asks the sport browse with no search, and nothing else', async () => {
     await open('/programs?sport=soccer');
     expect(names()).toEqual(['search:programsBrowse']);
-    expect(subscription('search:programsBrowse').args).toEqual({ sport: 'soccer', page: 1 });
+    expect(subscription('search:programsBrowse').args).toEqual({
+      sport: 'soccer',
+      withCamps: true,
+      page: 1,
+    });
   });
 
   it('asks the search with the sport when there is a q', async () => {
     await open('/programs?q=coed&sport=beach-volleyball');
     expect(names()).toEqual(['search:programs']);
-    expect(subscription('search:programs').args).toEqual({ q: 'coed', sport: 'beachVolleyball' });
+    expect(subscription('search:programs').args).toEqual({
+      q: 'coed',
+      sport: 'beachVolleyball',
+      withCamps: true,
+    });
   });
 
   it('adds the division filters and the page to the args', async () => {
     await open('/programs?sport=soccer&age=u10&gender=girls&page=2&utm_source=x');
     expect(subscription('search:programsBrowse').args).toEqual({
       sport: 'soccer',
+      withCamps: true,
       gender: ['womens'],
       ageGroup: ['u10'],
       page: 2,
@@ -151,12 +161,20 @@ describe('FindPage queries by sport', () => {
 
   it('adds the filters to a search, and gender and age with no sport', async () => {
     await open('/programs?q=coed&age=over40&format=4v4&level=bb');
-    expect(subscription('search:programs').args).toEqual({ q: 'coed', ageGroup: ['over40'] });
+    expect(subscription('search:programs').args).toEqual({
+      q: 'coed',
+      ageGroup: ['over40'],
+      withCamps: true,
+    });
   });
 
   it('ignores a level that is not one of the sport, and a sport it does not know', async () => {
     await open('/programs?sport=softball&level=bb');
-    expect(subscription('search:programsBrowse').args).toEqual({ sport: 'softball', page: 1 });
+    expect(subscription('search:programsBrowse').args).toEqual({
+      sport: 'softball',
+      withCamps: true,
+      page: 1,
+    });
     TestBed.resetTestingModule();
     await open('/programs?sport=cricket&age=u10');
     expect(names()).toEqual(['search:organizations']);
@@ -255,6 +273,43 @@ describe('FindPage filter bar', () => {
     );
     await settle(harness);
     expect(count(harness)).toBe('2 of 5 soccer programs');
+  });
+
+  it('counts a camp with the matches of the filters and out of the programs before them, because no filter narrows it', async () => {
+    const harness = await open('/programs?sport=soccer&age=u10&gender=girls');
+    subscription('search:programsBrowse').emit({
+      ...browseResults([JUNIOR_CAMP_ROW, GIRLS_ROOKIES_ROW, GIRLS_SELECT_ROW]),
+      typeCounts: [
+        { type: 'league', count: 2 },
+        { type: 'camp', count: 1 },
+      ],
+    });
+    await settle(harness);
+    expect(count(harness)).toBe('3 of 6 soccer programs');
+  });
+
+  it('counts only the camps of a camp view, which offers no filter', async () => {
+    const harness = await open('/programs?type=camp&sport=soccer');
+    subscription('search:programsBrowse').emit({
+      ...browseResults([JUNIOR_CAMP_ROW], {}, []),
+      typeCounts: [{ type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(count(harness)).toBe('1 soccer camp');
+    expect(dimensions(harness)).toEqual([]);
+  });
+
+  it('leaves a camp out of the count of a league view', async () => {
+    const harness = await open('/programs?type=league&sport=soccer&age=u10');
+    subscription('search:programsBrowse').emit({
+      ...browseResults([GIRLS_ROOKIES_ROW]),
+      typeCounts: [
+        { type: 'league', count: 1 },
+        { type: 'camp', count: 1 },
+      ],
+    });
+    await settle(harness);
+    expect(count(harness)).toBe('3 of 5 soccer leagues');
   });
 
   it('counts every league of the sport when no filter is chosen', async () => {
