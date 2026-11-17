@@ -715,6 +715,21 @@ describe('search.programs and camps', () => {
     expect(result).toEqual({ rows: [], more: false, facets: [], typeCounts: [] });
   });
 
+  test('a camp search whose only camp has ended counts the leagues and tournaments, not the camp', async () => {
+    const { t, gulf } = await setup();
+    await insertCamp(t, gulf, {
+      name: 'Ended Beach Camp',
+      slug: 'ended-beach-camp',
+      sessions: [{ name: 'Week 1', startInDays: -9, endInDays: -1 }],
+    });
+    const result = await searchWithCamps(t, 'beach', { type: 'camp' });
+    expect(result.rows).toEqual([]);
+    expect(result.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+    ]);
+  });
+
   test('drops a published camp with no session', async () => {
     const { t, gulf } = await setup();
     await insertCamp(t, gulf, {
