@@ -37,7 +37,7 @@ export const BRACKET_MESSAGES = {
   noResult: 'This game has no result.',
   nextGamePlayed: 'The next game has a result, so this result cannot change.',
   bracketTypeUnsupported:
-    'This bracket needs a newer version of the app, which takes its results. Reload the page and try again.',
+    'Results for a double-elimination bracket cannot be saved right now. Nothing was saved. Try again later.',
   resultChanged: 'Someone else changed this result first. The game shows their result now.',
   reportsClosed: 'This game has a result, so it takes no more score reports.',
   reportChanged: 'The team reported a different score first. The game shows it now.',

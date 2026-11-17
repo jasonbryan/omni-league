@@ -77,6 +77,35 @@ async function addDoubleRows(s: TournamentWorld) {
   });
 }
 
+/** Six teams in 2 pools of 3, every pool game played, and a way to create the bracket from the pool finish. */
+async function poolsWorld() {
+  const { s, teamIds } = await world({ bracket: false, structure: 'pools' });
+  await s
+    .as(s.admin)
+    .mutation(api.tournamentGames.splitPools, { tournamentId: s.gulf, poolCount: 2 });
+  await s.as(s.admin).mutation(api.tournamentGames.createPoolGames, { tournamentId: s.gulf });
+  const pool = await gamesAt(s, 'pool');
+  for (const game of pool) {
+    const firstWins = teamIds.indexOf(game.teamIds[0]!) < teamIds.indexOf(game.teamIds[1]!);
+    await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+      gameId: game._id,
+      score: firstWins ? ONE_SET : { kind: 'sets', sets: [{ a: 15, b: 21 }] },
+    });
+  }
+  const createFromPools = async () => {
+    const { ranked } = (await s
+      .as(s.admin)
+      .query(api.tournamentGames.getPoolBracket, TOURNAMENT_SLUGS))!;
+    return s.as(s.admin).mutation(api.tournamentGames.createBracketFromPools, {
+      tournamentId: s.gulf,
+      advancePerPool: 2,
+      expectedRanking: ranked.map((team) => team.teamId),
+      replace: true,
+    });
+  };
+  return { s, teamIds, pool, createFromPools };
+}
+
 const gamesAt = (s: TournamentWorld, stage: string) =>
   s.t.run((ctx) =>
     ctx.db
@@ -139,33 +168,10 @@ describe('recreating a double-elimination bracket', () => {
   });
 
   test('from the pool finish replaces them too, and keeps the pool games', async () => {
-    const { s, teamIds } = await world({ bracket: false, structure: 'pools' });
-    await s
-      .as(s.admin)
-      .mutation(api.tournamentGames.splitPools, { tournamentId: s.gulf, poolCount: 2 });
-    await s.as(s.admin).mutation(api.tournamentGames.createPoolGames, { tournamentId: s.gulf });
-    const pool = await gamesAt(s, 'pool');
-    for (const game of pool) {
-      const firstWins = teamIds.indexOf(game.teamIds[0]!) < teamIds.indexOf(game.teamIds[1]!);
-      await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
-        gameId: game._id,
-        score: firstWins ? ONE_SET : { kind: 'sets', sets: [{ a: 15, b: 21 }] },
-      });
-    }
-    const create = async () => {
-      const { ranked } = (await s
-        .as(s.admin)
-        .query(api.tournamentGames.getPoolBracket, TOURNAMENT_SLUGS))!;
-      return s.as(s.admin).mutation(api.tournamentGames.createBracketFromPools, {
-        tournamentId: s.gulf,
-        advancePerPool: 2,
-        expectedRanking: ranked.map((team) => team.teamId),
-        replace: true,
-      });
-    };
-    await create();
+    const { s, pool, createFromPools } = await poolsWorld();
+    await createFromPools();
     await addDoubleRows(s);
-    await create();
+    await createFromPools();
     expect(await gamesAt(s, 'losers')).toEqual([]);
     expect(await gamesAt(s, 'grandFinal')).toEqual([]);
     expect(await gamesAt(s, 'pool')).toHaveLength(pool.length);
@@ -230,7 +236,7 @@ describe('a double-elimination tournament before the release that plays it', () 
     expect((await gamesAt(s, 'pool')).filter((game) => game.winnerTeamId)).toHaveLength(1);
   });
 
-  test('names no winner, on the organizer’s page, the pool page, and the public page, when the winners’ final has a result', async () => {
+  test('names no winner on the organizer’s page and the public page when the winners’ final has a result', async () => {
     const { s, teamIds } = await world();
     const final = await winnersGame(s, 3, 1);
     await s.t.run((ctx) =>
@@ -244,6 +250,21 @@ describe('a double-elimination tournament before the release that plays it', () 
     expect(setup!.bracket!.winner).toBeNull();
     const page = await s.t.query(api.tournaments.getPublicPage, TOURNAMENT_SLUGS);
     expect(page!.bracket!.winner).toBeUndefined();
+  });
+
+  test('names no winner on the pool page either, when the final of the bracket from the pools has a result', async () => {
+    const { s, teamIds, createFromPools } = await poolsWorld();
+    await createFromPools();
+    const final = await winnersGame(s, 2, 1);
+    await s.t.run((ctx) =>
+      ctx.db.patch('tournamentGames', final._id, {
+        teamIds: [teamIds[0], teamIds[1]],
+        winnerTeamId: teamIds[0],
+        score: ONE_SET,
+      }),
+    );
+    const view = await s.as(s.admin).query(api.tournamentGames.getPoolBracket, TOURNAMENT_SLUGS);
+    expect(view!.bracket!.winner).toBeNull();
   });
 
   test('names the winner of a single-elimination tournament as before', async () => {
