@@ -25,6 +25,7 @@ import {
   at,
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_DOUBLE_BRACKET,
   BEACH_OPEN_POOLS,
   TOURNAMENT_ARGS,
   TOURNAMENT_PATH,
@@ -238,6 +239,41 @@ describe('PublicTournamentPage server render', () => {
     const markup = html.slice(html.indexOf('<body'));
     expect(markup.indexOf('id="details-heading"')).toBeLessThan(markup.indexOf('id="bracket"'));
     expect(section.querySelector('[role="region"][aria-label="Bracket rounds"]')).not.toBeNull();
+  });
+
+  it('writes the winners’ bracket, the losers’ bracket, and the grand final, with their games, into the raw HTML', async () => {
+    const { body } = await render(
+      TOURNAMENT_PATH,
+      answer({ ...BEACH_OPEN, bracket: BEACH_OPEN_DOUBLE_BRACKET }),
+    );
+    const section = body.querySelector('main section#bracket')!;
+    expect([...section.querySelectorAll('h3')].map((heading) => text(heading))).toEqual([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    expect([...section.querySelectorAll('h4')].map((heading) => text(heading))).toEqual([
+      'Winners’ semifinals',
+      'Winners’ final',
+      'Losers’ round 1',
+      'Losers’ final',
+    ]);
+    expect([...section.querySelectorAll('li')].map((game) => spacedText(game))).toEqual([
+      'Game 1: (1) Sand Crabs Won against (4) Dig Dogs',
+      'Game 2: (2) Net Results against (3) Dune Dashers',
+      'Game 1: (1) Sand Crabs against To be decided',
+      'Game 1: (4) Dig Dogs against To be decided',
+      'Game 1: To be decided against To be decided',
+      'Game 1 To be decided against To be decided',
+    ]);
+    expect(text(section.querySelector('[data-testid="grand-final-note"]'))).toBe(
+      'Game 2 is played only if the losers’ bracket team wins game 1.',
+    );
+    expect(
+      [...section.querySelectorAll('[role="region"]')].map((region) =>
+        region.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Winners’ bracket rounds', 'Losers’ bracket rounds']);
   });
 
   it('writes each game’s score line, with its screen-reader label, and a forfeit line into the raw HTML', async () => {

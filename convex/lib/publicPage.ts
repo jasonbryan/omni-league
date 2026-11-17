@@ -294,23 +294,32 @@ const publicBracketPlaceValidator = v.union(
 
 const publicBracketSideValidator = v.union(v.literal(0), v.literal(1));
 
-// Holds no ids: the page is cached and saved offline, and an id is an internal key.
 // `score` and `forfeit` are optional so a copy saved before they existed stays valid.
+const publicBracketGameValidator = v.object({
+  teams: v.array(publicBracketPlaceValidator),
+  bye: v.boolean(),
+  winner: v.optional(publicBracketSideValidator),
+  score: v.optional(scoreValidator),
+  // The place of the team that forfeited, in place of `score`, which holds the sport's forfeit score.
+  forfeit: v.optional(publicBracketSideValidator),
+});
+
+const publicBracketRoundsValidator = v.array(
+  v.object({ name: v.string(), games: v.array(publicBracketGameValidator) }),
+);
+
+// Holds no ids: the page is cached and saved offline, and an id is an internal key.
+// `rounds` is the winners' bracket, which a single-elimination bracket is entirely. `losers` and `grandFinal` are optional so a
+// copy saved before they existed stays valid; a single-elimination bracket has neither, and a bracket of two teams has no losers' rounds.
 export const publicBracketValidator = v.object({
   winner: v.optional(v.string()),
-  rounds: v.array(
+  rounds: publicBracketRoundsValidator,
+  losers: v.optional(publicBracketRoundsValidator),
+  grandFinal: v.optional(
     v.object({
-      name: v.string(),
-      games: v.array(
-        v.object({
-          teams: v.array(publicBracketPlaceValidator),
-          bye: v.boolean(),
-          winner: v.optional(publicBracketSideValidator),
-          score: v.optional(scoreValidator),
-          // The place of the team that forfeited, in place of `score`, which holds the sport's forfeit score.
-          forfeit: v.optional(publicBracketSideValidator),
-        }),
-      ),
+      games: v.array(publicBracketGameValidator),
+      // True for "Deciding game if needed": a second game follows if the losers' bracket team wins the first.
+      decidingGame: v.boolean(),
     }),
   ),
 });

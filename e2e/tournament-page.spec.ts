@@ -1,7 +1,9 @@
-import type { Locator } from '@playwright/test';
+import type { Browser, Locator, Page, ViewportSize } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { seedBestOfThree, seedBracket, seedResult, type SeededResult } from './support/bracket';
-import { remoteBaseUrl } from './support/env';
+import { answerWithClientShell } from './support/client-shell';
+import { seedDoubleTournament, type DoubleProgress } from './support/double-bracket';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -529,5 +531,272 @@ test.describe('public tournament page: in the browser', () => {
         await expect.poll(() => consoleGuard.hydrated).toBe(true);
       },
     );
+  });
+});
+
+const WINNERS_ROUNDS = ['Winners’ round 1', 'Winners’ semifinals', 'Winners’ final'];
+const LOSERS_ROUNDS = ['Losers’ round 1', 'Losers’ round 2', 'Losers’ round 3', 'Losers’ final'];
+const NOTE = 'Game 2 is played only if the losers’ bracket team wins game 1.';
+const GOOD_SHIFT = 0.1;
+const SETTLE_AFTER_LOAD_MS = 1_000;
+const WINNERS_GAME_COUNT = 7;
+const LOSERS_GAME_COUNT = 4;
+const DOUBLE_GAMES = WINNERS_GAME_COUNT + LOSERS_GAME_COUNT + 1;
+
+const headingsOf = (html: string, level: 3 | 4) =>
+  [...html.matchAll(new RegExp(`<h${level}\\b[^>]*>([\\s\\S]*?)</h${level}>`, 'g'))].map(
+    ([, heading]) => textOf(heading),
+  );
+
+const grandFinalOf = (html: string) =>
+  textOf(html.slice(html.indexOf('id="bracket-grand-final-heading"')));
+
+const gamesOfHtml = (html: string) =>
+  [...html.matchAll(/<li\b[^>]*data-testid="bracket-game"[\s\S]*?<\/li>/g)].map(([game]) =>
+    textOf(game),
+  );
+
+test.describe('public tournament page: double elimination, raw server HTML', () => {
+  test(
+    'Double Trouble Doubles: the three sections with their headings and games are in the HTML after the details',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedDoubleTournament({ progress: 'waiting' }),
+      );
+      const start = html.indexOf('id="bracket"');
+      expect(start).toBeGreaterThan(html.indexOf('id="details-heading"'));
+      const bracket = html.slice(start);
+      expect(headingsOf(bracket, 3)).toEqual([
+        'Winners’ bracket',
+        'Losers’ bracket',
+        'Grand final',
+      ]);
+      expect(headingsOf(bracket, 4)).toEqual([...WINNERS_ROUNDS, ...LOSERS_ROUNDS]);
+      const games = gamesOfHtml(bracket);
+      expect(games).toHaveLength(DOUBLE_GAMES);
+      expect(games.slice(0, 3)).toEqual([
+        'Game 1: (1) Alpha against Bye',
+        'Game 2: (4) Delta Won against (5) Echo Score: 21–15',
+        'Game 3: (2) Bravo against Bye',
+      ]);
+      expect(games.at(-1)).toBe('Game 1 (1) Alpha against (5) Echo');
+      expect(bracket).toContain('aria-label="Winners’ bracket rounds"');
+      expect(bracket).toContain('aria-label="Losers’ bracket rounds"');
+      expect(textOf(bracket)).toContain(NOTE);
+    },
+  );
+
+  test(
+    'a grand final won by the winners’ bracket team shows no game 2 and no note, and names the winner',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await fetchRawHtml(
+        request,
+        await seedDoubleTournament({ progress: 'notNeeded' }),
+      );
+      const bracket = html.slice(html.indexOf('id="bracket"'));
+      expect(grandFinalOf(html)).not.toContain('Game 2');
+      expect(grandFinalOf(html)).not.toContain(NOTE);
+      expect(textOf(bracket)).toContain('Winner: Alpha');
+      expect(gamesOfHtml(bracket).at(-1)).toMatch(/^Game 1 \(1\) Alpha Won against \(\d\) \w+/);
+    },
+  );
+
+  test(
+    'a grand final won by the losers’ bracket team lists Game 2, with its teams, and then its result',
+    RAW_HTTP,
+    async ({ request }) => {
+      const deciding = await fetchRawHtml(
+        request,
+        await seedDoubleTournament({ progress: 'deciding' }),
+      );
+      const open = gamesOfHtml(deciding.html.slice(deciding.html.indexOf('id="bracket"')));
+      expect(open.slice(-2).map((game) => game.slice(0, 6))).toEqual(['Game 1', 'Game 2']);
+      expect(open.at(-1)).not.toContain('Won');
+      expect(grandFinalOf(deciding.html)).not.toContain(NOTE);
+      expect(textOf(deciding.html)).not.toContain('Winner:');
+
+      const decided = await fetchRawHtml(
+        request,
+        await seedDoubleTournament({ progress: 'decided' }),
+      );
+      const played = gamesOfHtml(decided.html.slice(decided.html.indexOf('id="bracket"')));
+      expect(played.at(-1)).toMatch(/^Game 2 .* Won against .* Score: 21–15$/);
+      expect(textOf(decided.html)).toContain('Winner:');
+    },
+  );
+
+  test('a single game has no game numbers and no note', RAW_HTTP, async ({ request }) => {
+    const { html } = await fetchRawHtml(
+      request,
+      await seedDoubleTournament({ progress: 'waiting', grandFinal: 'single' }),
+    );
+    const bracket = html.slice(html.indexOf('id="bracket"'));
+    expect(gamesOfHtml(bracket).at(-1)).toBe('Game 1: (1) Alpha against (5) Echo');
+    expect(grandFinalOf(html)).not.toContain('Game 2');
+  });
+});
+
+const STATES: readonly { progress: DoubleProgress; title: string; games: number }[] = [
+  { progress: 'none', title: 'before any result', games: DOUBLE_GAMES },
+  { progress: 'waiting', title: 'with the grand final waiting for game 1', games: DOUBLE_GAMES },
+  { progress: 'notNeeded', title: 'with game 2 not needed', games: DOUBLE_GAMES },
+  { progress: 'deciding', title: 'with game 2 to play', games: DOUBLE_GAMES + 1 },
+  { progress: 'decided', title: 'with game 2 played', games: DOUBLE_GAMES + 1 },
+];
+
+test.describe('public tournament page: double elimination, in the browser', () => {
+  for (const { progress, title, games } of STATES) {
+    test(`${title}: lists the three sections, passes the axe helper, and does not scroll sideways at 320px`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      await page.goto(await seedDoubleTournament({ progress }));
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await expect(page.locator('section#bracket h3')).toHaveText([
+        'Winners’ bracket',
+        'Losers’ bracket',
+        'Grand final',
+      ]);
+      await expect(page.getByTestId('bracket-game')).toHaveCount(games);
+      await expect(page.getByTestId('grand-final-note')).toHaveCount(
+        progress === 'waiting' || progress === 'none' ? 1 : 0,
+      );
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      expect(await checkReflow(page)).toMatchObject({ passed: true });
+      await screenshot(page, testInfo, `tournament-double-${progress}`);
+    });
+  }
+
+  test('the sections stack, each bracket’s rounds are columns from 768px, and the page does not scroll sideways', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    await page.goto(await seedDoubleTournament({ progress: 'waiting' }));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const headings = await cornersOf(page.locator('section#bracket h3'));
+    expect(new Set(headings.map(({ x }) => x)).size).toBe(1);
+    expect(headings.map(({ y }) => y)).toEqual(
+      [...headings.map(({ y }) => y)].sort((a, b) => a - b),
+    );
+    expect(new Set(headings.map(({ y }) => y)).size).toBe(3);
+
+    const winners = await cornersOf(
+      page.getByRole('region', { name: 'Winners’ bracket rounds' }).locator('section'),
+    );
+    const losers = await cornersOf(
+      page.getByRole('region', { name: 'Losers’ bracket rounds' }).locator('section'),
+    );
+    if (testInfo.project.name === 'chromium-desktop') {
+      expect(new Set(winners.map(({ y }) => y)).size).toBe(1);
+      expect(new Set(winners.map(({ x }) => x)).size).toBe(3);
+      expect(new Set(losers.map(({ y }) => y)).size).toBe(1);
+      expect(new Set(losers.map(({ x }) => x)).size).toBe(4);
+    } else {
+      expect(new Set([...winners, ...losers].map(({ x }) => x)).size).toBe(1);
+      expect(new Set(winners.map(({ y }) => y)).size).toBe(3);
+    }
+    const width = page.viewportSize()!.width;
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+  });
+
+  test('long team names wrap inside their games at 320px', async ({ page, consoleGuard }) => {
+    const long = [
+      'The Unbelievably Persistent Corpus Christi Beach Volleyball Club',
+      'Supercalifragilisticexpialidocious-Dig-Dogs-Of-The-Gulf-Coast',
+      'Bravo',
+      'Charlie',
+      'Delta',
+      'Echo',
+    ];
+    await page.goto(await seedDoubleTournament({ progress: 'deciding', teamNames: long }));
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page.setViewportSize({ width: 320, height: 800 });
+    const boxes = await page.getByTestId('bracket-game').evaluateAll((items) =>
+      items.map((item) => {
+        const { left, right } = item.getBoundingClientRect();
+        return { left, right, overflow: item.scrollWidth - item.clientWidth };
+      }),
+    );
+    expect(boxes).toHaveLength(DOUBLE_GAMES + 1);
+    for (const box of boxes) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(320);
+      expect(box.overflow).toBeLessThanOrEqual(0);
+    }
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+});
+
+const BRACKET_PARTS =
+  'section#bracket :is(h2, h3, h4, [data-testid="bracket-scroller"], [data-testid="bracket-game"], [data-testid="grand-final-note"])';
+
+const bracketBoxes = (target: Page) =>
+  target.locator(BRACKET_PARTS).evaluateAll((elements) =>
+    elements.map((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return [x, y + window.scrollY, width, height].map(Math.round);
+    }),
+  );
+
+async function serverRenderedBoxes(browser: Browser, path: string, viewport: ViewportSize) {
+  const bare = await browser.newContext({ javaScriptEnabled: false, viewport });
+  try {
+    const serverPage = await bare.newPage();
+    await serverPage.goto(`${baseURL}${path}`);
+    return await bracketBoxes(serverPage);
+  } finally {
+    await bare.close();
+  }
+}
+
+test.describe('public tournament page: double elimination, layout', () => {
+  test('the sections sit where the server render puts them once the page hydrates', async ({
+    page,
+    browser,
+    consoleGuard,
+  }) => {
+    const path = await seedDoubleTournament({ progress: 'deciding' });
+    const server = await serverRenderedBoxes(browser, path, page.viewportSize()!);
+    await page.goto(path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    expect(server.length).toBeGreaterThan(20);
+    expect(await bracketBoxes(page)).toEqual(server);
+  });
+
+  test('the sections sit there too when the browser renders the page from the client shell, with a layout shift below 0.1', async ({
+    page,
+    browser,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'WebKit records no layout-shift entries');
+    const path = await seedDoubleTournament({ progress: 'deciding' });
+    const server = await serverRenderedBoxes(browser, path, page.viewportSize()!);
+    await answerWithClientShell(page, path);
+    await page.addInitScript(() => {
+      const watch = window as Window & { e2eShift?: number };
+      watch.e2eShift = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as (PerformanceEntry & {
+          value: number;
+          hadRecentInput: boolean;
+        })[]) {
+          if (!entry.hadRecentInput) watch.e2eShift = (watch.e2eShift ?? 0) + entry.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    await page.goto(path, { waitUntil: 'networkidle' });
+    await expect(page.getByTestId('tournament-skeleton')).toHaveCount(0);
+    await expect(page.locator('section#bracket h3')).toHaveCount(3);
+    expect(await bracketBoxes(page)).toEqual(server);
+    await page.waitForTimeout(SETTLE_AFTER_LOAD_MS);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eShift?: number }).e2eShift),
+    ).toBeLessThan(GOOD_SHIFT);
   });
 });

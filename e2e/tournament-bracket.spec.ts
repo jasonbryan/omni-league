@@ -1715,7 +1715,7 @@ test.describe('Tournaments: double elimination, beyond the criteria', () => {
     await expect(rounds(page).locator('h4').last()).toHaveText('Grand final');
   });
 
-  test('the public page lists the winners’ bracket only, and names the winner once the grand final is decided', async ({
+  test('the public page lists the winners’ bracket, the losers’ bracket, and the grand final, and names the winner once the grand final is decided', async ({
     page,
   }) => {
     const { tenant, managePath } = await adminOf(page, {
@@ -1728,9 +1728,18 @@ test.describe('Tournaments: double elimination, beyond the criteria', () => {
     const publicPath = `/organizations/${tenant.slug}/tournaments/${SLUG}`;
     await page.goto(publicPath);
     await expect(page.locator('section#bracket h3')).toHaveText([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    await expect(page.locator('section#bracket h4')).toHaveText([
       'Winners’ round 1',
       'Winners’ semifinals',
       'Winners’ final',
+      'Losers’ round 1',
+      'Losers’ round 2',
+      'Losers’ round 3',
+      'Losers’ final',
     ]);
     await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
 
@@ -1748,6 +1757,7 @@ test.describe('Tournaments: double elimination, beyond the criteria', () => {
     await seedResult(tenant, SLUG, { stage: 'grandFinal', round: 1, slot: 1 }, SECOND_TEAM_WINS);
     await page.goto(publicPath);
     await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
+    await expect(page.getByTestId('bracket-game')).toHaveCount(13);
     await seedResult(tenant, SLUG, { stage: 'grandFinal', round: 2, slot: 1 }, FIRST_TEAM_WINS);
     await page.goto(publicPath);
     await expect(page.getByTestId('bracket-winner')).toHaveText('Winner: Alpha');

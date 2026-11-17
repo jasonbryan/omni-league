@@ -189,3 +189,25 @@ describe('seed:demo: Double Trouble Doubles has first-round results, so a team i
     ]);
   });
 });
+
+describe('seed:demo: Double Trouble Doubles on its public page', () => {
+  test('lists the winners’ bracket, the losers’ bracket with a team in it, and the grand final waiting', async () => {
+    const t = setup();
+    await seedDemo(t, WITH_ADMIN);
+    const page = await t.query(api.tournaments.getPublicPage, {
+      orgSlug: DEMO_DOUBLE_TOURNAMENT.orgSlug,
+      tournamentSlug: DEMO_DOUBLE_TOURNAMENT.tournamentSlug,
+    });
+    const bracket = page!.bracket!;
+    expect(bracket.rounds.map((round) => round.games.length)).toEqual([4, 2, 1]);
+    expect(bracket.losers?.map((round) => round.games.length)).toEqual([1, 1, 1, 1]);
+    expect(bracket.losers?.[0].games[0].teams.map((team) => team?.name)).toEqual([
+      DEMO_DOUBLE_TEAMS[4].name,
+      DEMO_DOUBLE_TEAMS[2].name,
+    ]);
+    expect(bracket.grandFinal).toEqual({
+      games: [{ teams: [null, null], bye: false }],
+      decidingGame: true,
+    });
+  });
+});

@@ -12,6 +12,7 @@ import {
 } from './support/saved-copies';
 import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedBracket } from './support/bracket';
+import { seedDoubleTournament } from './support/double-bracket';
 import { seedPublishedCamp, seedTenantWithCamps } from './support/camp';
 import { convexRun } from './support/convex';
 import { seedPoolPlay, seedPoolResult, seedPoolsStructure } from './support/pools';
@@ -566,6 +567,41 @@ test.describe('a tournament page offline', () => {
     await expect(page.locator('section#bracket h3')).toHaveText(['Semifinals', 'Final']);
     await expect(games).toHaveCount(3);
     await expect(games.first()).toContainText('(1) Alpha');
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
+
+    await context.setOffline(false);
+  });
+
+  test('a double-elimination bracket viewed online opens from its saved copy, with the three sections', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const path = await seedDoubleTournament({ progress: 'waiting' });
+    const games = page.getByTestId('bracket-game');
+
+    await page.goto(path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(games).toHaveCount(12);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(/\/organizations\/[^/]+$/);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(path);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(page.locator('section#bracket h3')).toHaveText([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    await expect(games).toHaveCount(12);
+    await expect(page.getByTestId('grand-final-note')).toHaveText(
+      'Game 2 is played only if the losers’ bracket team wins game 1.',
+    );
     const results = await axeScan(page);
     expect(describeViolations(results.violations)).toEqual([]);
 

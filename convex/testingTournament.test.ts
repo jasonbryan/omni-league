@@ -92,6 +92,23 @@ describe('testing:seedTournament', () => {
     });
   });
 
+  test('holds a double-elimination bracket type and a grand final when given, and single elimination otherwise', async () => {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTournament, TOURNAMENT);
+    await t.mutation(internal.testing.seedTournament, {
+      ...TOURNAMENT,
+      slug: 'double-open',
+      name: 'Double Open',
+      bracketType: 'double',
+      grandFinal: 'single',
+    });
+    const rows = await t.run((ctx) => ctx.db.query('tournaments').collect());
+    expect(rows.map(({ bracketType, grandFinal }) => ({ bracketType, grandFinal }))).toEqual([
+      { bracketType: 'single' },
+      { bracketType: 'double', grandFinal: 'single' },
+    ]);
+  });
+
   test('refuses an unknown organization, a location it does not have, and a taken web address', async () => {
     const t = await seeded();
     await expect(

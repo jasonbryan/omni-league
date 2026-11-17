@@ -1,6 +1,11 @@
 import { publicTournamentPageValidator } from '../../../../convex/lib/publicPage';
 import { matchesValidator } from '../../core/data/convex/matches-validator';
-import { BEACH_OPEN, BEACH_OPEN_BRACKET, BEACH_OPEN_POOLS } from './testing/tournament-data';
+import {
+  BEACH_OPEN,
+  BEACH_OPEN_BRACKET,
+  BEACH_OPEN_DOUBLE_BRACKET,
+  BEACH_OPEN_POOLS,
+} from './testing/tournament-data';
 
 const matches = (value: unknown) => matchesValidator(value, publicTournamentPageValidator);
 
@@ -21,6 +26,30 @@ describe('a saved tournament page checked against the current shape', () => {
   it('accepts a bracket that names a winner and places no team fills yet', () => {
     const bracket = { ...BEACH_OPEN_BRACKET, winner: 'Sand Crabs' };
     expect(matches({ ...BEACH_OPEN, bracket })).toBe(true);
+  });
+
+  it('accepts a copy saved with a losers’ bracket and a grand final', () => {
+    expect(matches({ ...BEACH_OPEN, bracket: BEACH_OPEN_DOUBLE_BRACKET })).toBe(true);
+  });
+
+  it('accepts a grand final with its deciding game played', () => {
+    const [game] = BEACH_OPEN_DOUBLE_BRACKET.grandFinal!.games;
+    const grandFinal = { games: [{ ...game, winner: 1 }, game], decidingGame: true };
+    expect(matches({ ...BEACH_OPEN, bracket: { ...BEACH_OPEN_DOUBLE_BRACKET, grandFinal } })).toBe(
+      true,
+    );
+  });
+
+  it('rejects a grand final that does not say whether a deciding game is possible', () => {
+    const grandFinal = { games: BEACH_OPEN_DOUBLE_BRACKET.grandFinal!.games };
+    expect(matches({ ...BEACH_OPEN, bracket: { ...BEACH_OPEN_DOUBLE_BRACKET, grandFinal } })).toBe(
+      false,
+    );
+  });
+
+  it('rejects a losers’ bracket whose rounds are not a list', () => {
+    const bracket = { ...BEACH_OPEN_DOUBLE_BRACKET, losers: 'Losers’ final' };
+    expect(matches({ ...BEACH_OPEN, bracket })).toBe(false);
   });
 
   it('rejects a bracket whose rounds are not a list', () => {

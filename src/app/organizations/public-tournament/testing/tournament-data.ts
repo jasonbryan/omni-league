@@ -47,6 +47,43 @@ export const BEACH_OPEN_BRACKET: PublicBracket = {
   ],
 };
 
+export const BEACH_OPEN_DOUBLE_BRACKET: PublicBracket = {
+  rounds: [
+    {
+      name: 'Winners’ semifinals',
+      games: [
+        {
+          teams: [
+            { name: 'Sand Crabs', seed: 1 },
+            { name: 'Dig Dogs', seed: 4 },
+          ],
+          bye: false,
+          winner: 0,
+        },
+        {
+          teams: [
+            { name: 'Net Results', seed: 2 },
+            { name: 'Dune Dashers', seed: 3 },
+          ],
+          bye: false,
+        },
+      ],
+    },
+    {
+      name: 'Winners’ final',
+      games: [{ teams: [{ name: 'Sand Crabs', seed: 1 }, null], bye: false }],
+    },
+  ],
+  losers: [
+    {
+      name: 'Losers’ round 1',
+      games: [{ teams: [{ name: 'Dig Dogs', seed: 4 }, null], bye: false }],
+    },
+    { name: 'Losers’ final', games: [{ teams: [null, null], bye: false }] },
+  ],
+  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGame: true },
+};
+
 export const BEACH_OPEN_POOLS: PublicPool[] = [
   {
     pool: 'A',

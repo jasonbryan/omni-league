@@ -17,6 +17,7 @@ import {
   at,
   BEACH_OPEN,
   BEACH_OPEN_BRACKET,
+  BEACH_OPEN_DOUBLE_BRACKET,
   BEACH_OPEN_POOLS,
   ORG_SLUG,
   TOURNAMENT_ARGS,
@@ -449,6 +450,19 @@ describe('PublicTournamentPage bracket', () => {
     expect(
       details.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('shows the winners’ bracket, the losers’ bracket, and the grand final of a double-elimination bracket', async () => {
+    const harness = await open();
+    emit({ ...BEACH_OPEN, bracket: BEACH_OPEN_DOUBLE_BRACKET });
+    await settle(harness);
+    const section = bracketSection(harness)!;
+    expect([...section.querySelectorAll('h3')].map(text)).toEqual([
+      'Winners’ bracket',
+      'Losers’ bracket',
+      'Grand final',
+    ]);
+    expect(section.querySelectorAll('li')).toHaveLength(6);
   });
 
   it('follows a new result without a reload', async () => {
