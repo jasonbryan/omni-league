@@ -160,6 +160,55 @@ describe('planDoubleBracket', () => {
   );
 });
 
+describe('planDoubleBracket for other team counts', () => {
+  test('7 teams: three round 1 games, the 1 seed waiting for the semifinals, and 5 losers bracket games', () => {
+    const plan = planDoubleBracket(7);
+    expect(
+      gamesOf(plan, 'bracket', 1)
+        .filter((game) => game.advances === null)
+        .map((game) => game.entrants),
+    ).toEqual([
+      [4, 5],
+      [2, 7],
+      [3, 6],
+    ]);
+    expect(feedersIn(plan, 'losers', 1)).toEqual([['loser of W1.2', 'loser of W1.3']]);
+    expect(feedersIn(plan, 'losers', 2)).toEqual([
+      ['loser of W2.1', 'winner of L1.1'],
+      ['loser of W1.4', 'loser of W2.2'],
+    ]);
+    expect(feedersIn(plan, 'losers', 3)).toEqual([['winner of L2.1', 'winner of L2.2']]);
+    expect(feedersIn(plan, 'losers', 4)).toEqual([['loser of W3.1', 'winner of L3.1']]);
+    expect(gamesOf(plan, 'losers')).toHaveLength(5);
+  });
+
+  test('16 teams: the losers bracket has 6 rounds of 4, 4, 2, 2, 1 and 1 games, and each winners round drops across the bracket', () => {
+    const plan = planDoubleBracket(16);
+    expect([1, 2, 3, 4, 5, 6].map((round) => gamesOf(plan, 'losers', round).length)).toEqual([
+      4, 4, 2, 2, 1, 1,
+    ]);
+    expect(feedersIn(plan, 'losers', 2)).toEqual([
+      ['loser of W2.4', 'winner of L1.1'],
+      ['loser of W2.3', 'winner of L1.2'],
+      ['loser of W2.2', 'winner of L1.3'],
+      ['loser of W2.1', 'winner of L1.4'],
+    ]);
+    expect(feedersIn(plan, 'losers', 4)).toEqual([
+      ['loser of W3.1', 'winner of L3.1'],
+      ['loser of W3.2', 'winner of L3.2'],
+    ]);
+    expect(feedersIn(plan, 'losers', 6)).toEqual([['loser of W4.1', 'winner of L5.1']]);
+  });
+
+  test('128 teams: the losers bracket has 12 rounds and 126 games, and the winners final loser plays the last one', () => {
+    const plan = planDoubleBracket(128);
+    expect(gamesOf(plan, 'bracket')).toHaveLength(127);
+    expect(gamesOf(plan, 'losers')).toHaveLength(126);
+    expect(Math.max(...gamesOf(plan, 'losers').map((game) => game.round))).toBe(12);
+    expect(feedersIn(plan, 'losers', 12)).toEqual([['loser of W7.1', 'winner of L11.1']]);
+  });
+});
+
 describe('round names', () => {
   test('winners rounds count up and end with the winners final', () => {
     expect([1, 2, 3, 4].map((round) => winnersRoundName(round, 4))).toEqual([

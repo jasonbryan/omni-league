@@ -1644,3 +1644,133 @@ test.describe('Tournaments: double elimination', () => {
     await expectNoSidewaysScroll(page);
   });
 });
+
+const LONG_NAMES = [
+  'Supercalifragilistic-Beach-Volleyball-Club-Of-Corpus-Christi',
+  'The Extraordinarily Long Named Sandbaggers Of Padre Island',
+  'Gulf Coast Tide Pool Hustlers And Seaside Spikers Society',
+  'Mustang Island Dunes Diggers And Dinkers Association Inc',
+  'Port Aransas Ferry Landing Blockers And Setters League',
+  'Rockport Fulton Oyster Reef Rotation Specialists Group',
+];
+
+test.describe('Tournaments: double elimination, beyond the criteria', () => {
+  const detailsForm = (page: Page) => page.locator('#edit-details form');
+  const choice = (page: Page, id: string) =>
+    detailsForm(page).locator('label', { has: page.locator(`#${id}`) });
+  const section = (page: Page, heading: string) =>
+    rounds(page)
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: heading, exact: true }) });
+
+  async function chooseAndSave(page: Page, ids: readonly string[]) {
+    for (const id of ids) await choice(page, id).click();
+    await detailsForm(page)
+      .getByRole('button', { name: /^Save changes/ })
+      .click();
+    await expect(detailsForm(page)).toContainText('Details saved.');
+  }
+
+  test('team names of 60 characters in every losers’ bracket place do not scroll the page sideways at 320px', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(LONG_NAMES),
+      registration: 'closed',
+    });
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+    await seedResult(tenant, SLUG, { round: 1, slot: 2 }, FIRST_TEAM_WINS);
+    await seedResult(tenant, SLUG, { round: 1, slot: 4 }, FIRST_TEAM_WINS);
+    await seedResult(tenant, SLUG, { round: 2, slot: 1 }, FIRST_TEAM_WINS);
+    await page.reload();
+    await expect(
+      section(page, 'Losers’ round 1').locator('[data-slot="game-label"]'),
+    ).toContainText(LONG_NAMES[4]);
+    await expectNoSidewaysScroll(page);
+    await enterButton(section(page, 'Losers’ round 1').locator('[data-game]')).click();
+    await expectNoSidewaysScroll(page);
+  });
+
+  test('recreating before any result keeps the bracket double, with the losers’ bracket and the grand final', async ({
+    page,
+  }) => {
+    const { managePath } = await adminOf(page, { teams: full(SIX), registration: 'closed' });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+    await move(page, 'Foxtrot', 'up').click();
+    await createButton(page).click();
+    await page
+      .getByRole('alertdialog', { name: 'Recreate the bracket?' })
+      .getByRole('button', { name: 'Recreate bracket' })
+      .click();
+    await expect(
+      panel(page).getByRole('status').filter({ hasText: 'Bracket recreated' }),
+    ).toContainText('12 games in a winners’ bracket, a losers’ bracket, and a grand final.');
+    await expect(gameLabels(page).nth(3)).toHaveText('Game 4: Charlie v Echo');
+    await expect(rounds(page).locator('h4')).toHaveCount(8);
+    await expect(rounds(page).locator('h4').last()).toHaveText('Grand final');
+  });
+
+  test('the public page lists the winners’ bracket only, and names the winner once the grand final is decided', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(SIX),
+      registration: 'closed',
+    });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double']);
+    await createBracket(page);
+    const publicPath = `/organizations/${tenant.slug}/tournaments/${SLUG}`;
+    await page.goto(publicPath);
+    await expect(page.locator('section#bracket h3')).toHaveText([
+      'Winners’ round 1',
+      'Winners’ semifinals',
+      'Winners’ final',
+    ]);
+    await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
+
+    const winners = [
+      { round: 1, slot: 2 },
+      { round: 1, slot: 4 },
+      { round: 2, slot: 1 },
+      { round: 2, slot: 2 },
+      { round: 3, slot: 1 },
+    ];
+    for (const game of winners) await seedResult(tenant, SLUG, game, FIRST_TEAM_WINS);
+    for (const round of [1, 2, 3, 4]) {
+      await seedResult(tenant, SLUG, { stage: 'losers', round, slot: 1 }, FIRST_TEAM_WINS);
+    }
+    await seedResult(tenant, SLUG, { stage: 'grandFinal', round: 1, slot: 1 }, SECOND_TEAM_WINS);
+    await page.goto(publicPath);
+    await expect(page.getByTestId('bracket-winner')).toHaveCount(0);
+    await seedResult(tenant, SLUG, { stage: 'grandFinal', round: 2, slot: 1 }, FIRST_TEAM_WINS);
+    await page.goto(publicPath);
+    await expect(page.getByTestId('bracket-winner')).toHaveText('Winner: Alpha');
+    await expect(page.locator('section#bracket h3')).toHaveCount(3);
+  });
+
+  test('copying a double tournament opens a draft with the same bracket type and grand final', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, {
+      teams: full(SIX),
+      registration: 'closed',
+    });
+    await page.goto(managePath);
+    await chooseAndSave(page, ['bracket-type-double', 'grand-final-single']);
+    await page.getByRole('link', { name: 'Copy to a new tournament' }).click();
+    const createForm = page.locator('#create-tournament form');
+    await page.locator('#start-date').fill('2031-06-12');
+    await page.locator('#registration-deadline').fill('2031-06-05');
+    await createForm.getByRole('button', { name: /^Create draft tournament/ }).click();
+    await createForm.getByRole('link', { name: 'Open Labor Day Sand Slam' }).click();
+    await expect(page).toHaveURL(`/app/organizations/${tenant.slug}/tournaments/${SLUG}-2`);
+    await expect(page.locator('#bracket-type-double')).toBeChecked();
+    await expect(page.locator('#grand-final-single')).toBeChecked();
+  });
+});
