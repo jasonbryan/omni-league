@@ -25,6 +25,8 @@ const HELD = {
   maximumTeams: 4,
   setsPerGame: 1,
   structure: 'bracket',
+  bracketType: 'single',
+  grandFinal: 'ifNecessary',
 };
 
 const TOURNAMENT = {
@@ -43,6 +45,7 @@ const TOURNAMENT = {
   teamCount: 3,
   bracketCreated: false,
   poolGamesCreated: false,
+  grandFinalLocked: false,
   ...HELD,
 };
 
@@ -71,6 +74,8 @@ describe('TournamentDetailsForm', () => {
   const save = () => form().querySelector<HTMLButtonElement>('button[type="submit"]')!;
   const sets = (key: string) => page.querySelector<HTMLInputElement>(`#sets-per-game-${key}`);
   const structure = (key: string) => page.querySelector<HTMLInputElement>(`#structure-${key}`);
+  const bracketType = (key: string) => page.querySelector<HTMLInputElement>(`#bracket-type-${key}`);
+  const grandFinal = (key: string) => page.querySelector<HTMLInputElement>(`#grand-final-${key}`);
   const status = () => form().querySelector<HTMLElement>('[data-slot="save-status"]')!;
   const alertBox = () => form().querySelector<HTMLElement>('[data-slot="alert"]');
   const undoButton = () =>
@@ -98,12 +103,15 @@ describe('TournamentDetailsForm', () => {
     await o.harness.fixture.whenStable();
   }
 
-  async function chooseStructure(key: string) {
-    const radio = structure(key)!;
+  async function choose(radio: HTMLInputElement) {
     radio.checked = true;
     radio.dispatchEvent(new Event('change', { bubbles: true }));
     await o.harness.fixture.whenStable();
   }
+
+  const chooseStructure = (key: string) => choose(structure(key)!);
+  const chooseBracketType = (key: string) => choose(bracketType(key)!);
+  const chooseGrandFinal = (key: string) => choose(grandFinal(key)!);
 
   async function submit() {
     save().click();
@@ -168,6 +176,76 @@ describe('TournamentDetailsForm', () => {
         expect(input('maximum-teams').disabled).toBe(false);
       },
     );
+
+    it('offers the bracket type as Single elimination, chosen, or Double elimination', async () => {
+      await open();
+      expect(text(section().querySelector('[data-slot="bracket-type"] legend'))).toBe(
+        'Bracket type',
+      );
+      expect(
+        [...section().querySelectorAll('[data-slot="bracket-type"] label')].map((label) =>
+          text(label),
+        ),
+      ).toEqual(['Single elimination', 'Double elimination']);
+      expect(bracketType('single')!.checked).toBe(true);
+      expect(bracketType('double')!.checked).toBe(false);
+    });
+
+    it('offers the bracket type for a Pools, then bracket tournament too', async () => {
+      await open({ ...TOURNAMENT, structure: 'pools', poolGamesCreated: true });
+      expect(bracketType('single')!.checked).toBe(true);
+      expect(bracketType('double')).not.toBeNull();
+    });
+
+    it('shows the grand final only with Double elimination chosen, with Deciding game if needed chosen first', async () => {
+      await open();
+      expect(section().querySelector('[data-slot="grand-final"]')).toBeNull();
+      await chooseBracketType('double');
+      expect(text(section().querySelector('[data-slot="grand-final"] legend'))).toBe('Grand final');
+      expect(
+        [...section().querySelectorAll('[data-slot="grand-final"] label')].map((label) =>
+          text(label),
+        ),
+      ).toEqual(['Deciding game if needed', 'Single game']);
+      expect(grandFinal('ifNecessary')!.checked).toBe(true);
+      expect(text(section().querySelector('#grand-final-description'))).toBe(
+        'When the losers’ bracket team wins the first game, a second game decides the tournament.',
+      );
+      await chooseGrandFinal('single');
+      expect(text(section().querySelector('#grand-final-description'))).toBe(
+        'The first game decides the tournament, whoever wins it.',
+      );
+    });
+
+    it('shows a Double elimination tournament with its choices made', async () => {
+      await open({ ...TOURNAMENT, bracketType: 'double', grandFinal: 'single' });
+      expect(bracketType('double')!.checked).toBe(true);
+      expect(grandFinal('single')!.checked).toBe(true);
+    });
+
+    it('shows the bracket type as text with the reason once the bracket is created, and keeps the grand final editable', async () => {
+      await open({ ...TOURNAMENT, bracketType: 'double', bracketCreated: true });
+      expect(bracketType('single')).toBeNull();
+      expect(bracketType('double')).toBeNull();
+      expect(text(section().querySelector('[data-slot="bracket-type"]'))).toBe(
+        `Bracket typeDouble elimination${BRACKET_MESSAGES.bracketTypeLocked}`,
+      );
+      expect(grandFinal('single')).not.toBeNull();
+      expect(input('maximum-teams').disabled).toBe(false);
+    });
+
+    it('shows the grand final as text with the reason once it has a result', async () => {
+      await open({
+        ...TOURNAMENT,
+        bracketType: 'double',
+        bracketCreated: true,
+        grandFinalLocked: true,
+      });
+      expect(grandFinal('single')).toBeNull();
+      expect(text(section().querySelector('[data-slot="grand-final"]'))).toBe(
+        `Grand finalDeciding game if needed${BRACKET_MESSAGES.grandFinalLocked}`,
+      );
+    });
 
     it('offers sets per game as 1 or 3 for beach volleyball', async () => {
       await open();
@@ -345,6 +423,7 @@ describe('TournamentDetailsForm', () => {
             maximumTeams: 6,
             setsPerGame: 3,
             structure: 'bracket',
+            bracketType: 'single',
             expected: HELD,
           },
         ],
@@ -380,6 +459,46 @@ describe('TournamentDetailsForm', () => {
       await o.flush();
       expect(text(status())).toBe('Details saved.Undo');
       expect(structure('pools')!.checked).toBe(true);
+    });
+
+    it('sends the bracket type and grand final chosen, and the form holds them after the save', async () => {
+      await open();
+      await chooseBracketType('double');
+      await chooseGrandFinal('single');
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({
+        bracketType: 'double',
+        grandFinal: 'single',
+        expected: { bracketType: 'single', grandFinal: 'ifNecessary' },
+      });
+      o.convex.calls[0].resolve({
+        earlier: HELD,
+        written: { ...HELD, bracketType: 'double', grandFinal: 'single' },
+      });
+      await o.flush();
+      expect(text(status())).toBe('Details saved.Undo');
+      expect(bracketType('double')!.checked).toBe(true);
+      expect(grandFinal('single')!.checked).toBe(true);
+    });
+
+    it('sends no grand final for a single-elimination tournament, which the form does not show', async () => {
+      await open();
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('grandFinal');
+    });
+
+    it('sends no bracket type once the bracket is created, and no grand final once it has a result', async () => {
+      await open({
+        ...TOURNAMENT,
+        bracketType: 'double',
+        bracketCreated: true,
+        grandFinalLocked: true,
+      });
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('bracketType');
+      expect(o.convex.calls[0].args).not.toHaveProperty('grandFinal');
     });
 
     it('sends no structure once games exist, so the held one stays', async () => {

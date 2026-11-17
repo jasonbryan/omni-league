@@ -51,13 +51,18 @@ import {
 } from './lib/tournamentLookup';
 import { sportName, sportValidator, type Sport } from './lib/sports';
 import {
+  bracketTypeValidator,
   editableOf,
+  grandFinalValidator,
   sameEditable,
+  DEFAULT_GRAND_FINAL,
   DEFAULT_SETS_PER_GAME,
   setsPerGameIsChosen,
   setsPerGameValidator,
   structureValidator,
   tournamentEditableValidator,
+  type BracketType,
+  type GrandFinal,
   type Structure,
   type TournamentEditable,
 } from './lib/tournamentEdit';
@@ -69,7 +74,12 @@ import {
   TOURNAMENT_MESSAGES,
   type TournamentInputError,
 } from './lib/tournamentInput';
-import { firstGameStage, refuseBracket } from './lib/tournamentBracket';
+import {
+  bracketExists,
+  firstGameStage,
+  gameHasResult,
+  refuseBracket,
+} from './lib/tournamentBracket';
 import {
   insertDraftTournament,
   leagueSlugTaken,
@@ -119,6 +129,8 @@ export const create = mutation({
     registrationDeadline: v.string(),
     maximumTeams: v.number(),
     structure: v.optional(structureValidator),
+    bracketType: v.optional(bracketTypeValidator),
+    grandFinal: v.optional(grandFinalValidator),
   },
   returns: v.object({ tournamentId: v.id('tournaments') }),
   handler: async (ctx, args) => {
@@ -180,6 +192,8 @@ export const create = mutation({
       registrationDeadline: args.registrationDeadline,
       maximumTeams: args.maximumTeams,
       ...(args.structure && { structure: args.structure }),
+      ...(args.bracketType && { bracketType: args.bracketType }),
+      ...(args.grandFinal && { grandFinal: args.grandFinal }),
     });
     return { tournamentId };
   },
@@ -275,6 +289,9 @@ export const updateDetails = mutation({
     setsPerGame: v.optional(setsPerGameValidator),
     // Absent keeps the structure the tournament holds.
     structure: v.optional(structureValidator),
+    // Absent keeps the bracket type and the grand final the tournament holds.
+    bracketType: v.optional(bracketTypeValidator),
+    grandFinal: v.optional(grandFinalValidator),
     // What the form last showed, so a save made from out-of-date details is refused.
     expected: tournamentEditableValidator,
   },
@@ -306,6 +323,7 @@ export const updateDetails = mutation({
       startDate: input.startDate,
       registrationDeadline: input.registrationDeadline,
     });
+    await refuseLockedBracketChanges(ctx, tournament, input);
     return updateTournamentDetails(ctx, tournament, {
       startDate: input.startDate,
       endDate: endDate === '' ? input.startDate : endDate,
@@ -313,6 +331,8 @@ export const updateDetails = mutation({
       maximumTeams: input.maximumTeams,
       setsPerGame: input.setsPerGame ?? held.setsPerGame,
       structure: input.structure ?? held.structure,
+      bracketType: input.bracketType ?? held.bracketType,
+      grandFinal: input.grandFinal ?? held.grandFinal,
     });
   },
 });
@@ -338,6 +358,11 @@ export const undoUpdateDetails = mutation({
       throw new Error('Not allowed');
     }
     await refuseLockedChanges(ctx, tournament, earlier);
+    // An earlier save that held no grand final means the default, so undoing a change from it changes the setting.
+    await refuseLockedBracketChanges(ctx, tournament, {
+      ...earlier,
+      grandFinal: earlier.grandFinal ?? DEFAULT_GRAND_FINAL,
+    });
     checkedDetails(tournament, earlier, (error) =>
       error.code === 'maximumTeamsBelowTeams'
         ? TOURNAMENT_MESSAGES.undoMaximumTeamsBelowTeams(
@@ -395,6 +420,48 @@ async function refuseLockedChanges(
   }
 }
 
+async function refuseLockedBracketChanges(
+  ctx: QueryCtx,
+  tournament: Doc<'tournaments'>,
+  next: { bracketType?: BracketType | undefined; grandFinal?: GrandFinal | undefined },
+): Promise<void> {
+  const held = editableOf(tournament);
+  if (
+    next.bracketType !== undefined &&
+    next.bracketType !== held.bracketType &&
+    (await bracketExists(ctx, tournament._id))
+  ) {
+    refuseBracket(
+      { code: 'bracketTypeLocked', message: BRACKET_MESSAGES.bracketTypeLocked },
+      { field: 'bracketType' },
+    );
+  }
+  if (
+    next.grandFinal !== undefined &&
+    next.grandFinal !== (held.grandFinal ?? DEFAULT_GRAND_FINAL) &&
+    (await grandFinalHasResult(ctx, tournament))
+  ) {
+    refuseBracket(
+      { code: 'grandFinalLocked', message: BRACKET_MESSAGES.grandFinalLocked },
+      { field: 'grandFinal' },
+    );
+  }
+}
+
+/** The first grand final game decides the second, so it is the one to ask. */
+async function grandFinalHasResult(
+  ctx: QueryCtx,
+  tournament: Doc<'tournaments'>,
+): Promise<boolean> {
+  const first = await ctx.db
+    .query('tournamentGames')
+    .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
+      q.eq('tournamentId', tournament._id).eq('stage', 'grandFinal'),
+    )
+    .first();
+  return first !== null && gameHasResult(first);
+}
+
 function setsPerGameFitsSport(
   sport: Sport,
   setsPerGame: TournamentEditable['setsPerGame'],
@@ -430,6 +497,10 @@ export const getForManagement = query({
       structure: structureValidator,
       /** The Structure and Sets per game are locked while pool games exist. */
       poolGamesCreated: v.boolean(),
+      bracketType: bracketTypeValidator,
+      grandFinal: grandFinalValidator,
+      /** The grand final has a result, so its setting is locked. */
+      grandFinalLocked: v.boolean(),
       ...tournamentDetailsValidator.fields,
     }),
   ),
@@ -456,6 +527,9 @@ export const getForManagement = query({
       bracketCreated: stage === 'bracket',
       structure: found.tournament.structure,
       poolGamesCreated: stage === 'pool',
+      bracketType: found.tournament.bracketType,
+      grandFinal: found.tournament.grandFinal ?? DEFAULT_GRAND_FINAL,
+      grandFinalLocked: await grandFinalHasResult(ctx, found.tournament),
       ...(await tournamentDetails(ctx, organization, found)),
     };
   },
@@ -477,8 +551,8 @@ export const getForCopy = query({
       ageGroup: ageGroupValidator,
       maximumTeams: v.number(),
       structure: v.union(v.literal('bracket'), v.literal('pools')),
-      bracketType: v.union(v.literal('single'), v.literal('double')),
-      grandFinal: v.optional(v.union(v.literal('ifNecessary'), v.literal('single'))),
+      bracketType: bracketTypeValidator,
+      grandFinal: v.optional(grandFinalValidator),
     }),
   ),
   handler: async (ctx, { organizationSlug, slug }) => {
@@ -490,10 +564,6 @@ export const getForCopy = query({
     const found = await findTournamentBySlugs(ctx, organization, slug);
     if (!found) return null;
     const { program, tournament } = found;
-    // The release that adds double elimination writes this field, which this release's schema does not list.
-    const { grandFinal } = tournament as typeof tournament & {
-      grandFinal?: 'ifNecessary' | 'single';
-    };
     return {
       name: program.name,
       slug: await nextFreeSlug(ctx, organization._id, slugify(program.name)),
@@ -507,7 +577,7 @@ export const getForCopy = query({
       maximumTeams: tournament.maximumTeams,
       structure: tournament.structure,
       bracketType: tournament.bracketType,
-      ...(grandFinal && { grandFinal }),
+      ...(tournament.grandFinal && { grandFinal: tournament.grandFinal }),
     };
   },
 });
@@ -522,7 +592,7 @@ export const getPublicPage = query({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published') return null;
-    const bracket = await publicBracket(ctx, found.tournament);
+    const bracket = await publicBracket(ctx, found.tournament._id);
     const pools = await publicPools(ctx, found.tournament, found.program.sport);
     return {
       ...(await tournamentDetails(ctx, organization, found)),

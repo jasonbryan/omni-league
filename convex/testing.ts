@@ -902,7 +902,7 @@ export const seedTournamentBracket = internalMutation({
       throw new Error(`The tournament ${JSON.stringify(tournamentSlug)} has a bracket already`);
     }
     const { seeds } = await tournamentTeams(ctx, found.tournament);
-    return { gameCount: await replaceBracket(ctx, found.tournament._id, seeds, []) };
+    return { gameCount: await replaceBracket(ctx, found.tournament, seeds, []) };
   },
 });
 
@@ -1039,13 +1039,17 @@ export const seedTournamentResult = internalMutation({
   args: {
     organizationSlug: v.string(),
     tournamentSlug: v.string(),
+    stage: v.optional(v.union(v.literal('bracket'), v.literal('losers'), v.literal('grandFinal'))),
     round: v.number(),
     slot: v.number(),
     score: v.optional(scoreValidator),
     forfeitSide: v.optional(v.union(v.literal(0), v.literal(1))),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, tournamentSlug, round, slot, score, forfeitSide }) => {
+  handler: async (
+    ctx,
+    { organizationSlug, tournamentSlug, stage, round, slot, score, forfeitSide },
+  ) => {
     assertTestDeployment();
     if ((score === undefined) === (forfeitSide === undefined)) {
       throw new Error('Give either a score or a forfeitSide');
@@ -1059,7 +1063,7 @@ export const seedTournamentResult = internalMutation({
       .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
         q
           .eq('tournamentId', tournament._id)
-          .eq('stage', 'bracket')
+          .eq('stage', stage ?? 'bracket')
           .eq('round', round)
           .eq('slot', slot),
       )

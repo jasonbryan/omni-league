@@ -2,7 +2,13 @@ import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { scoreValidator } from './sports';
-import { bracketGames, gameHasResult, gameIsDecided, reportsOfGame } from './tournamentBracket';
+import {
+  allPlayoffGames,
+  gameHasResult,
+  gameIsDecided,
+  playoffGames,
+  reportsOfGame,
+} from './tournamentBracket';
 import { poolGames } from './tournamentPools';
 
 export const reportViewValidator = v.object({
@@ -23,7 +29,7 @@ export function reportableGamesOf(
   const open = games
     .filter((game) => game.teamIds.includes(teamId) && !gameIsDecided(game))
     .sort(byRoundAndSlot);
-  const [bracket] = open.filter((game) => game.stage === 'bracket');
+  const [bracket] = open.filter((game) => game.stage !== 'pool');
   const current = bracket?.teamIds.every((placed) => placed !== null) ? [bracket] : [];
   return [...open.filter((game) => game.stage === 'pool'), ...current];
 }
@@ -35,7 +41,7 @@ export async function reportableGamesOfTeam(
 ): Promise<Doc<'tournamentGames'>[]> {
   const games = [
     ...(await poolGames(ctx, tournamentId)),
-    ...(await bracketGames(ctx, tournamentId)),
+    ...allPlayoffGames(await playoffGames(ctx, tournamentId)),
   ];
   return reportableGamesOf(games, teamId);
 }

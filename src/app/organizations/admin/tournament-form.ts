@@ -7,7 +7,7 @@ import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/div
 import { limitFromText } from '../../../../convex/lib/seasonInput';
 import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
-import type { Structure } from '../../../../convex/lib/tournamentEdit';
+import type { BracketType, GrandFinal, Structure } from '../../../../convex/lib/tournamentEdit';
 import {
   checkTournamentFields,
   TOURNAMENT_FIELDS,
@@ -48,6 +48,9 @@ export interface TournamentCreateValues {
   maximumTeams: number;
   /** Sent by a copy of a Pools, then bracket tournament; left out otherwise. */
   structure?: Structure;
+  /** Sent by a copy of a Double elimination tournament, with its grand final; left out otherwise. */
+  bracketType?: BracketType;
+  grandFinal?: GrandFinal;
 }
 
 export type TournamentCopy = NonNullable<FunctionReturnType<typeof api.tournaments.getForCopy>>;
@@ -118,6 +121,7 @@ export class TournamentForm {
   // The source's name, whose division the copy already holds.
   private copiedName: string | null = null;
   private copiedStructure: Structure | null = null;
+  private copiedBracket: { bracketType: BracketType; grandFinal?: GrandFinal } | null = null;
   private readonly serverErrors: Record<TournamentField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<TournamentField, Signal<string | null>>;
@@ -252,6 +256,10 @@ export class TournamentForm {
     this.slugEdited.set(false);
     this.copiedName = copy.name;
     this.copiedStructure = copy.structure;
+    this.copiedBracket =
+      copy.bracketType === 'double'
+        ? { bracketType: 'double', ...(copy.grandFinal && { grandFinal: copy.grandFinal }) }
+        : null;
     this.chosenSport.set(copy.sport);
     this.division.load({
       gender: copy.gender,
@@ -284,6 +292,7 @@ export class TournamentForm {
     this.slugEdited.set(false);
     this.copiedName = null;
     this.copiedStructure = null;
+    this.copiedBracket = null;
     this.chosenSport.set(null);
     this.division.clear();
     this.selected.set(this.defaultSelected());
@@ -336,6 +345,7 @@ export class TournamentForm {
       registrationDeadline: m.registrationDeadline,
       maximumTeams: limitFromText(m.maximumTeams)!,
       ...(this.copiedStructure === 'pools' && { structure: this.copiedStructure }),
+      ...this.copiedBracket,
     };
     this.submitting.set(true);
     try {

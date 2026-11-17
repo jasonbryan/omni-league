@@ -49,8 +49,8 @@ const NEW_TOURNAMENT = {
   maximumTeams: 4,
 };
 
-export async function tournamentWorld(schemaInUse: typeof schema = schema) {
-  const t = convexTest(schemaInUse, modules);
+export async function tournamentWorld() {
+  const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
   const ids = await t.run(async (ctx) => {
     const a = await insertTenant(ctx, {

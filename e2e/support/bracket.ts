@@ -30,11 +30,11 @@ export async function seedBestOfThree(tenant: Tenant, tournamentSlug: string): P
 
 export type SeededResult = { score: Score } | { forfeitSide: 0 | 1 };
 
-/** One result for the game in a round and slot, through the writer the organizer's page uses, with the score rules. Local runs only. */
+/** One result for the game in a round and slot of the winners' bracket, or of the stage named, through the writer the organizer's page uses, with the score rules. Local runs only. */
 export async function seedResult(
   tenant: Tenant,
   tournamentSlug: string,
-  game: { round: number; slot: number },
+  game: { stage?: 'bracket' | 'losers' | 'grandFinal'; round: number; slot: number },
   result: SeededResult,
 ): Promise<void> {
   await convexRun('testing:seedTournamentResult', {

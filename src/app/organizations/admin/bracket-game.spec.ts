@@ -853,6 +853,15 @@ describe('BracketGame', () => {
       );
     });
 
+    it('gives the losers’ bracket reason when the loser has played there', async () => {
+      await open(PLAYED({ locked: true, lockedBy: 'loser' }));
+      expect(button('g_2', 'Clear result')).toBeUndefined();
+      expect(button('g_2', 'Correct result')).toBeUndefined();
+      expect(text(row('g_2').querySelector('[data-slot="locked"]'))).toBe(
+        'The loser has played in the losers’ bracket, so this result cannot change.',
+      );
+    });
+
     it('is not offered on a bye, a game waiting on a result, or a game with no result', async () => {
       await open();
       for (const id of ['g_1', 'g_2', 'g_3']) {

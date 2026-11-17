@@ -280,7 +280,7 @@ const DATA = {
   customLevels: 1,
   leagues: 46,
   seasons: 8,
-  tournaments: 6,
+  tournaments: 7,
   camps: 3,
   campSessions: 5,
   trainings: 1,
@@ -311,7 +311,7 @@ describe('seed:demo accounts: a new deployment', () => {
         backfilled: NO_BACKFILL,
         memberships: 5,
         invites: 1,
-        teams: 34,
+        teams: 40,
         teamInvites: 4,
         freeAgents: 6,
         campRegistrations: 2,
@@ -709,7 +709,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(34);
+      expect(first.teams).toBe(40);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -876,7 +876,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(33);
+      expect(result.teams).toBe(39);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -980,7 +980,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(59);
+      expect(rosterEntries).toHaveLength(71);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);

@@ -2,7 +2,8 @@ import { v } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { requireGameOrganizer } from './access';
-import { BRACKET_MESSAGES, roundName } from './bracket';
+import { BRACKET_MESSAGES } from './bracket';
+import { playoffRoundName } from './doubleBracket';
 import { POOL_MESSAGES } from './pools';
 import {
   POOL_PLAY_TIES,
@@ -15,10 +16,12 @@ import {
 } from './sports';
 import { DEFAULT_SETS_PER_GAME } from './tournamentEdit';
 import {
+  allPlayoffGames,
   bracketExists,
-  bracketGames,
   gameHasResult,
   nextGameOf,
+  playoffGames,
+  playoffRoundsOf,
   refuseBracket,
   saveResult,
   storedResultOf,
@@ -107,14 +110,6 @@ export async function refuseUnlessReady(
   game: Doc<'tournamentGames'>,
   expectResult: boolean,
 ): Promise<void> {
-  const tournament = await ctx.db.get('tournaments', game.tournamentId);
-  // Only the release that plays a double-elimination bracket places its losers, so results wait for it.
-  if (game.stage !== 'pool' && tournament?.bracketType !== 'single') {
-    refuseBracket({
-      code: 'bracketTypeUnsupported',
-      message: BRACKET_MESSAGES.bracketTypeUnsupported,
-    });
-  }
   if (game.stage === 'pool' && (await bracketExists(ctx, game.tournamentId))) {
     refuseBracket({ code: 'poolsFrozen', message: POOL_MESSAGES.poolsFrozen });
   }
@@ -131,6 +126,11 @@ export async function refuseUnlessReady(
   const next = await nextGameOf(ctx, game);
   if (next && gameHasResult(next)) {
     refuseBracket({ code: 'nextGamePlayed', message: BRACKET_MESSAGES.nextGamePlayed });
+  }
+  const loserNext =
+    game.loserNextGameId && (await ctx.db.get('tournamentGames', game.loserNextGameId));
+  if (loserNext && gameHasResult(loserNext)) {
+    refuseBracket({ code: 'loserGamePlayed', message: BRACKET_MESSAGES.loserGamePlayed });
   }
 }
 
@@ -149,17 +149,20 @@ export async function saveFor(
     winnerTeamId: winnerTeamId ?? null,
     winnerName: winnerTeamId ? ((await ctx.db.get('teams', winnerTeamId))?.name ?? '') : null,
     resultEnteredAt,
-    advancesTo: game.nextGameId ? await roundNameAfter(ctx, game, tournament) : null,
+    advancesTo: await roundNameAfter(ctx, game, tournament),
     previous: hadResult ? previous : null,
   };
 }
 
+// Read after the save, because a first grand final game adds or removes its deciding game.
 async function roundNameAfter(
   ctx: QueryCtx,
   game: Doc<'tournamentGames'>,
   tournament: Doc<'tournaments'>,
-): Promise<string> {
-  const games = await bracketGames(ctx, tournament._id);
-  const rounds = games.reduce((most, row) => Math.max(most, row.round), 0);
-  return roundName(game.round + 1, rounds);
+): Promise<string | null> {
+  const { nextGameId } = (await ctx.db.get('tournamentGames', game._id))!;
+  if (!nextGameId) return null;
+  const playoff = await playoffGames(ctx, tournament._id);
+  const next = allPlayoffGames(playoff).find((row) => row._id === nextGameId)!;
+  return playoffRoundName(next, playoffRoundsOf(playoff));
 }
