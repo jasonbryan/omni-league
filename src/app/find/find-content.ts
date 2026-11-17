@@ -23,7 +23,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
-import { type ProgramType } from '../../../convex/lib/programs';
+import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
 import { isPlainClick } from '../shell/follow-link';
@@ -52,7 +52,6 @@ export type FindStatus = 'start' | 'searching' | 'results' | 'error';
 /** What a search finds, named once so the page's copy follows the noun. */
 const RESULT_NOUN = 'program';
 
-/** The programs of a search or of a browse, whichever the page asked for. */
 export interface FindRows {
   readonly rows: readonly FindResultRow[];
   readonly more?: boolean;
@@ -300,10 +299,10 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
               } @else if (emptyKind() === 'sport') {
                 <div class="flex max-w-md flex-col items-start">
                   <p #resultStatus role="status" tabindex="-1" class="font-medium">
-                    No {{ noun() }}s are published yet
+                    {{ emptyHeading() }}
                   </p>
                   <p class="mt-1 text-sm text-muted-foreground">
-                    {{ publishedSentence() }}
+                    {{ emptySentence() }}
                   </p>
                   <a
                     [routerLink]="action"
@@ -431,7 +430,21 @@ export class FindContent {
       : `${count} programs of other types match.`;
   });
 
-  protected readonly publishedSentence = computed(() => {
+  /** The search reads no program of these types, so an empty list says nothing about what organizations published. */
+  private readonly unlistedType = computed(() => {
+    const type = this.type();
+    return type !== undefined && !SEARCHABLE_PROGRAM_TYPES.includes(type) ? type : undefined;
+  });
+
+  protected readonly emptyHeading = computed(() => {
+    const unlisted = this.unlistedType();
+    return unlisted === undefined
+      ? `No ${this.noun()}s are published yet`
+      : `Find a program does not list ${PROGRAM_TYPE_WORDS[unlisted].noun}s yet`;
+  });
+
+  protected readonly emptySentence = computed(() => {
+    if (this.unlistedType() !== undefined) return 'Search the leagues and tournaments instead.';
     const type = this.type();
     const noun = type === undefined ? RESULT_NOUN : PROGRAM_TYPE_WORDS[type].noun;
     return `A ${noun} appears here once its organization publishes it.`;

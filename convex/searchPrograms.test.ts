@@ -14,7 +14,7 @@ import {
 } from './lib/tenantWrites';
 import schema from './schema';
 import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
-import { insertCampProgram, modules, setTeamCounts } from './test.setup';
+import { insertCampProgram, insertLeagueWithProgram, modules, setTeamCounts } from './test.setup';
 
 const OPEN_SEASON: NewSeason = {
   name: 'Summer 2027',
@@ -411,6 +411,52 @@ describe('search.programsBrowse', () => {
     expect(last.page).toBe(40);
     const beyond = await browse(t, { type: 'tournament', page: 41 });
     expect(beyond.page).toBe(1);
+  });
+
+  test('with no sport, lists the first 200 by name across sports, not the first sport’s 200', async () => {
+    const { t, lakeshore } = await setup();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 201; i++) {
+        const name = `Zed ${String(i).padStart(3, '0')}`;
+        await insertLeagueWithProgram(ctx, {
+          organizationId: lakeshore,
+          name,
+          slug: name.toLowerCase().replace(' ', '-'),
+          sport: 'beachVolleyball',
+          ...defaultDivision('beachVolleyball'),
+          locationIds: [],
+          status: 'published',
+          searchText: name,
+        });
+      }
+      await insertLeagueWithProgram(ctx, {
+        organizationId: lakeshore,
+        name: 'Aaa Soccer',
+        slug: 'aaa-soccer',
+        sport: 'soccer',
+        ...defaultDivision('soccer'),
+        locationIds: [],
+        status: 'published',
+        searchText: 'Aaa Soccer',
+      });
+    });
+    const first = await browse(t, { type: 'league' });
+    expect(first.total).toBe(200);
+    expect(first.rows.map((row) => row.name)).toEqual([
+      'Aaa Soccer',
+      'Saturday Coed 6s',
+      'Sunday Reverse Coed 4s',
+      'Zed 000',
+      'Zed 001',
+    ]);
+    const last = await browse(t, { type: 'league', page: 40 });
+    expect(last.rows.map((row) => row.name)).toEqual([
+      'Zed 192',
+      'Zed 193',
+      'Zed 194',
+      'Zed 195',
+      'Zed 196',
+    ]);
   });
 
   test('a division filter narrows the rows and the facets are those of the type', async () => {

@@ -50,7 +50,7 @@ import {
   draftLeagueCount,
   hiddenDraftInputs,
   offeredFacets,
-  showLeaguesLabel,
+  showListedLabel,
   type ListedKind,
 } from './filter-draft';
 import { listPagesQuery } from './organization-path';
@@ -323,7 +323,7 @@ export class LeagueFilterOverlays {
       total,
     );
   });
-  protected readonly showLabel = computed(() => showLeaguesLabel(this.count(), this.kind()));
+  protected readonly showLabel = computed(() => showListedLabel(this.count(), this.kind()));
   protected readonly countStatus = computed(() => {
     const count = this.count();
     if (count === undefined) return '';

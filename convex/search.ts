@@ -1,10 +1,10 @@
 import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
-import { query } from './_generated/server';
+import { query, type QueryCtx } from './_generated/server';
 import { divisionFilterArgs, filtersInScope, matchesDivisionFilters } from './lib/leagueFilters';
 import { logoUrlField } from './lib/organizationLogo';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
-import { programTypeValidator, SEARCHABLE_PROGRAM_TYPES } from './lib/programs';
+import { programTypeValidator, SEARCHABLE_PROGRAM_TYPES, type ProgramType } from './lib/programs';
 import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
@@ -172,6 +172,27 @@ function bySortName(a: Doc<'programs'>, b: Doc<'programs'>): number {
   return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0;
 }
 
+// The index orders by sport before name, so with no sport the first 200 by name are the first 200 of each sport's own run, merged.
+async function firstByName(
+  ctx: QueryCtx,
+  type: ProgramType,
+  sport: Sport | undefined,
+): Promise<Doc<'programs'>[]> {
+  const sports = sport === undefined ? (Object.keys(SPORT_NAMES) as Sport[]) : [sport];
+  const read: Doc<'programs'>[] = [];
+  for (const own of sports) {
+    read.push(
+      ...(await ctx.db
+        .query('programs')
+        .withIndex('by_status_and_type_and_sport_and_sortName', (q) =>
+          q.eq('status', 'published').eq('type', type).eq('sport', own),
+        )
+        .take(PUBLIC_LIST_MAX_ROWS)),
+    );
+  }
+  return read.sort(bySortName).slice(0, PUBLIC_LIST_MAX_ROWS);
+}
+
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous list that reads no identity and returns only published fields, with no ids.
 export const programsBrowse = query({
   args: {
@@ -186,15 +207,7 @@ export const programsBrowse = query({
     // Every listed type is read, so the type chips count them all; the chosen type is applied after.
     const read: Doc<'programs'>[] = [];
     for (const listed of SEARCHABLE_PROGRAM_TYPES) {
-      read.push(
-        ...(await ctx.db
-          .query('programs')
-          .withIndex('by_status_and_type_and_sport_and_sortName', (q) => {
-            const ofType = q.eq('status', 'published').eq('type', listed);
-            return sport === undefined ? ofType : ofType.eq('sport', sport);
-          })
-          .take(PUBLIC_LIST_MAX_ROWS)),
-      );
+      read.push(...(await firstByName(ctx, listed, sport)));
     }
     read.sort(bySortName);
     const filters = filtersInScope(args, sport);

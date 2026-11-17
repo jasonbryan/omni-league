@@ -3,7 +3,7 @@ import {
   draftLeagueCount,
   hiddenDraftInputs,
   offeredFacets,
-  showLeaguesLabel,
+  showListedLabel,
 } from './filter-draft';
 import { GULF_COAST, SAND } from './testing/pages';
 
@@ -62,17 +62,15 @@ describe('draftLeagueCount', () => {
   });
 });
 
-describe('showLeaguesLabel', () => {
+describe('showListedLabel', () => {
   it('names the count, singular for one, and no number while it is unknown', () => {
-    expect(showLeaguesLabel(2)).toBe('Show 2 leagues');
-    expect(showLeaguesLabel(1)).toBe('Show 1 league');
-    expect(showLeaguesLabel(0)).toBe('Show 0 leagues');
-    expect(showLeaguesLabel(undefined)).toBe('Show leagues');
-    expect(showLeaguesLabel(2, { singular: 'program', plural: 'programs' })).toBe(
-      'Show 2 programs',
-    );
-    expect(showLeaguesLabel(1, { singular: 'program', plural: 'programs' })).toBe('Show 1 program');
-    expect(showLeaguesLabel(undefined, { singular: 'program', plural: 'programs' })).toBe(
+    expect(showListedLabel(2)).toBe('Show 2 leagues');
+    expect(showListedLabel(1)).toBe('Show 1 league');
+    expect(showListedLabel(0)).toBe('Show 0 leagues');
+    expect(showListedLabel(undefined)).toBe('Show leagues');
+    expect(showListedLabel(2, { singular: 'program', plural: 'programs' })).toBe('Show 2 programs');
+    expect(showListedLabel(1, { singular: 'program', plural: 'programs' })).toBe('Show 1 program');
+    expect(showListedLabel(undefined, { singular: 'program', plural: 'programs' })).toBe(
       'Show programs',
     );
   });

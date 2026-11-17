@@ -233,12 +233,17 @@ export class FindPage {
     return value && { page: value.page, pageCount: value.pageCount, total: value.total };
   });
 
-  // The start view has no counts, so it offers each type a search lists; a search or a browse offers those with a match.
-  protected readonly offeredTypes = computed(() =>
-    this.mode() === 'organizations'
-      ? SEARCHABLE_PROGRAM_TYPES
-      : this.shownResults()?.typeCounts.map(({ type }) => type),
-  );
+  // The start view has no counts, so it offers each type a search lists; a search or a browse offers those with a match. The counts do not depend on the chosen type, so the last answer's types stay while the next loads and no chip moves.
+  protected readonly offeredTypes = linkedSignal<
+    readonly ProgramType[] | undefined,
+    readonly ProgramType[] | undefined
+  >({
+    source: () =>
+      this.mode() === 'organizations'
+        ? SEARCHABLE_PROGRAM_TYPES
+        : this.shownResults()?.typeCounts.map(({ type }) => type),
+    computation: (types, previous) => types ?? previous?.value,
+  });
 
   // A copy saved before the facets existed has none, so it still shows, with nothing to offer.
   protected readonly facets = computed(() => {

@@ -591,7 +591,7 @@ describe('FindPage server render by type', () => {
       ['Camps', '/programs?type=camp', 'page'],
     ]);
     expect(text(body.querySelector('main section [role="status"]'))).toBe(
-      'No camps are published yet',
+      'Find a program does not list camps yet',
     );
   });
 });

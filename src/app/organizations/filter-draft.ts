@@ -31,7 +31,7 @@ export interface ListedKind {
 
 export const LEAGUES: ListedKind = { singular: 'league', plural: 'leagues' };
 
-export function showLeaguesLabel(count: number | undefined, kind: ListedKind = LEAGUES): string {
+export function showListedLabel(count: number | undefined, kind: ListedKind = LEAGUES): string {
   if (count === undefined) return `Show ${kind.plural}`;
   return `Show ${count} ${count === 1 ? kind.singular : kind.plural}`;
 }

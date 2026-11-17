@@ -239,10 +239,10 @@ describe('Find a program type', () => {
     ]);
     expect(rows(harness)).toEqual([]);
     expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
-      'No camps are published yet',
+      'Find a program does not list camps yet',
     );
     expect(text(results(harness)!.querySelector('p + p'))).toBe(
-      'A camp appears here once its organization publishes it.',
+      'Search the leagues and tournaments instead.',
     );
     const all = [...results(harness)!.querySelectorAll('a')].find((a) => text(a) === 'All types');
     expect(all?.getAttribute('href')).toBe('/programs');
@@ -289,6 +289,46 @@ describe('Find a program type', () => {
     const harness = await open('/programs?type=tournament&q=beach');
     expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Tournaments']);
     subscription(SEARCH).emit(MIXED);
+    await settle(harness);
+    expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues', 'Tournaments']);
+  });
+
+  it('keeps the chip set while the answer to a type press loads, so no chip moves', async () => {
+    const harness = await open('/programs?q=beach');
+    subscription(SEARCH).emit(MIXED);
+    await settle(harness);
+    const before = typeChips(harness).map((chip) => chip.name);
+    expect(before).toEqual(['All', 'Leagues', 'Tournaments']);
+
+    host(harness)
+      .querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Program type"] a[href*="type=tournament"]',
+      )!
+      .click();
+    await settle(harness);
+    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament' });
+    expect(typeChips(harness).map((chip) => [chip.name, chip.current])).toEqual([
+      ['All', null],
+      ['Leagues', null],
+      ['Tournaments', 'page'],
+    ]);
+  });
+
+  it('keeps the chip set while a browse answer loads after a type press', async () => {
+    const harness = await open('/programs?type=league');
+    subscription(BROWSE).emit({
+      ...browseResults([SUNDAY_4S_ROW]),
+      typeCounts: [
+        { type: 'league', count: 1 },
+        { type: 'tournament', count: 1 },
+      ],
+    });
+    await settle(harness);
+    host(harness)
+      .querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Program type"] a[href*="type=tournament"]',
+      )!
+      .click();
     await settle(harness);
     expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues', 'Tournaments']);
   });

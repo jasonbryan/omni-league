@@ -1451,7 +1451,7 @@ test.describe('find a program: leagues and tournaments', () => {
       const none = await raw(request, '/programs?type=camp&sport=beach-volleyball');
       expect(resultNames(none.html)).toEqual([]);
       expect(plainText(resultsSection(none.html))).toContain(
-        'No beach volleyball camps are published yet',
+        'Find a program does not list camps yet',
       );
 
       const unknown = await raw(request, `/programs?type=zzz&q=${id}`);
@@ -1603,6 +1603,36 @@ test.describe('find a program: type chips in the browser', () => {
     await expect(rowNames(page).filter({ hasText: over60.id }).first()).toBeVisible();
     await screenshot(page, testInfo, '350-programs-browse');
     await expectAccessible(page);
+  });
+
+  test('no type chip moves while the answer to a type press loads', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithTournament();
+    const held = await holdQueries(page, ['search:programs'], {
+      watchFromStart: false,
+      holdFromStart: false,
+    });
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    const chips = page.getByRole('navigation', { name: 'Program type' }).getByRole('link');
+    const positions = async () =>
+      Promise.all((await chips.all()).map(async (chip) => (await chip.boundingBox())?.x));
+    const before = await positions();
+    expect(before).toHaveLength(3);
+
+    held.watchNewSubscriptions();
+    held.holdNextAnswer();
+    await chips.filter({ hasText: 'Tournaments' }).click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByTestId('find-skeleton')).toBeVisible();
+    expect(await positions()).toEqual(before);
+
+    held.release();
+    await expect(rowNames(page)).toHaveText([tournamentName(id)]);
+    expect(await positions()).toEqual(before);
   });
 
   test('the chips and the results do not move when a search answers', async ({
