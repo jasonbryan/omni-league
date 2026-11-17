@@ -690,7 +690,7 @@ export async function insertTrainingClasses(
 }
 
 // Read again: a caller that schedules classes holds a training row whose fields are already out of date.
-async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): Promise<void> {
+async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): Promise<boolean> {
   const training = await ctx.db.get('trainings', trainingId);
   if (!training) throw new Error(`Training ${trainingId} does not exist`);
   const program = await ctx.db.get('programs', training.programId);
@@ -706,11 +706,17 @@ async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): P
       status === 'scheduled' && (latest === undefined || date > latest) ? date : latest,
     undefined,
   );
+  const unchanged =
+    training.status === program.status &&
+    training.sport === program.sport &&
+    training.lastClassDate === lastClassDate;
+  if (unchanged) return false;
   await ctx.db.patch('trainings', trainingId, {
     status: program.status,
     sport: program.sport,
     lastClassDate,
   });
+  return true;
 }
 
 export async function setTrainingClassStatus(
@@ -738,13 +744,12 @@ export async function publishTraining(ctx: MutationCtx, training: Doc<'trainings
   await refreshTraining(ctx, training._id);
 }
 
-export async function backfillTrainingFields(
+// Recomputed for every row, because a write by a release that did not keep the fields leaves them stale on a row that has them.
+export function backfillTrainingFields(
   ctx: MutationCtx,
   training: Doc<'trainings'>,
 ): Promise<boolean> {
-  if (training.status !== undefined && training.sport !== undefined) return false;
-  await refreshTraining(ctx, training._id);
-  return true;
+  return refreshTraining(ctx, training._id);
 }
 
 export async function backfillAllTrainingFields(ctx: MutationCtx): Promise<number> {

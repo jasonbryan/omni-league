@@ -12,6 +12,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
 import {
+  cancelSeededTrainingClasses,
   seedPublishedTraining,
   seedTraining,
   seedTrainingClasses,
@@ -161,6 +162,36 @@ test.describe('public training page: raw server HTML', () => {
   );
 
   test(
+    'a series in progress says In progress and no longer writes when registration closes',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenantWithPlace('E2E Training In Progress');
+      const published = await seedPublishedTraining(tenant, clinic({ classes: classes(-7) }));
+      const { status, html } = await fetchRawHtml(request, published);
+      expect(status).toBe(200);
+      expect(textOf(html)).toContain('In progress');
+      expect(textOf(html)).not.toMatch(/Closes|Registration open/);
+    },
+  );
+
+  test(
+    'a program whose every class is cancelled says so in place of the ended line, with no class and no registration, and is on no list',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenantWithPlace('E2E Training Cancelled');
+      const program = clinic();
+      const published = await seedPublishedTraining(tenant, program);
+      await cancelSeededTrainingClasses(tenant, program.slug);
+      const { status, html } = await fetchRawHtml(request, published);
+      expect(status).toBe(200);
+      expect(textOf(html)).toContain('Every class of this training program is cancelled.');
+      expect(textOf(html)).not.toMatch(/This training has ended|Registration|places left/);
+      const organization = await fetchRawHtml(request, tenant.path);
+      expect(textOf(organization.html)).not.toContain(program.name);
+    },
+  );
+
+  test(
     'a draft program, an unknown web address, and an unknown organization answer 404 with the not-found view and nothing about the draft',
     RAW_HTTP,
     async ({ request }) => {
@@ -222,6 +253,27 @@ test.describe('public training page: in the browser', () => {
     await expect(page.locator('#classes li')).toHaveCount(0);
     await expect(page.locator('[data-slot="series-status"]')).toHaveCount(0);
     await screenshot(page, testInfo, 'training-public-ended');
+    await expectAccessible(page);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+  });
+
+  test('a program whose every class is cancelled passes the axe helper and does not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await seedTenantWithPlace('E2E Training Cancelled Page');
+    const program = clinic();
+    const published = await seedPublishedTraining(tenant, program);
+    await cancelSeededTrainingClasses(tenant, program.slug);
+    await page.goto(published);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(
+      page.getByText('Every class of this training program is cancelled.'),
+    ).toBeVisible();
+    await expect(page.getByText('This training has ended.')).toHaveCount(0);
+    await expect(page.locator('#classes li')).toHaveCount(0);
+    await expect(page.locator('[data-slot="series-status"]')).toHaveCount(0);
+    await screenshot(page, testInfo, 'training-public-cancelled');
     await expectAccessible(page);
     expect(await checkReflow(page)).toMatchObject({ passed: true });
   });

@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { TRAINING_PUBLISH_MESSAGES } from './lib/trainingInput';
 import type { TrainingPattern } from './lib/trainingPattern';
@@ -365,6 +365,50 @@ describe('the training row keeps its status, sport, and last class date', () => 
   });
 });
 
+describe('the backfill of the training row fields', () => {
+  async function staleRow(s: Setup) {
+    await schedule(s, s.tuesday);
+    await s.adminA.mutation(api.trainings.publish, { trainingId: s.tuesday.trainingId });
+    // The release before this one cancels a class without keeping the row's last class date.
+    await s.t.run(async (ctx) => {
+      const last = (await ctx.db.query('trainingClasses').collect()).find(
+        (row) => row.date === '2027-02-16',
+      )!;
+      await ctx.db.patch('trainingClasses', last._id, { status: 'cancelled' });
+    });
+    const lastClassDate = () =>
+      s.t.run(async (ctx) => (await ctx.db.get('trainings', s.tuesday.trainingId))!.lastClassDate);
+    expect(await lastClassDate()).toBe('2027-02-16');
+    return lastClassDate;
+  }
+
+  test('releaseBackfill:run corrects a row that has every field but a stale last class date, and a second run changes nothing', async () => {
+    const s = await setup();
+    const lastClassDate = await staleRow(s);
+    const first = await s.t.action(internal.releaseBackfill.run, {});
+    expect(first.backfilled.trainingFields).toBe(1);
+    expect(await lastClassDate()).toBe('2027-02-09');
+    const before = await snapshot(s.t);
+    const second = await s.t.action(internal.releaseBackfill.run, {});
+    expect(second.backfilled.trainingFields).toBe(0);
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('a published program whose classes were all cancelled by that release loses its last class date', async () => {
+    const s = await setup();
+    await schedule(s, s.tuesday);
+    await s.adminA.mutation(api.trainings.publish, { trainingId: s.tuesday.trainingId });
+    await s.t.run(async (ctx) => {
+      for (const row of await ctx.db.query('trainingClasses').collect()) {
+        await ctx.db.patch('trainingClasses', row._id, { status: 'cancelled' });
+      }
+    });
+    await s.t.action(internal.releaseBackfill.run, {});
+    const row = await s.t.run((ctx) => ctx.db.get('trainings', s.tuesday.trainingId));
+    expect(row).not.toHaveProperty('lastClassDate');
+  });
+});
+
 describe('trainings.getPublicPage', () => {
   const slugs = { orgSlug: 'org-a', trainingSlug: 'tuesday-serving-clinic' };
 
@@ -438,6 +482,36 @@ describe('trainings.getPublicPage', () => {
     const page = await s.t.query(api.trainings.getPublicPage, slugs);
     expect(page?.name).toBe('Tuesday Serving Clinic');
     expect(page?.classes).toEqual([]);
+  });
+
+  test('says every class is cancelled when no class is scheduled, with no class listed', async () => {
+    const s = await setup();
+    await published(s);
+    await s.t.run(async (ctx) => {
+      for (const row of await ctx.db.query('trainingClasses').collect()) {
+        await ctx.db.patch('trainingClasses', row._id, { status: 'cancelled' });
+      }
+    });
+    const page = await s.t.query(api.trainings.getPublicPage, slugs);
+    expect(page).toMatchObject({ everyClassCancelled: true, classes: [] });
+  });
+
+  test('says nothing of cancelled while a class is ahead, and not for a program whose held classes have passed', async () => {
+    const s = await setup();
+    await published(s);
+    expect(await s.t.query(api.trainings.getPublicPage, slugs)).not.toHaveProperty(
+      'everyClassCancelled',
+    );
+    await s.t.run(async (ctx) => {
+      const rows = await ctx.db.query('trainingClasses').collect();
+      for (const row of rows.filter((row) => row.date > '2027-02-02')) {
+        await ctx.db.patch('trainingClasses', row._id, { status: 'cancelled' });
+      }
+    });
+    vi.setSystemTime(Date.UTC(2027, 1, 5, 12, 0, 0));
+    const page = await s.t.query(api.trainings.getPublicPage, slugs);
+    expect(page?.classes).toEqual([]);
+    expect(page).not.toHaveProperty('everyClassCancelled');
   });
 
   test('gives every caller the same answer', async () => {

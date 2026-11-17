@@ -242,6 +242,18 @@ describe('PublicTrainingPage server render', () => {
     expect(text(body.querySelector('main'))).not.toMatch(/Registration/);
   });
 
+  it('writes "Every class of this training program is cancelled." in place of the ended line when none is scheduled', async () => {
+    const { body } = await render(
+      TRAINING_PATH,
+      answer({ ...TUESDAY_CLINIC, classes: [], everyClassCancelled: true }),
+    );
+    expect(text(body.querySelector('main [data-slot="training-cancelled"]'))).toBe(
+      'Every class of this training program is cancelled.',
+    );
+    expect(body.querySelector('main [data-slot="training-ended"]')).toBeNull();
+    expect(body.querySelectorAll('main #classes li')).toHaveLength(0);
+  });
+
   it('writes one description tag that matches og:description', async () => {
     const { head } = await render(TRAINING_PATH, answer());
     expect(

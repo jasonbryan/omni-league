@@ -36,6 +36,7 @@ const CLASS_LINE = 'mt-1.5 flex items-start gap-1.5 text-sm text-muted-foregroun
 const CLASS_ICON = 'mt-0.5 shrink-0 text-base';
 
 const ENDED_TEXT = 'This training has ended.';
+const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
 
 /** The dates are written from the stored text, never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
@@ -118,6 +119,10 @@ const ENDED_TEXT = 'This training has ended.';
                   </li>
                 }
               </ul>
+            } @else if (training().everyClassCancelled) {
+              <p data-slot="training-cancelled" class="px-4 py-6 font-medium md:px-5">
+                {{ cancelledText }}
+              </p>
             } @else {
               <p data-slot="training-ended" class="px-4 py-6 font-medium md:px-5">
                 {{ endedText }}
@@ -192,12 +197,14 @@ const ENDED_TEXT = 'This training has ended.';
                     status.badge
                   }}</span>
                 </dd>
-                <dd class="mt-1 text-sm text-muted-foreground">
-                  Closes
-                  <time [attr.datetime]="training().pattern.registrationDeadline">{{
-                    closes()
-                  }}</time>
-                </dd>
+                @if (status.registrationOpen) {
+                  <dd class="mt-1 text-sm text-muted-foreground">
+                    Closes
+                    <time [attr.datetime]="training().pattern.registrationDeadline">{{
+                      closes()
+                    }}</time>
+                  </dd>
+                }
               </div>
             }
           </dl>
@@ -213,6 +220,7 @@ export class PublicTrainingContent {
   readonly now = input.required<number>();
 
   protected readonly endedText = ENDED_TEXT;
+  protected readonly cancelledText = CANCELLED_TEXT;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -242,7 +250,7 @@ export class PublicTrainingContent {
           : `${row.placesLeft} ${row.placesLeft === 1 ? 'place' : 'places'} left`,
     })),
   );
-  /** Once every class has passed there is nothing to register for, so no status is shown. */
+  /** With no class left there is nothing to register for, so no status is shown. */
   protected readonly status = computed(() =>
     this.classes().length === 0
       ? null

@@ -215,3 +215,57 @@ describe('testing:seedTrainingClasses and testing:publishSeededTraining', () => 
     ).rejects.toThrow(/No training program/);
   });
 });
+
+describe('testing:cancelSeededTrainingClasses', () => {
+  const CANCEL = { organizationSlug: 'e2e-org-t7k2', trainingSlug: 'tuesday-serving-clinic' };
+
+  async function publishedWithClasses() {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTraining, TRAINING);
+    await t.mutation(internal.testing.seedTrainingClasses, {
+      ...CANCEL,
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: '2099-01-06',
+      weeks: 3,
+      placesPerClass: 12,
+      registrationDeadline: '2099-01-01',
+    });
+    await t.mutation(internal.testing.publishSeededTraining, CANCEL);
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+    ['empty', ''],
+  ])('throws with IS_TEST %s and changes nothing', async (_, value) => {
+    const t = await publishedWithClasses();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.cancelSeededTrainingClasses, CANCEL)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    const rows = await t.run((ctx) => ctx.db.query('trainingClasses').collect());
+    expect(rows.every((row) => row.status === 'scheduled')).toBe(true);
+  });
+
+  test('cancels every class and clears the training row’s last class date', async () => {
+    const t = await publishedWithClasses();
+    await t.mutation(internal.testing.cancelSeededTrainingClasses, CANCEL);
+    const rows = await t.run((ctx) => ctx.db.query('trainingClasses').collect());
+    expect(rows.map((row) => row.status)).toEqual(['cancelled', 'cancelled', 'cancelled']);
+    const [training] = await t.run((ctx) => ctx.db.query('trainings').collect());
+    expect(training).not.toHaveProperty('lastClassDate');
+  });
+
+  test('refuses an unknown training program', async () => {
+    const t = await publishedWithClasses();
+    await expect(
+      t.mutation(internal.testing.cancelSeededTrainingClasses, {
+        ...CANCEL,
+        trainingSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No training program/);
+  });
+});

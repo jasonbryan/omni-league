@@ -3,6 +3,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { seedTenantWithCamps } from './support/camp';
+import { seedPublishedTraining } from './support/training';
 import { RAW_HTTP } from './support/raw-http';
 import {
   dateFromToday,
@@ -28,6 +29,7 @@ const EDGE_PATHS = [
   '/organizations/cache-key-sample/leagues/cache-key-sample/seasons/cache-key-sample',
   '/organizations/cache-key-sample/tournaments/cache-key-sample',
   '/organizations/cache-key-sample/camps/cache-key-sample',
+  '/organizations/cache-key-sample/training/cache-key-sample',
   '/sign-up',
   '/sign-in',
 ];
@@ -95,6 +97,7 @@ test.describe('query strings and the CDN', () => {
         `/organizations${unique}/leagues/sample/seasons/sample`,
         `/organizations${unique}/tournaments/sample`,
         `/organizations${unique}/camps/sample`,
+        `/organizations${unique}/training/sample`,
         `/sign-up`,
         `/sign-in`,
       ]) {
@@ -450,14 +453,17 @@ test.describe('query strings and the CDN', () => {
 const PUBLIC_PAGE_CACHE = 'public,max-age=0,s-maxage=60,stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
 
-const rowIdsOf = (body: string, kind: 'league' | 'location' | 'tournament' | 'camp') =>
+const rowIdsOf = (body: string, kind: 'league' | 'location' | 'tournament' | 'camp' | 'training') =>
   [...body.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
 const canonicalOf = (body: string) => {
   const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(body)?.[0] ?? '';
   return /\bhref="([^"]*)"/.exec(tag)?.[1]?.replaceAll('&amp;', '&');
 };
-const rowIds = (kind: 'league' | 'location' | 'tournament' | 'camp', from: number, to: number) =>
-  Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
+const rowIds = (
+  kind: 'league' | 'location' | 'tournament' | 'camp' | 'training',
+  from: number,
+  to: number,
+) => Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
 
 /**
  * On a preview, Confluence Sport & Social from `seed:demo` (26 leagues, 14 locations; soccer has 8
@@ -739,6 +745,85 @@ test.describe('the camps page of the organization page', () => {
       }
       const second = await rawGet(`${path}?campsPage=2`);
       expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?campsPage=2`);
+    },
+  );
+});
+
+test.describe('the training page of the organization page', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
+
+  async function sevenTrainingPrograms(): Promise<string> {
+    const location = { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' };
+    const tenant = await seedTenant({
+      name: 'E2E Cache Key Training',
+      locations: [location],
+      leagues: [{ name: 'Alpha League', sport: 'soccer', locations: [location.name] }],
+    });
+    for (let i = 0; i < 7; i++) {
+      const firstDate = dateFromToday(20 + i);
+      await seedPublishedTraining(tenant, {
+        name: `Clinic ${i + 1}`,
+        slug: `clinic-${i + 1}`,
+        locations: [location.name],
+        coachName: 'Dana Ruiz',
+        classes: {
+          weekday: new Date(`${firstDate}T00:00:00Z`).getUTCDay(),
+          startTime: '18:00',
+          endTime: '19:00',
+          firstDate,
+          weeks: 2,
+          registrationDeadline: dateFromToday(10),
+        },
+      });
+    }
+    return tenant.path;
+  }
+
+  test(
+    'a page that is not valid or past the last renders page 1, cacheable, with no Location and none of the value; ?trainingPage=2 holds the last 2 and never gets another page’s body',
+    RAW_HTTP,
+    async () => {
+      const path = await sevenTrainingPrograms();
+      for (const query of [
+        '?trainingPage=0',
+        '?trainingPage=3',
+        '?trainingPage=2.5',
+        '?trainingPage=abc',
+        '?trainingPage=2&trainingPage=3',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+          PUBLIC_PAGE_CACHE,
+        );
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(rowIdsOf(response.body, 'training'), query).toEqual(rowIds('training', 1, 5));
+        expect(canonicalOf(response.body), query).toBe(`${ORIGIN}${path}`);
+        expect(response.body, query).not.toContain(query.slice(1));
+      }
+      for (const sample of [
+        (c: string) => `?trainingPage=${c}`,
+        (c: string) => `?trainingPage=2&trainingPage=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+      }
+
+      const expected: Record<string, string[]> = {
+        '?trainingPage=2': ['training-6', 'training-7'],
+        '': rowIds('training', 1, 5),
+      };
+      for (const query of ['?trainingPage=2', '', '?trainingPage=2', '']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(rowIdsOf(response.body, 'training'), query).toEqual(expected[query]);
+      }
+      const second = await rawGet(`${path}?trainingPage=2`);
+      expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?trainingPage=2`);
     },
   );
 });

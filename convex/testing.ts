@@ -46,6 +46,7 @@ import {
   insertDraftCamp,
   insertDraftTraining,
   insertTrainingClasses,
+  setTrainingClassStatus,
   publishTraining,
   publishCamp,
   insertDraftTournament,
@@ -92,6 +93,7 @@ import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
 import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
+import { MAX_TRAINING_WEEKS } from './lib/trainingPattern';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
@@ -674,6 +676,25 @@ export const seedTrainingClasses = internalMutation({
       allowSingleRegistration: false,
     });
     return { classCount };
+  },
+});
+
+/** Cancels every class the way `trainingClasses.cancel` does, which the e2e has no sign-in for. */
+export const cancelSeededTrainingClasses = internalMutation({
+  args: { organizationSlug: v.string(), trainingSlug: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const classes = await ctx.db
+      .query('trainingClasses')
+      .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', found.training._id))
+      .take(MAX_TRAINING_WEEKS);
+    for (const row of classes) await setTrainingClassStatus(ctx, row, 'cancelled');
+    return null;
   },
 });
 

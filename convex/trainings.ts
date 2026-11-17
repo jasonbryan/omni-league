@@ -221,6 +221,10 @@ export const getPublicPage = query({
     // A draft answers like an unknown training program, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published' || found.training.pattern === undefined) return null;
     const details = await trainingDetails(ctx, organization, found);
+    const classes = await upcomingClassesOf(ctx, found.training._id);
+    // A class that was held and has passed means the program ran, so only a program with no scheduled class at all reads as cancelled.
+    const everyClassCancelled =
+      classes.length === 0 && !(await hasScheduledClass(ctx, found.training._id));
     return {
       organization: details.organization,
       name: details.name,
@@ -231,7 +235,8 @@ export const getPublicPage = query({
       ...(details.maximumAge !== undefined && { maximumAge: details.maximumAge }),
       locations: details.locations,
       pattern: publicPattern(found.training.pattern),
-      classes: await upcomingClassesOf(ctx, found.training._id),
+      ...(everyClassCancelled && { everyClassCancelled }),
+      classes,
     };
   },
 });

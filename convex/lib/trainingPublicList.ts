@@ -69,7 +69,6 @@ export async function hasScheduledClass(
   return classes.some((row) => row.status === 'scheduled');
 }
 
-/** What the page and the rows show of the pattern: no place count and no registration rule. */
 export function publicPattern(pattern: NonNullable<Doc<'trainings'>['pattern']>) {
   return {
     weekday: pattern.weekday,

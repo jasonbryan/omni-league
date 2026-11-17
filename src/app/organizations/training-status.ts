@@ -17,7 +17,6 @@ interface Series {
   registrationDeadline: string;
 }
 
-/** Follows the seasons' phases, with the series running from its first class to its last. */
 export function trainingSeriesStatus(series: Series, nowMs: number): TrainingSeriesStatus {
   const phase = seasonPhase(
     {

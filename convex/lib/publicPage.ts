@@ -457,6 +457,8 @@ export const publicTrainingPageValidator = v.object({
   maximumAge: v.optional(v.number()),
   locations: v.array(v.object({ name: v.string(), address: v.string() })),
   pattern: v.object({ ...publicTrainingPatternFields, weeks: v.number() }),
+  // Set only when no class of the program is scheduled, so a page saved before it existed reads as before.
+  everyClassCancelled: v.optional(v.boolean()),
   classes: v.array(
     v.object({
       date: v.string(),

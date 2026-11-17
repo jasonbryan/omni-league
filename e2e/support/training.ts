@@ -88,3 +88,14 @@ export async function seedPublishedTraining(
   }
   return `${tenant.path}/training/${slug}`;
 }
+
+/** Local runs only. */
+export async function cancelSeededTrainingClasses(
+  tenant: Tenant,
+  trainingSlug: string,
+): Promise<void> {
+  await convexRun('testing:cancelSeededTrainingClasses', {
+    organizationSlug: tenant.slug,
+    trainingSlug,
+  });
+}

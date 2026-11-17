@@ -166,9 +166,9 @@ read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY
 npx convex run releaseBackfill:run
 ```
 
-It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result: `locations`, `leagues`, `organizations`, `staffCounts`, `staffInviteCounts`, `draftLeagueCounts`, `teamCounts`, `waitlistCounts`, `pendingInviteCounts`, `campFields`. Then `unset CONVEX_DEPLOY_KEY`.
+It returns `{ batches, backfilled }`, with `backfilled` named as in the `seed:demo` result: `locations`, `leagues`, `organizations`, `staffCounts`, `staffInviteCounts`, `draftLeagueCounts`, `teamCounts`, `waitlistCounts`, `pendingInviteCounts`, `campFields`, `trainingFields`. Then `unset CONVEX_DEPLOY_KEY`.
 
-**What it does.** It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`); season `teamCount` and `waitlistCount`; team `pendingInviteCount`; camp `status`, `sport`, and `lastSessionEndDate`. It sets only what is unset, so a second run changes nothing and a run that stops partway (network, timeout) is repeated with the same command and continues.
+**What it does.** It runs in batches (`BATCH_SIZE`), one transaction each, in this order: location `sortName`; league `sortName`, `status` (a league without one is published), and `publishedSeasonCount`; organization counters (`leagueCount`, `locationCount`, `sportLeagueCounts`, `sportLocationCounts` with its `sportLocations` rows, `draftLeagueCount`, `staffCount`, `pendingInviteCount`); season `teamCount` and `waitlistCount`; team `pendingInviteCount`; camp `status`, `sport`, and `lastSessionEndDate`; training program `status`, `sport`, and `lastClassDate`. It sets only what is unset, except a training program's three fields, which it recomputes and patches only when they differ, so a second run changes nothing and a run that stops partway (network, timeout) is repeated with the same command and continues.
 
 **Check afterwards.**
 

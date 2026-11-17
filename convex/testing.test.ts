@@ -141,6 +141,7 @@ describe('convex/testing.ts exports', () => {
       'addTeamInvite',
       'addToTeam',
       'assignForeignLeague',
+      'cancelSeededTrainingClasses',
       'ping',
       'publishSeededCamp',
       'publishSeededTraining',

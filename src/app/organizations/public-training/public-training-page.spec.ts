@@ -306,17 +306,49 @@ describe('PublicTrainingPage clock', () => {
       ...TUESDAY_CLINIC,
       pattern: { ...TUESDAY_CLINIC.pattern, registrationDeadline: '2027-01-25' },
     };
-    const status = async (now: number) => {
+    const registration = async (now: number) => {
       TestBed.resetTestingModule();
       vi.setSystemTime(now);
       const harness = await open();
       emit(earlyDeadline);
       await settle(harness);
-      return text(host(harness).querySelector('[data-slot="series-status"]'));
+      const fact = host(harness).querySelector('[data-slot="series-status"]')!.closest('div')!;
+      return spaced(fact);
     };
-    expect(await status(at('2027-01-25'))).toBe('Registration open');
-    expect(await status(at('2027-01-30'))).toBe('Registration closed');
-    expect(await status(at('2027-02-02'))).toBe('In progress');
+    expect(await registration(at('2027-01-25'))).toBe(
+      'Registration Registration open Closes Jan 25, 2027',
+    );
+    expect(await registration(at('2027-01-30'))).toBe('Registration Registration closed');
+    expect(await registration(at('2027-02-02'))).toBe('Registration In progress');
+  });
+
+  it('writes "Closes" only while registration is open, never a deadline that has passed', async () => {
+    for (const now of [at('2027-01-30'), at('2027-02-03')]) {
+      TestBed.resetTestingModule();
+      vi.setSystemTime(now);
+      const harness = await open();
+      emit({
+        ...TUESDAY_CLINIC,
+        pattern: { ...TUESDAY_CLINIC.pattern, registrationDeadline: '2027-01-25' },
+      });
+      await settle(harness);
+      expect(text(host(harness).querySelector('main dl'))).not.toContain('Closes');
+    }
+  });
+
+  it('says every class is cancelled, in place of the ended line, with no class and no registration', async () => {
+    vi.setSystemTime(at('2027-01-20'));
+    const harness = await open();
+    emit({ ...TUESDAY_CLINIC, classes: [], everyClassCancelled: true });
+    await settle(harness);
+    const main = host(harness).querySelector('main')!;
+    expect(text(main.querySelector('[data-slot="training-cancelled"]'))).toBe(
+      'Every class of this training program is cancelled.',
+    );
+    expect(main.querySelector('[data-slot="training-ended"]')).toBeNull();
+    expect(classRows(harness)).toEqual([]);
+    expect(main.querySelector('[data-slot="series-status"]')).toBeNull();
+    expect(text(main)).not.toMatch(/Register|ended/);
   });
 });
 

@@ -1575,6 +1575,20 @@ describe('seed:demo training', () => {
     expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(0);
   });
 
+  test('corrects the last class date of a row that has every field, after a release that cancelled a class without keeping it, and a second run changes none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const before = (await trainingRows(t)).trainings[0].lastClassDate;
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query('trainingClasses').collect();
+      const last = rows.sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      await ctx.db.patch('trainingClasses', last._id, { status: 'cancelled' });
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(1);
+    expect((await trainingRows(t)).trainings[0].lastClassDate).not.toBe(before);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(0);
+  });
+
   test('adds none where a program already holds the web address', async () => {
     const t = setup();
     await t.run(async (ctx) => {
