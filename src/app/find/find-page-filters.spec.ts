@@ -299,6 +299,21 @@ describe('FindPage filter bar', () => {
     expect(dimensions(harness)).toEqual([]);
   });
 
+  it('shows the plain count on the camp type, with no pill for a filter that narrows nothing', async () => {
+    const harness = await open('/programs?type=camp&sport=soccer&gender=coed');
+    subscription('search:programsBrowse').emit({
+      ...browseResults([JUNIOR_CAMP_ROW], {}, []),
+      typeCounts: [{ type: 'camp', count: 1 }],
+    });
+    await settle(harness);
+    expect(count(harness)).toBe('1 soccer camp');
+    expect(pills(harness)).toEqual([]);
+    const all = [...host(harness).querySelectorAll('nav[aria-label="Program type"] a')].find(
+      (a) => text(a) === 'All',
+    );
+    expect(all?.getAttribute('href')).toBe('/programs?sport=soccer&gender=coed');
+  });
+
   it('leaves a camp out of the count of a league view', async () => {
     const harness = await open('/programs?type=league&sport=soccer&age=u10');
     subscription('search:programsBrowse').emit({

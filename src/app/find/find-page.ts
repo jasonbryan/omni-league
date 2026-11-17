@@ -101,11 +101,11 @@ const TITLE = 'Find a program | Omni League';
                 rule="above"
                 [path]="path"
                 [sportView]="false"
-                [filters]="filters()"
+                [filters]="formFilters()"
                 [groups]="filterGroupsOffered()"
                 [total]="leagueTotal()"
                 [matching]="matchingCount()"
-                [unfiltered]="campCount()"
+                [filterExempt]="campCount()"
                 [facets]="facets()"
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
@@ -145,6 +145,10 @@ export class FindPage {
   // A view that lists organizations offers no filter, so one in the URL is ignored there, not kept out of sight in the links.
   protected readonly filters = computed(() =>
     this.mode() === 'organizations' ? NO_DIVISION_FILTERS : this.parsedView().filters,
+  );
+  // A camp has no division, so on the camp type a filter in the URL narrows nothing; the links keep it for the types it does narrow.
+  protected readonly formFilters = computed(() =>
+    this.type() === 'camp' ? NO_DIVISION_FILTERS : this.filters(),
   );
   private readonly filterArgs = computed(() => divisionFilterQueryArgs(this.filters()));
 
@@ -265,18 +269,18 @@ export class FindPage {
   });
   protected readonly filterGroupsOffered = computed(() => {
     const facets = this.facets();
-    return facets && filterGroups(facets, this.filters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
+    return facets && filterGroups(facets, this.formFilters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
   });
 
   // While a filter change loads, the held page is the previous filters' result, so its count is not shown.
   protected readonly matchingCount = computed(() => {
     const facets = this.facets();
-    if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.filters())) {
+    if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.formFilters())) {
       return undefined;
     }
     return draftLeagueCount(
       facets,
-      this.filters(),
+      this.formFilters(),
       undefined,
       this.sport(),
       facets.length + this.campCount(),

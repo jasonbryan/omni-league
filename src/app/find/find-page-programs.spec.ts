@@ -584,6 +584,20 @@ describe('Find a program camps', () => {
     expect(text(results(harness))).toContain('1 program of another type matches.');
   });
 
+  it('does not count the chosen type on the other-types line when the page’s clock drops its only camp', async () => {
+    vi.setSystemTime(at('2027-07-17'));
+    const harness = await open('/programs?type=camp&q=junior');
+    subscription(SEARCH).emit(CAMP_SEARCH);
+    await settle(harness);
+    expect(rows(harness)).toEqual([]);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No camps match “junior”',
+    );
+    expect(text(results(harness))).not.toContain('of another type');
+    expect(text(results(harness))).not.toContain('of other types');
+    expect(text(results(harness))).not.toContain('Show all types');
+  });
+
   it('names camps in the intro and in the description of a link preview', async () => {
     const harness = await open('/programs');
     expect(text(host(harness).querySelector('main p'))).toBe(

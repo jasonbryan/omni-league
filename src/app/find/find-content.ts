@@ -420,7 +420,9 @@ export class FindContent {
   private readonly facets = computed(() => this.results()?.facets ?? []);
 
   private readonly otherTypeCount = computed(() =>
-    (this.results()?.typeCounts ?? []).reduce((sum, entry) => sum + entry.count, 0),
+    (this.results()?.typeCounts ?? [])
+      .filter((entry) => entry.type !== this.type())
+      .reduce((sum, entry) => sum + entry.count, 0),
   );
 
   // The facets are the matches of the type before the division filters, so any of them with no row left means the filters, not the words, excluded them.

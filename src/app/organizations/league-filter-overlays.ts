@@ -274,7 +274,7 @@ export class LeagueFilterOverlays {
   readonly sport = input.required<Sport | undefined>();
   readonly locationsPage = input.required<number>();
   readonly total = input.required<number | undefined>();
-  readonly unfiltered = input(0);
+  readonly filterExempt = input(0);
   readonly queryBuilder = input.required<((filters: DivisionFilters) => Params) | undefined>();
   readonly ageOrder = input.required<readonly AgeGroup[] | undefined>();
   readonly kind = input.required<ListedKind>();
@@ -322,7 +322,7 @@ export class LeagueFilterOverlays {
       this.sportLeagueCounts(),
       this.sport(),
       total,
-      this.unfiltered(),
+      this.filterExempt(),
     );
   });
   protected readonly showLabel = computed(() => showListedLabel(this.count(), this.kind()));
