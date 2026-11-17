@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -1656,5 +1656,201 @@ test.describe('find a program: type chips in the browser', () => {
     held.release();
     await expect(rowNames(page)).toHaveCount(3);
     expect(await top()).toEqual(before);
+  });
+});
+
+interface ProgramsBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+async function programsBox(locator: Locator): Promise<ProgramsBox> {
+  const found = await locator.boundingBox();
+  expect(found, 'the element has a box').not.toBeNull();
+  return found as ProgramsBox;
+}
+
+/** The boxes above the results, which neither a search nor a type press may move. */
+async function programsFrame(page: Page) {
+  const chipBoxes = async (name: string) =>
+    Promise.all(
+      (await page.getByRole('navigation', { name }).getByRole('link').all()).map(programsBox),
+    );
+  return {
+    heading: await programsBox(page.getByRole('heading', { level: 1 })),
+    form: await programsBox(page.getByRole('search', { name: 'Filter programs' })),
+    types: await programsBox(page.getByRole('navigation', { name: 'Program type' })),
+    typeChips: await chipBoxes('Program type'),
+    sports: await programsBox(page.getByRole('navigation', { name: 'Sport' })),
+    sportChips: await chipBoxes('Sport'),
+    results: await programsBox(page.locator('#results-heading')),
+  };
+}
+
+const typeNav = (page: Page) => page.getByRole('navigation', { name: 'Program type' });
+const sportNav = (page: Page) => page.getByRole('navigation', { name: 'Sport' });
+
+for (const width of [320, 360, 1280]) {
+  test.describe(`find a program: layout at ${String(width)}px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('the chips, the form, and the results heading keep their boxes from the skeleton to the loaded rows', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      const { id } = await seedWithTournament();
+      const held = await holdQueries(page, ['search:programs']);
+      await page.goto('/programs');
+      await hydrated(consoleGuard);
+      await submit(page, id);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.getByTestId('find-skeleton')).toBeVisible();
+      const loading = await programsFrame(page);
+      const skeletonRow = await programsBox(
+        page.getByTestId('find-skeleton').locator('div.py-4').first(),
+      );
+      await screenshot(page, testInfo, `350-programs-loading-${String(width)}`);
+
+      held.release();
+      await expect(rowNames(page)).toHaveCount(3);
+      await screenshot(page, testInfo, `350-programs-loaded-${String(width)}`);
+      expect(await programsFrame(page)).toEqual(loading);
+      const loadedRow = await programsBox(results(page).locator('ul > li').first());
+      expect(Math.abs(loadedRow.height - skeletonRow.height)).toBeLessThanOrEqual(2);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    });
+
+    test('every chip keeps its box while the answer to a type press and to a sport press loads', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      const { id } = await seedWithTournament();
+      const held = await holdQueries(page, ['search:programs'], {
+        watchFromStart: false,
+        holdFromStart: false,
+      });
+      await page.goto(url(id));
+      await hydrated(consoleGuard);
+      await expect(rowNames(page)).toHaveCount(3);
+      const before = await programsFrame(page);
+      expect(before.typeChips).toHaveLength(3);
+
+      for (const press of [
+        () => typeNav(page).getByRole('link', { name: 'Tournaments' }).click(),
+        () => sportNav(page).getByRole('link', { name: 'Beach volleyball' }).click(),
+      ]) {
+        held.watchNewSubscriptions();
+        held.holdNextAnswer();
+        await press();
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await expect(page.getByTestId('find-skeleton')).toBeVisible();
+        const during = await programsFrame(page);
+        expect(during.typeChips).toEqual(before.typeChips);
+        expect(during.sportChips).toEqual(before.sportChips);
+        expect(during.heading).toEqual(before.heading);
+        expect(during.form).toEqual(before.form);
+        held.release();
+        await expect(page.getByTestId('find-skeleton')).toBeHidden();
+        const after = await programsFrame(page);
+        expect(after.typeChips).toEqual(before.typeChips);
+        expect(after.sportChips).toEqual(before.sportChips);
+      }
+    });
+
+    test('the chips are where the server put them once the page hydrates', async ({
+      page,
+      browser,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      const { id } = await seedWithTournament();
+      const path = `/programs?q=${id}&sport=beach-volleyball`;
+      const bare = await browser.newContext({
+        javaScriptEnabled: false,
+        viewport: { width, height: 900 },
+      });
+      const serverPage = await bare.newPage();
+      await serverPage.goto(`${baseURL}${path}`);
+      await expect(rowNames(serverPage)).toHaveCount(3);
+      const server = await programsFrame(serverPage);
+      const serverTypes = await typeNav(serverPage).getByRole('link').allTextContents();
+      const serverSports = await sportNav(serverPage).getByRole('link').allTextContents();
+      await bare.close();
+
+      await page.goto(path);
+      await hydrated(consoleGuard);
+      await expect(rowNames(page)).toHaveCount(3);
+      expect(await programsFrame(page)).toEqual(server);
+      expect(await typeNav(page).getByRole('link').allTextContents()).toEqual(serverTypes);
+      expect(await sportNav(page).getByRole('link').allTextContents()).toEqual(serverSports);
+      expect(serverTypes).toEqual(['All', 'Leagues', 'Tournaments']);
+    });
+  });
+}
+
+test.describe('find a program: the chips with script off and by keyboard', () => {
+  test('a type chip and a sport chip are links that load their own page without script', async ({
+    browser,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'script is off in every project');
+    const { id } = await seedWithTournament();
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}${url(id)}`);
+    await expect(rowNames(page)).toHaveCount(3);
+    await typeNav(page).getByRole('link', { name: 'Tournaments' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=tournament&q=${id}`);
+    await expect(rowNames(page)).toHaveCount(1);
+    await sportNav(page).getByRole('link', { name: 'Beach volleyball' }).click();
+    await expect(page).toHaveURL(
+      `${baseURL}/programs?type=tournament&q=${id}&sport=beach-volleyball`,
+    );
+    await expect(rowNames(page)).toHaveCount(1);
+    await context.close();
+  });
+
+  test('Tab reaches each type chip after the search button and Enter chooses it', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithTournament();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    await page.getByRole('button', { name: 'Search', exact: true }).focus();
+    const reached: string[] = [];
+    for (let step = 0; step < 8 && reached.at(-1) !== 'Tournaments'; step++) {
+      await page.keyboard.press('Tab');
+      reached.push(await page.evaluate(() => document.activeElement?.textContent?.trim() ?? ''));
+    }
+    expect(reached).toEqual(expect.arrayContaining(['All', 'Leagues', 'Tournaments']));
+    await expect(typeNav(page).getByRole('link', { name: 'Tournaments' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/programs?type=tournament&q=${id}`);
+    await expect(rowNames(page)).toHaveText([tournamentName(id)]);
+    await expect(typeNav(page).getByRole('link', { name: 'Tournaments' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  test('a sport chip is chosen with Enter and the page passes the accessibility checks with both chip rows', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithTournament();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    await expectAccessible(page);
+    await sportNav(page).getByRole('link', { name: 'Beach volleyball' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/programs?q=${id}&sport=beach-volleyball`);
   });
 });
