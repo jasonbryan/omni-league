@@ -1313,6 +1313,7 @@ test.describe('find a program: offline', () => {
     await expect(rowNames(page)).toHaveText([campName]);
     await hydrated(consoleGuard);
     await submit(page, `junior ${id}`);
+    await expect(results(page)).toContainText(`“junior ${id}”`);
     await expect(rowNames(page)).toHaveText([campName]);
 
     await context.setOffline(true);
