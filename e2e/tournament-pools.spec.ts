@@ -478,7 +478,11 @@ test.describe('Tournaments: the structure', () => {
     await expect(editForm(page).locator('[data-slot="sets-per-game"]')).toContainText(
       'Sets per game cannot change once the pool games are created.',
     );
-    await expect(editForm(page).getByRole('radio')).toHaveCount(0);
+    // The bracket type stays a choice until the bracket exists.
+    await expect(editForm(page).getByRole('radio')).toHaveCount(2);
+    await expect(
+      editForm(page).locator('[data-slot="bracket-type"]').getByRole('radio'),
+    ).toHaveCount(2);
     await screenshot(page, testInfo, 'structure-locked');
     await expectAccessible(page);
   });

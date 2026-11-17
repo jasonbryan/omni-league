@@ -1454,9 +1454,9 @@ test.describe('Tournaments: double elimination', () => {
   const choice = (page: Page, id: string) =>
     detailsForm(page).locator('label', { has: page.locator(`#${id}`) });
   const section = (page: Page, heading: string) =>
-    rounds(page).locator('section', {
-      has: page.locator('h4', { hasText: new RegExp(`^${heading}$`) }),
-    });
+    rounds(page)
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: heading, exact: true }) });
 
   async function chooseAndSave(page: Page, ids: readonly string[]) {
     for (const id of ids) await choice(page, id).click();
