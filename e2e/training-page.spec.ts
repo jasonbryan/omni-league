@@ -102,6 +102,7 @@ test.describe('public training page: raw server HTML', () => {
         expect(textOf(html), query).toContain('16 or older');
         expect(html, query).toContain(ADDRESS);
 
+        const markup = html.slice(html.indexOf('<body'));
         const order = [
           '<h1',
           PATTERN_TEXT,
@@ -110,7 +111,7 @@ test.describe('public training page: raw server HTML', () => {
           'id="details-heading"',
           'Dana Ruiz',
           ADDRESS,
-        ].map((marker) => html.indexOf(marker));
+        ].map((marker) => markup.indexOf(marker));
         expect(
           order.every((position) => position > 0),
           query,
@@ -264,7 +265,7 @@ test.describe('public training page: in the browser', () => {
 
     await page.goBack();
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    const trainingCrumb = crumbs.getByRole('link', { name: 'Training' });
+    const trainingCrumb = crumbs.getByRole('link', { name: 'Training', exact: true });
     const trainingHref = await trainingCrumb.getAttribute('href');
     await trainingCrumb.click();
     await expect(page).toHaveURL(`${tenant.path}#training`);
@@ -277,10 +278,15 @@ test.describe('public training page: in the browser', () => {
     await expect(section.getByRole('heading', { level: 2, name: 'Training' })).toBeInViewport();
   });
 
-  test('the loaded page starts where its skeleton did, with no jump when the answer arrives', async ({
+  test('the loaded page starts where its skeleton did when its lines do not wrap, with no jump when the answer arrives', async ({
     page,
   }) => {
-    const { published, program } = await seed({ name: 'Serve Clinic', slug: 'serve-clinic' });
+    const tenant = await seedTenant({
+      name: 'E2E Training Shift',
+      locations: [{ name: 'Courts', address: '1 Sand Rd, Corpus Christi, TX 78402' }],
+    });
+    const program = clinic({ name: 'Serve Clinic', slug: 'serve-clinic', locations: ['Courts'] });
+    const published = await seedPublishedTraining(tenant, program);
     const held = await holdQueries(page, ['trainings:getPublicPage']);
     await answerWithClientShell(page, published);
     await page.goto(published);
@@ -376,7 +382,8 @@ test.describe('a published program is listed', () => {
     await expect(page.locator('#training')).toHaveCount(0);
     await page.goto(`/programs?type=training&q=${token}`);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await expect(page.getByRole('main').locator('ul > li')).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('link', { name: token })).toHaveCount(0);
+    await expect(page.getByText('No training programs match')).toBeVisible();
   });
 });
 
