@@ -7,6 +7,7 @@ import {
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
   organizationTournamentSavedKeys,
+  organizationTrainingSavedKeys,
 } from '../support/saved-copies';
 import { seedTenant } from '../support/tenant';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
@@ -67,6 +68,20 @@ test.describe('organization page camp saved-copy keys', VIEWPORT_AGNOSTIC, () =>
     expect(organizationCampSavedKeys('gulf-coast', 'soccer')).toEqual([
       'cvx-saved:camps:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
       'cvx-saved:camps:listOpenForOrganization:{"organizationSlug":"gulf-coast","sport":"soccer"}',
+    ]);
+  });
+});
+
+test.describe('organization page training saved-copy keys', VIEWPORT_AGNOSTIC, () => {
+  test('the All sports view has the upcoming training programs on page 1', () => {
+    expect(organizationTrainingSavedKeys('gulf-coast')).toEqual([
+      'cvx-saved:trainings:listPublic:{"organizationSlug":"gulf-coast","page":1}',
+    ]);
+  });
+
+  test('a sport view adds the sport to the key', () => {
+    expect(organizationTrainingSavedKeys('gulf-coast', 'soccer')).toEqual([
+      'cvx-saved:trainings:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
     ]);
   });
 });

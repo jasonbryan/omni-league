@@ -134,6 +134,7 @@ describe('FindTypeChips', () => {
       'Leagues',
       'Tournaments',
       'Camps',
+      'Training',
     ]);
     expect(sizer.querySelector('a, button, input')).toBeNull();
     expect(nav.querySelectorAll('a')).toHaveLength(2);

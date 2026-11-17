@@ -3,7 +3,7 @@ import type { Doc } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { requireTrainingClassOrganizer, requireTrainingOrganizer } from './lib/access';
 import { dateAtUtcMinus12 } from './lib/registration';
-import { insertTrainingClasses } from './lib/tenantWrites';
+import { insertTrainingClasses, setTrainingClassStatus } from './lib/tenantWrites';
 import {
   TRAINING_PATTERN_MESSAGES,
   MAX_TRAINING_WEEKS,
@@ -119,7 +119,7 @@ export const cancel = mutation({
         message: TRAINING_PATTERN_MESSAGES.hasRegistrations(trainingClass.registeredCount),
       });
     }
-    await ctx.db.patch('trainingClasses', trainingClassId, { status: 'cancelled' });
+    await setTrainingClassStatus(ctx, trainingClass, 'cancelled');
     return null;
   },
 });
@@ -130,7 +130,7 @@ export const restore = mutation({
   handler: async (ctx, { trainingClassId }) => {
     const { trainingClass } = await requireTrainingClassOrganizer(ctx, trainingClassId);
     if (trainingClass.status === 'scheduled') return null;
-    await ctx.db.patch('trainingClasses', trainingClassId, { status: 'scheduled' });
+    await setTrainingClassStatus(ctx, trainingClass, 'scheduled');
     return null;
   },
 });

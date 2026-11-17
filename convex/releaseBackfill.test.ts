@@ -10,6 +10,7 @@ import schema from './schema';
 import {
   insertCampProgram,
   insertLeagueWithProgram,
+  insertTrainingProgram,
   modules,
   leagueRequiredFields,
   organizationListFields,
@@ -32,6 +33,7 @@ const ZERO = {
   waitlistCounts: 0,
   pendingInviteCounts: 0,
   campFields: 0,
+  trainingFields: 0,
 };
 
 beforeEach(() => {
@@ -356,6 +358,103 @@ describe('the release backfill', () => {
       first.every((camp) => camp.status === 'published' && camp.lastSessionEndDate !== undefined),
     ).toBe(true);
     expect((await t.action(internal.releaseBackfill.run, {})).backfilled.campFields).toBe(0);
+    expect(await snapshot()).toEqual(first);
+  });
+
+  test('sets the status, sport, and last class date of a training program written before they were kept, and a second run changes none', async () => {
+    const t = setup();
+    const { legacy, current } = await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, {
+        organization: { name: 'Org', slug: 'org' },
+        locations: [],
+        leagues: [],
+      });
+      const training = async (slug: string, status: 'draft' | 'published') => {
+        const programId = await insertTrainingProgram(ctx, organizationId, slug, slug);
+        await ctx.db.patch('programs', programId, { status, sport: 'soccer' });
+        return ctx.db.insert('trainings', { programId, organizationId, coachName: 'Dana Ruiz' });
+      };
+      const legacy = await training('legacy', 'published');
+      const current = await training('current', 'draft');
+      for (const [date, status] of [
+        ['2030-07-02', 'scheduled'],
+        ['2030-07-09', 'scheduled'],
+        ['2030-07-16', 'cancelled'],
+      ] as const) {
+        await ctx.db.insert('trainingClasses', {
+          trainingId: legacy,
+          organizationId,
+          date,
+          startTime: '18:00',
+          endTime: '19:00',
+          places: 10,
+          registeredCount: 0,
+          status,
+        });
+      }
+      await ctx.db.patch('trainings', current, { status: 'draft', sport: 'soccer' });
+      return { legacy, current };
+    });
+
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.trainingFields).toBe(1);
+    const rows = await t.run(async (ctx) => [
+      await ctx.db.get('trainings', legacy),
+      await ctx.db.get('trainings', current),
+    ]);
+    expect(rows[0]).toMatchObject({
+      status: 'published',
+      sport: 'soccer',
+      lastClassDate: '2030-07-09',
+    });
+    expect(rows[1]).toMatchObject({ status: 'draft', sport: 'soccer' });
+    expect(rows[1]).not.toHaveProperty('lastClassDate');
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.trainingFields).toBe(0);
+  });
+
+  test('fills the training programs of several batches, and a second run leaves every row as the first left it', async () => {
+    const t = setup();
+    const count = BATCH_SIZE.trainings * 2 + 5;
+    await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, {
+        organization: { name: 'Many Trainings', slug: 'many-trainings' },
+        locations: [],
+        leagues: [],
+      });
+      for (let i = 0; i < count; i++) {
+        const programId = await insertTrainingProgram(
+          ctx,
+          organizationId,
+          `Training ${i}`,
+          `training-${i}`,
+        );
+        await ctx.db.patch('programs', programId, { status: 'published' });
+        const trainingId = await ctx.db.insert('trainings', {
+          programId,
+          organizationId,
+          coachName: 'Dana Ruiz',
+        });
+        await ctx.db.insert('trainingClasses', {
+          trainingId,
+          organizationId,
+          date: `2030-08-${String((i % 28) + 1).padStart(2, '0')}`,
+          startTime: '18:00',
+          endTime: '19:00',
+          places: 10,
+          registeredCount: 0,
+          status: 'scheduled',
+        });
+      }
+    });
+
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.trainingFields).toBe(
+      count,
+    );
+    const snapshot = () => t.run(async (ctx) => ctx.db.query('trainings').collect());
+    const first = await snapshot();
+    expect(
+      first.every((row) => row.status === 'published' && row.lastClassDate !== undefined),
+    ).toBe(true);
+    expect((await t.action(internal.releaseBackfill.run, {})).backfilled.trainingFields).toBe(0);
     expect(await snapshot()).toEqual(first);
   });
 

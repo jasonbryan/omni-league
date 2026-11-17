@@ -136,6 +136,28 @@ const publicCampListRowFields = {
   sessions: v.array(v.object({ name: v.string(), ...publicCampSessionFields })),
 };
 
+const publicTrainingPatternFields = {
+  weekday: v.number(),
+  startTime: v.string(),
+  endTime: v.string(),
+  firstDate: v.string(),
+  registrationDeadline: v.string(),
+};
+
+// `lastClassDate` lets the page drop a training program whose classes have all passed since the query ran.
+const publicTrainingListRowFields = {
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  coachName: v.string(),
+  minimumAge: v.optional(v.number()),
+  maximumAge: v.optional(v.number()),
+  locationNames: v.array(v.string()),
+  ...publicTrainingPatternFields,
+  weeks: v.number(),
+  lastClassDate: v.string(),
+};
+
 // Each row names its organization, so a result needs no second query.
 const searchProgramLeagueValidator = v.object({
   type: v.literal('league'),
@@ -162,10 +184,17 @@ const searchProgramCampValidator = v.object({
   ...publicCampListRowFields,
 });
 
+const searchProgramTrainingValidator = v.object({
+  type: v.literal('training'),
+  organization: publicLeagueOrganizationValidator,
+  ...publicTrainingListRowFields,
+});
+
 const searchProgramValidator = v.union(
   searchProgramLeagueValidator,
   searchProgramTournamentValidator,
   searchProgramCampValidator,
+  searchProgramTrainingValidator,
 );
 
 export type SearchProgramRow = Infer<typeof searchProgramValidator>;
@@ -416,6 +445,32 @@ export type PublicCampPage = Infer<typeof publicCampPageValidator>;
 
 export const getCampPublicPageReturns = v.union(v.null(), publicCampPageValidator);
 
+// Holds no registrant data: the page is cached and saved offline. `placesLeft` is a count, never the registrations behind it.
+// `classes` are the scheduled ones that had not passed when the query ran, in date order, because a query does not rerun as time passes: the page drops those that have passed by its own clock.
+export const publicTrainingPageValidator = v.object({
+  organization: v.object({ name: v.string(), slug: v.string() }),
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  coachName: v.string(),
+  minimumAge: v.optional(v.number()),
+  maximumAge: v.optional(v.number()),
+  locations: v.array(v.object({ name: v.string(), address: v.string() })),
+  pattern: v.object({ ...publicTrainingPatternFields, weeks: v.number() }),
+  classes: v.array(
+    v.object({
+      date: v.string(),
+      startTime: v.string(),
+      endTime: v.string(),
+      placesLeft: v.number(),
+    }),
+  ),
+});
+
+export type PublicTrainingPage = Infer<typeof publicTrainingPageValidator>;
+
+export const getTrainingPublicPageReturns = v.union(v.null(), publicTrainingPageValidator);
+
 // `isFull` is optional so a copy saved before it existed stays valid.
 const publicTournamentRowFields = {
   isFull: v.optional(v.boolean()),
@@ -448,3 +503,7 @@ export const publicOpenCampSessionsValidator = v.array(
 );
 
 export type PublicOpenCampSessions = Infer<typeof publicOpenCampSessionsValidator>;
+
+export const publicTrainingsValidator = publicListValidator(v.object(publicTrainingListRowFields));
+
+export type PublicTrainings = Infer<typeof publicTrainingsValidator>;

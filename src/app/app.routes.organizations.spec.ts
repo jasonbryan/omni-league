@@ -15,6 +15,7 @@ import { OrganizationPage } from './organizations/organization-page';
 import { PublicLeaguePage } from './organizations/public-league/public-league-page';
 import { PublicSeasonPage } from './organizations/public-season/public-season-page';
 import { PublicCampPage } from './organizations/public-camp/public-camp-page';
+import { PublicTrainingPage } from './organizations/public-training/public-training-page';
 import { PublicTournamentPage } from './organizations/public-tournament/public-tournament-page';
 
 @Component({ template: 'page' })
@@ -59,6 +60,12 @@ const PAGES: { url: string; path: string; page: unknown; params: Record<string, 
     path: ':orgSlug/camps/:campSlug',
     page: PublicCampPage,
     params: { orgSlug: 'acme', campSlug: 'junior' },
+  },
+  {
+    url: '/organizations/acme/training/serving-clinic',
+    path: ':orgSlug/training/:trainingSlug',
+    page: PublicTrainingPage,
+    params: { orgSlug: 'acme', trainingSlug: 'serving-clinic' },
   },
 ];
 

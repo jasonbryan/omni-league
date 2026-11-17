@@ -16,6 +16,7 @@ import {
   browseResults,
   GULF_OPEN_ROW,
   JUNIOR_CAMP_ROW,
+  SERVING_CLINIC_ROW,
   NO_RESULTS,
   OPEN_DAY,
   SUNDAY_4S_ROW,
@@ -186,7 +187,12 @@ describe('Find a program type', () => {
 
   it('asks the search with the type and carries it in the form, before the words', async () => {
     const harness = await open('/programs?type=tournament&q=beach');
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament', withCamps: true });
+    expect(subscription(SEARCH).args).toEqual({
+      q: 'beach',
+      type: 'tournament',
+      withCamps: true,
+      withTraining: true,
+    });
     const names = [...host(harness).querySelectorAll('main form[role="search"] input')].map((i) =>
       i.getAttribute('name'),
     );
@@ -204,6 +210,7 @@ describe('Find a program type', () => {
       type: 'tournament',
       sport: 'beachVolleyball',
       withCamps: true,
+      withTraining: true,
       page: 1,
     });
     expect(client.activeSubscriptions.map((s) => s.name)).not.toContain(SEARCH);
@@ -224,7 +231,12 @@ describe('Find a program type', () => {
   it('browses by type alone, across sports, rather than listing organizations', async () => {
     await open('/programs?type=league');
     expect(client.activeSubscriptions.map((s) => s.name)).toEqual([BROWSE]);
-    expect(subscription(BROWSE).args).toEqual({ type: 'league', withCamps: true, page: 1 });
+    expect(subscription(BROWSE).args).toEqual({
+      type: 'league',
+      withCamps: true,
+      withTraining: true,
+      page: 1,
+    });
   });
 
   it('shows a type no program has as the current chip, with the no-programs state', async () => {
@@ -250,15 +262,15 @@ describe('Find a program type', () => {
     expect(all?.getAttribute('href')).toBe('/programs');
   });
 
-  it('says training programs are not listed, and names the types that are', async () => {
+  it('says no training program is published yet when the training type has none', async () => {
     const harness = await open('/programs?type=training');
     subscription(BROWSE).emit({ ...browseResults([], {}, []), typeCounts: [] });
     await settle(harness);
     expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
-      'Find a program does not list training programs yet',
+      'No training programs are published yet',
     );
     expect(text(results(harness)!.querySelector('p + p'))).toBe(
-      'Search the leagues, tournaments, and camps instead.',
+      'A training program appears here once its organization publishes it.',
     );
   });
 
@@ -284,7 +296,7 @@ describe('Find a program type', () => {
 
   it('ignores an unknown type: no chip, no argument, and nowhere in the page', async () => {
     const harness = await open('/programs?type=zzz&q=beach');
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach', withCamps: true });
+    expect(subscription(SEARCH).args).toEqual({ q: 'beach', withCamps: true, withTraining: true });
     subscription(SEARCH).emit(MIXED);
     await settle(harness);
     expect(host(harness).querySelector('main')?.innerHTML).not.toContain('zzz');
@@ -320,7 +332,12 @@ describe('Find a program type', () => {
       )!
       .click();
     await settle(harness);
-    expect(subscription(SEARCH).args).toEqual({ q: 'beach', type: 'tournament', withCamps: true });
+    expect(subscription(SEARCH).args).toEqual({
+      q: 'beach',
+      type: 'tournament',
+      withCamps: true,
+      withTraining: true,
+    });
     expect(typeChips(harness).map((chip) => [chip.name, chip.current])).toEqual([
       ['All', null],
       ['Leagues', null],
@@ -354,6 +371,7 @@ describe('Find a program type', () => {
       'Leagues',
       'Tournaments',
       'Camps',
+      'Training',
     ]);
     expect(client.activeSubscriptions.map((s) => s.name)).toEqual(['search:organizations']);
   });
@@ -370,6 +388,7 @@ describe('Find a program type', () => {
       type: 'tournament',
       sport: 'soccer',
       withCamps: true,
+      withTraining: true,
     });
   });
 });
@@ -606,5 +625,93 @@ describe('Find a program camps', () => {
     expect(head().querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(
       'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
     );
+  });
+});
+
+const TRAINING_SEARCH: FindResults = {
+  more: false,
+  rows: [SERVING_CLINIC_ROW],
+  facets: [],
+  typeCounts: [{ type: 'training', count: 1 }],
+};
+
+describe('Find a program training', () => {
+  it('asks for training programs with withTraining, which the page of an earlier release does not send', async () => {
+    const harness = await open('/programs?q=serving&type=training');
+    expect(subscription(SEARCH).args).toEqual({
+      q: 'serving',
+      type: 'training',
+      withCamps: true,
+      withTraining: true,
+    });
+    subscription(SEARCH).emit(TRAINING_SEARCH);
+    await settle(harness);
+  });
+
+  it('shows a training program with the Training badge, its pattern, where, and the series status, linking to its page', async () => {
+    const harness = await open('/programs?q=serving');
+    subscription(SEARCH).emit(TRAINING_SEARCH);
+    await settle(harness);
+    const [training] = rows(harness);
+    expect(text(training.querySelector('h3'))).toBe('Tuesday Serving Clinic');
+    expect(text(training.querySelector('[data-slot="badge"]'))).toBe('Training');
+    expect(text(training)).toContain('Tuesdays, 6 to 7 pm, 8 weeks');
+    expect(text(training)).toContain('Gulf Coast Sport & Social · North Beach Sand Courts');
+    const status = training.querySelector('p:last-of-type [data-slot="badge"]');
+    expect(text(status)).toBe('Registration open');
+    expectBadge(status, 'secondary', 'fit');
+    expect(text(training.querySelector('p:last-of-type'))).toBe(
+      'Registration openJul 6 – Aug 24, 2027 · closes Jul 1',
+    );
+    expect(training.querySelector('h3 a')?.getAttribute('href')).toBe(
+      '/organizations/gulf-coast-sport-social/training/tuesday-serving-clinic',
+    );
+    const link = harness.fixture.debugElement.queryAll(By.css('ul > li h3 a'))[0];
+    expect(link.injector.get(RouterLink).state).toEqual({
+      organization: { slug: 'gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' },
+      training: { slug: 'tuesday-serving-clinic', name: 'Tuesday Serving Clinic' },
+    });
+  });
+
+  it('offers a Training chip beside the others when training programs match', async () => {
+    const harness = await open('/programs?q=serving');
+    subscription(SEARCH).emit(TRAINING_SEARCH);
+    await settle(harness);
+    const chips = [...host(harness).querySelectorAll('nav[aria-label="Program type"] a')].map(
+      (a) => [text(a), a.getAttribute('href')],
+    );
+    expect(chips).toEqual([
+      ['All', '/programs?q=serving'],
+      ['Training', '/programs?type=training&q=serving'],
+    ]);
+  });
+
+  it('drops a training program whose last class has passed at the page’s time, and shows the no-training state', async () => {
+    vi.setSystemTime(at('2027-08-25'));
+    const harness = await open('/programs?type=training');
+    subscription(BROWSE).emit({
+      ...browseResults([SERVING_CLINIC_ROW]),
+      typeCounts: [{ type: 'training', count: 1 }],
+    });
+    await settle(harness);
+    expect(rows(harness)).toEqual([]);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No training programs are published yet',
+    );
+  });
+
+  it('keeps the division filters out of the form on the training type, which they do not narrow', async () => {
+    const harness = await open('/programs?type=training&gender=coed');
+    subscription(BROWSE).emit({
+      ...browseResults([SERVING_CLINIC_ROW], {}, []),
+      typeCounts: [{ type: 'training', count: 1 }],
+    });
+    await settle(harness);
+    expect(rows(harness).map((row) => text(row.querySelector('h3')))).toEqual([
+      'Tuesday Serving Clinic',
+    ]);
+    expect(
+      host(harness).querySelector('[data-testid="filter-pill"], [data-slot="chip-filter"]'),
+    ).toBeNull();
   });
 });

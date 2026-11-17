@@ -305,6 +305,7 @@ describe('every writer sets the required fields', () => {
       staffInviteCounts: 0,
       draftLeagueCounts: 0,
       campFields: 0,
+      trainingFields: 0,
     });
   });
 });

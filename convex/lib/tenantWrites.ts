@@ -15,7 +15,7 @@ import {
 } from './divisions';
 import { CAMP_SESSIONS_LIMIT } from './campLookup';
 import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
-import { classDates, type TrainingPattern } from './trainingPattern';
+import { classDates, MAX_TRAINING_WEEKS, type TrainingPattern } from './trainingPattern';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
@@ -96,7 +96,7 @@ export const MAX_LEAGUES_SEARCH_UPDATED = 200;
 
 export const MAX_PROGRAMS_SEARCH_UPDATED = 200;
 
-const SEARCHED_PROGRAM_TYPES = ['league', 'tournament', 'camp'] as const;
+const SEARCHED_PROGRAM_TYPES = ['league', 'tournament', 'camp', 'training'] as const;
 
 type ProgramSearchFields = LeagueDivisionFields & Pick<Doc<'programs'>, 'name' | 'locationIds'>;
 
@@ -113,7 +113,7 @@ async function locationNamesOf(
   return names;
 }
 
-// Every writer of a league's or tournament's name, sport, division, or locations, of a camp's name, sport, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
+// Every writer of a league's or tournament's name, sport, division, or locations, of a camp's or training program's name, sport, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
 async function programSearchText(
   ctx: Pick<MutationCtx, 'db'>,
   organization: Doc<'organizations'>,
@@ -128,17 +128,17 @@ async function programSearchText(
   ]);
 }
 
-// The `programs` row of a camp holds the sport's default division for the schema's sake, so its words stay out and a division search never finds a camp.
-async function campSearchText(
+// The `programs` row of a camp or training program holds the sport's default division for the schema's sake, so its words stay out and a division search never finds one.
+async function divisionlessSearchText(
   ctx: Pick<MutationCtx, 'db'>,
   organization: Doc<'organizations'>,
-  camp: Pick<Doc<'programs'>, 'name' | 'sport' | 'locationIds'>,
+  program: Pick<Doc<'programs'>, 'name' | 'sport' | 'locationIds'>,
 ): Promise<string> {
   return joinSearchText([
-    camp.name,
-    sportName(camp.sport),
+    program.name,
+    sportName(program.sport),
     organization.name,
-    ...(await locationNamesOf(ctx, organization, camp.locationIds)),
+    ...(await locationNamesOf(ctx, organization, program.locationIds)),
     organization.cityState,
   ]);
 }
@@ -148,8 +148,8 @@ function searchTextOfProgram(
   organization: Doc<'organizations'>,
   program: Doc<'programs'>,
 ): Promise<string> {
-  return program.type === 'camp'
-    ? campSearchText(ctx, organization, program)
+  return program.type === 'camp' || program.type === 'training'
+    ? divisionlessSearchText(ctx, organization, program)
     : programSearchText(ctx, organization, program);
 }
 
@@ -594,7 +594,11 @@ export async function insertDraftCamp(
   organizationId: Id<'organizations'>,
   camp: NewCamp,
 ): Promise<Id<'camps'>> {
-  const searchText = await campSearchText(ctx, await organizationOf(ctx, organizationId), camp);
+  const searchText = await divisionlessSearchText(
+    ctx,
+    await organizationOf(ctx, organizationId),
+    camp,
+  );
   const programId = await ctx.db.insert('programs', {
     organizationId,
     type: 'camp',
@@ -633,6 +637,11 @@ export async function insertDraftTraining(
   organizationId: Id<'organizations'>,
   training: NewTraining,
 ): Promise<Id<'trainings'>> {
+  const searchText = await divisionlessSearchText(
+    ctx,
+    await organizationOf(ctx, organizationId),
+    training,
+  );
   const programId = await ctx.db.insert('programs', {
     organizationId,
     type: 'training',
@@ -643,10 +652,13 @@ export async function insertDraftTraining(
     status: 'draft',
     locationIds: training.locationIds,
     ...defaultDivision(training.sport),
+    searchText,
   });
   return ctx.db.insert('trainings', {
     programId,
     organizationId,
+    status: 'draft',
+    sport: training.sport,
     coachName: training.coachName,
     ...(training.minimumAge !== undefined && { minimumAge: training.minimumAge }),
     ...(training.maximumAge !== undefined && { maximumAge: training.maximumAge }),
@@ -673,7 +685,74 @@ export async function insertTrainingClasses(
     });
   }
   await ctx.db.patch('trainings', training._id, { pattern });
+  await refreshTraining(ctx, training._id);
   return dates.length;
+}
+
+// Read again: a caller that schedules classes holds a training row whose fields are already out of date.
+async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): Promise<void> {
+  const training = await ctx.db.get('trainings', trainingId);
+  if (!training) throw new Error(`Training ${trainingId} does not exist`);
+  const program = await ctx.db.get('programs', training.programId);
+  if (program?.organizationId !== training.organizationId) {
+    throw new Error(`Training ${trainingId} has no program of its organization`);
+  }
+  const classes = await ctx.db
+    .query('trainingClasses')
+    .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId))
+    .take(MAX_TRAINING_WEEKS);
+  const lastClassDate = classes.reduce<string | undefined>(
+    (latest, { date, status }) =>
+      status === 'scheduled' && (latest === undefined || date > latest) ? date : latest,
+    undefined,
+  );
+  await ctx.db.patch('trainings', trainingId, {
+    status: program.status,
+    sport: program.sport,
+    lastClassDate,
+  });
+}
+
+export async function setTrainingClassStatus(
+  ctx: MutationCtx,
+  trainingClass: Doc<'trainingClasses'>,
+  status: Doc<'trainingClasses'>['status'],
+): Promise<void> {
+  await ctx.db.patch('trainingClasses', trainingClass._id, { status });
+  await refreshTraining(ctx, trainingClass.trainingId);
+}
+
+export async function publishTraining(ctx: MutationCtx, training: Doc<'trainings'>): Promise<void> {
+  const program = await ctx.db.get('programs', training.programId);
+  if (program?.organizationId !== training.organizationId) {
+    throw new Error(`Training ${training._id} has no program of its organization`);
+  }
+  const searchText = await divisionlessSearchText(
+    ctx,
+    await organizationOf(ctx, program.organizationId),
+    program,
+  );
+  if (program.status !== 'published' || program.searchText !== searchText) {
+    await ctx.db.patch('programs', program._id, { status: 'published', searchText });
+  }
+  await refreshTraining(ctx, training._id);
+}
+
+export async function backfillTrainingFields(
+  ctx: MutationCtx,
+  training: Doc<'trainings'>,
+): Promise<boolean> {
+  if (training.status !== undefined && training.sport !== undefined) return false;
+  await refreshTraining(ctx, training._id);
+  return true;
+}
+
+export async function backfillAllTrainingFields(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const training of await ctx.db.query('trainings').take(BACKFILL_SCAN_LIMIT)) {
+    if (await backfillTrainingFields(ctx, training)) backfilled++;
+  }
+  return backfilled;
 }
 
 export interface NewCampSession {
@@ -752,7 +831,7 @@ export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise
   if (program?.organizationId !== camp.organizationId) {
     throw new Error(`Camp ${camp._id} has no program of its organization`);
   }
-  const searchText = await campSearchText(
+  const searchText = await divisionlessSearchText(
     ctx,
     await organizationOf(ctx, program.organizationId),
     program,

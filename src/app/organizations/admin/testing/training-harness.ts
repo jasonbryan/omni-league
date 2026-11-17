@@ -24,6 +24,7 @@ export const RESTORE_CLASS = 'trainingClasses:restore';
 export const UPDATE_CLASS_PLACES = 'trainingClasses:updatePlaces';
 export const UPDATE_ALL_PLACES = 'trainingClasses:updateAllPlaces';
 export const RESTORE_PLACES = 'trainingClasses:restorePlaces';
+export const PUBLISH_TRAINING = 'trainings:publish';
 export const LIST_MINE = 'organizations:listMine';
 export const TRAINING_ARGS = { orgSlug: COASTAL.slug, trainingSlug: 'tuesday-serving-clinic' };
 export const CLASSES_ARGS = { trainingId: 'tr_serving' };
@@ -61,7 +62,11 @@ export const SCHEDULED_TRAINING = {
   },
 };
 
+export const PUBLISHED_TRAINING = { ...SCHEDULED_TRAINING, status: 'published' };
+
 export const AS_ORGANIZER = { ...TRAINING, role: 'leagueOrganizer' };
+
+export const SCHEDULED_AS_ORGANIZER = { ...SCHEDULED_TRAINING, role: 'leagueOrganizer' };
 
 export function trainingClass(change: Record<string, unknown> = {}) {
   return {

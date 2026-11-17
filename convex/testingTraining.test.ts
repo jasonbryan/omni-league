@@ -147,3 +147,71 @@ describe('testing:setTrainingClassRegistered', () => {
     ).rejects.toThrow(/No class/);
   });
 });
+
+describe('testing:seedTrainingClasses and testing:publishSeededTraining', () => {
+  const CLASSES = {
+    organizationSlug: 'e2e-org-t7k2',
+    trainingSlug: 'tuesday-serving-clinic',
+    weekday: 2,
+    startTime: '18:00',
+    endTime: '19:00',
+    firstDate: '2020-01-07',
+    weeks: 3,
+    placesPerClass: 12,
+    registrationDeadline: '2020-01-01',
+  };
+
+  async function seededTraining() {
+    const t = await seeded();
+    await t.mutation(internal.testing.seedTraining, TRAINING);
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+    ['empty', ''],
+  ])('throw with IS_TEST %s and change nothing', async (_, value) => {
+    const t = await seededTraining();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.seedTrainingClasses, CLASSES)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    await expect(
+      t.mutation(internal.testing.publishSeededTraining, {
+        organizationSlug: CLASSES.organizationSlug,
+        trainingSlug: CLASSES.trainingSlug,
+      }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await t.run((ctx) => ctx.db.query('trainingClasses').collect())).toEqual([]);
+    expect((await t.run((ctx) => ctx.db.query('programs').collect()))[0]?.status).toBe('draft');
+  });
+
+  test('seeds classes that have passed, keeping the training row’s last class date, and publishes without the rules', async () => {
+    const t = await seededTraining();
+    await expect(t.mutation(internal.testing.seedTrainingClasses, CLASSES)).resolves.toEqual({
+      classCount: 3,
+    });
+    await t.mutation(internal.testing.publishSeededTraining, {
+      organizationSlug: CLASSES.organizationSlug,
+      trainingSlug: CLASSES.trainingSlug,
+    });
+    const [training] = await t.run((ctx) => ctx.db.query('trainings').collect());
+    expect(training).toMatchObject({ status: 'published', lastClassDate: '2020-01-21' });
+    const [program] = await t.run((ctx) => ctx.db.query('programs').collect());
+    expect(program?.status).toBe('published');
+  });
+
+  test('refuse an unknown training program', async () => {
+    const t = await seededTraining();
+    await expect(
+      t.mutation(internal.testing.seedTrainingClasses, { ...CLASSES, trainingSlug: 'nowhere' }),
+    ).rejects.toThrow(/No training program/);
+    await expect(
+      t.mutation(internal.testing.publishSeededTraining, {
+        organizationSlug: CLASSES.organizationSlug,
+        trainingSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No training program/);
+  });
+});

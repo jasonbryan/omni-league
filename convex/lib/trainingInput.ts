@@ -43,6 +43,10 @@ export type TrainingInputCode =
   | 'ageInvalid'
   | 'agesReversed';
 
+export const TRAINING_PUBLISH_MESSAGES = {
+  noClasses: 'Schedule the classes first.',
+} as const;
+
 export interface TrainingInputError {
   field: TrainingField;
   code: TrainingInputCode;

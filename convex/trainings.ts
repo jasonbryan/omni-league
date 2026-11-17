@@ -4,7 +4,23 @@ import {
   requireOrgAdmin,
   requireProgramOrganizerOrForbidden,
   requireStaffOrForbidden,
+  requireTrainingOrganizer,
 } from './lib/access';
+import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import {
+  getTrainingPublicPageReturns,
+  publicTrainingsValidator,
+  type PublicTrainingPage,
+  type PublicTrainings,
+} from './lib/publicPage';
+import {
+  hasScheduledClass,
+  publicPattern,
+  publicTrainingRow,
+  publishedTrainingProgramOf,
+  upcomingClassesOf,
+  upcomingTrainings,
+} from './lib/trainingPublicList';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs, trainingDetails } from './lib/trainingLookup';
@@ -12,15 +28,18 @@ import { trainingPatternValidator } from './lib/trainingPattern';
 import { programStatusValidator } from './lib/programs';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
-import { insertDraftTraining, leagueSlugTaken } from './lib/tenantWrites';
+import { insertDraftTraining, leagueSlugTaken, publishTraining } from './lib/tenantWrites';
 import {
   checkTrainingFields,
   firstTrainingError,
   TRAINING_MESSAGES,
+  TRAINING_PUBLISH_MESSAGES,
   type TrainingInputError,
 } from './lib/trainingInput';
 
 export const ADMIN_TRAININGS_LIMIT = 200;
+
+const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 
 function refuse(error: TrainingInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -171,5 +190,68 @@ export const getForManagement = query({
       role: membership.role,
       ...(await trainingDetails(ctx, organization, found)),
     };
+  },
+});
+
+export const publish = mutation({
+  args: { trainingId: v.id('trainings') },
+  returns: v.null(),
+  handler: async (ctx, { trainingId }) => {
+    const { training, program } = await requireTrainingOrganizer(ctx, trainingId);
+    if (program.status === 'published') return null;
+    if (!(await hasScheduledClass(ctx, training._id))) {
+      throw new ConvexError({
+        code: 'noClasses',
+        message: TRAINING_PUBLISH_MESSAGES.noClasses,
+      });
+    }
+    await publishTraining(ctx, training);
+    return null;
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const getPublicPage = query({
+  args: { orgSlug: v.string(), trainingSlug: v.string() },
+  returns: getTrainingPublicPageReturns,
+  handler: async (ctx, { orgSlug, trainingSlug }): Promise<PublicTrainingPage | null> => {
+    const organization = await findOrganizationBySlug(ctx, orgSlug);
+    if (!organization) return null;
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    // A draft answers like an unknown training program, so nothing public says whether its slug exists.
+    if (found?.program.status !== 'published' || found.training.pattern === undefined) return null;
+    const details = await trainingDetails(ctx, organization, found);
+    return {
+      organization: details.organization,
+      name: details.name,
+      slug: details.slug,
+      sportName: details.sportName,
+      coachName: details.coachName,
+      ...(details.minimumAge !== undefined && { minimumAge: details.minimumAge }),
+      ...(details.maximumAge !== undefined && { maximumAge: details.maximumAge }),
+      locations: details.locations,
+      pattern: publicPattern(found.training.pattern),
+      classes: await upcomingClassesOf(ctx, found.training._id),
+    };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
+export const listPublic = query({
+  args: { organizationSlug: v.string(), page: v.number(), sport: v.optional(sportValidator) },
+  returns: publicTrainingsValidator,
+  handler: async (ctx, { organizationSlug, page: requested, sport }): Promise<PublicTrainings> => {
+    const organization = await findOrganizationBySlug(ctx, organizationSlug);
+    if (!organization) return EMPTY_LIST;
+    const read = await upcomingTrainings(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
+    const { page, pageCount } = pageOf(read.length, requested);
+    if (pageCount === 0) return EMPTY_LIST;
+    const rows = [];
+    for (const training of pageRows(read.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
+      const program = await publishedTrainingProgramOf(ctx, training);
+      const row = program && (await publicTrainingRow(ctx, organization, training, program));
+      if (row) rows.push(row);
+    }
+    return { rows, page, pageCount, total: read.length };
   },
 });

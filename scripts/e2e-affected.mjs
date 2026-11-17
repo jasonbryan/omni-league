@@ -64,6 +64,8 @@ const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
 // cache-key samples the camp route. The camp page's session rows link to the register route and read "You're registered".
 const CAMP_PAGE = ['camp-page', 'camp-registration', 'cache-key'];
+// The training page's breadcrumb, the organization page's Training section, and Find a program's Training rows link to it.
+const TRAINING_PAGE = ['training-page'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
@@ -112,6 +114,7 @@ export const ROUTE_SPECS = {
     'organization-route-preload',
   ],
   'organizations/:orgSlug/camps/:campSlug': ['camp-page', 'organization-route-preload'],
+  'organizations/:orgSlug/training/:trainingSlug': ['training-page', 'organization-route-preload'],
   'sign-up': ['sign-up', 'auth-session', 'after-sign-in'],
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
   'invites/accept': ['accept-invite'],
@@ -147,7 +150,11 @@ export const ROUTE_SPECS = {
     'camp-page',
     'after-sign-in',
   ],
-  'app/organizations/:orgSlug/training/:trainingSlug': ['organization-training', 'after-sign-in'],
+  'app/organizations/:orgSlug/training/:trainingSlug': [
+    'organization-training',
+    'training-page',
+    'after-sign-in',
+  ],
   'app/organizations/:slug': ['organization-admin', 'after-sign-in'],
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
@@ -248,6 +255,8 @@ export const PUBLIC_QUERIES = [
   'camps:getPublicPage',
   'camps:listPublic',
   'camps:listOpenForOrganization',
+  'trainings:getPublicPage',
+  'trainings:listPublic',
 ];
 const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
 const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;
@@ -674,6 +683,7 @@ export const OFFLINE_QUERY_GROUP_SPECS = {
   SEASON_PAGE_QUERIES: ['season-page'],
   TOURNAMENT_PAGE_QUERIES: ['tournament-page'],
   CAMP_PAGE_QUERIES: ['camp-page'],
+  TRAINING_PAGE_QUERIES: ['training-page'],
   FIND_PAGE_QUERIES: ['find-a-program', 'find-organizations'],
 };
 
@@ -856,6 +866,14 @@ export const AREAS = [
     test: matching(/^src\/app\/organizations\/admin\/(?:camp-[\w-]+|publish-camp-dialog)\.ts$/),
     specs: [...ADMIN, 'camp-page'],
   },
+  {
+    // training-page.spec.ts drives the admin training page, which the admin area's specs leave out.
+    name: 'admin training page',
+    test: matching(
+      /^src\/app\/organizations\/admin\/(?:training-[\w-]+|publish-training-dialog)\.ts$/,
+    ),
+    specs: [...ADMIN, ...TRAINING_PAGE],
+  },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
     name: 'create organization',
@@ -901,6 +919,11 @@ export const AREAS = [
     name: 'public camp page',
     test: inDir('src/app/organizations/public-camp/'),
     specs: CAMP_PAGE,
+  },
+  {
+    name: 'public training page',
+    test: inDir('src/app/organizations/public-training/'),
+    specs: TRAINING_PAGE,
   },
   {
     name: 'camp register page',
@@ -1022,6 +1045,7 @@ export const AREAS = [
       'season-page',
       'tournament-page',
       'camp-page',
+      ...TRAINING_PAGE,
       ...ADMIN,
     ],
   },
@@ -1038,6 +1062,7 @@ export const AREAS = [
       'season-page',
       'tournament-page',
       'camp-page',
+      ...TRAINING_PAGE,
     ],
   },
   {
@@ -1051,6 +1076,7 @@ export const AREAS = [
       ...SEASON_PAGE,
       ...TOURNAMENT_PAGE,
       ...CAMP_PAGE,
+      ...TRAINING_PAGE,
       ...SPORT_VIEW,
       'accept-invite',
       'install',
@@ -1131,6 +1157,7 @@ export const AREAS = [
       ...SEASON_PAGE,
       ...TOURNAMENT_PAGE,
       ...CAMP_PAGE,
+      ...TRAINING_PAGE,
       ...SPORT_VIEW,
       ...FIND_PAGE,
     ],
@@ -1201,8 +1228,13 @@ export const AREAS = [
     name: 'convex training',
     test: (file) =>
       named('convex/', ['trainings', 'trainingClasses'])(file) ||
-      named('convex/lib/', ['trainingInput', 'trainingLookup', 'trainingPattern'])(file),
-    specs: ['organization-training'],
+      named('convex/lib/', [
+        'trainingInput',
+        'trainingLookup',
+        'trainingPattern',
+        'trainingPublicList',
+      ])(file),
+    specs: ['organization-training', ...TRAINING_PAGE],
   },
   {
     name: 'convex tournament bracket',

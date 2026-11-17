@@ -1477,13 +1477,16 @@ test.describe('find a program: leagues and tournaments', () => {
       });
       expect(plainText(resultsSection(camps.html))).toContain(`No camps match “${id}”`);
       expect(plainText(resultsSection(camps.html))).toContain('3 programs of other types match.');
-      const training = await raw(request, '/programs?type=training');
+      const training = await raw(request, `/programs?type=training&q=${id}`);
       expect(resultNames(training.html)).toEqual([]);
+      expect(typeChipLinks(training.html).find((chip) => chip.current)).toMatchObject({
+        name: 'Training',
+      });
       expect(plainText(resultsSection(training.html))).toContain(
-        'Find a program does not list training programs yet',
+        `No training programs match “${id}”`,
       );
       expect(plainText(resultsSection(training.html))).toContain(
-        'Search the leagues, tournaments, and camps instead.',
+        '3 programs of other types match.',
       );
 
       const unknown = await raw(request, `/programs?type=zzz&q=${id}`);
