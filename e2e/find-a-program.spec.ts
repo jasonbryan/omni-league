@@ -1902,7 +1902,10 @@ for (const width of [320, 360, 1280]) {
       held.release();
       await expect(rowNames(page)).toHaveCount(3);
       await screenshot(page, testInfo, `350-programs-loaded-${String(width)}`);
-      expect(await programsFrame(page)).toEqual(loading);
+      const loaded = await programsFrame(page);
+      // The start view offers Camps, which leaves the row when no camp matches; the chips before it stay where they were.
+      expect({ ...loaded, typeChips: [] }).toEqual({ ...loading, typeChips: [] });
+      expect(loaded.typeChips).toEqual(loading.typeChips.slice(0, loaded.typeChips.length));
       const rowHeights = await results(page)
         .locator('ul > li')
         .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
