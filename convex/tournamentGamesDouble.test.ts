@@ -555,6 +555,21 @@ describe('tournaments.updateDetails: the bracket type and the grand final', () =
     expect([row.bracketType, row.grandFinal]).toEqual(['double', undefined]);
   });
 
+  test('Undo of a Single game save is refused once the losers bracket team has won the first grand final game', async () => {
+    const { s, teamIds } = await world(6);
+    const saved = await editDetails(s, { grandFinal: 'single' }, await heldNow(s));
+    expect(saved.earlier).not.toHaveProperty('grandFinal');
+    await playOut(s, lowerSeedWins(teamIds, 1));
+    expect(
+      await s
+        .as(s.admin)
+        .mutation(api.tournaments.undoUpdateDetails, { tournamentId: s.gulf, ...saved })
+        .catch(refusalOf),
+    ).toMatchObject({ code: 'grandFinalLocked', field: 'grandFinal' });
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
+    expect(row.grandFinal).toBe('single');
+  });
+
   test('an organizer assigned to the tournament changes the bracket type and the grand final', async () => {
     const { s } = await world(6, { create: false });
     const result = await editDetails(
@@ -776,5 +791,49 @@ describe('Pools, then bracket with Double elimination', () => {
     expect(
       await editDetails(s, { bracketType: 'single' }, await heldNow(s)).catch(refusalOf),
     ).toMatchObject({ code: 'bracketTypeLocked' });
+  });
+});
+
+describe('double elimination: edge cases of the bracket and of the details', () => {
+  test('a save made from details that held single elimination is refused once another organizer chose double', async () => {
+    const { s } = await world(6, { create: false });
+    const stale: TournamentEditable = { ...(await heldNow(s)), bracketType: 'single' };
+    expect(await editDetails(s, { maximumTeams: 90 }, stale).catch(refusalOf)).toMatchObject({
+      code: 'changedSince',
+    });
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
+    expect([row.bracketType, row.maximumTeams]).toEqual(['double', 128]);
+  });
+
+  test('a bracket type outside the two choices is refused', async () => {
+    const { s } = await world(6, { create: false });
+    await expect(
+      editDetails(s, { bracketType: 'triple' as 'double' }, await heldNow(s)),
+    ).rejects.toThrow();
+  });
+
+  test('one confirmed team makes no double bracket and writes no game', async () => {
+    const { s } = await world(1, { create: false });
+    expect(await createBracket(s).catch(refusalOf)).toMatchObject({ code: 'tooFewTeams' });
+    expect(await s.t.run((ctx) => ctx.db.query('tournamentGames').collect())).toHaveLength(0);
+  });
+
+  test('two teams make a winners final and a grand final, and the winners final loser takes the second place of the grand final', async () => {
+    const { s, teamIds } = await world(2);
+    expect(await gamesOf(s, 'bracket')).toHaveLength(1);
+    expect(await gamesOf(s, 'losers')).toHaveLength(0);
+    await win(s, await gameAt(s, 'bracket', 1, 1), teamIds[1]);
+    const first = await gameAt(s, 'grandFinal', 1, 1);
+    expect(await teamsOfGame(s, first)).toEqual(['Team 02', 'Team 01']);
+  });
+
+  test('128 teams make 127 winners games, 126 losers games, and a grand final, and recreating replaces them all', async () => {
+    const { s } = await world(128);
+    expect(await gamesOf(s, 'bracket')).toHaveLength(127);
+    expect(await gamesOf(s, 'losers')).toHaveLength(126);
+    expect(await gamesOf(s, 'grandFinal')).toHaveLength(1);
+    expect(await createBracket(s, { replace: true })).toEqual({ gameCount: 254, replaced: true });
+    expect(await s.t.run((ctx) => ctx.db.query('tournamentGames').collect())).toHaveLength(254);
+    expect((await setup(s))!.bracket?.losersRounds).toHaveLength(12);
   });
 });
