@@ -34,6 +34,14 @@ describe('draftLeagueCount', () => {
     expect(draftLeagueCount([], NO_DIVISION_FILTERS, SAND_COUNTS, undefined, 3)).toBe(3);
   });
 
+  it('adds what no filter narrows to the matches of a filter, and leaves the total as it is', () => {
+    const draft = filters({ gender: ['womens'] });
+    expect(draftLeagueCount(SAND.facets, draft, SAND_COUNTS, undefined, 9, 2)).toBe(4);
+    expect(draftLeagueCount(SAND.facets, NO_DIVISION_FILTERS, SAND_COUNTS, undefined, 9, 2)).toBe(
+      9,
+    );
+  });
+
   it('ignores Format and Level on All sports with several sports, as the backend does', () => {
     const draft = filters({ gender: ['coed'], playersPerSide: [4], level: ['bb'] });
     expect(draftLeagueCount(GULF_COAST.facets, draft, GULF_COUNTS, undefined, 5)).toBe(4);

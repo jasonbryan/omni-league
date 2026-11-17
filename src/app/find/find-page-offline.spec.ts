@@ -75,7 +75,7 @@ describe('FindPage offline', () => {
   });
 
   it('opens a search viewed online from its saved copy, with the saved-copy note under the intro', async () => {
-    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed', withCamps: true }, COED_RESULTS, SAVED_AT);
     stubOnLine(false);
     const harness = await open('/programs?q=coed');
     const main = host(harness).querySelector('main')!;
@@ -99,7 +99,7 @@ describe('FindPage offline', () => {
         { ...thursday, seasons: sunday.seasons.map((season) => ({ ...season, isFull: true })) },
       ],
     };
-    plantSavedCopy(api.search.programs, { q: 'coed' }, results, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed', withCamps: true }, results, SAVED_AT);
     stubOnLine(false);
     const harness = await open('/programs?q=coed');
     const [before, full] = [...host(harness).querySelectorAll('main section ul > li')];
@@ -112,7 +112,7 @@ describe('FindPage offline', () => {
   });
 
   it('shows the not-saved view for a search that was not viewed', async () => {
-    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed', withCamps: true }, COED_RESULTS, SAVED_AT);
     stubOnLine(false);
     const harness = await open('/programs?q=soccer');
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
@@ -126,7 +126,7 @@ describe('FindPage offline', () => {
   it('opens a saved no-results search with its saved suggestions, and a suggestion that was not viewed shows the not-saved view', async () => {
     plantSavedCopy(
       api.search.programs,
-      { q: 'coed 4s austin' },
+      { q: 'coed 4s austin', withCamps: true },
       { rows: [], more: false, typeCounts: [], suggestions: ['coed 4s'] },
       SAVED_AT,
     );
@@ -155,7 +155,7 @@ describe('FindPage offline', () => {
   it('opens a type browse viewed online from its saved copy', async () => {
     plantSavedCopy(
       api.search.programsBrowse,
-      { type: 'tournament', page: 1 },
+      { type: 'tournament', withCamps: true, page: 1 },
       { ...browseResults([GULF_OPEN_ROW]), typeCounts: [{ type: 'tournament', count: 1 }] },
       SAVED_AT,
     );
@@ -171,7 +171,7 @@ describe('FindPage offline', () => {
   it('shows the not-saved view for a type browse that was not viewed', async () => {
     plantSavedCopy(
       api.search.programsBrowse,
-      { type: 'tournament', page: 1 },
+      { type: 'tournament', withCamps: true, page: 1 },
       { ...browseResults([GULF_OPEN_ROW]), typeCounts: [{ type: 'tournament', count: 1 }] },
       SAVED_AT,
     );
@@ -220,7 +220,7 @@ describe('FindPage offline', () => {
   });
 
   it('online before the first live result shows the saved copy with no note', async () => {
-    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed', withCamps: true }, COED_RESULTS, SAVED_AT);
     stubOnLine(true);
     const harness = await open('/programs?q=coed', 'up');
     expect(host(harness).querySelectorAll('main section ul > li')).toHaveLength(3);

@@ -11,6 +11,7 @@ import { rawGet } from './support/raw-get';
 import { fetchRawHtml } from './support/raw-html';
 import { FULL_LEAGUE, PACKED_LEAGUE, seedFullSeasonTenant } from './support/full-season';
 import { screenshot } from './support/screenshot';
+import { seedPublishedCamp } from './support/camp';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { seedTournament } from './support/tournament';
@@ -448,9 +449,10 @@ test.describe('find a program: sport chips and division filters, raw server HTML
       for (const other of [BOYS_ROOKIES, WOMEN_ELEVEN, GIRLS_SANDS]) {
         expect(names).not.toContain(other);
       }
+      // A camp has no division, so the filters leave it listed.
       for (const row of resultsSection(html)
         .split('</li>')
-        .filter((part) => part.includes('<h3'))) {
+        .filter((part) => part.includes('<h3') && !/>\s*Camp\s*</.test(part))) {
         expect(plainText(row)).toMatch(/Girls · \d+v\d+ · [A-Za-z]+ · U10/);
       }
       expect(currentChip(html)).toBe('Soccer');
@@ -1136,15 +1138,18 @@ test.describe('find a program: sport chips and division filters, in the browser'
     consoleGuard,
   }) => {
     await seedYouth('over40');
-    await page.goto('/programs?sport=soccer&gender=womens&age=over40&level=intermediate');
+    // The league type, because a soccer camp in the same backend stays listed under any filter.
+    await page.goto(
+      '/programs?type=league&sport=soccer&gender=womens&age=over40&level=intermediate',
+    );
     await hydrated(consoleGuard);
     await expect(results(page).getByRole('status')).toHaveText(
-      'No soccer programs match these filters',
+      'No soccer leagues match these filters',
     );
     await results(page)
       .getByRole('link', { name: /^Remove Level: Intermediate/ })
       .click();
-    await expect(page).toHaveURL(/\/programs\?sport=soccer&gender=womens&age=over40$/);
+    await expect(page).toHaveURL(/\/programs\?type=league&sport=soccer&gender=womens&age=over40$/);
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
   });
 });
@@ -1296,6 +1301,30 @@ test.describe('find a program: offline', () => {
     );
     await context.setOffline(false);
   });
+
+  test('a camp search viewed online opens offline from its saved copy with the camp row and the note', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const { id, campName } = await seedWithCamp();
+    await page.goto(`/programs?type=camp&q=${encodeURIComponent(id)}`);
+    await expect(rowNames(page)).toHaveText([campName]);
+    await hydrated(consoleGuard);
+    await submit(page, `junior ${id}`);
+    await expect(results(page)).toContainText(`“junior ${id}”`);
+    await expect(rowNames(page)).toHaveText([campName]);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await submit(page, id);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(rowNames(page)).toHaveText([campName]);
+    await expect(results(page)).toContainText('Camp');
+    await expect(results(page)).toContainText('Ages 9 to 14');
+    await context.setOffline(false);
+  });
 });
 
 const BEACH_OPEN_DIVISION = {
@@ -1437,7 +1466,7 @@ test.describe('find a program: leagues and tournaments', () => {
   );
 
   test(
-    'a known type with no programs shows its chip as current with no results, and an unknown type is ignored and appears nowhere',
+    'a type with no match shows its chip as current with no results, training is named as not listed, and an unknown type is ignored and appears nowhere',
     RAW_HTTP,
     async ({ request }) => {
       const { id } = await seedWithTournament();
@@ -1448,10 +1477,13 @@ test.describe('find a program: leagues and tournaments', () => {
       });
       expect(plainText(resultsSection(camps.html))).toContain(`No camps match “${id}”`);
       expect(plainText(resultsSection(camps.html))).toContain('3 programs of other types match.');
-      const none = await raw(request, '/programs?type=camp&sport=beach-volleyball');
-      expect(resultNames(none.html)).toEqual([]);
-      expect(plainText(resultsSection(none.html))).toContain(
-        'Find a program does not list camps yet',
+      const training = await raw(request, '/programs?type=training');
+      expect(resultNames(training.html)).toEqual([]);
+      expect(plainText(resultsSection(training.html))).toContain(
+        'Find a program does not list training programs yet',
+      );
+      expect(plainText(resultsSection(training.html))).toContain(
+        'Search the leagues, tournaments, and camps instead.',
       );
 
       const unknown = await raw(request, `/programs?type=zzz&q=${id}`);
@@ -1507,6 +1539,183 @@ test.describe('find a program: leagues and tournaments', () => {
       expect(rowOf(html, `Closed Cup ${id}`)).toContain('Registration closed');
     },
   );
+});
+
+const CAMP_NAME = 'Junior Beach Volleyball Camp';
+
+interface CampSeeded extends Seeded {
+  campName: string;
+  campPath: string;
+}
+
+/**
+ * The organization also has a draft camp and one whose only session has ended, which no search or browse lists.
+ * `prefix` puts the camps first by name in a browse, which lists every organization's camps of the sport.
+ */
+async function seedWithCamp(prefix = '', withTournament = false): Promise<CampSeeded> {
+  const seeded = await seed();
+  if (withTournament) {
+    await seedTournament(seeded.tenant, {
+      name: tournamentName(seeded.id),
+      slug: 'beach-open',
+      locations: [NORTH_BEACH],
+      division: BEACH_OPEN_DIVISION,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(41),
+      registrationDeadline: dateFromToday(30),
+    });
+  }
+  const camp = (name: string, slug: string, session: [number, number], status?: 'draft') => ({
+    name: `${prefix}${name}`,
+    slug,
+    locations: [NORTH_BEACH],
+    minimumAge: 9,
+    maximumAge: 14,
+    sessions: [
+      {
+        name: 'Week 1',
+        startDate: dateFromToday(session[0]),
+        endDate: dateFromToday(session[1]),
+        registrationDeadline: dateFromToday(session[0] - 4),
+      },
+    ],
+    ...(status && { status }),
+  });
+  const campPath = await seedPublishedCamp(seeded.tenant, camp(CAMP_NAME, 'junior-camp', [14, 18]));
+  await seedPublishedCamp(
+    seeded.tenant,
+    camp('Draft Junior Camp', 'draft-camp', [14, 18], 'draft'),
+  );
+  await seedPublishedCamp(seeded.tenant, camp('Ended Junior Camp', 'ended-camp', [-20, -15]));
+  return { ...seeded, campName: `${prefix}${CAMP_NAME}`, campPath };
+}
+
+const chipNames = (html: string) => typeChipLinks(html).map((chip) => chip.name);
+
+test.describe('find a program: camps', () => {
+  test(
+    'a search finds the camp with its Camp badge, ages, and next session’s dates and status, and lists no draft or ended camp',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id, campPath } = await seedWithCamp();
+      const { html } = await raw(request, url(`junior ${id}`));
+      expect(resultNames(html)).toEqual([CAMP_NAME]);
+      const row = rowOf(html, CAMP_NAME);
+      expect(row).toContain(`${CAMP_NAME} Camp Ages 9 to 14`);
+      expect(row).toContain('Registration open');
+      expect(row).toMatch(/[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4}/);
+      expect(row).toContain('closes');
+      expect(html).toContain(`href="${campPath}"`);
+      expect(chipNames(html)).toEqual(['All', 'Camps']);
+    },
+  );
+
+  test(
+    'a search lists the leagues and the camp, with a chip for each type that matches and no count on any chip',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithCamp();
+      const { html } = await raw(request, url(id));
+      expect(resultNames(html).sort()).toEqual([CAMP_NAME, SUNDAY, THURSDAY].sort());
+      expect(plainText(resultsSection(html))).toContain(`3 programs match “${id}”`);
+      expect(chipNames(html)).toEqual(['All', 'Leagues', 'Camps']);
+      expect(chipNames(html).every((name) => !/\d/.test(name))).toBe(true);
+      const camps = await raw(request, `/programs?type=camp&q=${id}`);
+      expect(resultNames(camps.html)).toEqual([CAMP_NAME]);
+    },
+  );
+
+  test(
+    'a type and a sport without a search list the camp, and not a draft or ended camp',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { campName } = await seedWithCamp('Aaa ');
+      const { html } = await raw(request, '/programs?type=camp&sport=beach-volleyball');
+      expect(resultNames(html)).toContain(campName);
+      expect(resultNames(html)).not.toContain('Aaa Draft Junior Camp');
+      expect(resultNames(html)).not.toContain('Aaa Ended Junior Camp');
+      expect(rowOf(html, campName)).toContain('Camp Ages 9 to 14');
+      expect(currentChip(html)).toBe('Beach volleyball');
+    },
+  );
+
+  test(
+    'a division filter narrows the leagues and leaves the camp listed and counted',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithCamp();
+      const { html } = await raw(request, `${url(id)}&gender=womens`);
+      expect(resultNames(html)).toEqual([CAMP_NAME]);
+      expect(chipNames(html)).toEqual(['All', 'Camps']);
+      const count = /<p\b[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/.exec(filterBar(html))?.[1] ?? '';
+      expect(plainText(count)).toBe('1 of 3 programs');
+    },
+  );
+
+  test(
+    'a camp search for words only a league holds says no camps match and how many programs of another type do',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithCamp();
+      const { html } = await raw(
+        request,
+        `/programs?type=camp&q=${encodeURIComponent(`sunday ${id}`)}`,
+      );
+      expect(resultNames(html)).toEqual([]);
+      const text = plainText(resultsSection(html));
+      expect(text).toContain(`No camps match “sunday ${id}”`);
+      expect(text).toContain('1 program of another type matches.');
+      expect(text).toContain('Show all types');
+    },
+  );
+
+  test('the intro and the description of the page name camps', RAW_HTTP, async ({ request }) => {
+    const { html } = await raw(request, '/programs');
+    expect(plainText(html)).toContain(
+      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
+    );
+    expect(html).toContain('leagues, tournaments, and camps on Omni League');
+  });
+
+  test('the camp states pass the axe helper and do not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { id, campName } = await seedWithCamp();
+    await page.goto(url(`junior ${id}`));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveText([campName]);
+    await screenshot(page, testInfo, '373-programs-camp-result');
+    await expectAccessible(page);
+
+    await page.goto(`/programs?type=camp&q=${encodeURIComponent(`sunday ${id}`)}`);
+    await hydrated(consoleGuard);
+    await expect(results(page)).toContainText(`No camps match “sunday ${id}”`);
+    await screenshot(page, testInfo, '373-programs-camp-other-type');
+    await expectAccessible(page);
+
+    await page.goto('/programs?type=camp&sport=beach-volleyball');
+    await hydrated(consoleGuard);
+    await expect(results(page).locator('ul > li').first()).toContainText('Camp');
+    await screenshot(page, testInfo, '373-programs-camp-browse');
+    await expectAccessible(page);
+  });
+
+  test('the Camps chip lists the camp and keeps the search, and All brings the leagues back', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithCamp();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    const chips = page.getByRole('navigation', { name: 'Program type' });
+    await chips.getByRole('link', { name: 'Camps' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=camp&q=${id}`);
+    await expect(rowNames(page)).toHaveText([CAMP_NAME]);
+    await chips.getByRole('link', { name: 'All' }).click();
+    await expect(rowNames(page)).toHaveCount(3);
+  });
 });
 
 test.describe('find a program: /leagues redirects', () => {
@@ -1717,7 +1926,11 @@ for (const width of [320, 360, 1280]) {
       held.release();
       await expect(rowNames(page)).toHaveCount(3);
       await screenshot(page, testInfo, `350-programs-loaded-${String(width)}`);
-      expect(await programsFrame(page)).toEqual(loading);
+      const loaded = await programsFrame(page);
+      // The start view offers Camps, which leaves the row when no camp matches; the chips before it stay where they were.
+      expect({ ...loaded, typeChips: [] }).toEqual({ ...loading, typeChips: [] });
+      expect(loaded.typeChips).toHaveLength(3);
+      expect(loaded.typeChips).toEqual(loading.typeChips.slice(0, 3));
       const rowHeights = await results(page)
         .locator('ul > li')
         .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
@@ -1808,6 +2021,79 @@ for (const width of [320, 360, 1280]) {
       expect(await typeNav(page).getByRole('link').allTextContents()).toEqual(serverTypes);
       expect(await sportNav(page).getByRole('link').allTextContents()).toEqual(serverSports);
       expect(serverTypes).toEqual(['All', 'Leagues', 'Tournaments']);
+    });
+  });
+}
+
+for (const width of [320, 360, 1280]) {
+  test.describe(`find a program: camp layout at ${String(width)}px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    for (const withTournament of [true, false]) {
+      const offers = withTournament ? 'all three types' : 'two types';
+      test(`the chips, the form, and the results heading keep their boxes from the skeleton to a search that offers ${offers}`, async ({
+        page,
+        consoleGuard,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+        const { id } = await seedWithCamp('', withTournament);
+        const held = await holdQueries(page, ['search:programs']);
+        await page.goto('/programs');
+        await hydrated(consoleGuard);
+        await submit(page, id);
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await expect(page.getByTestId('find-skeleton')).toBeVisible();
+        const loading = await programsFrame(page);
+
+        held.release();
+        await expect(rowNames(page)).toHaveCount(withTournament ? 4 : 3);
+        await screenshot(
+          page,
+          testInfo,
+          `373-programs-camp-loaded-${withTournament ? 'three' : 'two'}-types-${String(width)}`,
+        );
+        const loaded = await programsFrame(page);
+        expect(loaded.typeChips).toHaveLength(withTournament ? 4 : 3);
+        // A chip with no match leaves the row as the answer arrives; the boxes around the row stay where they were.
+        expect({ ...loaded, typeChips: [] }).toEqual({ ...loading, typeChips: [] });
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        ).toBe(true);
+      });
+    }
+
+    test('every chip keeps its box while the answer to a Camps press loads', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      const { id } = await seedWithCamp('', true);
+      const held = await holdQueries(page, ['search:programs'], {
+        watchFromStart: false,
+        holdFromStart: false,
+      });
+      await page.goto(url(id));
+      await hydrated(consoleGuard);
+      await expect(rowNames(page)).toHaveCount(4);
+      const before = await programsFrame(page);
+      expect(before.typeChips).toHaveLength(4);
+
+      held.watchNewSubscriptions();
+      held.holdNextAnswer();
+      await typeNav(page).getByRole('link', { name: 'Camps' }).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.getByTestId('find-skeleton')).toBeVisible();
+      const during = await programsFrame(page);
+      expect(during.typeChips).toEqual(before.typeChips);
+      expect(during.types).toEqual(before.types);
+      expect(during.sports).toEqual(before.sports);
+
+      held.release();
+      await expect(rowNames(page)).toHaveText([CAMP_NAME]);
+      const after = await programsFrame(page);
+      expect(after.typeChips).toEqual(before.typeChips);
+      expect(after.types).toEqual(before.types);
+      expect(after.sports).toEqual(before.sports);
     });
   });
 }

@@ -1,10 +1,15 @@
 import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { query, type QueryCtx } from './_generated/server';
-import { divisionFilterArgs, filtersInScope, matchesDivisionFilters } from './lib/leagueFilters';
+import {
+  divisionFilterArgs,
+  filtersInScope,
+  matchesDivisionFilters,
+  type DivisionFilters,
+} from './lib/leagueFilters';
 import { logoUrlField } from './lib/organizationLogo';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
-import { programTypeValidator, SEARCHABLE_PROGRAM_TYPES, type ProgramType } from './lib/programs';
+import { programTypeValidator, searchableProgramTypes, type ProgramType } from './lib/programs';
 import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
@@ -17,7 +22,7 @@ import {
   type SearchPrograms,
   type SearchProgramsBrowse,
 } from './lib/publicPage';
-import { searchProgramRows, searchRows } from './lib/searchRows';
+import { campIsUpcoming, searchProgramRows, searchRows } from './lib/searchRows';
 import {
   matchesEveryWord,
   parseSearchQuery,
@@ -114,12 +119,33 @@ export const organizations = query({
   },
 });
 
-function typeCountsOf(programs: readonly Doc<'programs'>[]): SearchPrograms['typeCounts'] {
-  return SEARCHABLE_PROGRAM_TYPES.map((type) => ({
-    type,
-    count: programs.filter((program) => program.type === type).length,
-  })).filter(({ count }) => count > 0);
+function typeCountsOf(
+  programs: readonly Doc<'programs'>[],
+  types: readonly ProgramType[],
+): SearchPrograms['typeCounts'] {
+  return types
+    .map((type) => ({ type, count: programs.filter((program) => program.type === type).length }))
+    .filter(({ count }) => count > 0);
 }
+
+// A camp has no division, so the division filters leave it listed and it adds no facet.
+function narrowedByDivision(program: Doc<'programs'>, filters: DivisionFilters): boolean {
+  return program.type === 'camp' || matchesDivisionFilters(program, filters);
+}
+
+async function withoutEndedCamps(
+  ctx: QueryCtx,
+  programs: readonly Doc<'programs'>[],
+): Promise<Doc<'programs'>[]> {
+  const kept: Doc<'programs'>[] = [];
+  for (const program of programs) {
+    if (program.type !== 'camp' || (await campIsUpcoming(ctx, program))) kept.push(program);
+  }
+  return kept;
+}
+
+const divisionFacets = (programs: readonly Doc<'programs'>[]) =>
+  programs.filter(({ type }) => type !== 'camp').map(facetOf);
 
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.
 export const programs = query({
@@ -127,6 +153,8 @@ export const programs = query({
     q: v.string(),
     type: v.optional(programTypeValidator),
     sport: v.optional(sportValidator),
+    // Without it the call is the previous release's, whose page renders a camp as a tournament.
+    withCamps: v.optional(v.boolean()),
     ...divisionFilterArgs,
   },
   returns: searchProgramsValidator,
@@ -135,21 +163,27 @@ export const programs = query({
     const q = stripPossessives(parseSearchQuery([args.q]));
     if (q === '') return { rows: [], more: false, typeCounts: [] };
     const { sport, type } = args;
-    const scanned = await ctx.db
-      .query('programs')
-      .withSearchIndex('search_searchText', (search) => {
-        const published = search.search('searchText', q).eq('status', 'published');
-        return sport === undefined ? published : published.eq('sport', sport);
-      })
-      .take(SEARCH_SCAN_LIMIT);
+    const types = searchableProgramTypes(args.withCamps);
+    const scanned = await withoutEndedCamps(
+      ctx,
+      (
+        await ctx.db
+          .query('programs')
+          .withSearchIndex('search_searchText', (search) => {
+            const published = search.search('searchText', q).eq('status', 'published');
+            return sport === undefined ? published : published.eq('sport', sport);
+          })
+          .take(SEARCH_SCAN_LIMIT)
+      ).filter((program) => types.includes(program.type)),
+    );
     const filters = filtersInScope(args, sport);
-    const passesDivision = (program: Doc<'programs'>) => matchesDivisionFilters(program, filters);
+    const passesDivision = (program: Doc<'programs'>) => narrowedByDivision(program, filters);
     const passesType = (program: Doc<'programs'>) => type === undefined || program.type === type;
     const kept = scanned.filter((program) => matchesEveryWord(program.searchText ?? '', q));
     const ofType = kept.filter(passesType);
     const matched = ofType.filter(passesDivision);
-    const typeCounts = typeCountsOf(kept.filter(passesDivision));
-    const facets = ofType.map(facetOf);
+    const typeCounts = typeCountsOf(kept.filter(passesDivision), types);
+    const facets = divisionFacets(ofType);
     const rows = await searchProgramRows(ctx, matched.slice(0, SEARCH_RESULT_LIMIT));
     const more = matched.length > SEARCH_RESULT_LIMIT;
     // Programs that hold every word but fail the type or the division filters mean fewer words would not help.
@@ -198,20 +232,23 @@ export const programsBrowse = query({
   args: {
     type: v.optional(programTypeValidator),
     sport: v.optional(sportValidator),
+    // As on `programs`.
+    withCamps: v.optional(v.boolean()),
     ...divisionFilterArgs,
     page: v.number(),
   },
   returns: searchProgramsBrowseValidator,
   handler: async (ctx, args): Promise<SearchProgramsBrowse> => {
     const { sport, type } = args;
+    const types = searchableProgramTypes(args.withCamps);
     // Every listed type is read, so the type chips count them all; the chosen type is applied after.
     const read: Doc<'programs'>[] = [];
-    for (const listed of SEARCHABLE_PROGRAM_TYPES) {
-      read.push(...(await firstByName(ctx, listed, sport)));
+    for (const listed of types) {
+      read.push(...(await withoutEndedCamps(ctx, await firstByName(ctx, listed, sport))));
     }
     read.sort(bySortName);
     const filters = filtersInScope(args, sport);
-    const passesDivision = (program: Doc<'programs'>) => matchesDivisionFilters(program, filters);
+    const passesDivision = (program: Doc<'programs'>) => narrowedByDivision(program, filters);
     const ofType = read.filter((program) => type === undefined || program.type === type);
     const matched = ofType.filter(passesDivision).slice(0, PUBLIC_LIST_MAX_ROWS);
     const { page, pageCount } = pageOf(matched.length, args.page);
@@ -224,8 +261,8 @@ export const programsBrowse = query({
       page,
       pageCount,
       total: matched.length,
-      facets: ofType.map(facetOf),
-      typeCounts: typeCountsOf(read.filter(passesDivision)),
+      facets: divisionFacets(ofType),
+      typeCounts: typeCountsOf(read.filter(passesDivision), types),
     };
   },
 });

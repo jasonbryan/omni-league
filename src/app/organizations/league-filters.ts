@@ -244,6 +244,7 @@ export class LeagueFilters {
   /** Undefined until the leagues it counts have loaded. */
   readonly total = input.required<number | undefined>();
   readonly matching = input<number | undefined>(undefined);
+  readonly filterExempt = input(0);
   readonly facets = input<readonly LeagueFacet[] | undefined>(undefined);
   readonly sportLeagueCounts = input<SportCounts | undefined>(undefined);
   readonly sport = input<Sport | undefined>(undefined);
@@ -424,6 +425,7 @@ export class LeagueFilters {
         inputBinding('sport', this.sport),
         inputBinding('locationsPage', this.locationsPage),
         inputBinding('total', this.total),
+        inputBinding('filterExempt', this.filterExempt),
         inputBinding('queryBuilder', this.queryBuilder),
         inputBinding('ageOrder', this.ageOrder),
         inputBinding('kind', this.kind),
