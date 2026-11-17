@@ -7,11 +7,13 @@ import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
 import { holdQueries } from './support/hold-queries';
 import { RAW_HTTP } from './support/raw-http';
+import { rawGet } from './support/raw-get';
 import { fetchRawHtml } from './support/raw-html';
 import { FULL_LEAGUE, PACKED_LEAGUE, seedFullSeasonTenant } from './support/full-season';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
+import { seedTournament } from './support/tournament';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -71,7 +73,10 @@ async function seed(): Promise<Seeded> {
   return { tenant, id: tenant.slug.replace(/^e2e-/, '') };
 }
 
-const url = (q: string) => `/leagues?q=${encodeURIComponent(q)}`;
+const url = (q: string) => `/programs?q=${encodeURIComponent(q)}`;
+
+/** The top bar's search opens `/leagues`, which redirects here. */
+const leaguesUrl = (q: string) => `/programs?type=league&q=${encodeURIComponent(q)}`;
 
 function resultsSection(html: string): string {
   return (
@@ -110,7 +115,7 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
 }
 
 const field = (page: Page) =>
-  page.getByRole('searchbox', { name: 'League, organization, or location' });
+  page.getByRole('searchbox', { name: 'Program, organization, or location' });
 const results = (page: Page) => page.locator('section[aria-labelledby="results-heading"]');
 const rowNames = (page: Page) => results(page).locator('ul > li h3');
 
@@ -119,19 +124,19 @@ async function submit(page: Page, q: string): Promise<void> {
   await page.getByRole('button', { name: 'Search', exact: true }).click();
 }
 
-test.describe('find a league: raw server HTML', () => {
+test.describe('find a program: raw server HTML', () => {
   test(
-    '/leagues without a search: 200, the public Cache-Control, the title, the form, and no results section',
+    '/programs without a search: 200, the public Cache-Control, the title, the form, and no results section',
     RAW_HTTP,
     async ({ request }) => {
-      const { status, headers, html } = await fetchRawHtml(request, '/leagues');
+      const { status, headers, html } = await fetchRawHtml(request, '/programs');
       expect(status).toBe(200);
       expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
       expect(headers['content-type']).toContain('text/html');
-      expect(html).toContain('<title>Find a league | Omni League</title>');
-      expect(html).toMatch(/<h1\b[^>]*>\s*Find a league\s*<\/h1>/);
-      expect(html).toMatch(/<form\b[^>]*role="search"[^>]*action="\/leagues"/);
-      expect(html).toContain('League, organization, or location');
+      expect(html).toContain('<title>Find a program | Omni League</title>');
+      expect(html).toMatch(/<h1\b[^>]*>\s*Find a program\s*<\/h1>/);
+      expect(html).toMatch(/<form\b[^>]*role="search"[^>]*action="\/programs"/);
+      expect(html).toContain('Program, organization, or location');
       expect(html).toContain('name="q"');
       expect(html).not.toContain('results-heading');
       expect(html).not.toContain('name="robots"');
@@ -139,7 +144,7 @@ test.describe('find a league: raw server HTML', () => {
   );
 
   test(
-    '?q: the leagues of a published organization with their organization, division, and status, the count line, noindex, and the canonical /leagues',
+    '?q: the leagues of a published organization with their organization, division, and status, the count line, noindex, and the canonical /programs',
     RAW_HTTP,
     async ({ request }) => {
       const { tenant, id } = await seed();
@@ -149,7 +154,7 @@ test.describe('find a league: raw server HTML', () => {
       expect(resultNames(html)).not.toContain(DRAFT);
 
       const section = plainText(resultsSection(html));
-      expect(section).toMatch(/^Results (?:\d+ leagues? match|Showing the first 50)/);
+      expect(section).toMatch(/^Results (?:\d+ programs? match|Showing the first 50)/);
       const sunday = plainText(
         resultsSection(html)
           .split('</li>')
@@ -170,12 +175,12 @@ test.describe('find a league: raw server HTML', () => {
 
       expect(html).toMatch(/<meta\b[^>]*name="robots"[^>]*content="noindex"/);
       const exact = await raw(request, url(id));
-      expect(plainText(resultsSection(exact.html))).toContain(`2 leagues match “${id}”`);
+      expect(plainText(resultsSection(exact.html))).toContain(`2 programs match “${id}”`);
       const canonicals = [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/g)].map(
         ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1] ?? '',
       );
       expect(canonicals).toHaveLength(1);
-      expect(canonicals[0].endsWith('/leagues')).toBe(true);
+      expect(canonicals[0].endsWith('/programs')).toBe(true);
     },
   );
 
@@ -214,7 +219,7 @@ test.describe('find a league: raw server HTML', () => {
       const all = await raw(request, url(`coed 4s corpus ${id}`));
       expect(resultNames(all.html)).toEqual([SUNDAY]);
       expect(plainText(resultsSection(all.html))).toContain(
-        `1 league matches “coed 4s corpus ${id}”`,
+        `1 program matches “coed 4s corpus ${id}”`,
       );
       const prefix = await raw(request, url(`coed ${id} corp`));
       expect(resultNames(prefix.html).sort()).toEqual([SUNDAY, THURSDAY]);
@@ -228,14 +233,14 @@ test.describe('find a league: raw server HTML', () => {
       const { id } = await seed();
       const { html } = await raw(request, url(`coed 4s ${id} zz${id}`));
       const section = resultsSection(html);
-      expect(plainText(section)).toContain(`No leagues match “coed 4s ${id} zz${id}”`);
+      expect(plainText(section)).toContain(`No programs match “coed 4s ${id} zz${id}”`);
       expect(plainText(section)).toContain('Try fewer words:');
       expect(resultNames(html)).toEqual([]);
       const links = [
         ...section.matchAll(/<li\b[^>]*>\s*<a\b[^>]*\bhref="([^"]*)"[^>]*>([^<]*)<\/a>/g),
       ];
       expect(links.map(([, href, name]) => [href, name])).toEqual([
-        [`/leagues?q=${encodeURIComponent(`coed 4s ${id}`)}`, `coed 4s ${id}`],
+        [`/programs?q=${encodeURIComponent(`coed 4s ${id}`)}`, `coed 4s ${id}`],
       ]);
       expect(section.indexOf('Try fewer words:')).toBeLessThan(section.indexOf('Clear the search'));
       expect(section).toMatch(/<ul\b[^>]*aria-labelledby="suggestions-heading"/);
@@ -326,9 +331,9 @@ test.describe('find a league: raw server HTML', () => {
     const { headers, html } = await raw(request, url('pickleball'));
     expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
     const section = resultsSection(html);
-    expect(plainText(section)).toContain('No leagues match “pickleball”');
-    expect(plainText(section)).toContain('Try a league name, an organization, or a location');
-    expect(section).toMatch(/<a\b[^>]*href="\/leagues"[^>]*>\s*Clear the search\s*<\/a>/);
+    expect(plainText(section)).toContain('No programs match “pickleball”');
+    expect(plainText(section)).toContain('Try a program name, an organization, or a location');
+    expect(section).toMatch(/<a\b[^>]*href="\/programs"[^>]*>\s*Clear the search\s*<\/a>/);
     expect(section).not.toContain('<ul');
   });
 
@@ -338,21 +343,21 @@ test.describe('find a league: raw server HTML', () => {
     async ({ request }) => {
       const canary = `CANARY${randomUUID().replaceAll('-', '')}`;
       const longWord = 'x'.repeat(300);
-      const long = await raw(request, `/leagues?q=${longWord}&utm_source=${canary}`);
-      expect(long.html).toContain(`No leagues match “${'x'.repeat(100)}”`);
+      const long = await raw(request, `/programs?q=${longWord}&utm_source=${canary}`);
+      expect(long.html).toContain(`No programs match “${'x'.repeat(100)}”`);
       expect(long.html).not.toContain('x'.repeat(101));
       expect(long.html).not.toContain(canary);
 
       const words = Array.from({ length: 20 }, (_, i) => `zz${i + 1}`);
-      const many = await raw(request, `/leagues?q=${words.join('+')}&ott=${canary}`);
+      const many = await raw(request, `/programs?q=${words.join('+')}&ott=${canary}`);
       expect(plainText(resultsSection(many.html))).toContain(
-        `No leagues match “${words.slice(0, 16).join(' ')}”`,
+        `No programs match “${words.slice(0, 16).join(' ')}”`,
       );
       expect(many.html).not.toContain('zz17');
       expect(many.html).not.toContain(canary);
 
-      const repeated = await raw(request, `/leagues?q=first&q=${canary}`);
-      expect(plainText(resultsSection(repeated.html))).toContain('No leagues match “first”');
+      const repeated = await raw(request, `/programs?q=first&q=${canary}`);
+      expect(plainText(resultsSection(repeated.html))).toContain('No programs match “first”');
       expect(repeated.html).not.toContain(canary);
       expect(JSON.stringify(repeated.headers)).not.toContain(canary);
     },
@@ -417,7 +422,7 @@ async function seedYouth(
 }
 
 function filterBar(html: string): string {
-  return /<form\b[^>]*aria-label="Filter leagues"[^>]*>([\s\S]*?)<\/form>/.exec(html)?.[1] ?? '';
+  return /<form\b[^>]*aria-label="Filter programs"[^>]*>([\s\S]*?)<\/form>/.exec(html)?.[1] ?? '';
 }
 
 function currentChip(html: string): string {
@@ -427,16 +432,16 @@ function currentChip(html: string): string {
 
 function canonicalOf(html: string): string | undefined {
   const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(html)?.[0];
-  return tag && /\bhref="([^"]*)"/.exec(tag)?.[1];
+  return tag && /\bhref="([^"]*)"/.exec(tag)?.[1]?.replaceAll('&amp;', '&');
 }
 
-test.describe('find a league: sport chips and division filters, raw server HTML', () => {
+test.describe('find a program: sport chips and division filters, raw server HTML', () => {
   test(
     '?sport=soccer&age=u10&gender=girls lists only the soccer U10 womens leagues, with the Soccer chip current, the pills, and the count',
     RAW_HTTP,
     async ({ request }) => {
       await seedYouth();
-      const { headers, html } = await raw(request, '/leagues?sport=soccer&age=u10&gender=girls');
+      const { headers, html } = await raw(request, '/programs?sport=soccer&age=u10&gender=girls');
       expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
       const names = resultNames(html);
       expect(names).toEqual(expect.arrayContaining([GIRLS_ROOKIES, GIRLS_SELECT]));
@@ -454,7 +459,7 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
       expect(plainText(pills ?? '')).toContain('Gender: Girls');
       expect(plainText(pills ?? '')).toContain('U10');
       const count = /<p\b[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/.exec(bar)?.[1] ?? '';
-      expect(plainText(count)).toMatch(/^\d+ of \d+ soccer leagues?$/);
+      expect(plainText(count)).toMatch(/^\d+ of \d+ soccer programs?$/);
     },
   );
 
@@ -474,16 +479,18 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
       const q = `coed ${id}`;
       const { html } = await raw(
         request,
-        `/leagues?q=${encodeURIComponent(q)}&sport=beach-volleyball`,
+        `/programs?q=${encodeURIComponent(q)}&sport=beach-volleyball`,
       );
       expect(resultNames(html)).toEqual(['Coed Sands']);
-      expect(plainText(resultsSection(html))).toContain(`1 beach volleyball league matches “${q}”`);
+      expect(plainText(resultsSection(html))).toContain(
+        `1 beach volleyball program matches “${q}”`,
+      );
       expect(currentChip(html)).toBe('Beach volleyball');
       const encoded = encodeURIComponent(q);
       for (const href of [
-        `/leagues?q=${encoded}`,
-        `/leagues?q=${encoded}&amp;sport=soccer`,
-        `/leagues?q=${encoded}&amp;sport=softball`,
+        `/programs?q=${encoded}`,
+        `/programs?q=${encoded}&amp;sport=soccer`,
+        `/programs?q=${encoded}&amp;sport=softball`,
       ]) {
         expect(html, href).toContain(`href="${href}"`);
       }
@@ -494,11 +501,11 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
     '?sport=softball&level=bb ignores the level, which is not a softball level, and writes it nowhere',
     RAW_HTTP,
     async ({ request }) => {
-      const { html } = await raw(request, '/leagues?sport=softball&level=bb');
+      const { html } = await raw(request, '/programs?sport=softball&level=bb');
       expect(html).not.toContain('level=bb');
       expect(html).not.toContain('level%3Dbb');
       expect(html).not.toMatch(/name="robots"/);
-      expect(canonicalOf(html)?.endsWith('/leagues?sport=softball')).toBe(true);
+      expect(canonicalOf(html)?.endsWith('/programs?sport=softball')).toBe(true);
       expect(currentChip(html)).toBe('Softball');
     },
   );
@@ -525,11 +532,11 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
           },
         })),
       });
-      const path = '/leagues?sport=softball&gender=mens&age=over60';
+      const path = '/programs?sport=softball&gender=mens&age=over60';
       const encoded = path.replaceAll('&', '&amp;');
       const first = await raw(request, path);
       expect(resultNames(first.html)).toHaveLength(5);
-      const pager = /<nav\b[^>]*aria-label="Leagues pages"[^>]*>([\s\S]*?)<\/nav>/.exec(
+      const pager = /<nav\b[^>]*aria-label="Programs pages"[^>]*>([\s\S]*?)<\/nav>/.exec(
         first.html,
       )?.[1];
       expect(pager).toContain(`href="${encoded}&amp;page=2"`);
@@ -544,17 +551,17 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
   );
 
   test(
-    'a sport alone is indexable with the canonical /leagues?sport=soccer; with a division filter it is noindex with the canonical /leagues',
+    'a sport alone is indexable with the canonical /programs?sport=soccer; with a division filter it is noindex with the canonical /programs',
     RAW_HTTP,
     async ({ request }) => {
       await seedYouth();
-      const plain = await raw(request, '/leagues?sport=soccer');
+      const plain = await raw(request, '/programs?sport=soccer');
       expect(plain.html).not.toMatch(/name="robots"/);
-      expect(canonicalOf(plain.html)?.endsWith('/leagues?sport=soccer')).toBe(true);
-      expect(plain.html).toContain('<title>Soccer | Find a league | Omni League</title>');
-      const filtered = await raw(request, '/leagues?sport=soccer&age=u10');
+      expect(canonicalOf(plain.html)?.endsWith('/programs?sport=soccer')).toBe(true);
+      expect(plain.html).toContain('<title>Soccer | Find a program | Omni League</title>');
+      const filtered = await raw(request, '/programs?sport=soccer&age=u10');
       expect(filtered.html).toMatch(/<meta\b[^>]*name="robots"[^>]*content="noindex"/);
-      expect(canonicalOf(filtered.html)?.endsWith('/leagues')).toBe(true);
+      expect(canonicalOf(filtered.html)?.endsWith('/programs')).toBe(true);
     },
   );
 
@@ -573,9 +580,9 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
           .find((part) => new RegExp(`<legend\\b[^>]*>\\s*${legend}\\s*</legend>`).test(part));
         return [...(set ?? '').matchAll(/<span\b[^>]*>([^<]*)<\/span>/g)].map(([, text]) => text);
       };
-      const anySport = await raw(request, `/leagues?q=${encodeURIComponent('00 girls')}`);
+      const anySport = await raw(request, `/programs?q=${encodeURIComponent('00 girls')}`);
       expect(legends(anySport.html)).toEqual(['Gender', 'Age group']);
-      const soccer = await raw(request, '/leagues?sport=soccer');
+      const soccer = await raw(request, '/programs?sport=soccer');
       expect(legends(soccer.html)).toEqual(['Gender', 'Format', 'Level', 'Age group']);
       expect(labels(soccer.html, 'Format')).toEqual(expect.arrayContaining(['7v7', '11v11']));
       expect(labels(soccer.html, 'Format')).not.toContain('2v2');
@@ -584,7 +591,7 @@ test.describe('find a league: sport chips and division filters, raw server HTML'
   );
 });
 
-test.describe('find a league: in the browser', () => {
+test.describe('find a program: in the browser', () => {
   test('a new search shows skeleton rows with "Searching." until the results arrive, adds a history entry, and Back restores the earlier results', async ({
     page,
     consoleGuard,
@@ -592,8 +599,8 @@ test.describe('find a league: in the browser', () => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'one browser project only');
     const { id } = await seed();
     // The socket must be routed before the page opens it.
-    const held = await holdQueries(page, ['search:leagues']);
-    await page.goto('/leagues');
+    const held = await holdQueries(page, ['search:programs']);
+    await page.goto('/programs');
     await hydrated(consoleGuard);
     await submit(page, id);
     await expect(page).toHaveURL(`${baseURL}${url(id)}`);
@@ -625,13 +632,13 @@ test.describe('find a league: in the browser', () => {
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const { id } = await seed();
-      await page.goto('/leagues');
+      await page.goto('/programs');
       await hydrated(consoleGuard);
       await field(page).fill(id);
       await field(page).press('Enter');
       await expect(page).toHaveURL(`${baseURL}${url(id)}`);
       await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
-      await expect(results(page).getByRole('status')).toContainText('2 leagues match');
+      await expect(results(page).getByRole('status')).toContainText('2 programs match');
     },
   );
 
@@ -643,7 +650,7 @@ test.describe('find a league: in the browser', () => {
       const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
       const plain = await context.newPage();
       try {
-        await plain.goto('/leagues');
+        await plain.goto('/programs');
         await plain.getByRole('searchbox').fill(id);
         await plain.getByRole('button', { name: 'Search', exact: true }).click();
         await expect(plain).toHaveURL(`${baseURL}${url(id)}`);
@@ -664,8 +671,8 @@ test.describe('find a league: in the browser', () => {
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
     await page.getByRole('contentinfo').getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Find a league' })).toBeVisible();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
     await expect(page.locator('main#main')).toBeFocused();
   });
 
@@ -697,7 +704,7 @@ test.describe('find a league: in the browser', () => {
       await hydrated(consoleGuard);
       await expect(rowNames(page)).toHaveText([THURSDAY]);
       await page.goto(url(`harbor ${id}`));
-      await expect(results(page)).toContainText(`No leagues match “harbor ${id}”`);
+      await expect(results(page)).toContainText(`No programs match “harbor ${id}”`);
       await expect(rowNames(page)).toHaveCount(0);
     },
   );
@@ -708,7 +715,7 @@ test.describe('find a league: in the browser', () => {
   }, testInfo) => {
     const { id } = await seed();
     await freezeOrganizations(page);
-    await page.goto('/leagues');
+    await page.goto('/programs');
     await hydrated(consoleGuard);
     await screenshot(page, testInfo, '300-find-start');
     await expectAccessible(page);
@@ -719,7 +726,7 @@ test.describe('find a league: in the browser', () => {
     await expectAccessible(page);
 
     await submit(page, 'pickleball');
-    await expect(results(page)).toContainText('No leagues match “pickleball”');
+    await expect(results(page)).toContainText('No programs match “pickleball”');
     await screenshot(page, testInfo, '300-find-none');
     await expectAccessible(page);
 
@@ -733,9 +740,9 @@ test.describe('find a league: in the browser', () => {
     await expect(rowNames(page)).toHaveText([SUNDAY]);
     await expect(results(page).getByRole('status')).toBeFocused();
     await submit(page, 'pickleball');
-    await expect(results(page)).toContainText('No leagues match “pickleball”');
+    await expect(results(page)).toContainText('No programs match “pickleball”');
     await results(page).getByRole('link', { name: 'Clear the search' }).click();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(results(page)).toHaveCount(0);
     await expect(field(page)).toHaveValue('');
     await expect(field(page)).toBeFocused();
@@ -755,7 +762,7 @@ test.describe('find a league: in the browser', () => {
     await expect(rowNames(page)).toHaveText([SUNDAY]);
     const status = results(page).getByRole('status');
     await expect(status).toBeFocused();
-    await expect(status).toHaveText(`1 league matches “coed 4s ${id}”`);
+    await expect(status).toHaveText(`1 program matches “coed 4s ${id}”`);
     expect(await status.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
     await expectAccessible(page);
   });
@@ -768,7 +775,7 @@ test.describe('find a league: in the browser', () => {
     await hydrated(consoleGuard);
     await results(page).getByRole('link', { name: 'Clear the search' }).focus();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(field(page)).toBeFocused();
     expect(await field(page).evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
   });
@@ -797,7 +804,7 @@ test.describe('find a league: in the browser', () => {
           modifications?: { type: string; queryId: number; udfPath?: string }[];
         };
         for (const { type, queryId, udfPath } of modifications) {
-          if (type === 'Add' && udfPath === 'search:leagues') searchIds.add(queryId);
+          if (type === 'Add' && udfPath === 'search:programs') searchIds.add(queryId);
         }
         server.send(message);
       });
@@ -899,7 +906,7 @@ test.describe('find a league: in the browser', () => {
   });
 });
 
-test.describe('find a league: a full season with registration open', () => {
+test.describe('find a program: a full season with registration open', () => {
   test(
     'raw: the row of a league whose soonest-closing open season is full reads Full and the waitlist',
     RAW_HTTP,
@@ -929,8 +936,9 @@ test.describe('find a league: a full season with registration open', () => {
     const row = results(page)
       .locator('ul > li')
       .filter({ has: page.getByRole('heading', { name: FULL_LEAGUE }) });
-    await expect(row.locator('[data-slot="badge"]')).toHaveText('Full');
-    await expect(row.locator('[data-slot="badge"]')).toHaveClass(/\bborder-border\b/);
+    const status = row.locator('p:last-of-type [data-slot="badge"]');
+    await expect(status).toHaveText('Full');
+    await expect(status).toHaveClass(/\bborder-border\b/);
     await expect(row).toContainText('Full Season · waitlist open');
     await screenshot(page, testInfo, '530-find-full-season');
     await expectAccessible(page);
@@ -941,10 +949,10 @@ test.describe('find a league: a full season with registration open', () => {
   });
 });
 
-test.describe('find a league: sport chips and division filters, in the browser', () => {
+test.describe('find a program: sport chips and division filters, in the browser', () => {
   const sheet = (page: Page) => page.getByRole('dialog', { name: 'Filters' });
   const filtersButton = (page: Page) =>
-    page.getByRole('search', { name: 'Filter leagues' }).getByRole('button', { name: /^Filters/ });
+    page.getByRole('search', { name: 'Filter programs' }).getByRole('button', { name: /^Filters/ });
 
   const rowNamed = (page: Page, name: string) => rowNames(page).filter({ hasText: name });
 
@@ -953,7 +961,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
     consoleGuard,
   }) => {
     await seedYouth('over30');
-    await page.goto('/leagues?sport=soccer&age=over30&gender=womens');
+    await page.goto('/programs?sport=soccer&age=over30&gender=womens');
     await hydrated(consoleGuard);
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
     await expect(rowNamed(page, GIRLS_SELECT).first()).toBeVisible();
@@ -966,7 +974,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
       .getByRole('list', { name: 'Active filters' })
       .getByRole('link', { name: /^30\+/ })
       .click();
-    await expect(page).toHaveURL(/\/leagues\?sport=soccer&gender=womens$/);
+    await expect(page).toHaveURL(/\/programs\?sport=soccer&gender=womens$/);
     await expect(rowNames(page).first()).toBeVisible();
     await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
 
@@ -974,7 +982,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
       .getByRole('navigation', { name: 'Sport' })
       .getByRole('link', { name: 'Softball' })
       .click();
-    await expect(page).toHaveURL(/\/leagues\?sport=softball&gender=womens$/);
+    await expect(page).toHaveURL(/\/programs\?sport=softball&gender=womens$/);
     await expect(
       page.getByRole('navigation', { name: 'Sport' }).getByRole('link', { name: 'Softball' }),
     ).toHaveAttribute('aria-current', 'page');
@@ -998,8 +1006,8 @@ test.describe('find a league: sport chips and division filters, in the browser',
         await page.setViewportSize({ width: touch ? width.touch : width.mouse, height: 900 });
       }
       const { id } = await seed();
-      const held = await holdQueries(page, ['search:leagues']);
-      await page.goto('/leagues');
+      const held = await holdQueries(page, ['search:programs']);
+      await page.goto('/programs');
       await hydrated(consoleGuard);
       await submit(page, id);
       await expect.poll(() => held.isHolding()).toBe(true);
@@ -1016,10 +1024,10 @@ test.describe('find a league: sport chips and division filters, in the browser',
 
   test('a new search keeps the sport and the filters', async ({ page, consoleGuard }) => {
     await seedYouth('over35');
-    await page.goto('/leagues?sport=soccer&age=over35');
+    await page.goto('/programs?sport=soccer&age=over35');
     await hydrated(consoleGuard);
     await submit(page, 'girls');
-    await expect(page).toHaveURL(/\/leagues\?q=girls&sport=soccer&age=over35$/);
+    await expect(page).toHaveURL(/\/programs\?q=girls&sport=soccer&age=over35$/);
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
     await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
   });
@@ -1070,7 +1078,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
           },
         ],
       });
-      await page.goto('/leagues?sport=softball');
+      await page.goto('/programs?sport=softball');
       await hydrated(consoleGuard);
       await filtersButton(page).click();
       await expect(sheet(page).locator('[data-slot="sheet-content"]')).toBeVisible();
@@ -1085,7 +1093,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
       expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
       await screenshot(page, testInfo, 'find-filter-sheet');
 
-      const show = sheet(page).getByRole('button', { name: /^Show \d+ leagues?$/ });
+      const show = sheet(page).getByRole('button', { name: /^Show \d+ programs?$/ });
       const countOf = (label: string) => Number(/\d+/.exec(label)?.[0]);
       const initial = (await show.textContent()) ?? '';
       await age.getByText('55+', { exact: true }).click();
@@ -1100,10 +1108,10 @@ test.describe('find a league: sport chips and division filters, in the browser',
       const withFifties = countOf(fifties);
 
       await show.click();
-      await expect(page).toHaveURL(/\/leagues\?sport=softball&age=over55$/);
+      await expect(page).toHaveURL(/\/programs\?sport=softball&age=over55$/);
       await expect(
-        page.getByRole('search', { name: 'Filter leagues' }).getByRole('status'),
-      ).toHaveText(new RegExp(`^${String(withFifties)} of \\d+ softball leagues\\s*$`));
+        page.getByRole('search', { name: 'Filter programs' }).getByRole('status'),
+      ).toHaveText(new RegExp(`^${String(withFifties)} of \\d+ softball programs\\s*$`));
     });
   });
 
@@ -1112,7 +1120,7 @@ test.describe('find a league: sport chips and division filters, in the browser',
     consoleGuard,
   }, testInfo) => {
     await seedYouth('over50');
-    await page.goto('/leagues?sport=soccer&age=over50&gender=womens');
+    await page.goto('/programs?sport=soccer&age=over50&gender=womens');
     await hydrated(consoleGuard);
     await expect(rowNames(page).first()).toBeVisible();
     await expectAccessible(page);
@@ -1128,20 +1136,20 @@ test.describe('find a league: sport chips and division filters, in the browser',
     consoleGuard,
   }) => {
     await seedYouth('over40');
-    await page.goto('/leagues?sport=soccer&gender=womens&age=over40&level=intermediate');
+    await page.goto('/programs?sport=soccer&gender=womens&age=over40&level=intermediate');
     await hydrated(consoleGuard);
     await expect(results(page).getByRole('status')).toHaveText(
-      'No soccer leagues match these filters',
+      'No soccer programs match these filters',
     );
     await results(page)
       .getByRole('link', { name: /^Remove Level: Intermediate/ })
       .click();
-    await expect(page).toHaveURL(/\/leagues\?sport=soccer&gender=womens&age=over40$/);
+    await expect(page).toHaveURL(/\/programs\?sport=soccer&gender=womens&age=over40$/);
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
   });
 });
 
-test.describe('find a league: top bar', () => {
+test.describe('find a program: top bar', () => {
   const searchForm = (page: Page) => page.getByRole('search', { name: 'Find a league' });
   const phoneLink = (page: Page) =>
     page.getByRole('banner').getByRole('link', { name: 'Find a league' });
@@ -1175,7 +1183,7 @@ test.describe('find a league: top bar', () => {
     const input = searchForm(page).getByRole('searchbox', { name: 'Find a league' });
     await input.fill(id);
     await input.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}${url(id)}`);
+    await expect(page).toHaveURL(`${baseURL}${leaguesUrl(id)}`);
     await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
     await expect(searchForm(page)).toHaveCount(0);
   });
@@ -1190,7 +1198,7 @@ test.describe('find a league: top bar', () => {
       const input = searchForm(plain).getByRole('searchbox');
       await input.fill(id);
       await input.press('Enter');
-      await expect(plain).toHaveURL(`${baseURL}${url(id)}`);
+      await expect(plain).toHaveURL(`${baseURL}${leaguesUrl(id)}`);
       await expect(rowNames(plain)).toHaveText([SUNDAY, THURSDAY]);
     } finally {
       await context.close();
@@ -1212,19 +1220,21 @@ test.describe('find a league: top bar', () => {
     expect(box?.width).toBeGreaterThanOrEqual(44);
     expect(box?.height).toBeGreaterThanOrEqual(44);
     await link.click();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Find a league' })).toBeVisible();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
   });
 
-  test('on /leagues the bar has neither the field nor the link', async ({ page }) => {
-    await page.goto('/leagues');
-    await expect(page.getByRole('banner')).toBeVisible();
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Find a league' })).toHaveCount(
-      0,
-    );
-    await expect(page.getByRole('banner').getByRole('searchbox')).toHaveCount(0);
-    await expect(page.getByRole('search')).toHaveCount(1);
-  });
+  for (const path of ['/leagues', '/programs']) {
+    test(`on ${path} the bar has neither the field nor the link`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByRole('banner')).toBeVisible();
+      await expect(
+        page.getByRole('banner').getByRole('link', { name: 'Find a league' }),
+      ).toHaveCount(0);
+      await expect(page.getByRole('banner').getByRole('searchbox')).toHaveCount(0);
+      await expect(page.getByRole('main').getByRole('searchbox')).toHaveCount(1);
+    });
+  }
 
   for (const width of [768, 1280]) {
     test(`at ${width}px the page with the field passes axe and does not scroll at 320px`, async ({
@@ -1254,7 +1264,7 @@ test.describe('find a league: top bar', () => {
   });
 });
 
-test.describe('find a league: offline', () => {
+test.describe('find a program: offline', () => {
   test('a search viewed online opens from its saved copy with the note; any other search shows the not-saved view', async ({
     page,
     context,
@@ -1285,5 +1295,336 @@ test.describe('find a league: offline', () => {
       url(`never viewed ${id}`),
     );
     await context.setOffline(false);
+  });
+});
+
+const BEACH_OPEN_DIVISION = {
+  gender: 'coed',
+  playersPerSide: 4,
+  level: 'bb',
+  ageGroup: 'adult',
+} as const;
+
+const tournamentName = (id: string) => `Beach Open ${id}`;
+
+const OVER_60_WOMENS = {
+  gender: 'womens',
+  playersPerSide: 10,
+  level: 'rec',
+  ageGroup: 'over60',
+} as const;
+
+/** No other test seeds a tournament in this division, so a browse of it lists only these, by name. */
+const OVER_60_BROWSE = '/programs?type=tournament&sport=softball&gender=womens&age=over60';
+
+async function seedOver60Tournaments(): Promise<{ id: string; names: string[] }> {
+  const { tenant, id } = await seed();
+  const names = [`Alpha Open ${id}`, `Bravo Open ${id}`];
+  for (const [index, name] of names.entries()) {
+    await seedTournament(tenant, {
+      name,
+      slug: `over-60-${String(index)}`,
+      sport: 'softball',
+      locations: [NORTH_BEACH],
+      division: OVER_60_WOMENS,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(41),
+    });
+  }
+  return { id, names };
+}
+
+async function seedWithTournament(): Promise<Seeded & { tournamentPath: string }> {
+  const seeded = await seed();
+  const tournamentPath = await seedTournament(seeded.tenant, {
+    name: tournamentName(seeded.id),
+    slug: 'beach-open',
+    locations: [NORTH_BEACH],
+    division: BEACH_OPEN_DIVISION,
+    startDate: dateFromToday(40),
+    endDate: dateFromToday(41),
+    registrationDeadline: dateFromToday(30),
+  });
+  return { ...seeded, tournamentPath };
+}
+
+const rowOf = (html: string, name: string) =>
+  plainText(
+    resultsSection(html)
+      .split('</li>')
+      .find((row) => row.includes(name)) ?? '',
+  );
+
+const typeChipLinks = (html: string) =>
+  [
+    ...(
+      /<nav\b[^>]*aria-label="Program type"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? ''
+    ).matchAll(/<a\b([^>]*)>([^<]*)<\/a>/g),
+  ].map(([, attributes, name]) => ({
+    name: name.trim(),
+    href: /\bhref="([^"]*)"/.exec(attributes)?.[1]?.replace(/&amp;/g, '&'),
+    current: attributes.includes('aria-current="page"'),
+  }));
+
+test.describe('find a program: leagues and tournaments', () => {
+  test(
+    'a search finds leagues and a tournament, each with its type, and the tournament shows its dates and status',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant, id, tournamentPath } = await seedWithTournament();
+      const { html } = await raw(request, url(id));
+      expect(resultNames(html).sort()).toEqual([tournamentName(id), SUNDAY, THURSDAY].sort());
+      expect(plainText(resultsSection(html))).toContain(`3 programs match “${id}”`);
+      expect(rowOf(html, SUNDAY)).toContain(`${SUNDAY} League Coed`);
+      expect(rowOf(html, tournamentName(id))).toContain(`${tournamentName(id)} Tournament Coed`);
+      const tournament = rowOf(html, tournamentName(id));
+      expect(tournament).toContain('Registration open');
+      expect(tournament).toMatch(/[A-Z][a-z]{2} \d{1,2}(?: – [A-Z][a-z]{2} \d{1,2})?, \d{4}/);
+      expect(tournament).toContain('closes');
+      expect(html).toContain(`href="${tournamentPath}"`);
+      expect(html).toContain(`href="${tenant.path}/leagues/sunday-reverse-coed-4s"`);
+      expect(typeChipLinks(html)).toEqual([
+        { name: 'All', href: url(id), current: true },
+        { name: 'Leagues', href: `/programs?type=league&q=${id}`, current: false },
+        { name: 'Tournaments', href: `/programs?type=tournament&q=${id}`, current: false },
+      ]);
+    },
+  );
+
+  test(
+    'a type chosen with a search lists only that type, and the chips keep every type with a match',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithTournament();
+      const tournaments = await raw(request, `/programs?type=tournament&q=${id}`);
+      expect(resultNames(tournaments.html)).toEqual([tournamentName(id)]);
+      expect(typeChipLinks(tournaments.html).map((chip) => [chip.name, chip.current])).toEqual([
+        ['All', false],
+        ['Leagues', false],
+        ['Tournaments', true],
+      ]);
+      const leagues = await raw(request, `/programs?type=league&q=${id}`);
+      expect(resultNames(leagues.html).sort()).toEqual([SUNDAY, THURSDAY]);
+    },
+  );
+
+  test(
+    'a type and a sport without a search list the tournaments by name',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id, names } = await seedOver60Tournaments();
+      const { html } = await raw(request, OVER_60_BROWSE);
+      expect(resultNames(html).filter((name) => name.endsWith(id))).toEqual(names);
+      const rows = resultsSection(html).split('</li>').slice(0, -1);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((row) => plainText(row).includes('Tournament'))).toBe(true);
+      expect(rows.some((row) => /<span[^>]*>\s*League\s*<\/span>/.test(row))).toBe(false);
+    },
+  );
+
+  test(
+    'a type and a sport are indexable with their own canonical and title',
+    RAW_HTTP,
+    async ({ request }) => {
+      const path = '/programs?type=tournament&sport=beach-volleyball';
+      const { html } = await raw(request, path);
+      expect(html).not.toMatch(/name="robots"/);
+      expect(canonicalOf(html)?.endsWith(path)).toBe(true);
+      expect(html).toContain(
+        '<title>Beach volleyball tournaments | Find a program | Omni League</title>',
+      );
+    },
+  );
+
+  test(
+    'a known type with no programs shows its chip as current with no results, and an unknown type is ignored and appears nowhere',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithTournament();
+      const camps = await raw(request, `/programs?type=camp&q=${id}`);
+      expect(resultNames(camps.html)).toEqual([]);
+      expect(typeChipLinks(camps.html).find((chip) => chip.current)).toMatchObject({
+        name: 'Camps',
+      });
+      expect(plainText(resultsSection(camps.html))).toContain(`No camps match “${id}”`);
+      expect(plainText(resultsSection(camps.html))).toContain('3 programs of other types match.');
+      const none = await raw(request, '/programs?type=camp&sport=beach-volleyball');
+      expect(resultNames(none.html)).toEqual([]);
+      expect(plainText(resultsSection(none.html))).toContain(
+        'No beach volleyball camps are published yet',
+      );
+
+      const unknown = await raw(request, `/programs?type=zzz&q=${id}`);
+      expect(unknown.html).not.toContain('zzz');
+      expect(resultNames(unknown.html)).toEqual(resultNames((await raw(request, url(id))).html));
+      expect(typeChipLinks(unknown.html).some((chip) => chip.current && chip.name === 'All')).toBe(
+        true,
+      );
+    },
+  );
+
+  test(
+    'the search and the sport views are indexed as before: a search is noindex with the canonical /programs, a sport is indexable, and page 2 keeps its page',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant } = await seed();
+      for (let i = 1; i <= 6; i++) {
+        await seedTournament(tenant, {
+          name: `Softball Cup ${i}`,
+          slug: `softball-cup-${i}`,
+          sport: 'softball',
+          locations: [NORTH_BEACH],
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(41),
+        });
+      }
+      const search = await raw(request, '/programs?q=coed');
+      expect(search.html).toMatch(/<meta\b[^>]*name="robots"[^>]*content="noindex"/);
+      expect(canonicalOf(search.html)?.endsWith('/programs')).toBe(true);
+      const sport = await raw(request, '/programs?sport=soccer');
+      expect(sport.html).not.toMatch(/name="robots"/);
+      expect(canonicalOf(sport.html)?.endsWith('/programs?sport=soccer')).toBe(true);
+      const second = await raw(request, '/programs?sport=softball&page=2');
+      expect(second.html).not.toMatch(/name="robots"/);
+      expect(canonicalOf(second.html)?.endsWith('/programs?sport=softball&page=2')).toBe(true);
+    },
+  );
+
+  test(
+    'a tournament row’s status reads Registration closed after its deadline',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant, id } = await seed();
+      await seedTournament(tenant, {
+        name: `Closed Cup ${id}`,
+        slug: 'closed-cup',
+        locations: [NORTH_BEACH],
+        startDate: dateFromToday(40),
+        endDate: dateFromToday(41),
+        registrationDeadline: dateFromToday(-3),
+      });
+      const { html } = await raw(request, url(`closed cup ${id}`));
+      expect(rowOf(html, `Closed Cup ${id}`)).toContain('Registration closed');
+    },
+  );
+});
+
+test.describe('find a program: /leagues redirects', () => {
+  test(
+    '/leagues answers a 301 to /programs?type=league with the known parameters only, no-store, and no other parameter anywhere in the response',
+    RAW_HTTP,
+    async () => {
+      const canary = `CANARY${randomUUID().slice(0, 8)}`;
+      const response = await rawGet(`/leagues?q=coed&sport=soccer&canary=${canary}&ott=${canary}`);
+      expect(response.status).toBe(301);
+      expect(response.location).toBe('/programs?type=league&q=coed&sport=soccer');
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(JSON.stringify(response.headers)).not.toContain(canary);
+      expect(response.body).not.toContain(canary);
+
+      const bare = await rawGet('/leagues');
+      expect(bare.status).toBe(301);
+      expect(bare.location).toBe('/programs?type=league');
+      const filtered = await rawGet('/leagues?sport=soccer&gender=girls&age=u10&page=2&zzz=1');
+      expect(filtered.location).toBe(
+        '/programs?type=league&sport=soccer&gender=girls&age=u10&page=2',
+      );
+    },
+  );
+
+  test('an in-app link to /leagues lands on /programs?type=league', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto('/programs');
+    await hydrated(consoleGuard);
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Find a league' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Program type' }).getByRole('link', { name: 'Leagues' }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+test.describe('find a program: type chips in the browser', () => {
+  test('choosing Tournaments lists the tournament and keeps the search, and All brings the leagues back', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithTournament();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    const chips = page.getByRole('navigation', { name: 'Program type' });
+    await chips.getByRole('link', { name: 'Tournaments' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=tournament&q=${id}`);
+    await expect(rowNames(page)).toHaveText([tournamentName(id)]);
+    await expect(chips.getByRole('link', { name: 'Tournaments' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await chips.getByRole('link', { name: 'All' }).click();
+    await expect(page).toHaveURL(`${baseURL}${url(id)}`);
+    await expect(rowNames(page)).toHaveCount(3);
+  });
+
+  test('a new search keeps the chosen type', async ({ page, consoleGuard }) => {
+    const { id } = await seedWithTournament();
+    await page.goto('/programs?type=tournament&sport=beach-volleyball');
+    await hydrated(consoleGuard);
+    await submit(page, id);
+    await expect(page).toHaveURL(
+      `${baseURL}/programs?type=tournament&q=${id}&sport=beach-volleyball`,
+    );
+    await expect(rowNames(page)).toHaveText([tournamentName(id)]);
+  });
+
+  test('the type chips pass the axe helper with the results, the empty type, and the browse, and nothing scrolls sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { id } = await seedWithTournament();
+    const over60 = await seedOver60Tournaments();
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    await screenshot(page, testInfo, '350-programs-results');
+    await expectAccessible(page);
+
+    await page.goto(`/programs?type=camp&q=${id}`);
+    await hydrated(consoleGuard);
+    await expect(results(page)).toContainText(`No camps match “${id}”`);
+    await screenshot(page, testInfo, '350-programs-other-type');
+    await expectAccessible(page);
+
+    await page.goto(OVER_60_BROWSE);
+    await hydrated(consoleGuard);
+    await expect(rowNames(page).filter({ hasText: over60.id }).first()).toBeVisible();
+    await screenshot(page, testInfo, '350-programs-browse');
+    await expectAccessible(page);
+  });
+
+  test('the chips and the results do not move when a search answers', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seedWithTournament();
+    const held = await holdQueries(page, ['search:programs']);
+    await page.goto('/programs');
+    await hydrated(consoleGuard);
+    await submit(page, id);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByTestId('find-skeleton')).toBeVisible();
+    const chips = page.getByRole('navigation', { name: 'Program type' });
+    const top = async () => ({
+      chips: (await chips.boundingBox())?.y,
+      sports: (await page.getByRole('navigation', { name: 'Sport' }).boundingBox())?.y,
+      results: (await page.locator('#results-heading').boundingBox())?.y,
+    });
+    const before = await top();
+    held.release();
+    await expect(rowNames(page)).toHaveCount(3);
+    expect(await top()).toEqual(before);
   });
 });

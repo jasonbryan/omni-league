@@ -68,6 +68,13 @@ describe('showLeaguesLabel', () => {
     expect(showLeaguesLabel(1)).toBe('Show 1 league');
     expect(showLeaguesLabel(0)).toBe('Show 0 leagues');
     expect(showLeaguesLabel(undefined)).toBe('Show leagues');
+    expect(showLeaguesLabel(2, { singular: 'program', plural: 'programs' })).toBe(
+      'Show 2 programs',
+    );
+    expect(showLeaguesLabel(1, { singular: 'program', plural: 'programs' })).toBe('Show 1 program');
+    expect(showLeaguesLabel(undefined, { singular: 'program', plural: 'programs' })).toBe(
+      'Show programs',
+    );
   });
 });
 

@@ -51,6 +51,7 @@ import {
   hiddenDraftInputs,
   offeredFacets,
   showLeaguesLabel,
+  type ListedKind,
 } from './filter-draft';
 import { listPagesQuery } from './organization-path';
 
@@ -275,6 +276,7 @@ export class LeagueFilterOverlays {
   readonly total = input.required<number | undefined>();
   readonly queryBuilder = input.required<((filters: DivisionFilters) => Params) | undefined>();
   readonly ageOrder = input.required<readonly AgeGroup[] | undefined>();
+  readonly kind = input.required<ListedKind>();
   readonly sheetTrigger = input.required<HTMLElement | undefined>();
 
   /** Called once a Clear link's navigation ends, since the pressed link has left with its overlay. */
@@ -321,11 +323,11 @@ export class LeagueFilterOverlays {
       total,
     );
   });
-  protected readonly showLabel = computed(() => showLeaguesLabel(this.count()));
+  protected readonly showLabel = computed(() => showLeaguesLabel(this.count(), this.kind()));
   protected readonly countStatus = computed(() => {
     const count = this.count();
     if (count === undefined) return '';
-    return `${count} ${count === 1 ? 'league matches' : 'leagues match'}`;
+    return `${count} ${count === 1 ? `${this.kind().singular} matches` : `${this.kind().plural} match`}`;
   });
 
   protected readonly sheetHidden = computed(() =>

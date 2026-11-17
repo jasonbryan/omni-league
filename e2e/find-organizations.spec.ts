@@ -118,10 +118,10 @@ test.describe('find a league: the organizations list', () => {
   });
 
   test(
-    '/leagues without JavaScript lists the organizations with a published league by name ignoring case, with their sports and City, state',
+    '/programs without JavaScript lists the organizations with a published league by name ignoring case, with their sports and City, state',
     RAW_HTTP,
     async ({ request }) => {
-      const response = await fetchRawHtml(request, '/leagues');
+      const response = await fetchRawHtml(request, '/programs');
       expect(response.status).toBe(200);
       expect(noSpaces(response.headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
       expect(response.headers['location']).toBeUndefined();
@@ -140,7 +140,7 @@ test.describe('find a league: the organizations list', () => {
       expect(response.html).not.toContain(seeded.draftsOnly.name);
       expect(response.html).not.toContain(seeded.noLeagues.name);
       expect(canonicals(response.html)).toHaveLength(1);
-      expect(canonicals(response.html)[0].endsWith('/leagues')).toBe(true);
+      expect(canonicals(response.html)[0].endsWith('/programs')).toBe(true);
     },
   );
 
@@ -148,12 +148,12 @@ test.describe('find a league: the organizations list', () => {
     '?page=2 holds the 6th and 7th organization with the canonical /leagues?page=2, and no organization with only drafts or none',
     RAW_HTTP,
     async ({ request }) => {
-      const response = await fetchRawHtml(request, '/leagues?page=2');
+      const response = await fetchRawHtml(request, '/programs?page=2');
       expect(response.status).toBe(200);
       // Organizations other specs seed follow the seven, so the page holds more than the 6th and 7th.
       expect(listedNames(response.html).slice(0, 2)).toEqual(['Foxtrot', 'Golf'].map(nameOf));
       expect(canonicals(response.html)).toHaveLength(1);
-      expect(canonicals(response.html)[0].endsWith('/leagues?page=2')).toBe(true);
+      expect(canonicals(response.html)[0].endsWith('/programs?page=2')).toBe(true);
       expect(plainText(organizationsSection(response.html))).toMatch(/6–\d+ of \d+ organizations/);
       expect(response.html).not.toContain(seeded.draftsOnly.name);
       expect(response.html).not.toContain(seeded.noLeagues.name);
@@ -162,11 +162,11 @@ test.describe('find a league: the organizations list', () => {
 
   for (const query of ['?page=0', '?page=abc', '?page=2&page=3']) {
     test(`${query} renders page 1 with 200 and no Location`, RAW_HTTP, async ({ request }) => {
-      const response = await fetchRawHtml(request, `/leagues${query}`);
+      const response = await fetchRawHtml(request, `/programs${query}`);
       expect(response.status).toBe(200);
       expect(response.headers['location']).toBeUndefined();
       expect(listedNames(response.html)).toEqual(SORTED_WORDS.slice(0, 5).map(nameOf));
-      expect(canonicals(response.html)[0].endsWith('/leagues')).toBe(true);
+      expect(canonicals(response.html)[0].endsWith('/programs')).toBe(true);
     });
   }
 
@@ -175,7 +175,7 @@ test.describe('find a league: the organizations list', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
-    await page.goto('/leagues');
+    await page.goto('/programs');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
 
@@ -184,13 +184,13 @@ test.describe('find a league: the organizations list', () => {
     });
     await next.focus();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/leagues?page=2`);
+    await expect(page).toHaveURL(`${baseURL}/programs?page=2`);
     await expect(rows(page).nth(0)).toHaveText(nameOf('Foxtrot'));
     await expect(rows(page).nth(1)).toHaveText(nameOf('Golf'));
     await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toBeFocused();
 
     await page.goBack();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
   });
 
@@ -199,7 +199,7 @@ test.describe('find a league: the organizations list', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
-    await page.goto('/leagues');
+    await page.goto('/programs');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
     await page.evaluate(() => {
@@ -224,7 +224,7 @@ test.describe('find a league: the organizations list screens', () => {
       leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
     });
     await freezeOrganizations(page);
-    await page.goto('/leagues');
+    await page.goto('/programs');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows(page).first()).toBeVisible();
     await screenshot(page, testInfo, '300-find-organizations');
@@ -245,7 +245,7 @@ test.describe('find a league: the organizations list screens', () => {
       });
     }
     await freezeOrganizations(page);
-    await page.goto('/leagues?page=2');
+    await page.goto('/programs?page=2');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     // The saved copy is written only from the live result, which is the one answer the frozen list lets through.
     await expect.poll(() => savedPageNames(page, 2)).not.toBeNull();
@@ -267,7 +267,7 @@ test.describe('find a league: the organizations list screens', () => {
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(`${baseURL}/leagues?page=2`);
+    await expect(page).toHaveURL(`${baseURL}/programs?page=2`);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
     await expect(rows(page)).toHaveText(saved);
 
@@ -301,7 +301,7 @@ test.describe('find a league: the top bar search beside the organizations list',
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'the bar field shows from 768px');
     const { tenant, id } = await seedFindable();
-    await page.goto('/leagues');
+    await page.goto('/programs');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows(page).first()).toBeVisible();
     await expect(bar(page).getByRole('searchbox')).toHaveCount(0);
@@ -313,13 +313,13 @@ test.describe('find a league: the top bar search beside the organizations list',
     await expect(field).toBeVisible();
     await field.fill(id);
     await field.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/leagues?q=${id}`);
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league&q=${id}`);
     await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
     await expect(page.getByRole('search')).toHaveCount(2);
   });
 
-  test('on a phone the bar link from an organization page opens /leagues with the organizations list', async ({
+  test('on a phone the bar link from an organization page opens the leagues of Find a program', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -328,8 +328,9 @@ test.describe('find a league: the top bar search beside the organizations list',
     await page.goto(tenant.path);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await bar(page).getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
-    await expect(rows(page).first()).toBeVisible();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
     await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
   });
 });

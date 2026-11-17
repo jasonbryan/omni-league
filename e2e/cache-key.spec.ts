@@ -21,6 +21,7 @@ const EDGE_PATHS = [
   '/app/x',
   '/app',
   '/leagues',
+  '/programs',
   '/organizations/cache-key-sample',
   '/organizations/cache-key-sample/sports/soccer',
   '/organizations/cache-key-sample/leagues/cache-key-sample',
@@ -45,8 +46,8 @@ test.describe('query strings and the CDN', () => {
     async () => {
       for (const path of [...EDGE_PATHS, ...STATIC_PATHS]) {
         const token = canary();
-        // `q` is the find page's search, so its HTML holds the parsed value; every other parameter stays out.
-        const param = path === '/leagues' ? 'r' : 'q';
+        // `q` is the find page's search, so its HTML holds the parsed value, and the `/leagues` redirect's `Location` does; every other parameter stays out.
+        const param = path === '/leagues' || path === '/programs' ? 'r' : 'q';
         const response = await rawGet(`${path}?ott=${token}&${param}=${token}x`);
         expect(response.status, path).toBeLessThan(500);
         expect(response.body, path).not.toContain(token);
@@ -86,7 +87,7 @@ test.describe('query strings and the CDN', () => {
       const [a, b] = [canary(), canary()];
       for (const path of [
         unique,
-        '/leagues',
+        '/programs',
         `/app${unique}`,
         `/organizations${unique}`,
         `/organizations${unique}/sports/soccer`,
@@ -130,23 +131,79 @@ test.describe('query strings and the CDN', () => {
   );
 
   test(
+    'the /leagues redirect: each request gets its own Location, built from the known parameters, and none is stored',
+    RAW_HTTP,
+    async () => {
+      const [a, b, other] = [canary(), canary(), canary()];
+      const samples: [string, string][] = [
+        [`/leagues?q=${a}&utm_source=${other}`, `/programs?type=league&q=${a}`],
+        [`/leagues?q=${b}`, `/programs?type=league&q=${b}`],
+        ['/leagues', '/programs?type=league'],
+        [`/leagues?sport=soccer&ott=${other}`, '/programs?type=league&sport=soccer'],
+        [`/leagues?sport=${other}&page=${other}`, '/programs?type=league'],
+        [`/leagues?q=${a}&q=${other}&page=2`, `/programs?type=league&q=${a}&page=2`],
+      ];
+      for (const path of [...samples, ...samples].map(([sample]) => sample)) {
+        const expected = samples.find(([sample]) => sample === path)![1];
+        const response = await rawGet(path);
+        expect(response.status, path).toBe(301);
+        expect(response.location, path).toBe(expected);
+        expect(response.headers['cache-control'], path).toBe('no-store');
+        expect(response.headers['netlify-vary'], path).toBe('query');
+        expect(`${response.body}${JSON.stringify(response.headers)}`, path).not.toContain(other);
+      }
+    },
+  );
+
+  test(
+    'the programs page: each type, sport, and ?q gets its own HTML, and another parameter never reaches the response',
+    RAW_HTTP,
+    async () => {
+      const [a, other] = [canary(), canary()];
+      const current = (body: string) => {
+        const types =
+          /<nav\b[^>]*aria-label="Program type"[^>]*>([\s\S]*?)<\/nav>/.exec(body)?.[1] ?? '';
+        return /<a\b[^>]*aria-current="page"[^>]*>\s*([^<]*?)\s*<\/a>/.exec(types)?.[1];
+      };
+      const withType = await rawGet(`/programs?type=tournament&q=${a}&utm_source=${other}`);
+      expect(withType.status).toBe(200);
+      expect(sharedCacheable(withType.headers['cache-control'])).toBe(true);
+      expect(withType.body).toContain(a);
+      expect(withType.body).not.toContain(other);
+      expect(current(withType.body)).toBe('Tournaments');
+      await rawGet(`/programs?type=tournament&q=${a}&utm_source=${other}`);
+      for (const [query, chip] of [
+        [`?q=${a}`, 'All'],
+        ['?type=league', 'Leagues'],
+        ['?type=tournament', 'Tournaments'],
+        ['', 'All'],
+      ]) {
+        const later = await rawGet(`/programs${query}`);
+        expect(later.status, query).toBe(200);
+        expect(current(later.body), query).toBe(chip);
+        expect(later.body, query).not.toContain(other);
+      }
+    },
+  );
+
+  test(
     'the find page: each ?q gets its own HTML, and another parameter never reaches the response',
     RAW_HTTP,
     async () => {
       const [a, b, other] = [canary(), canary(), canary()];
-      const first = await rawGet(`/leagues?q=${a}&utm_source=${other}`);
+      const first = await rawGet(`/programs?q=${a}&utm_source=${other}`);
       expect(first.status).toBe(200);
       expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
       expect(first.body).toContain(a);
       expect(first.body).not.toContain(other);
-      await rawGet(`/leagues?q=${a}&utm_source=${other}`);
+      await rawGet(`/programs?q=${a}&utm_source=${other}`);
       for (const query of [`?q=${b}`, '']) {
-        const later = await rawGet(`/leagues${query}`);
+        const later = await rawGet(`/programs${query}`);
         expect(later.status, query).toBe(200);
         expect(later.body, query).not.toContain(a);
         expect(later.body, query).not.toContain(other);
       }
-      const second = await rawGet(`/leagues?q=${b}`);
+      const second = await rawGet(`/programs?q=${b}`);
       expect(second.body).toContain(b);
     },
   );
@@ -155,17 +212,22 @@ test.describe('query strings and the CDN', () => {
     'the find page by sport: a canary as the sport, a filter, or an unknown level never reaches the response, and each sport gets its own HTML',
     RAW_HTTP,
     async () => {
-      const current = (body: string) =>
-        /<a\b[^>]*aria-current="page"[^>]*>\s*([^<]*?)\s*<\/a>/.exec(body)?.[1];
+      const current = (body: string) => {
+        const sports = /<nav\b[^>]*aria-label="Sport"[^>]*>([\s\S]*?)<\/nav>/.exec(body)?.[1] ?? '';
+        return /<a\b[^>]*aria-current="page"[^>]*>\s*([^<]*?)\s*<\/a>/.exec(sports)?.[1];
+      };
       for (const sample of [
         (c: string) => `?sport=${c}`,
         (c: string) => `?sport=soccer&age=${c}`,
         (c: string) => `?sport=soccer&gender=${c}&level=${c}&format=${c}&page=${c}`,
         (c: string) => `?sport=soccer&sport=${c}`,
         (c: string) => `?q=a&sport=soccer&age=u10&age=${c}`,
+        (c: string) => `?type=${c}`,
+        (c: string) => `?type=league&type=${c}`,
+        (c: string) => `?type=${c}&q=a&sport=soccer`,
       ]) {
         const token = canary();
-        const response = await rawGet(`/leagues${sample(token)}`);
+        const response = await rawGet(`/programs${sample(token)}`);
         expect(response.status, sample(token)).toBe(200);
         expect(response.body, sample(token)).not.toContain(token);
         expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
@@ -173,13 +235,13 @@ test.describe('query strings and the CDN', () => {
         expect(response.headers['netlify-vary'], sample(token)).toBe('query');
         expect(sharedCacheable(response.headers['cache-control']), sample(token)).toBe(true);
       }
-      const soccer = await rawGet('/leagues?sport=soccer');
-      const softball = await rawGet('/leagues?sport=softball&level=bb');
+      const soccer = await rawGet('/programs?sport=soccer');
+      const softball = await rawGet('/programs?sport=softball&level=bb');
       expect(current(soccer.body)).toBe('Soccer');
       expect(current(softball.body)).toBe('Softball');
       expect(softball.body).not.toContain('level=bb');
       expect(softball.body).not.toContain('level%3Dbb');
-      const back = await rawGet('/leagues?sport=soccer');
+      const back = await rawGet('/programs?sport=soccer');
       expect(current(back.body)).toBe('Soccer');
     },
   );
@@ -188,11 +250,11 @@ test.describe('query strings and the CDN', () => {
     'the find page without a search: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
     RAW_HTTP,
     async () => {
-      const first = await rawGet('/leagues');
+      const first = await rawGet('/programs');
       expect(first.status).toBe(200);
       for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
         const token = canary();
-        const response = await rawGet(`/leagues${sample(token)}`);
+        const response = await rawGet(`/programs${sample(token)}`);
         expect(response.status, sample(token)).toBe(200);
         expect(response.body, sample(token)).not.toContain(token);
         expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);

@@ -84,6 +84,7 @@ import type * as lib_rosterEntry from "../lib/rosterEntry.js";
 import type * as lib_rosterWrites from "../lib/rosterWrites.js";
 import type * as lib_scoreReports from "../lib/scoreReports.js";
 import type * as lib_searchQuery from "../lib/searchQuery.js";
+import type * as lib_searchRows from "../lib/searchRows.js";
 import type * as lib_seasonInput from "../lib/seasonInput.js";
 import type * as lib_seasonLookup from "../lib/seasonLookup.js";
 import type * as lib_seasonStatus from "../lib/seasonStatus.js";
@@ -215,6 +216,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rosterWrites": typeof lib_rosterWrites;
   "lib/scoreReports": typeof lib_scoreReports;
   "lib/searchQuery": typeof lib_searchQuery;
+  "lib/searchRows": typeof lib_searchRows;
   "lib/seasonInput": typeof lib_seasonInput;
   "lib/seasonLookup": typeof lib_seasonLookup;
   "lib/seasonStatus": typeof lib_seasonStatus;

@@ -19,7 +19,7 @@ const sessionSpecs = deriveSessionSpecs(repoRoot);
 const pr = { event: 'pull_request', base: 'main' };
 const FULL = 'FULL';
 const accept = 'e2e/accept-invite.spec.ts';
-const findPage = 'e2e/find-a-league.spec.ts';
+const findPage = 'e2e/find-a-program.spec.ts';
 const findOrganizations = 'e2e/find-organizations.spec.ts';
 const withAlways = (...filters) => [...new Set([...ALWAYS, ...filters])].sort();
 
@@ -868,7 +868,7 @@ describe('the public-page specs', () => {
       'e2e/league-page.spec.ts',
       'e2e/season-page.spec.ts',
       'e2e/sport-view.spec.ts',
-      'e2e/find-a-league.spec.ts',
+      'e2e/find-a-program.spec.ts',
       'e2e/cache-key.spec.ts',
     ];
 

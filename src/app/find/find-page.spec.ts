@@ -23,16 +23,16 @@ import {
 import { expectFindAlert } from '../ui/testing/alert';
 import { expectBadge } from '../ui/testing/badge';
 
-const QUERY = 'search:leagues';
+const QUERY = 'search:programs';
 
 let client: FakeConvexClient;
 
-async function open(url = '/leagues'): Promise<RouterTestingHarness> {
+async function open(url = '/programs'): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
       provideRouter([
-        { path: 'leagues', component: FindPage },
+        { path: 'programs', component: FindPage },
         { path: '**', component: PlainTestPage },
       ]),
       { provide: CONVEX_CLIENT, useValue: client },
@@ -95,16 +95,16 @@ describe('FindPage before a search', () => {
   it('shows the heading, the intro, and the search form, and asks no query', async () => {
     const harness = await open();
     const main = host(harness).querySelector('main')!;
-    expect(text(main.querySelector('h1'))).toBe('Find a league');
+    expect(text(main.querySelector('h1'))).toBe('Find a program');
     expect(text(main.querySelector('h1 + p'))).toBe(
-      'Beach volleyball, soccer, and softball leagues on Omni League.',
+      'Beach volleyball, soccer, and softball leagues and tournaments on Omni League.',
     );
     const form = main.querySelector('form')!;
     expect(form.getAttribute('role')).toBe('search');
-    expect(form.getAttribute('action')).toBe('/leagues');
+    expect(form.getAttribute('action')).toBe('/programs');
     expect(form.getAttribute('method')).toBe('get');
     expect(text(form.querySelector('label[for="find-q"]'))).toBe(
-      'League, organization, or location',
+      'Program, organization, or location',
     );
     expect(input(harness).value).toBe('');
     expect(text(form.querySelector('button[type="submit"]'))).toBe('Search');
@@ -114,13 +114,13 @@ describe('FindPage before a search', () => {
 
   it('sets the title, the canonical, and no robots tag', async () => {
     await open();
-    expect(TestBed.inject(Title).getTitle()).toBe('Find a league | Omni League');
-    expect(canonical()).toBe(`${location.origin}/leagues`);
+    expect(TestBed.inject(Title).getTitle()).toBe('Find a program | Omni League');
+    expect(canonical()).toBe(`${location.origin}/programs`);
     expect(robots()).toBeNull();
   });
 
   it('treats a blank q as no search', async () => {
-    const harness = await open('/leagues?q=%20%20');
+    const harness = await open('/programs?q=%20%20');
     expect(results(harness)).toBeNull();
     expect(client.activeSubscriptions.filter((s) => s.name === QUERY)).toEqual([]);
   });
@@ -128,22 +128,22 @@ describe('FindPage before a search', () => {
 
 describe('FindPage query', () => {
   it('asks the parsed q only, and keeps it in the field', async () => {
-    const harness = await open('/leagues?q=%20north%20%20beach%20&utm_source=x&ott=SECRET');
+    const harness = await open('/programs?q=%20north%20%20beach%20&utm_source=x&ott=SECRET');
     expect(subscription().args).toEqual({ q: 'north beach' });
     expect(input(harness).value).toBe('north beach');
   });
 
   it('uses the first value of a repeated q', async () => {
-    await open('/leagues?q=a&q=b');
+    await open('/programs?q=a&q=b');
     expect(subscription().args).toEqual({ q: 'a' });
   });
 
   it('cuts q to 100 characters and 16 words', async () => {
-    await open(`/leagues?q=${'x'.repeat(300)}`);
+    await open(`/programs?q=${'x'.repeat(300)}`);
     expect(subscription().args).toEqual({ q: 'x'.repeat(100) });
     TestBed.resetTestingModule();
     const words = Array.from({ length: 20 }, (_, i) => `w${i + 1}`);
-    await open(`/leagues?q=${words.join('+')}`);
+    await open(`/programs?q=${words.join('+')}`);
     expect(subscription().args).toEqual({ q: words.slice(0, 16).join(' ') });
   });
 });
@@ -151,13 +151,15 @@ describe('FindPage query', () => {
 describe('FindPage results', () => {
   let harness: RouterTestingHarness;
   beforeEach(async () => {
-    harness = await open('/leagues?q=coed');
+    harness = await open('/programs?q=coed');
     subscription().emit(COED_RESULTS);
     await settle(harness);
   });
 
   it('shows the count line as a status and a row per league in the order given', () => {
-    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe('3 leagues match “coed”');
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      '3 programs match “coed”',
+    );
     expect([...results(harness)!.querySelectorAll('ul > li h3')].map(text)).toEqual([
       'Sunday Reverse Coed 4s',
       'Thursday Night Coed 2s',
@@ -205,26 +207,29 @@ describe('FindPage results', () => {
     );
     expect(text(sunday)).toContain('Coed · 4v4 · BB');
     expect(text(sunday)).toContain('Gulf Coast Sport & Social · North Beach Sand Courts');
-    expect(text(sunday.querySelector('[data-slot="badge"]'))).toBe('Registration open');
-    expectBadge(sunday.querySelector('[data-slot="badge"]'), 'secondary', 'fit');
+    expect(text(sunday.querySelector('p:last-of-type [data-slot="badge"]'))).toBe(
+      'Registration open',
+    );
+    expectBadge(sunday.querySelector('p:last-of-type [data-slot="badge"]'), 'secondary', 'fit');
     expect(text(sunday)).toContain('Summer 2027 · closes May 23');
 
     expect(text(saturday)).toContain(
       'Lakeshore Sand League · Driftwood Beach Courts, Harbor Point Sand Courts',
     );
     expect(text(saturday)).toContain('No upcoming season');
-    expect(saturday.querySelector('[data-slot="badge"]')).toBeNull();
+    expect(saturday.querySelector('p:last-of-type [data-slot="badge"]')).toBeNull();
   });
 
   it('reads Full with its waitlist open, in the outline badge, for a league whose soonest-closing open season is full', async () => {
     const [summer] = SUNDAY_4S_ROW.seasons;
     subscription().emit({
       more: false,
+      typeCounts: [],
       rows: [{ ...SUNDAY_4S_ROW, seasons: [{ ...summer, isFull: true }] }],
     });
     await settle(harness);
     const row = results(harness)!.querySelector('ul > li')!;
-    const badge = row.querySelector('[data-slot="badge"]');
+    const badge = row.querySelector('p:last-of-type [data-slot="badge"]');
     expect(text(badge)).toBe('Full');
     expectBadge(badge, 'outline', 'fit');
     expect(text(row)).toContain('Summer 2027 · waitlist open');
@@ -235,6 +240,7 @@ describe('FindPage results', () => {
     const logoUrl = 'https://example.convex.cloud/api/storage/gulf-logo';
     subscription().emit({
       more: false,
+      typeCounts: [],
       rows: [
         { ...SUNDAY_4S_ROW, organization: { ...SUNDAY_4S_ROW.organization, logoUrl } },
         SATURDAY_6S_ROW,
@@ -250,17 +256,17 @@ describe('FindPage results', () => {
     expect(text(saturday.querySelector('app-organization-mark'))).toBe('LS');
   });
 
-  it('marks the view noindex with the canonical /leagues and a title naming the search', () => {
+  it('marks the view noindex with the canonical /programs and a title naming the search', () => {
     expect(robots()).toBe('noindex');
-    expect(canonical()).toBe(`${location.origin}/leagues`);
-    expect(TestBed.inject(Title).getTitle()).toBe('coed | Find a league | Omni League');
+    expect(canonical()).toBe(`${location.origin}/programs`);
+    expect(TestBed.inject(Title).getTitle()).toBe('coed | Find a program | Omni League');
   });
 
-  it('says "1 league matches" for one row', async () => {
-    subscription().emit({ more: false, rows: [SATURDAY_6S_ROW] });
+  it('says "1 program matches" for one row', async () => {
+    subscription().emit({ more: false, typeCounts: [], rows: [SATURDAY_6S_ROW] });
     await settle(harness);
     expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
-      '1 league matches “coed”',
+      '1 program matches “coed”',
     );
   });
 
@@ -274,34 +280,39 @@ describe('FindPage results', () => {
   });
 
   it('follows the live result', async () => {
-    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    subscription().emit({ more: false, typeCounts: [], rows: [SUNDAY_4S_ROW] });
     await settle(harness);
     expect(results(harness)!.querySelectorAll('ul > li')).toHaveLength(1);
   });
 });
 
 describe('FindPage with no results', () => {
-  it('says no leagues match, suggests other words, and links Clear the search to /leagues', async () => {
-    const harness = await open('/leagues?q=pickleball');
+  it('says no leagues match, suggests other words, and links Clear the search to /programs', async () => {
+    const harness = await open('/programs?q=pickleball');
     subscription().emit(NO_RESULTS);
     await settle(harness);
     const section = results(harness)!;
-    expect(text(section.querySelector('[role="status"]'))).toBe('No leagues match “pickleball”');
+    expect(text(section.querySelector('[role="status"]'))).toBe('No programs match “pickleball”');
     expect(text(section)).toContain(
-      'Omni League has beach volleyball, soccer, and softball leagues. Try a league name, an organization, or a location such as “North Beach”.',
+      'Omni League has beach volleyball, soccer, and softball programs. Try a program name, an organization, or a location such as “North Beach”.',
     );
     expect(section.querySelector('ul')).toBeNull();
     const clear = section.querySelector('a')!;
     expect(text(clear)).toBe('Clear the search');
-    expect(clear.getAttribute('href')).toBe('/leagues');
+    expect(clear.getAttribute('href')).toBe('/programs');
     expect(robots()).toBe('noindex');
   });
 });
 
 describe('FindPage suggestions', () => {
   it('lists each suggested search as a link, in order, in a list labelled by "Try fewer words:", before "Clear the search"', async () => {
-    const harness = await open('/leagues?q=coed%204s%20austin');
-    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s', 'coed austin'] });
+    const harness = await open('/programs?q=coed%204s%20austin');
+    subscription().emit({
+      more: false,
+      typeCounts: [],
+      rows: [],
+      suggestions: ['coed 4s', 'coed austin'],
+    });
     await settle(harness);
     const section = results(harness)!;
     const label = [...section.querySelectorAll('p')].find((p) => text(p) === 'Try fewer words:')!;
@@ -311,31 +322,31 @@ describe('FindPage suggestions', () => {
     expect(
       [...list.querySelectorAll('li a')].map((a) => [text(a), a.getAttribute('href')]),
     ).toEqual([
-      ['coed 4s', '/leagues?q=coed%204s'],
-      ['coed austin', '/leagues?q=coed%20austin'],
+      ['coed 4s', '/programs?q=coed%204s'],
+      ['coed austin', '/programs?q=coed%20austin'],
     ]);
     const clear = [...section.querySelectorAll('a')].find((a) => text(a) === 'Clear the search')!;
     expect(list.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(label.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(text(section.querySelector('[role="status"]'))).toBe(
-      'No leagues match “coed 4s austin”',
+      'No programs match “coed 4s austin”',
     );
   });
 
   it('follows a suggestion to its search', async () => {
-    const harness = await open('/leagues?q=coed%204s%20austin');
-    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    const harness = await open('/programs?q=coed%204s%20austin');
+    subscription().emit({ more: false, typeCounts: [], rows: [], suggestions: ['coed 4s'] });
     await settle(harness);
     results(harness)!.querySelector<HTMLAnchorElement>('ul a')!.click();
     await settle(harness);
-    expect(TestBed.inject(Router).url).toBe('/leagues?q=coed%204s');
+    expect(TestBed.inject(Router).url).toBe('/programs?q=coed%204s');
     expect(subscription().args).toEqual({ q: 'coed 4s' });
     expect(input(harness).value).toBe('coed 4s');
   });
 
   it('moves focus to the status line of the new results once they arrive, not before', async () => {
-    const harness = await open('/leagues?q=coed%204s%20austin');
-    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    const harness = await open('/programs?q=coed%204s%20austin');
+    subscription().emit({ more: false, typeCounts: [], rows: [], suggestions: ['coed 4s'] });
     await settle(harness);
     const link = results(harness)!.querySelector<HTMLAnchorElement>('ul a')!;
     link.focus();
@@ -346,15 +357,15 @@ describe('FindPage suggestions', () => {
       results(harness)!.querySelector('[role="status"]'),
     );
 
-    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    subscription().emit({ more: false, typeCounts: [], rows: [SUNDAY_4S_ROW] });
     await settle(harness);
     const status = results(harness)!.querySelector('[role="status"]');
-    expect(text(status)).toBe('1 league matches “coed 4s”');
+    expect(text(status)).toBe('1 program matches “coed 4s”');
     expect(host(harness).ownerDocument.activeElement).toBe(status);
   });
 
   it('moves focus to the search field when Clear the search is followed', async () => {
-    const harness = await open('/leagues?q=pickleball');
+    const harness = await open('/programs?q=pickleball');
     subscription().emit(NO_RESULTS);
     await settle(harness);
     const clear = [...results(harness)!.querySelectorAll('a')].find(
@@ -363,13 +374,13 @@ describe('FindPage suggestions', () => {
     clear.focus();
     clear.click();
     await settle(harness);
-    expect(TestBed.inject(Router).url).toBe('/leagues');
+    expect(TestBed.inject(Router).url).toBe('/programs');
     expect(host(harness).ownerDocument.activeElement).toBe(input(harness));
   });
 
   it('leaves focus alone when a suggestion is opened in a new tab', async () => {
-    const harness = await open('/leagues?q=coed%204s%20austin');
-    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    const harness = await open('/programs?q=coed%204s%20austin');
+    subscription().emit({ more: false, typeCounts: [], rows: [], suggestions: ['coed 4s'] });
     await settle(harness);
     const link = results(harness)!.querySelector<HTMLAnchorElement>('ul a')!;
     link.focus();
@@ -383,7 +394,7 @@ describe('FindPage suggestions', () => {
   });
 
   it('shows no list when there are no suggestions', async () => {
-    const harness = await open('/leagues?q=pickleball');
+    const harness = await open('/programs?q=pickleball');
     subscription().emit(NO_RESULTS);
     await settle(harness);
     expect(text(results(harness))).not.toContain('Try fewer words');
@@ -391,7 +402,7 @@ describe('FindPage suggestions', () => {
   });
 
   it('shows no list when there are results', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     subscription().emit(COED_RESULTS);
     await settle(harness);
     expect(text(results(harness))).not.toContain('Try fewer words');
@@ -400,7 +411,7 @@ describe('FindPage suggestions', () => {
 
 describe('FindPage searching', () => {
   it('shows skeleton rows with a Searching status until the results arrive', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     const skeleton = results(harness)!.querySelector('[data-testid="find-skeleton"]');
     expect(skeleton).not.toBeNull();
     const status = skeleton!.querySelector('[role="status"]')!;
@@ -415,54 +426,56 @@ describe('FindPage searching', () => {
   });
 
   it('draws each skeleton logo rounded-xl and each badge rounded-full', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     const skeleton = results(harness)!.querySelector('[data-testid="find-skeleton"]')!;
     const logos = skeleton.querySelectorAll('.divide-y > div > span');
-    const badges = skeleton.querySelectorAll('.space-y-2 > span:last-child');
+    const badges = skeleton.querySelectorAll(
+      '.min-w-0 > span:nth-child(2), .min-w-0 > span:last-child',
+    );
     expect(logos.length).toBeGreaterThan(0);
-    expect(badges).toHaveLength(logos.length);
+    expect(badges).toHaveLength(logos.length * 2);
     expect(allRadiusClasses(logos)).toEqual(Array.from(logos, () => ['rounded-xl']));
     expect(allRadiusClasses(badges)).toEqual(Array.from(badges, () => ['rounded-full']));
   });
 
   it('a new search from the form changes the URL, shows the skeleton, then its results', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     subscription().emit(COED_RESULTS);
     await settle(harness);
 
     await search(harness, '  north   beach ');
-    expect(TestBed.inject(Router).url).toBe('/leagues?q=north%20beach');
+    expect(TestBed.inject(Router).url).toBe('/programs?q=north%20beach');
     expect(subscription().args).toEqual({ q: 'north beach' });
     expect(results(harness)!.querySelector('[data-testid="find-skeleton"]')).not.toBeNull();
     expect(results(harness)!.querySelector('ul')).toBeNull();
 
-    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    subscription().emit({ more: false, typeCounts: [], rows: [SUNDAY_4S_ROW] });
     await settle(harness);
     expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
-      '1 league matches “north beach”',
+      '1 program matches “north beach”',
     );
   });
 
-  it('an empty search goes to /leagues and shows the form only', async () => {
-    const harness = await open('/leagues?q=coed');
+  it('an empty search goes to /programs and shows the form only', async () => {
+    const harness = await open('/programs?q=coed');
     subscription().emit(COED_RESULTS);
     await settle(harness);
     await search(harness, '   ');
-    expect(TestBed.inject(Router).url).toBe('/leagues');
+    expect(TestBed.inject(Router).url).toBe('/programs');
     expect(results(harness)).toBeNull();
     expect(robots()).toBeNull();
     expect(client.activeSubscriptions.filter((s) => s.name === QUERY)).toEqual([]);
   });
 
   it('Back shows the earlier search in the field and its results', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     subscription().emit(COED_RESULTS);
     await settle(harness);
     await search(harness, 'north beach');
-    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    subscription().emit({ more: false, typeCounts: [], rows: [SUNDAY_4S_ROW] });
     await settle(harness);
 
-    await TestBed.inject(Router).navigateByUrl('/leagues?q=coed');
+    await TestBed.inject(Router).navigateByUrl('/programs?q=coed');
     await settle(harness);
     expect(input(harness).value).toBe('coed');
     expect(subscription().args).toEqual({ q: 'coed' });
@@ -471,7 +484,7 @@ describe('FindPage searching', () => {
 
 describe('FindPage when the search fails', () => {
   it('replaces the results with an alert with Try again, keeps the form usable, and a new search recovers', async () => {
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     subscription().fail(new Error('connect ECONNREFUSED internal-db.corp.example:443'));
     await settle(harness);
 
@@ -481,14 +494,14 @@ describe('FindPage when the search fails', () => {
     expectFindAlert(alert);
     const retry = alert.querySelector('a')!;
     expect(text(retry)).toBe('Try again');
-    expect(retry.getAttribute('href')).toBe('/leagues?q=coed');
+    expect(retry.getAttribute('href')).toBe('/programs?q=coed');
     expect(text(main)).not.toContain('internal-db');
     expect(results(harness)!.querySelector('ul')).toBeNull();
-    expect(main.querySelector('h1')?.textContent).toContain('Find a league');
+    expect(main.querySelector('h1')?.textContent).toContain('Find a program');
     expect(input(harness).value).toBe('coed');
 
     await search(harness, 'soccer');
-    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    subscription().emit({ more: false, typeCounts: [], rows: [SUNDAY_4S_ROW] });
     await settle(harness);
     expect(main.querySelector('[role="alert"]')).toBeNull();
     expect(results(harness)!.querySelectorAll('ul > li')).toHaveLength(1);
@@ -496,7 +509,7 @@ describe('FindPage when the search fails', () => {
 });
 
 describe('FindPage layout', () => {
-  it('sits in the public layout, whose footer links to /leagues', async () => {
+  it('sits in the public layout, whose footer still links to /leagues, which redirects here', async () => {
     const harness = await open();
     const footerLinks = [...host(harness).querySelectorAll('footer nav a')].map((a) => [
       text(a),

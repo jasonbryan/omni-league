@@ -24,9 +24,16 @@ export function draftLeagueCount(
     .length;
 }
 
-export function showLeaguesLabel(count: number | undefined): string {
-  if (count === undefined) return 'Show leagues';
-  return `Show ${count} ${count === 1 ? 'league' : 'leagues'}`;
+export interface ListedKind {
+  readonly singular: string;
+  readonly plural: string;
+}
+
+export const LEAGUES: ListedKind = { singular: 'league', plural: 'leagues' };
+
+export function showLeaguesLabel(count: number | undefined, kind: ListedKind = LEAGUES): string {
+  if (count === undefined) return `Show ${kind.plural}`;
+  return `Show ${count} ${count === 1 ? kind.singular : kind.plural}`;
 }
 
 export interface HiddenInput {

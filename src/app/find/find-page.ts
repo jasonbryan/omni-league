@@ -15,6 +15,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
+import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
 import { api, injectOnline, injectQuery, skipToken } from '../core/data/convex';
@@ -33,18 +34,14 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { FindContent, type FindPaging, type FindStatus } from './find-content';
 import { FindOrganizationsList, type OrganizationsState } from './find-organizations';
-import {
-  FIND_PATH,
-  findPath,
-  findQuery,
-  organizationsPath,
-  type FindOrganizations,
-  type FindSportResults,
-} from './find-path';
+import { FIND_PATH, findPath, findQuery, organizationsPath } from './find-path';
 import { FindSportChips } from './find-sport-chips';
+import type { FindBrowseResults, FindOrganizations } from './find-types';
+import { FindTypeChips } from './find-type-chips';
 import { parseFindView } from './find-view';
+import { PROGRAM_TYPE_WORDS } from './program-type';
 
-const TITLE = 'Find a league | Omni League';
+const TITLE = 'Find a program | Omni League';
 
 @Component({
   selector: 'app-find-page',
@@ -52,6 +49,7 @@ const TITLE = 'Find a league | Omni League';
     FindContent,
     FindOrganizationsList,
     FindSportChips,
+    FindTypeChips,
     LeagueFilters,
     NotSavedView,
     PublicLayout,
@@ -74,19 +72,29 @@ const TITLE = 'Find a league | Omni League';
             [results]="shownResults()"
             [now]="now()"
             [savedAt]="savedAt()"
+            [type]="type()"
             [sport]="sport()"
             [filters]="filters()"
             [paging]="paging()"
-            [busy]="sportBusy()"
+            [busy]="browseBusy()"
             [retryHref]="retryHref()"
             (searched)="search($event)"
           >
-            <app-find-sport-chips
-              findChips
-              [query]="query()"
-              [sport]="sport()"
-              [filters]="filters()"
-            />
+            <div findChips>
+              <app-find-type-chips
+                [query]="query()"
+                [type]="type()"
+                [sport]="sport()"
+                [filters]="filters()"
+                [offered]="offeredTypes()"
+              />
+              <app-find-sport-chips
+                [query]="query()"
+                [type]="type()"
+                [sport]="sport()"
+                [filters]="filters()"
+              />
+            </div>
             @if (mode() !== 'organizations') {
               <app-league-filters
                 findFilters
@@ -101,6 +109,7 @@ const TITLE = 'Find a league | Omni League';
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
                 [noun]="noun()"
+                [kind]="kind"
                 [ageOrder]="ageOrder"
                 [carried]="carried()"
               />
@@ -130,6 +139,7 @@ export class FindPage {
 
   protected readonly query = computed(() => parseSearchQuery(this.queryParams().getAll('q')));
   private readonly parsedView = computed(() => parseFindView(this.queryParams()));
+  protected readonly type = computed(() => this.parsedView().type);
   protected readonly sport = computed(() => this.parsedView().sport);
   // A view that lists organizations offers no filter, so one in the URL is ignored there, not kept out of sight in the links.
   protected readonly filters = computed(() =>
@@ -139,22 +149,25 @@ export class FindPage {
 
   protected readonly mode = computed(() => {
     if (this.query() !== '') return 'search';
-    return this.sport() === undefined ? 'organizations' : 'sport';
+    return this.sport() === undefined && this.type() === undefined ? 'organizations' : 'browse';
   });
 
   protected readonly path = FIND_PATH;
+  protected readonly kind = { singular: 'program', plural: 'programs' };
   protected readonly ageOrder = YOUTH_FIRST_AGE_ORDER;
 
   protected readonly noun = computed(() => {
-    const sport = this.sport();
-    return sport === undefined ? 'league' : `${sportName(sport).toLowerCase()} league`;
+    const [type, sport] = [this.type(), this.sport()];
+    const typeNoun = type === undefined ? 'program' : PROGRAM_TYPE_WORDS[type].noun;
+    return sport === undefined ? typeNoun : `${sportName(sport).toLowerCase()} ${typeNoun}`;
   });
 
-  protected readonly results = injectQuery(api.search.leagues, () => {
+  protected readonly results = injectQuery(api.search.programs, () => {
     if (this.mode() !== 'search') return skipToken;
-    const sport = this.sport();
+    const [type, sport] = [this.type(), this.sport()];
     return {
       q: this.query(),
+      ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
       ...this.filterArgs(),
     };
@@ -166,45 +179,66 @@ export class FindPage {
     { requireSync: true },
   );
 
-  private readonly sportResults = injectQuery(api.search.leaguesBySport, () => {
-    const sport = this.sport();
-    if (this.mode() !== 'sport' || sport === undefined) return skipToken;
-    return { sport, ...this.filterArgs(), page: this.requestedPage() };
+  private readonly browseResults = injectQuery(api.search.programsBrowse, () => {
+    if (this.mode() !== 'browse') return skipToken;
+    const [type, sport] = [this.type(), this.sport()];
+    return {
+      ...(type !== undefined && { type }),
+      ...(sport !== undefined && { sport }),
+      ...this.filterArgs(),
+      page: this.requestedPage(),
+    };
   });
 
   protected readonly organizations = injectQuery(api.search.organizations, () =>
     this.mode() === 'organizations' ? { page: this.requestedPage() } : skipToken,
   );
 
-  // Online, the previous page stays while the next one loads, and a chip's sport shows the skeleton; offline, a page with no saved copy shows the not-saved view instead.
-  private readonly shownSportResults = linkedSignal<
-    { value: FindSportResults | undefined; online: boolean; sport: Sport | undefined },
-    { sport: Sport | undefined; value: FindSportResults } | undefined
+  // Online, the previous page stays while the next one loads, and a chip's type or sport shows the skeleton; offline, a page with no saved copy shows the not-saved view instead.
+  private readonly shownBrowseResults = linkedSignal<
+    {
+      value: FindBrowseResults | undefined;
+      online: boolean;
+      type: ProgramType | undefined;
+      sport: Sport | undefined;
+    },
+    | { type: ProgramType | undefined; sport: Sport | undefined; value: FindBrowseResults }
+    | undefined
   >({
     source: () => ({
-      value: this.sportResults.value(),
+      value: this.browseResults.value(),
       online: this.online(),
+      type: this.type(),
       sport: this.sport(),
     }),
-    computation: ({ value, online, sport }, previous) => {
-      if (value !== undefined) return { sport, value };
+    computation: ({ value, online, type, sport }, previous) => {
+      if (value !== undefined) return { type, sport, value };
       const held = previous?.value;
-      return online && held?.sport === sport ? held : undefined;
+      return online && held !== undefined && held.type === type && held.sport === sport
+        ? held
+        : undefined;
     },
   });
 
-  protected readonly sportBusy = computed(
-    () => this.shownSportResults() !== undefined && this.sportResults.value() === undefined,
+  protected readonly browseBusy = computed(
+    () => this.shownBrowseResults() !== undefined && this.browseResults.value() === undefined,
   );
 
   protected readonly shownResults = computed(() =>
-    this.mode() === 'sport' ? this.shownSportResults()?.value : this.results.value(),
+    this.mode() === 'browse' ? this.shownBrowseResults()?.value : this.results.value(),
   );
 
   protected readonly paging = computed((): FindPaging | undefined => {
-    const value = this.mode() === 'sport' ? this.shownSportResults()?.value : undefined;
+    const value = this.mode() === 'browse' ? this.shownBrowseResults()?.value : undefined;
     return value && { page: value.page, pageCount: value.pageCount, total: value.total };
   });
+
+  // The start view has no counts, so it offers each type a search lists; a search or a browse offers those with a match.
+  protected readonly offeredTypes = computed(() =>
+    this.mode() === 'organizations'
+      ? SEARCHABLE_PROGRAM_TYPES
+      : this.shownResults()?.typeCounts.map(({ type }) => type),
+  );
 
   // A copy saved before the facets existed has none, so it still shows, with nothing to offer.
   protected readonly facets = computed(() => {
@@ -220,21 +254,22 @@ export class FindPage {
   // While a filter change loads, the held page is the previous filters' result, so its count is not shown.
   protected readonly matchingCount = computed(() => {
     const facets = this.facets();
-    if (facets === undefined || this.sportBusy() || !hasDivisionFilters(this.filters())) {
+    if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.filters())) {
       return undefined;
     }
     return draftLeagueCount(facets, this.filters(), undefined, this.sport(), facets.length);
   });
 
   protected readonly queryBuilder = computed(() => {
-    const [q, sport] = [this.query(), this.sport()];
-    return (filters: DivisionFilters) => findQuery(q, { sport, filters });
+    const [q, type, sport] = [this.query(), this.type(), this.sport()];
+    return (filters: DivisionFilters) => findQuery(q, { type, sport, filters });
   });
 
-  /** The search and the sport, which the filter form keeps when it submits before hydration. */
+  /** The type, the search, and the sport, which the filter form keeps when it submits before hydration. */
   protected readonly carried = computed(() => {
-    const sport = this.sport();
+    const [type, sport] = [this.type(), this.sport()];
     return [
+      ...(type === undefined ? [] : [{ name: 'type', value: type }]),
       ...(this.query() === '' ? [] : [{ name: 'q', value: this.query() }]),
       ...(sport === undefined ? [] : [{ name: 'sport', value: sportSegment(sport) }]),
     ];
@@ -259,17 +294,17 @@ export class FindPage {
   });
 
   protected readonly retryHref = computed(() => {
-    const view = { sport: this.sport(), filters: this.filters() };
+    const view = { type: this.type(), sport: this.sport(), filters: this.filters() };
     if (this.mode() === 'organizations') return organizationsPath(this.requestedPage());
     return findPath(this.query(), {
       ...view,
-      page: this.mode() === 'sport' ? this.requestedPage() : 1,
+      page: this.mode() === 'browse' ? this.requestedPage() : 1,
     });
   });
 
   protected readonly status = computed((): FindStatus => {
     if (this.mode() === 'organizations') return 'start';
-    const failed = (this.mode() === 'sport' ? this.sportResults : this.results).error();
+    const failed = (this.mode() === 'browse' ? this.browseResults : this.results).error();
     if (failed !== undefined) return 'error';
     return this.shownResults() === undefined ? 'searching' : 'results';
   });
@@ -289,7 +324,7 @@ export class FindPage {
     if (this.online()) return undefined;
     const times = [
       this.results.savedAt(),
-      this.sportResults.savedAt(),
+      this.browseResults.savedAt(),
       this.organizations.savedAt(),
     ].filter((time) => time !== undefined);
     return times.length > 0 ? Math.min(...times) : undefined;
@@ -299,43 +334,50 @@ export class FindPage {
     bindPageMeta(() => {
       if (this.view() !== 'page') return null;
       const query = this.query();
-      const sport = this.sport();
-      const sportOnly = this.mode() === 'sport' && !hasDivisionFilters(this.filters());
+      const browseOnly = this.mode() === 'browse' && !hasDivisionFilters(this.filters());
       return {
         title: this.title(),
-        ogTitle: 'Find a league',
+        ogTitle: 'Find a program',
         ogDescription:
-          sport === undefined
-            ? 'Find beach volleyball, soccer, and softball leagues on Omni League.'
-            : `Find ${sportName(sport).toLowerCase()} leagues on Omni League.`,
+          this.mode() === 'organizations'
+            ? 'Find beach volleyball, soccer, and softball leagues and tournaments on Omni League.'
+            : `Find ${this.noun()}s on Omni League.`,
         ogType: 'website',
         // The page of the query result, never the request's, so the canonical holds only an integer.
-        path: this.canonicalPath(sportOnly),
-        noindex: query !== '' || (sport !== undefined && hasDivisionFilters(this.filters())),
+        path: this.canonicalPath(browseOnly),
+        noindex: query !== '' || hasDivisionFilters(this.filters()),
       };
     });
   }
 
   private title(): string {
-    const sport = this.sport();
+    const [type, sport] = [this.type(), this.sport()];
     if (this.query() !== '') return `${this.query()} | ${TITLE}`;
-    return this.mode() === 'sport' && sport !== undefined
-      ? `${sportName(sport)} | ${TITLE}`
-      : TITLE;
+    if (this.mode() === 'organizations') return TITLE;
+    const typeWords = type === undefined ? undefined : PROGRAM_TYPE_WORDS[type].chip;
+    if (sport === undefined) return `${typeWords} | ${TITLE}`;
+    return `${typeWords === undefined ? sportName(sport) : `${sportName(sport)} ${typeWords.toLowerCase()}`} | ${TITLE}`;
   }
 
-  private canonicalPath(sportOnly: boolean): string {
+  private canonicalPath(browseOnly: boolean): string {
     if (this.mode() === 'organizations') {
       return organizationsPath(this.organizations.value()?.page ?? 1);
     }
-    const sport = this.sport();
-    if (!sportOnly || sport === undefined) return FIND_PATH;
-    return findPath('', { sport, page: this.sportResults.value()?.page ?? 1 });
+    if (!browseOnly) return FIND_PATH;
+    return findPath('', {
+      type: this.type(),
+      sport: this.sport(),
+      page: this.browseResults.value()?.page ?? 1,
+    });
   }
 
   protected search(query: string): void {
     void this.router.navigate([FIND_PATH], {
-      queryParams: findQuery(query, { sport: this.sport(), filters: this.filters() }),
+      queryParams: findQuery(query, {
+        type: this.type(),
+        sport: this.sport(),
+        filters: this.filters(),
+      }),
     });
   }
 }

@@ -20,7 +20,8 @@ import { PageControl } from '../organizations/page-control';
 import { sportsCommaList } from '../organizations/sport-list';
 import { HlmAlertImports } from '../ui/alert';
 import { HlmSkeleton } from '../ui/skeleton';
-import { FIND_PATH, type FindOrganizations } from './find-path';
+import { FIND_PATH } from './find-path';
+import type { FindOrganizations } from './find-types';
 
 export type OrganizationsState = 'loading' | 'error' | 'ready';
 

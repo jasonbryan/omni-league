@@ -1,5 +1,5 @@
 import { LIST_PAGE_SIZE } from '../../core/list-page';
-import type { FindOrganizationRow, FindOrganizations } from '../find-path';
+import type { FindOrganizationRow, FindOrganizations } from '../find-types';
 
 export const GULF_ROW: FindOrganizationRow = {
   name: 'Gulf Coast Sport & Social',

@@ -372,6 +372,55 @@ test.describe('camps offline', () => {
   });
 });
 
+test.describe('find a program offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('a search viewed online opens from its saved copy with the note, and another search shows the not-saved view', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Programs',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [{ name: 'Alpha Coed League', sport: 'soccer', locations: ['Alpha Field'] }],
+    });
+    const word = tenant.slug.replace(/^e2e-/, '');
+    await seedTournament(tenant, {
+      name: `Alpha Coed Cup ${word}`,
+      slug: 'alpha-coed-cup',
+      sport: 'soccer',
+      locations: ['Alpha Field'],
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(41),
+    });
+    const rows = page.locator('section[aria-labelledby="results-heading"] ul > li h3');
+    const field = page.getByRole('searchbox', { name: 'Program, organization, or location' });
+    const search = async (q: string) => {
+      await field.fill(q);
+      await field.press('Enter');
+    };
+
+    await page.goto(`/programs?q=${word}`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows).toHaveCount(2);
+    await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
+    await search(`cup ${word}`);
+    await expect(rows).toHaveText([`Alpha Coed Cup ${word}`]);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await search(word);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(rows).toHaveCount(2);
+
+    await search(`never viewed ${word}`);
+    await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
+    await context.setOffline(false);
+  });
+});
+
 test.describe('find a league by sport offline', () => {
   test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
 
@@ -394,28 +443,28 @@ test.describe('find a league by sport offline', () => {
       ],
     });
     const rows = page.locator('section[aria-labelledby="results-heading"] ul > li h3');
-    const filters = page.getByRole('search', { name: 'Filter leagues' });
+    const filters = page.getByRole('search', { name: 'Filter programs' });
 
     const chips = page.getByRole('navigation', { name: 'Sport' });
 
-    await page.goto('/leagues?sport=soccer&age=u10');
+    await page.goto('/programs?sport=soccer&age=u10');
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows.first()).toBeVisible();
     await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
     await chips.getByRole('link', { name: 'Softball' }).click();
-    await expect(page).toHaveURL(/\/leagues\?sport=softball&age=u10$/);
+    await expect(page).toHaveURL(/\/programs\?sport=softball&age=u10$/);
     await expect(chips.getByRole('link', { name: 'Softball' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    await expect(filters.getByRole('status')).toContainText(/of \d+ softball leagues?/);
+    await expect(filters.getByRole('status')).toContainText(/of \d+ softball programs?/);
     await expect(page.getByTestId('find-skeleton')).toHaveCount(0);
     await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
 
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await chips.getByRole('link', { name: 'Soccer' }).click();
-    await expect(page).toHaveURL(/\/leagues\?sport=soccer&age=u10$/);
+    await expect(page).toHaveURL(/\/programs\?sport=soccer&age=u10$/);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
     await expect(rows.first()).toBeVisible();
     await expect(filters.getByRole('button', { name: /^Filters/ })).toBeVisible();

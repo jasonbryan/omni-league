@@ -40,9 +40,16 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
   },
   {
+    // The engine sends the router's redirect to the programs page with this status. Its `Location` holds only the known parameters (`src/app/find/programs-location.ts`), and it is `no-store` all the same.
+    path: 'leagues',
+    renderMode: RenderMode.Server,
+    status: 301,
+    headers: { 'Cache-Control': 'no-store' },
+  },
+  {
     // `Netlify-Vary: query` from the handler (src/server-cache.ts) stores each `?q=`, `?sport=`, filter, and `?page=N` on its own. The HTML holds only the parsed
     // search, sport, and filters (from the standard lists) and the page number from the query result, never another parameter. A failed query replaces the Cache-Control with no-store (src/app/core/server-error-status.ts).
-    path: 'leagues',
+    path: 'programs',
     renderMode: RenderMode.Server,
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },

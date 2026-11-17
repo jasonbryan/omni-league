@@ -10,6 +10,7 @@ const view = (query: string) => {
 describe('parseFindView', () => {
   it('reads the sport from its segment and the filters from their URL spelling', () => {
     expect(view('sport=soccer&gender=girls&age=u10')).toEqual({
+      type: undefined,
       sport: 'soccer',
       filters: { gender: ['womens'], playersPerSide: [], level: [], ageGroup: ['u10'] },
     });
@@ -43,5 +44,25 @@ describe('parseFindView', () => {
       level: [],
       ageGroup: ['over40'],
     });
+  });
+});
+
+describe('parseFindView, the type', () => {
+  it('reads each known program type', () => {
+    for (const type of ['league', 'tournament', 'camp', 'training']) {
+      expect(view(`type=${type}`).type).toBe(type);
+    }
+  });
+
+  it('ignores an unknown type, a different case, or an inherited property name', () => {
+    expect(view('type=zzz').type).toBeUndefined();
+    expect(view('type=League').type).toBeUndefined();
+    expect(view('type=constructor').type).toBeUndefined();
+    expect(view('type=').type).toBeUndefined();
+  });
+
+  it('uses the first value of a repeated type', () => {
+    expect(view('type=camp&type=league').type).toBe('camp');
+    expect(view('type=zzz&type=league').type).toBeUndefined();
   });
 });

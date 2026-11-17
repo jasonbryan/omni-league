@@ -135,7 +135,7 @@ describe('ownSpecs: screen specs of the changed src and design files', () => {
 
   it('lists the find page specs, not the full suite, for tokens.css with the find page', () => {
     const list = listFor(['src/styles/tokens.css', 'src/app/find/find-page.ts']);
-    assert.ok(list.includes('e2e/find-a-league.spec.ts'));
+    assert.ok(list.includes('e2e/find-a-program.spec.ts'));
     assert.ok(list.includes('e2e/find-organizations.spec.ts'));
     assert.ok(!list.includes('e2e/waitlist.spec.ts'));
     assert.ok(list.length < SCREEN_SPEC_CAP + 1);
@@ -634,7 +634,7 @@ describe('ownSpecs: changed files', () => {
       };
       write(CHANGED, 'export const text = 1;');
       write('src/app/find/find-page.ts', 'export const page = 1;');
-      write('e2e/find-a-league.spec.ts', 'test();');
+      write('e2e/find-a-program.spec.ts', 'test();');
       git('add', '.');
       git('commit', '-q', '-m', 'files');
       git('update-ref', 'refs/remotes/origin/main', 'HEAD');

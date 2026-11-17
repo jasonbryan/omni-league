@@ -140,7 +140,7 @@ test.describe('the page control at each width', () => {
     for (let i = 0; i < 6; i++) {
       await seedTenant({ locations: [COURTS], leagues: soccerLeagues(1) });
     }
-    findPath = '/leagues';
+    findPath = '/programs';
   });
 
   for (const index of [0, 1, 2, 3]) {

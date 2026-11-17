@@ -155,7 +155,7 @@ describe('PublicLayout', () => {
         expect(link?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
       });
 
-      it.each(['/leagues', '/leagues?q=coed'])(
+      it.each(['/leagues', '/leagues?q=coed', '/programs', '/programs?type=tournament&q=open'])(
         'shows neither on %s, and the account side moves to the right edge',
         async (url) => {
           const page = await open(url);
@@ -181,11 +181,14 @@ describe('PublicLayout', () => {
         expect(side?.classList.contains('md:col-start-3')).toBe(true);
       });
 
-      it('keeps the field on a path that only starts with /leagues', async () => {
-        const page = await open('/leagues/x');
+      it.each(['/leagues/x', '/programs/x'])(
+        'keeps the field on a path that only starts with a search page path',
+        async (url) => {
+          const page = await open(url);
 
-        expect(search(page)).not.toBeNull();
-      });
+          expect(search(page)).not.toBeNull();
+        },
+      );
 
       it('goes to /leagues?q= with the typed words through the router, not a page load', async () => {
         const page = await open();

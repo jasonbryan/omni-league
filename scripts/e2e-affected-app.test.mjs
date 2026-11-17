@@ -350,7 +350,7 @@ describe('the specs of the importers outside a hand rule', () => {
             withAlways(
               specFile('accept-invite'),
               specFile('cache-key'),
-              specFile('find-a-league'),
+              specFile('find-a-program'),
               specFile('find-organizations'),
             ),
           );
@@ -370,7 +370,7 @@ describe('the specs of the importers outside a hand rule', () => {
             withAlways(
               specFile('accept-invite'),
               specFile('cache-key'),
-              specFile('find-a-league'),
+              specFile('find-a-program'),
               specFile('find-organizations'),
             ),
           );
@@ -403,7 +403,7 @@ describe('the specs of the importers outside a hand rule', () => {
             withAlways(
               specFile('accept-invite'),
               specFile('cache-key'),
-              specFile('find-a-league'),
+              specFile('find-a-program'),
               specFile('find-organizations'),
             ),
           );
@@ -568,6 +568,7 @@ describe('the route tables', () => {
     redirectSignedIn: ['sign-in', 'sign-up', 'auth-session'],
     captureInviteToken: ['accept-invite'],
     captureTeamInviteToken: ['team-join'],
+    redirectLeagues: ['find-a-program'],
   };
 
   it('reads every path of the route table, nested ones with their parents', () => {
@@ -575,6 +576,7 @@ describe('the route tables', () => {
     for (const path of [
       '',
       'leagues',
+      'programs',
       'sign-in',
       'sign-up',
       'invites/accept',
@@ -968,7 +970,7 @@ describe('the offline saved query list', () => {
       'sport-view',
       'league-page',
       'season-page',
-      'find-a-league',
+      'find-a-program',
       ...Object.values(OFFLINE_QUERY_GROUP_SPECS).flat(),
     ]) {
       assert.ok(specs.includes(specFile(name)), name);
@@ -1272,7 +1274,7 @@ describe('selectSpecs with narrow', () => {
       },
       (root) => {
         const own = withAlways(
-          ...['find-a-league', 'find-organizations', 'cache-key'].map(specFile),
+          ...['find-a-program', 'find-organizations', 'cache-key'].map(specFile),
         );
         assert.deepEqual(narrow(['src/app/find/helper.ts'], root), own);
         const whole = specsFor(['src/app/find/helper.ts'], root);
@@ -1293,7 +1295,7 @@ describe('selectSpecs with narrow', () => {
       (root) => {
         assert.deepEqual(
           narrow(['src/app/core/new-helper.ts'], root),
-          withAlways(...['find-a-league', 'find-organizations', 'cache-key'].map(specFile)),
+          withAlways(...['find-a-program', 'find-organizations', 'cache-key'].map(specFile)),
         );
         assert.ok(
           specsFor(['src/app/core/new-helper.ts'], root).includes(specFile('organization-page')),
