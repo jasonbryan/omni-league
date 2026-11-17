@@ -310,7 +310,7 @@ const publicBracketRoundsValidator = v.array(
 
 // Holds no ids: the page is cached and saved offline, and an id is an internal key.
 // `rounds` is the winners' bracket, which a single-elimination bracket is entirely. `losers` and `grandFinal` are optional so a
-// copy saved before they existed stays valid; a single-elimination bracket has neither, and a bracket of two teams has no losers' rounds.
+// copy saved before they existed stays valid.
 export const publicBracketValidator = v.object({
   winner: v.optional(v.string()),
   rounds: publicBracketRoundsValidator,
@@ -318,8 +318,7 @@ export const publicBracketValidator = v.object({
   grandFinal: v.optional(
     v.object({
       games: v.array(publicBracketGameValidator),
-      // True for "Deciding game if needed": a second game follows if the losers' bracket team wins the first.
-      decidingGame: v.boolean(),
+      decidingGameIfNeeded: v.boolean(),
     }),
   ),
 });

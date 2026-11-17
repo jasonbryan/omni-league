@@ -34,7 +34,7 @@ describe('a saved tournament page checked against the current shape', () => {
 
   it('accepts a grand final with its deciding game played', () => {
     const [game] = BEACH_OPEN_DOUBLE_BRACKET.grandFinal!.games;
-    const grandFinal = { games: [{ ...game, winner: 1 }, game], decidingGame: true };
+    const grandFinal = { games: [{ ...game, winner: 1 }, game], decidingGameIfNeeded: true };
     expect(matches({ ...BEACH_OPEN, bracket: { ...BEACH_OPEN_DOUBLE_BRACKET, grandFinal } })).toBe(
       true,
     );

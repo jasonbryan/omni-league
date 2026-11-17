@@ -81,7 +81,7 @@ export const BEACH_OPEN_DOUBLE_BRACKET: PublicBracket = {
     },
     { name: 'Losers’ final', games: [{ teams: [null, null], bye: false }] },
   ],
-  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGame: true },
+  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGameIfNeeded: true },
 };
 
 export const BEACH_OPEN_POOLS: PublicPool[] = [

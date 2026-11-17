@@ -10,7 +10,7 @@ import {
   playoffGames,
   playoffRoundsOf,
 } from './tournamentBracket';
-import { DEFAULT_GRAND_FINAL } from './tournamentEdit';
+import { playsDecidingGame } from './tournamentEdit';
 
 type Game = Doc<'tournamentGames'>;
 type PublicGame = PublicBracket['rounds'][number]['games'][number];
@@ -57,7 +57,7 @@ export async function publicBracket(
     ...(rounds.double && {
       grandFinal: {
         games: playoff.grandFinal.map(gameOf),
-        decidingGame: (tournament.grandFinal ?? DEFAULT_GRAND_FINAL) === 'ifNecessary',
+        decidingGameIfNeeded: playsDecidingGame(tournament),
       },
     }),
   };

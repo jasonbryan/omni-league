@@ -112,7 +112,7 @@ describe('tournaments.getPublicPage for a double-elimination bracket', () => {
     expect(bracket.losers?.[0].games).toEqual([{ teams: [null, null], bye: false }]);
     expect(bracket.grandFinal).toEqual({
       games: [{ teams: [null, null], bye: false }],
-      decidingGame: true,
+      decidingGameIfNeeded: true,
     });
     expect(bracket).not.toHaveProperty('winner');
   });
@@ -160,7 +160,7 @@ describe('tournaments.getPublicPage for the grand final', () => {
     const { grandFinal } = (await bracketOf(s))!;
     expect(grandFinal).toEqual({
       games: [{ teams: [seeded('Team 01', 1), seeded('Team 02', 2)], bye: false }],
-      decidingGame: true,
+      decidingGameIfNeeded: true,
     });
   });
 
@@ -174,7 +174,7 @@ describe('tournaments.getPublicPage for the grand final', () => {
     expect(bracket.winner).toBe('Team 01');
   });
 
-  test('played: the losers’ bracket team wins game 1, so game 2 has the same teams and no winner yet', async () => {
+  test('deciding: the losers’ bracket team wins game 1, so game 2 has the same teams and no winner yet', async () => {
     const { s, teamIds } = await world(6);
     const first = await playToGrandFinal(s, teamIds);
     await win(s, first, first.teamIds[1]!);
@@ -206,7 +206,7 @@ describe('tournaments.getPublicPage for the grand final', () => {
     const first = await playToGrandFinal(s, teamIds);
     await win(s, first, first.teamIds[1]!);
     const bracket = (await bracketOf(s))!;
-    expect(bracket.grandFinal?.decidingGame).toBe(false);
+    expect(bracket.grandFinal?.decidingGameIfNeeded).toBe(false);
     expect(bracket.grandFinal?.games).toHaveLength(1);
     expect(bracket.winner).toBe('Team 02');
   });

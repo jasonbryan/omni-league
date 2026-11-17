@@ -346,7 +346,7 @@ const DOUBLE: PublicBracketData = {
     { name: 'Losers’ round 1', games: [{ teams: [team('Dig Dogs', 8), null], bye: false }] },
     { name: 'Losers’ final', games: [{ teams: [null, null], bye: false }] },
   ],
-  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGame: true },
+  grandFinal: { games: [{ teams: [null, null], bye: false }], decidingGameIfNeeded: true },
 };
 
 const withGrandFinal = (grandFinal: GrandFinalData) => create({ ...DOUBLE, grandFinal });
@@ -447,14 +447,17 @@ describe('PublicBracket grand final', () => {
   const grandFinalSection = (host: HTMLElement) => sections(host)[2];
 
   it('waiting: names game 1 and says game 2 is played only if the losers’ bracket team wins it', () => {
-    const { host } = withGrandFinal({ games: [first], decidingGame: true });
+    const { host } = withGrandFinal({ games: [first], decidingGameIfNeeded: true });
     const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
     expect(items.map(text)).toEqual(['Game 1 (1) Sand Crabs against (2) Net Results']);
     expect(text(note(host))).toBe(NOTE);
   });
 
   it('not needed: the winners’ bracket team won game 1, so there is no game 2 and no note', () => {
-    const { host } = withGrandFinal({ games: [{ ...first, winner: 0 }], decidingGame: true });
+    const { host } = withGrandFinal({
+      games: [{ ...first, winner: 0 }],
+      decidingGameIfNeeded: true,
+    });
     const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
     expect(items).toHaveLength(1);
     expect(text(items[0])).toBe('Game 1 (1) Sand Crabs Won against (2) Net Results');
@@ -465,7 +468,7 @@ describe('PublicBracket grand final', () => {
   it('played: shows Game 2 with its teams after game 1, and no note', () => {
     const { host } = withGrandFinal({
       games: [{ ...first, winner: 1 }, first],
-      decidingGame: true,
+      decidingGameIfNeeded: true,
     });
     const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
     expect(items.map(text)).toEqual([
@@ -481,7 +484,7 @@ describe('PublicBracket grand final', () => {
         { ...first, winner: 1 },
         { ...first, winner: 0, score: { kind: 'sets', sets: [{ a: 21, b: 15 }] } },
       ],
-      decidingGame: true,
+      decidingGameIfNeeded: true,
     });
     const items = [...grandFinalSection(host).querySelectorAll('li[data-testid="bracket-game"]')];
     expect(text(items[1])).toBe('Game 2 (1) Sand Crabs Won against (2) Net Results Score: 21–15');
@@ -489,7 +492,10 @@ describe('PublicBracket grand final', () => {
 
   it('a single game: no game number and no note, played or not', () => {
     for (const played of [{}, { winner: 1 } as const]) {
-      const { host } = withGrandFinal({ games: [{ ...first, ...played }], decidingGame: false });
+      const { host } = withGrandFinal({
+        games: [{ ...first, ...played }],
+        decidingGameIfNeeded: false,
+      });
       const item = grandFinalSection(host).querySelector('li[data-testid="bracket-game"]')!;
       expect(text(item)).toMatch(/^Game 1: /);
       expect(note(host)).toBeNull();

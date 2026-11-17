@@ -78,7 +78,7 @@ const ROUND_HEADING = 'text-sm font-medium text-muted-foreground';
                     <app-public-bracket-game
                       [game]="game"
                       [number]="gameIndex + 1"
-                      [visibleNumber]="grandFinal.decidingGame"
+                      [visibleNumber]="grandFinal.decidingGameIfNeeded"
                     />
                   </li>
                 }
@@ -149,8 +149,8 @@ const ROUND_HEADING = 'text-sm font-medium text-muted-foreground';
 export class PublicBracket {
   readonly bracket = input<PublicBracketData | undefined>(undefined);
 
-  protected decidingGamePending({ games, decidingGame }: GrandFinal): boolean {
-    return decidingGame && games.length === 1 && games[0].winner === undefined;
+  protected decidingGamePending({ games, decidingGameIfNeeded }: GrandFinal): boolean {
+    return decidingGameIfNeeded && games.length === 1 && games[0].winner === undefined;
   }
 
   private readonly scrollers = viewChildren<ElementRef<HTMLElement>>('scroller');

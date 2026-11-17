@@ -207,7 +207,7 @@ describe('seed:demo: Double Trouble Doubles on its public page', () => {
     ]);
     expect(bracket.grandFinal).toEqual({
       games: [{ teams: [null, null], bye: false }],
-      decidingGame: true,
+      decidingGameIfNeeded: true,
     });
   });
 });
