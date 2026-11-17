@@ -477,7 +477,8 @@ export const getForCopy = query({
       ageGroup: ageGroupValidator,
       maximumTeams: v.number(),
       structure: v.union(v.literal('bracket'), v.literal('pools')),
-      bracketType: v.literal('single'),
+      bracketType: v.union(v.literal('single'), v.literal('double')),
+      grandFinal: v.optional(v.union(v.literal('ifNecessary'), v.literal('single'))),
     }),
   ),
   handler: async (ctx, { organizationSlug, slug }) => {
@@ -489,6 +490,10 @@ export const getForCopy = query({
     const found = await findTournamentBySlugs(ctx, organization, slug);
     if (!found) return null;
     const { program, tournament } = found;
+    // The release that adds double elimination writes this field, which this release's schema does not list.
+    const { grandFinal } = tournament as typeof tournament & {
+      grandFinal?: 'ifNecessary' | 'single';
+    };
     return {
       name: program.name,
       slug: await nextFreeSlug(ctx, organization._id, slugify(program.name)),
@@ -502,6 +507,7 @@ export const getForCopy = query({
       maximumTeams: tournament.maximumTeams,
       structure: tournament.structure,
       bracketType: tournament.bracketType,
+      ...(grandFinal && { grandFinal }),
     };
   },
 });
@@ -516,7 +522,7 @@ export const getPublicPage = query({
     const found = await findTournamentBySlugs(ctx, organization, tournamentSlug);
     // A draft answers like an unknown tournament, so nothing public says whether its slug exists.
     if (found?.program.status !== 'published') return null;
-    const bracket = await publicBracket(ctx, found.tournament._id);
+    const bracket = await publicBracket(ctx, found.tournament);
     const pools = await publicPools(ctx, found.tournament, found.program.sport);
     return {
       ...(await tournamentDetails(ctx, organization, found)),

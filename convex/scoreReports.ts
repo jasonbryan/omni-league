@@ -61,7 +61,8 @@ export const forTeam = query({
       }
       games.push({
         gameId: game._id,
-        stage: game.stage,
+        // A captain sees one kind of bracket game, whichever bracket type the tournament plays.
+        stage: game.stage === 'pool' ? ('pool' as const) : ('bracket' as const),
         roundName: game.stage === 'pool' ? `Round ${game.round}` : roundName(game.round, rounds),
         teams,
         report: reported && { score: reported.score, reportedAt: reported.reportedAt },

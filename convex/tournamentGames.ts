@@ -48,6 +48,7 @@ import {
   bracketHasResult,
   clearResult,
   gameHasResult,
+  nonPoolGames,
   refuseBracket,
   replaceBracket,
   saveResult,
@@ -119,6 +120,7 @@ async function bracketView(
   ctx: QueryCtx,
   games: readonly Doc<'tournamentGames'>[],
   teamNames: ReadonlyMap<Id<'teams'>, string>,
+  { namesWinner }: { namesWinner: boolean },
 ) {
   const names = new Map(teamNames);
   for (const teamId of games.flatMap((game) => game.teamIds)) {
@@ -129,7 +131,9 @@ async function bracketView(
   const rounds = games.reduce((most, game) => Math.max(most, game.round), 0);
   const byId = new Map(games.map((game) => [game._id, game]));
   const final = games.find((game) => game.round === rounds);
-  const winnerTeamId = final && gameHasResult(final) ? final.winnerTeamId : undefined;
+  // The winners' final decides a single-elimination bracket only.
+  const winnerTeamId =
+    namesWinner && final && gameHasResult(final) ? final.winnerTeamId : undefined;
   return {
     hasResult: bracketHasResult(games),
     winner: winnerTeamId ? { teamId: winnerTeamId, name: names.get(winnerTeamId) ?? '' } : null,
@@ -180,7 +184,9 @@ export const getSetup = query({
       bracket:
         games.length === 0
           ? null
-          : await bracketView(ctx, games, new Map(seeds.map((team) => [team._id, team.name]))),
+          : await bracketView(ctx, games, new Map(seeds.map((team) => [team._id, team.name])), {
+              namesWinner: tournament.bracketType === 'single',
+            }),
     };
   },
 });
@@ -241,7 +247,7 @@ export const createBracket = mutation({
         message: BRACKET_MESSAGES.registrationOpen(tournament.registrationDeadline),
       });
     }
-    const existing = await bracketGames(ctx, tournament._id);
+    const existing = await nonPoolGames(ctx, tournament._id);
     if (bracketHasResult(existing)) {
       refuseBracket({ code: 'resultEntered', message: BRACKET_MESSAGES.resultEntered });
     }
@@ -637,6 +643,7 @@ export const getPoolBracket = query({
               ctx,
               games,
               new Map(results.ranked.map(({ team }) => [team._id, team.name])),
+              { namesWinner: tournament.bracketType === 'single' },
             ),
     };
   },
@@ -684,7 +691,7 @@ export const createBracketFromPools = mutation({
     }
     const issue = checkAdvance(results.poolSizes, advancePerPool);
     if (issue) refusePool(issue);
-    const existing = await bracketGames(ctx, tournament._id);
+    const existing = await nonPoolGames(ctx, tournament._id);
     if (bracketHasResult(existing)) {
       refuseBracket({ code: 'resultEntered', message: BRACKET_MESSAGES.resultEntered });
     }

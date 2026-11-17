@@ -36,6 +36,8 @@ export const BRACKET_MESSAGES = {
   resultExists: 'This game has a result already. Correct it instead.',
   noResult: 'This game has no result.',
   nextGamePlayed: 'The next game has a result, so this result cannot change.',
+  bracketTypeUnsupported:
+    'Results for a double-elimination bracket cannot be saved right now. Nothing was saved. Try again later.',
   resultChanged: 'Someone else changed this result first. The game shows their result now.',
   reportsClosed: 'This game has a result, so it takes no more score reports.',
   reportChanged: 'The team reported a different score first. The game shows it now.',
@@ -57,6 +59,7 @@ export const BRACKET_REFUSAL_CODES = [
   'resultExists',
   'noResult',
   'nextGamePlayed',
+  'bracketTypeUnsupported',
   'resultChanged',
   'reportsClosed',
   'reportChanged',
