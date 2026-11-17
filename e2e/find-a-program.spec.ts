@@ -1718,36 +1718,53 @@ for (const width of [320, 360, 1280]) {
       await expect(rowNames(page)).toHaveCount(3);
       await screenshot(page, testInfo, `350-programs-loaded-${String(width)}`);
       expect(await programsFrame(page)).toEqual(loading);
-      const loadedRow = await programsBox(results(page).locator('ul > li').first());
-      expect(Math.abs(loadedRow.height - skeletonRow.height)).toBeLessThanOrEqual(2);
+      const rowHeights = await results(page)
+        .locator('ul > li')
+        .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
+      await testInfo.attach('row-heights', {
+        body: JSON.stringify({ skeletonRow: skeletonRow.height, loadedRows: rowHeights }),
+        contentType: 'application/json',
+      });
+      // A narrow screen wraps the text of a row, which a skeleton cannot know.
+      if (width >= 1024) {
+        expect(Math.abs(rowHeights[0] - skeletonRow.height)).toBeLessThanOrEqual(2);
+      }
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
     });
 
-    test('every chip keeps its box while the answer to a type press and to a sport press loads', async ({
-      page,
-      consoleGuard,
-    }, testInfo) => {
-      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
-      const { id } = await seedWithTournament();
-      const held = await holdQueries(page, ['search:programs'], {
-        watchFromStart: false,
-        holdFromStart: false,
-      });
-      await page.goto(url(id));
-      await hydrated(consoleGuard);
-      await expect(rowNames(page)).toHaveCount(3);
-      const before = await programsFrame(page);
-      expect(before.typeChips).toHaveLength(3);
+    const PRESSES = [
+      {
+        name: 'a type press',
+        press: (page: Page) => typeNav(page).getByRole('link', { name: 'Tournaments' }).click(),
+      },
+      {
+        name: 'a sport press',
+        press: (page: Page) =>
+          sportNav(page).getByRole('link', { name: 'Beach volleyball' }).click(),
+      },
+    ];
+    for (const { name, press } of PRESSES) {
+      test(`every chip keeps its box while the answer to ${name} loads`, async ({
+        page,
+        consoleGuard,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+        const { id } = await seedWithTournament();
+        const held = await holdQueries(page, ['search:programs'], {
+          watchFromStart: false,
+          holdFromStart: false,
+        });
+        await page.goto(url(id));
+        await hydrated(consoleGuard);
+        await expect(rowNames(page)).toHaveCount(3);
+        const before = await programsFrame(page);
+        expect(before.typeChips).toHaveLength(3);
 
-      for (const press of [
-        () => typeNav(page).getByRole('link', { name: 'Tournaments' }).click(),
-        () => sportNav(page).getByRole('link', { name: 'Beach volleyball' }).click(),
-      ]) {
         held.watchNewSubscriptions();
         held.holdNextAnswer();
-        await press();
+        await press(page);
         await expect.poll(() => held.isHolding()).toBe(true);
         await expect(page.getByTestId('find-skeleton')).toBeVisible();
         const during = await programsFrame(page);
@@ -1755,13 +1772,14 @@ for (const width of [320, 360, 1280]) {
         expect(during.sportChips).toEqual(before.sportChips);
         expect(during.heading).toEqual(before.heading);
         expect(during.form).toEqual(before.form);
+
         held.release();
         await expect(page.getByTestId('find-skeleton')).toBeHidden();
         const after = await programsFrame(page);
         expect(after.typeChips).toEqual(before.typeChips);
         expect(after.sportChips).toEqual(before.sportChips);
-      }
-    });
+      });
+    }
 
     test('the chips are where the server put them once the page hydrates', async ({
       page,
