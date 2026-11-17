@@ -243,7 +243,7 @@ describe('selectSpecs: mapped areas', () => {
       assert.ok(!specs.includes('FULL'), file);
       for (const name of [
         'cache-key',
-        'find-a-league',
+        'find-a-program',
         'find-organizations',
         'league-page-offline',
         'league-page',
@@ -281,7 +281,7 @@ describe('selectSpecs: mapped areas', () => {
         specsFor([file]),
         want(
           'e2e/cache-key.spec.ts',
-          'e2e/find-a-league.spec.ts',
+          'e2e/find-a-program.spec.ts',
           'e2e/find-organizations.spec.ts',
         ),
         file,

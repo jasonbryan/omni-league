@@ -70,8 +70,8 @@ const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 const TEAM_INVITES = ['team-invites'];
 // The team invite link opens the join route, which links to the team page.
 const TEAM_JOIN = ['team-join'];
-// cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
-const FIND_PAGE = ['find-a-league', 'find-organizations', 'cache-key'];
+// cache-key samples the find page's `?q=` parameter and the `/leagues` redirect. The public layout's footer links to the redirect.
+const FIND_PAGE = ['find-a-program', 'find-organizations', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
   'league-management',
   'league-management-details',
@@ -86,7 +86,8 @@ export const SESSION = '@session';
 // A path with `canActivate` lists a spec that exercises the guard.
 export const ROUTE_SPECS = {
   '': ['install', 'pwa', 'pwa-kill-switch'],
-  leagues: ['find-a-league'],
+  leagues: ['find-a-program'],
+  programs: ['find-a-program'],
   organizations: ['not-found'],
   'organizations/': ['not-found'],
   'organizations/:orgSlug': [
@@ -673,7 +674,7 @@ export const OFFLINE_QUERY_GROUP_SPECS = {
   SEASON_PAGE_QUERIES: ['season-page'],
   TOURNAMENT_PAGE_QUERIES: ['tournament-page'],
   CAMP_PAGE_QUERIES: ['camp-page'],
-  FIND_PAGE_QUERIES: ['find-a-league', 'find-organizations'],
+  FIND_PAGE_QUERIES: ['find-a-program', 'find-organizations'],
 };
 
 const inDir =
@@ -1044,7 +1045,7 @@ export const AREAS = [
     test: inDir('src/app/public-layout/'),
     specs: [
       'public-layout',
-      'find-a-league',
+      'find-a-program',
       ...PUBLIC_PAGE,
       ...LEAGUE_PAGE,
       ...SEASON_PAGE,

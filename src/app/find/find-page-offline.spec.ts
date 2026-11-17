@@ -10,7 +10,15 @@ import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { FindPage } from './find-page';
-import { at, COED_RESULTS, OPEN_DAY } from './testing/find-data';
+import {
+  at,
+  browseResults,
+  COED_RESULTS,
+  GULF_OPEN_ROW,
+  OPEN_DAY,
+  SUNDAY_4S_ROW,
+  THURSDAY_2S_ROW,
+} from './testing/find-data';
 import { ORGANIZATIONS } from './testing/organizations-data';
 
 const NOW = at(OPEN_DAY);
@@ -28,7 +36,7 @@ async function open(url: string, socket: 'up' | 'down' = 'down'): Promise<Router
   TestBed.configureTestingModule({
     providers: [
       provideRouter([
-        { path: 'leagues', component: FindPage },
+        { path: 'programs', component: FindPage },
         { path: '**', component: PlainTestPage },
       ]),
       { provide: CONVEX_CLIENT, useValue: client },
@@ -61,15 +69,15 @@ afterEach(() => {
 describe('FindPage offline', () => {
   it('lists the search among the saved queries, with its own returns validator', () => {
     const entry = OFFLINE_SAVED_QUERIES.find(
-      (listed) => getFunctionName(listed.query) === 'search:leagues',
+      (listed) => getFunctionName(listed.query) === 'search:programs',
     );
     expect(entry).toBeDefined();
   });
 
   it('opens a search viewed online from its saved copy, with the saved-copy note under the intro', async () => {
-    plantSavedCopy(api.search.leagues, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
     stubOnLine(false);
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     const main = host(harness).querySelector('main')!;
     expect([...main.querySelectorAll('section ul > li h3')].map(text)).toEqual([
       'Sunday Reverse Coed 4s',
@@ -83,7 +91,7 @@ describe('FindPage offline', () => {
   });
 
   it('shows the status each saved row was saved with: Full for a full season, and today’s status for a row saved before seasons held isFull', async () => {
-    const [sunday, thursday] = COED_RESULTS.rows;
+    const [sunday, thursday] = [SUNDAY_4S_ROW, THURSDAY_2S_ROW];
     const results = {
       ...COED_RESULTS,
       rows: [
@@ -91,48 +99,84 @@ describe('FindPage offline', () => {
         { ...thursday, seasons: sunday.seasons.map((season) => ({ ...season, isFull: true })) },
       ],
     };
-    plantSavedCopy(api.search.leagues, { q: 'coed' }, results, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed' }, results, SAVED_AT);
     stubOnLine(false);
-    const harness = await open('/leagues?q=coed');
+    const harness = await open('/programs?q=coed');
     const [before, full] = [...host(harness).querySelectorAll('main section ul > li')];
-    expect(text(before.querySelector('[data-slot="badge"]'))).toBe('Registration open');
+    expect(text(before.querySelector('p:last-of-type [data-slot="badge"]'))).toBe(
+      'Registration open',
+    );
     expect(text(before)).toContain('Summer 2027 · closes May 23');
-    expect(text(full.querySelector('[data-slot="badge"]'))).toBe('Full');
+    expect(text(full.querySelector('p:last-of-type [data-slot="badge"]'))).toBe('Full');
     expect(text(full)).toContain('Summer 2027 · waitlist open');
   });
 
   it('shows the not-saved view for a search that was not viewed', async () => {
-    plantSavedCopy(api.search.leagues, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
     stubOnLine(false);
-    const harness = await open('/leagues?q=soccer');
+    const harness = await open('/programs?q=soccer');
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe(
       "This page isn't saved on this device",
     );
-    expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe('/leagues?q=soccer');
+    expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe('/programs?q=soccer');
     expect(host(harness).querySelector('main form')).toBeNull();
   });
 
   it('opens a saved no-results search with its saved suggestions, and a suggestion that was not viewed shows the not-saved view', async () => {
     plantSavedCopy(
-      api.search.leagues,
+      api.search.programs,
       { q: 'coed 4s austin' },
-      { rows: [], more: false, suggestions: ['coed 4s'] },
+      { rows: [], more: false, typeCounts: [], suggestions: ['coed 4s'] },
       SAVED_AT,
     );
     stubOnLine(false);
-    const harness = await open('/leagues?q=coed%204s%20austin');
+    const harness = await open('/programs?q=coed%204s%20austin');
     const main = host(harness).querySelector('main')!;
     expect(text(main)).toContain('Try fewer words:');
     const link = main.querySelector<HTMLAnchorElement>(
       'ul[aria-labelledby="suggestions-heading"] a',
     )!;
-    expect(link.getAttribute('href')).toBe('/leagues?q=coed%204s');
+    expect(link.getAttribute('href')).toBe('/programs?q=coed%204s');
     link.click();
     for (let i = 0; i < 3; i++) {
       TestBed.tick();
       await harness.fixture.whenStable();
     }
+    expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+  });
+
+  it('lists the program queries among the saved queries', () => {
+    const listed = OFFLINE_SAVED_QUERIES.map(({ query }) => getFunctionName(query));
+    expect(listed).toContain('search:programs');
+    expect(listed).toContain('search:programsBrowse');
+  });
+
+  it('opens a type browse viewed online from its saved copy', async () => {
+    plantSavedCopy(
+      api.search.programsBrowse,
+      { type: 'tournament', page: 1 },
+      { ...browseResults([GULF_OPEN_ROW]), typeCounts: [{ type: 'tournament', count: 1 }] },
+      SAVED_AT,
+    );
+    stubOnLine(false);
+    const harness = await open('/programs?type=tournament');
+    const main = host(harness).querySelector('main')!;
+    expect([...main.querySelectorAll('section ul > li h3')].map(text)).toEqual([
+      'Gulf Coast Beach Open',
+    ]);
+    expect(main.querySelector('[data-saved-copy-note]')).not.toBeNull();
+  });
+
+  it('shows the not-saved view for a type browse that was not viewed', async () => {
+    plantSavedCopy(
+      api.search.programsBrowse,
+      { type: 'tournament', page: 1 },
+      { ...browseResults([GULF_OPEN_ROW]), typeCounts: [{ type: 'tournament', count: 1 }] },
+      SAVED_AT,
+    );
+    stubOnLine(false);
+    const harness = await open('/programs?type=league');
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
   });
 
@@ -147,7 +191,7 @@ describe('FindPage offline', () => {
   it('opens the organizations viewed online from their saved copy, with the saved-copy note under the intro', async () => {
     plantSavedCopy(api.search.organizations, { page: 1 }, ORGANIZATIONS, SAVED_AT);
     stubOnLine(false);
-    const harness = await open('/leagues');
+    const harness = await open('/programs');
     const main = host(harness).querySelector('main')!;
     expect(main.querySelector('form[role="search"]')).not.toBeNull();
     expect([...main.querySelectorAll('section ul > li h3')].map(text)).toEqual([
@@ -164,21 +208,21 @@ describe('FindPage offline', () => {
   it('shows the not-saved view for a page of organizations that was not viewed', async () => {
     plantSavedCopy(api.search.organizations, { page: 1 }, ORGANIZATIONS, SAVED_AT);
     stubOnLine(false);
-    const harness = await open('/leagues?page=2');
+    const harness = await open('/programs?page=2');
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
     expect(host(harness).querySelector('[data-saved-copy-note]')).toBeNull();
   });
 
   it('shows the not-saved view for the organizations when nothing was saved', async () => {
     stubOnLine(false);
-    const harness = await open('/leagues');
+    const harness = await open('/programs');
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
   });
 
   it('online before the first live result shows the saved copy with no note', async () => {
-    plantSavedCopy(api.search.leagues, { q: 'coed' }, COED_RESULTS, SAVED_AT);
+    plantSavedCopy(api.search.programs, { q: 'coed' }, COED_RESULTS, SAVED_AT);
     stubOnLine(true);
-    const harness = await open('/leagues?q=coed', 'up');
+    const harness = await open('/programs?q=coed', 'up');
     expect(host(harness).querySelectorAll('main section ul > li')).toHaveLength(3);
     expect(host(harness).querySelector('[data-saved-copy-note]')).toBeNull();
   });

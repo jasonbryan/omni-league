@@ -36,6 +36,8 @@ const SAVED_QUERY_NAMES = [
   'search:leagues',
   'search:leaguesBySport',
   'search:organizations',
+  'search:programs',
+  'search:programsBrowse',
 ];
 
 describe('the local Convex api and getFunctionName', () => {

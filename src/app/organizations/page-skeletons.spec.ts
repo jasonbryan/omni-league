@@ -93,7 +93,7 @@ describe('page skeletons', () => {
         { names: FULL_NAMES, now: BEFORE_DEADLINE },
         { 'rounded-md': 10, 'rounded-full': 2, 'rounded-lg': 6 },
       ],
-      ['find', FindSkeleton, {}, { 'rounded-md': 7, 'rounded-xl': 3, 'rounded-full': 3 }],
+      ['find', FindSkeleton, {}, { 'rounded-md': 7, 'rounded-xl': 3, 'rounded-full': 6 }],
     ];
 
     const render = (skeleton: Type<unknown>, inputs: Record<string, unknown>) => {

@@ -1,19 +1,23 @@
 import { v } from 'convex/values';
-import type { Doc, Id } from './_generated/dataModel';
+import type { Doc } from './_generated/dataModel';
 import { query, type QueryCtx } from './_generated/server';
-import { leagueDivisionLabel } from './lib/leagueDivision';
 import { divisionFilterArgs, filtersInScope, matchesDivisionFilters } from './lib/leagueFilters';
 import { logoUrlField } from './lib/organizationLogo';
-import { leagueLocationNames, leagueRowSeasons } from './lib/publicLeague';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import { programTypeValidator, SEARCHABLE_PROGRAM_TYPES, type ProgramType } from './lib/programs';
 import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
   searchOrganizationsValidator,
+  searchProgramsBrowseValidator,
+  searchProgramsValidator,
   type SearchLeagues,
   type SearchLeaguesBySport,
   type SearchOrganizations,
+  type SearchPrograms,
+  type SearchProgramsBrowse,
 } from './lib/publicPage';
+import { searchProgramRows, searchRows } from './lib/searchRows';
 import {
   matchesEveryWord,
   parseSearchQuery,
@@ -26,41 +30,8 @@ export const SEARCH_RESULT_LIMIT = 50;
 
 export const SEARCH_SCAN_LIMIT = 200;
 
-function facetOf({ gender, playersPerSide, level, ageGroup }: Doc<'leagues'>) {
+function facetOf({ gender, playersPerSide, level, ageGroup }: Doc<'leagues'> | Doc<'programs'>) {
   return { gender, playersPerSide, level, ageGroup };
-}
-
-async function searchRows(
-  ctx: QueryCtx,
-  leagues: readonly Doc<'leagues'>[],
-): Promise<SearchLeagues['rows']> {
-  const organizations = new Map<Id<'organizations'>, Doc<'organizations'> | null>();
-  const rows: SearchLeagues['rows'] = [];
-  for (const league of leagues) {
-    if (!organizations.has(league.organizationId)) {
-      organizations.set(
-        league.organizationId,
-        await ctx.db.get('organizations', league.organizationId),
-      );
-    }
-    const organization = organizations.get(league.organizationId);
-    if (!organization) continue;
-    const label = await leagueDivisionLabel(ctx, league);
-    rows.push({
-      organization: {
-        name: organization.name,
-        slug: organization.slug,
-        ...(await logoUrlField(ctx, organization)),
-      },
-      name: league.name,
-      slug: league.slug,
-      sportName: sportName(league.sport),
-      locationNames: await leagueLocationNames(ctx, organization, league),
-      divisionLabel: label,
-      seasons: await leagueRowSeasons(ctx, league),
-    });
-  }
-  return rows;
 }
 
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.
@@ -140,5 +111,121 @@ export const organizations = query({
       });
     }
     return { rows, page, pageCount, total: listed.length };
+  },
+});
+
+function typeCountsOf(programs: readonly Doc<'programs'>[]): SearchPrograms['typeCounts'] {
+  return SEARCHABLE_PROGRAM_TYPES.map((type) => ({
+    type,
+    count: programs.filter((program) => program.type === type).length,
+  })).filter(({ count }) => count > 0);
+}
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.
+export const programs = query({
+  args: {
+    q: v.string(),
+    type: v.optional(programTypeValidator),
+    sport: v.optional(sportValidator),
+    ...divisionFilterArgs,
+  },
+  returns: searchProgramsValidator,
+  handler: async (ctx, args): Promise<SearchPrograms> => {
+    // The browser sends it already parsed; a caller that does not is held to the same limits.
+    const q = stripPossessives(parseSearchQuery([args.q]));
+    if (q === '') return { rows: [], more: false, typeCounts: [] };
+    const { sport, type } = args;
+    const scanned = await ctx.db
+      .query('programs')
+      .withSearchIndex('search_searchText', (search) => {
+        const published = search.search('searchText', q).eq('status', 'published');
+        return sport === undefined ? published : published.eq('sport', sport);
+      })
+      .take(SEARCH_SCAN_LIMIT);
+    const filters = filtersInScope(args, sport);
+    const passesDivision = (program: Doc<'programs'>) => matchesDivisionFilters(program, filters);
+    const passesType = (program: Doc<'programs'>) => type === undefined || program.type === type;
+    const kept = scanned.filter((program) => matchesEveryWord(program.searchText ?? '', q));
+    const ofType = kept.filter(passesType);
+    const matched = ofType.filter(passesDivision);
+    const typeCounts = typeCountsOf(kept.filter(passesDivision));
+    const facets = ofType.map(facetOf);
+    const rows = await searchProgramRows(ctx, matched.slice(0, SEARCH_RESULT_LIMIT));
+    const more = matched.length > SEARCH_RESULT_LIMIT;
+    // Programs that hold every word but fail the type or the division filters mean fewer words would not help.
+    if (kept.length > 0) return { rows, more, facets, typeCounts };
+    const suggestions = suggestFewerWords(
+      scanned
+        .filter(passesType)
+        .filter(passesDivision)
+        .map((program) => program.searchText ?? ''),
+      q,
+    );
+    return suggestions.length === 0
+      ? { rows, more, facets, typeCounts }
+      : { rows, more, facets, typeCounts, suggestions };
+  },
+});
+
+function bySortName(a: Doc<'programs'>, b: Doc<'programs'>): number {
+  if (a.sortName !== b.sortName) return a.sortName < b.sortName ? -1 : 1;
+  return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0;
+}
+
+// The index orders by sport before name, so with no sport the first 200 by name are the first 200 of each sport's own run, merged.
+async function firstByName(
+  ctx: QueryCtx,
+  type: ProgramType,
+  sport: Sport | undefined,
+): Promise<Doc<'programs'>[]> {
+  const sports = sport === undefined ? (Object.keys(SPORT_NAMES) as Sport[]) : [sport];
+  const read: Doc<'programs'>[] = [];
+  for (const own of sports) {
+    read.push(
+      ...(await ctx.db
+        .query('programs')
+        .withIndex('by_status_and_type_and_sport_and_sortName', (q) =>
+          q.eq('status', 'published').eq('type', type).eq('sport', own),
+        )
+        .take(PUBLIC_LIST_MAX_ROWS)),
+    );
+  }
+  return read.sort(bySortName).slice(0, PUBLIC_LIST_MAX_ROWS);
+}
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous list that reads no identity and returns only published fields, with no ids.
+export const programsBrowse = query({
+  args: {
+    type: v.optional(programTypeValidator),
+    sport: v.optional(sportValidator),
+    ...divisionFilterArgs,
+    page: v.number(),
+  },
+  returns: searchProgramsBrowseValidator,
+  handler: async (ctx, args): Promise<SearchProgramsBrowse> => {
+    const { sport, type } = args;
+    // Every listed type is read, so the type chips count them all; the chosen type is applied after.
+    const read: Doc<'programs'>[] = [];
+    for (const listed of SEARCHABLE_PROGRAM_TYPES) {
+      read.push(...(await firstByName(ctx, listed, sport)));
+    }
+    read.sort(bySortName);
+    const filters = filtersInScope(args, sport);
+    const passesDivision = (program: Doc<'programs'>) => matchesDivisionFilters(program, filters);
+    const ofType = read.filter((program) => type === undefined || program.type === type);
+    const matched = ofType.filter(passesDivision).slice(0, PUBLIC_LIST_MAX_ROWS);
+    const { page, pageCount } = pageOf(matched.length, args.page);
+    const rows = await searchProgramRows(
+      ctx,
+      pageRows(matched, page).slice(0, PUBLIC_LIST_PAGE_SIZE),
+    );
+    return {
+      rows,
+      page,
+      pageCount,
+      total: matched.length,
+      facets: ofType.map(facetOf),
+      typeCounts: typeCountsOf(read.filter(passesDivision)),
+    };
   },
 });

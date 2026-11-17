@@ -1,4 +1,5 @@
 import { v, type Infer, type Validator } from 'convex/values';
+import { programTypeValidator } from './programs';
 import { scoreValidator, sportValidator } from './sports';
 import { tournamentDetailsValidator } from './tournamentDetails';
 
@@ -111,6 +112,55 @@ export const searchLeaguesBySportValidator = v.object({
 });
 
 export type SearchLeaguesBySport = Infer<typeof searchLeaguesBySportValidator>;
+
+// Each row names its organization, so a result needs no second query.
+const searchProgramLeagueValidator = v.object({
+  type: v.literal('league'),
+  ...searchLeagueValidator.fields,
+});
+
+const searchProgramTournamentValidator = v.object({
+  type: v.literal('tournament'),
+  organization: publicLeagueOrganizationValidator,
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  locationNames: v.array(v.string()),
+  divisionLabel: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+  isFull: v.optional(v.boolean()),
+});
+
+const searchProgramValidator = v.union(
+  searchProgramLeagueValidator,
+  searchProgramTournamentValidator,
+);
+
+export type SearchProgramRow = Infer<typeof searchProgramValidator>;
+
+const programTypeCountsValidator = v.array(
+  v.object({ type: programTypeValidator, count: v.number() }),
+);
+
+export const searchProgramsValidator = v.object({
+  rows: v.array(searchProgramValidator),
+  more: v.boolean(),
+  suggestions: v.optional(v.array(v.string())),
+  facets: v.optional(publicLeagueFacetsValidator),
+  typeCounts: programTypeCountsValidator,
+});
+
+export type SearchPrograms = Infer<typeof searchProgramsValidator>;
+
+export const searchProgramsBrowseValidator = v.object({
+  ...publicListValidator(searchProgramValidator).fields,
+  facets: publicLeagueFacetsValidator,
+  typeCounts: programTypeCountsValidator,
+});
+
+export type SearchProgramsBrowse = Infer<typeof searchProgramsBrowseValidator>;
 
 const searchOrganizationValidator = v.object({
   name: v.string(),
