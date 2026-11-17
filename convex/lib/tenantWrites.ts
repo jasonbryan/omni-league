@@ -758,12 +758,12 @@ export async function updateTournamentDetails(
   change: TournamentEditable,
 ): Promise<{ earlier: TournamentEditable; written: TournamentEditable }> {
   const earlier = editableOf(tournament);
-  // A patch with an undefined field removes it, which the required structure cannot lose.
+  // A patch with an undefined field removes it, which the required fields cannot lose; the optional grand final is removed when the caller sends none, as an Undo does for a tournament that held none.
   const written = {
     ...change,
     structure: change.structure ?? earlier.structure,
     bracketType: change.bracketType ?? earlier.bracketType,
-    grandFinal: change.grandFinal ?? earlier.grandFinal,
+    grandFinal: change.grandFinal,
   };
   await ctx.db.patch('tournaments', tournament._id, written);
   return { earlier, written };

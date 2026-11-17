@@ -453,9 +453,26 @@ describe('tournaments.updateDetails: the bracket type and the grand final', () =
       await heldNow(s),
     );
     expect(result.written).toMatchObject({ bracketType: 'double', grandFinal: 'single' });
-    expect(result.earlier).toMatchObject({ bracketType: 'single', grandFinal: 'ifNecessary' });
+    expect(result.earlier).toMatchObject({ bracketType: 'single' });
+    expect(result.earlier).not.toHaveProperty('grandFinal');
     const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
     expect([row.bracketType, row.grandFinal]).toEqual(['double', 'single']);
+  });
+
+  test('a save of a single-elimination tournament leaves the grand final absent', async () => {
+    const { s } = await world(6, { create: false });
+    await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { bracketType: 'single' }));
+    await editDetails(s, { maximumTeams: 90, bracketType: 'single' }, await heldNow(s));
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
+    expect(row).not.toHaveProperty('grandFinal');
+  });
+
+  test('a grand final that was sent is kept by a later save that sends none', async () => {
+    const { s } = await world(6, { create: false });
+    await editDetails(s, { grandFinal: 'single' }, await heldNow(s));
+    await editDetails(s, { maximumTeams: 90 }, await heldNow(s));
+    const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
+    expect(row.grandFinal).toBe('single');
   });
 
   test('an older form that sends neither leaves both as they are', async () => {
@@ -472,11 +489,7 @@ describe('tournaments.updateDetails: the bracket type and the grand final', () =
       expected: older,
     });
     const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
-    expect([row.bracketType, row.grandFinal, row.maximumTeams]).toEqual([
-      'double',
-      'ifNecessary',
-      100,
-    ]);
+    expect([row.bracketType, row.grandFinal, row.maximumTeams]).toEqual(['double', undefined, 100]);
   });
 
   test('the bracket type is refused once bracket games exist, and nothing changes', async () => {
@@ -524,7 +537,7 @@ describe('tournaments.updateDetails: the bracket type and the grand final', () =
       ...result,
     });
     const row = (await s.t.run((ctx) => ctx.db.get('tournaments', s.gulf)))!;
-    expect([row.bracketType, row.grandFinal]).toEqual(['double', 'ifNecessary']);
+    expect([row.bracketType, row.grandFinal]).toEqual(['double', undefined]);
   });
 
   test('an organizer assigned to the tournament changes the bracket type and the grand final', async () => {

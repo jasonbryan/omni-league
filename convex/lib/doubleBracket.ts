@@ -40,7 +40,6 @@ export function losersRoundName(round: number, rounds: number): string {
 export interface PlayoffRounds {
   winners: number;
   losers: number;
-  /** A single-elimination bracket names its rounds Quarterfinals, Semifinals, and Final. */
   double: boolean;
 }
 
@@ -116,7 +115,6 @@ export function planDoubleBracket(teamCount: number): PlayoffGame[] {
     };
   };
 
-  // Neighbours in the bracket meet, and an odd team waits.
   const pairUp = (waiting: Waiting[]): Waiting[] => {
     const sorted = [...waiting].sort(byPosition);
     if (sorted.length < 2) return sorted;
@@ -127,7 +125,7 @@ export function planDoubleBracket(teamCount: number): PlayoffGame[] {
     return sorted.length % 2 === 1 ? [...played, sorted[sorted.length - 1]] : played;
   };
 
-  // Each survivor meets the dropping team furthest from where it came from, so teams that already met stay apart; a dropping team left over waits.
+  // Each survivor meets the dropping team from the far side of the bracket, which makes a rematch less likely; a dropping team left over waits.
   const dropIn = (survivors: Waiting[], dropping: Waiting[]): Waiting[] => {
     if (survivors.length > dropping.length) throw new Error('More survivors than dropping teams');
     round += 1;

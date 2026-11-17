@@ -416,7 +416,6 @@ async function refuseLockedChanges(
   }
 }
 
-// The bracket type is fixed once bracket games exist, and the grand final once it has a result.
 async function refuseLockedBracketChanges(
   ctx: QueryCtx,
   tournament: Doc<'tournaments'>,
@@ -435,7 +434,7 @@ async function refuseLockedBracketChanges(
   }
   if (
     next.grandFinal !== undefined &&
-    next.grandFinal !== held.grandFinal &&
+    next.grandFinal !== (held.grandFinal ?? DEFAULT_GRAND_FINAL) &&
     (await grandFinalHasResult(ctx, tournament))
   ) {
     refuseBracket(

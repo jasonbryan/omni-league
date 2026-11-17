@@ -189,7 +189,6 @@ async function placeIn(
   });
 }
 
-/** The first grand final game's winner is the losers' bracket team's, in a bracket that plays a deciding game, so a second game joins the same two teams. */
 async function syncDecidingGame(
   ctx: MutationCtx,
   first: Doc<'tournamentGames'>,

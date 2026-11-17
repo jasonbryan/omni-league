@@ -424,7 +424,6 @@ describe('TournamentDetailsForm', () => {
             setsPerGame: 3,
             structure: 'bracket',
             bracketType: 'single',
-            grandFinal: 'ifNecessary',
             expected: HELD,
           },
         ],
@@ -480,6 +479,13 @@ describe('TournamentDetailsForm', () => {
       expect(text(status())).toBe('Details saved.Undo');
       expect(bracketType('double')!.checked).toBe(true);
       expect(grandFinal('single')!.checked).toBe(true);
+    });
+
+    it('sends no grand final for a single-elimination tournament, which the form does not show', async () => {
+      await open();
+      await type('maximum-teams', '8');
+      await submit();
+      expect(o.convex.calls[0].args).not.toHaveProperty('grandFinal');
     });
 
     it('sends no bracket type once the bracket is created, and no grand final once it has a result', async () => {

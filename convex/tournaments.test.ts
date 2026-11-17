@@ -1720,7 +1720,6 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     setsPerGame: 1,
     structure: 'bracket',
     bracketType: 'single',
-    grandFinal: 'ifNecessary',
   };
 
   const changed: TournamentEditable = {
@@ -1731,7 +1730,6 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     setsPerGame: 3,
     structure: 'bracket',
     bracketType: 'single',
-    grandFinal: 'ifNecessary',
   };
 
   const edit = (

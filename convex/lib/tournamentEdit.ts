@@ -65,7 +65,7 @@ export function editableOf(tournament: {
     setsPerGame: tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME,
     structure: tournament.structure ?? DEFAULT_STRUCTURE,
     bracketType: tournament.bracketType ?? DEFAULT_BRACKET_TYPE,
-    grandFinal: tournament.grandFinal ?? DEFAULT_GRAND_FINAL,
+    ...(tournament.grandFinal && { grandFinal: tournament.grandFinal }),
   };
 }
 

@@ -472,7 +472,7 @@ export class TournamentDetailsForm implements OnInit {
         setsPerGame: this.hasSetsPerGame() && !this.setsLocked(),
         structure: !this.structureLocked(),
         bracketType: !this.bracketTypeLocked(),
-        grandFinal: !this.tournament().grandFinalLocked,
+        grandFinal: this.details.bracketType() === 'double' && !this.tournament().grandFinalLocked,
       },
       (values, expected) => this.updateCall.run({ tournamentId, ...values, expected }),
     );
