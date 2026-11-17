@@ -1301,6 +1301,29 @@ test.describe('find a program: offline', () => {
     );
     await context.setOffline(false);
   });
+
+  test('a camp search viewed online opens offline from its saved copy with the camp row and the note', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const { id, campName } = await seedWithCamp();
+    await page.goto(`/programs?type=camp&q=${encodeURIComponent(id)}`);
+    await expect(rowNames(page)).toHaveText([campName]);
+    await hydrated(consoleGuard);
+    await submit(page, `junior ${id}`);
+    await expect(rowNames(page)).toHaveText([campName]);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await submit(page, id);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(rowNames(page)).toHaveText([campName]);
+    await expect(results(page)).toContainText('Camp');
+    await expect(results(page)).toContainText('Ages 9 to 14');
+    await context.setOffline(false);
+  });
 });
 
 const BEACH_OPEN_DIVISION = {
