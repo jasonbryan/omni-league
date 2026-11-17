@@ -13,6 +13,9 @@ const STAGE = 'bracket';
 // A bracket of the most teams a tournament takes has one game fewer than teams.
 const BRACKET_GAMES_READ_LIMIT = MAX_MAXIMUM_TEAMS;
 
+// The index lists the stages in name order, so a bracket's games come before any pool game; a winners' bracket and a losers' bracket of the most teams have 253 games, and a grand final 2.
+const NON_POOL_GAMES_READ_LIMIT = 2 * MAX_MAXIMUM_TEAMS;
+
 /** A team reports once for its game, and a game has two teams. */
 export const REPORTS_PER_GAME = 2;
 
@@ -31,6 +34,20 @@ export function bracketGames(
       q.eq('tournamentId', tournamentId).eq('stage', STAGE),
     )
     .take(BRACKET_GAMES_READ_LIMIT);
+}
+
+/** Every game that is not a pool game, which for a bracket of the release that adds double elimination includes the losers' bracket and the grand final. */
+export async function nonPoolGames(
+  ctx: ReadCtx,
+  tournamentId: Id<'tournaments'>,
+): Promise<Doc<'tournamentGames'>[]> {
+  const games = await ctx.db
+    .query('tournamentGames')
+    .withIndex('by_tournamentId_and_stage_and_round_and_slot', (q) =>
+      q.eq('tournamentId', tournamentId),
+    )
+    .take(NON_POOL_GAMES_READ_LIMIT);
+  return games.filter((game) => game.stage !== 'pool');
 }
 
 /** The stage of the tournament's first game: the index sorts by stage, so a bracket game comes before a pool game. */

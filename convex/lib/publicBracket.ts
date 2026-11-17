@@ -10,9 +10,9 @@ type Place = PublicGame['teams'][number];
 
 export async function publicBracket(
   ctx: Pick<QueryCtx, 'db'>,
-  tournamentId: Id<'tournaments'>,
+  tournament: Doc<'tournaments'>,
 ): Promise<PublicBracket | undefined> {
-  const games = await bracketGames(ctx, tournamentId);
+  const games = await bracketGames(ctx, tournament._id);
   if (games.length === 0) return undefined;
   const teams = await teamsOf(ctx, games);
   const seedOf = new Map(seedOrderOfBracket(games).map((teamId, index) => [teamId, index + 1]));
@@ -24,7 +24,11 @@ export async function publicBracket(
   };
   const roundTotal = Math.max(...games.map((game) => game.round));
   const final = games.find((game) => game.round === roundTotal);
-  const winner = final && gameHasResult(final) ? placeOf(final.winnerTeamId ?? null) : null;
+  // The winners' final decides a single-elimination bracket only.
+  const winner =
+    tournament.bracketType === 'single' && final && gameHasResult(final)
+      ? placeOf(final.winnerTeamId ?? null)
+      : null;
   return {
     ...(winner && { winner: winner.name }),
     rounds: Array.from({ length: roundTotal }, (_, index) => ({

@@ -107,6 +107,14 @@ export async function refuseUnlessReady(
   game: Doc<'tournamentGames'>,
   expectResult: boolean,
 ): Promise<void> {
+  const tournament = await ctx.db.get('tournaments', game.tournamentId);
+  // Only the release that plays a double-elimination bracket places its losers, so results wait for it.
+  if (game.stage !== 'pool' && tournament?.bracketType !== 'single') {
+    refuseBracket({
+      code: 'bracketTypeUnsupported',
+      message: BRACKET_MESSAGES.bracketTypeUnsupported,
+    });
+  }
   if (game.stage === 'pool' && (await bracketExists(ctx, game.tournamentId))) {
     refuseBracket({ code: 'poolsFrozen', message: POOL_MESSAGES.poolsFrozen });
   }
