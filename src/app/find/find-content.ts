@@ -103,7 +103,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
     <div class="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 md:px-8 md:pt-14 md:pb-8">
       <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
       <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
-        Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.
+        Beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on
+        Omni League.
       </p>
       @if (savedAt(); as savedAt) {
         <app-saved-copy-note [savedAt]="savedAt" />

@@ -617,13 +617,13 @@ describe('Find a program camps', () => {
     expect(text(results(harness))).not.toContain('Show all types');
   });
 
-  it('names camps in the intro and in the description of a link preview', async () => {
+  it('names camps and training programs in the intro and in the description of a link preview', async () => {
     const harness = await open('/programs');
     expect(text(host(harness).querySelector('main p'))).toBe(
-      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
+      'Beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.',
     );
     expect(head().querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(
-      'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
+      'Find beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.',
     );
   });
 });

@@ -382,7 +382,7 @@ export class FindPage {
         ogTitle: 'Find a program',
         ogDescription:
           this.mode() === 'organizations'
-            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.'
+            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.'
             : `Find ${this.noun()}s on Omni League.`,
         ogType: 'website',
         // The page of the query result, never the request's, so the canonical holds only an integer.

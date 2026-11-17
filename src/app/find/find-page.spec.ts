@@ -97,7 +97,7 @@ describe('FindPage before a search', () => {
     const main = host(harness).querySelector('main')!;
     expect(text(main.querySelector('h1'))).toBe('Find a program');
     expect(text(main.querySelector('h1 + p'))).toBe(
-      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
+      'Beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.',
     );
     const form = main.querySelector('form')!;
     expect(form.getAttribute('role')).toBe('search');

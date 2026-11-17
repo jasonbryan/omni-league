@@ -1672,13 +1672,17 @@ test.describe('find a program: camps', () => {
     },
   );
 
-  test('the intro and the description of the page name camps', RAW_HTTP, async ({ request }) => {
-    const { html } = await raw(request, '/programs');
-    expect(plainText(html)).toContain(
-      'Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.',
-    );
-    expect(html).toContain('leagues, tournaments, and camps on Omni League');
-  });
+  test(
+    'the intro and the description of the page name camps and training programs',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { html } = await raw(request, '/programs');
+      expect(plainText(html)).toContain(
+        'Beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.',
+      );
+      expect(html).toContain('leagues, tournaments, camps, and training programs on Omni League');
+    },
+  );
 
   test('the camp states pass the axe helper and do not scroll sideways at 320px', async ({
     page,
