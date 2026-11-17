@@ -18,6 +18,7 @@ import {
   leagueSlugTaken,
   MAX_PROGRAMS_SEARCH_UPDATED,
   programSlugTaken,
+  publishCamp,
   publishLeague,
   publishTournament,
   restoreLeague,
@@ -797,17 +798,105 @@ describe('programs.searchText', () => {
     });
   });
 
-  test('camp and training programs get no text from a location rename or a City, state change', async () => {
+  const SAND_CAMP = {
+    name: 'Sand Camp',
+    slug: 'sand-camp',
+    sport: 'beachVolleyball' as const,
+    minimumAge: 9,
+    maximumAge: 14,
+  };
+
+  async function insertCamp(
+    ctx: MutationCtx,
+    organizationId: Id<'organizations'>,
+    alpha: Doc<'locations'>,
+  ) {
+    return insertDraftCamp(ctx, organizationId, { ...SAND_CAMP, locationIds: [alpha._id] });
+  }
+
+  test('a draft camp holds its name, sport, organization, location, and City, state, and no division word', async () => {
     const { t, organizationId, alpha } = await world();
     await t.run(async (ctx) => {
+      await insertCamp(ctx, organizationId, alpha);
+
+      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBe(
+        'Sand Camp Beach volleyball Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('publishing a camp rewrites its program’s text from the row', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const campId = await insertCamp(ctx, organizationId, alpha);
+      const camp = (await ctx.db.get('camps', campId))!;
+      await ctx.db.patch('programs', camp.programId, { searchText: 'stale' });
+
+      await publishCamp(ctx, camp);
+
+      const program = (await ctx.db.get('programs', camp.programId))!;
+      expect(program.status).toBe('published');
+      expect(program.searchText).toBe(
+        'Sand Camp Beach volleyball Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('publishing a published camp again leaves its text as it was', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const campId = await insertCamp(ctx, organizationId, alpha);
+      const camp = (await ctx.db.get('camps', campId))!;
+      await publishCamp(ctx, camp);
+      const before = (await ctx.db.get('programs', camp.programId))!;
+
+      await publishCamp(ctx, camp);
+
+      expect((await ctx.db.get('programs', camp.programId))!.searchText).toBe(before.searchText);
+    });
+  });
+
+  test('renaming a location rewrites the camps held there with no division word, and a camp elsewhere keeps its text', async () => {
+    const { t, organizationId, alpha, bravo } = await world();
+    await t.run(async (ctx) => {
+      await insertCamp(ctx, organizationId, alpha);
       await insertDraftCamp(ctx, organizationId, {
-        name: 'Sand Camp',
-        slug: 'sand-camp',
-        sport: 'beachVolleyball',
-        locationIds: [alpha._id],
-        minimumAge: 9,
-        maximumAge: 14,
+        ...SAND_CAMP,
+        name: 'Bravo Camp',
+        slug: 'bravo-camp',
+        locationIds: [bravo._id],
       });
+      const before = (await programNamed(ctx, organizationId, 'bravo-camp')).searchText;
+
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+
+      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBe(
+        'Sand Camp Beach volleyball Org A Omega Field Corpus Christi, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'bravo-camp')).searchText).toBe(before);
+    });
+  });
+
+  test('changing City, state rewrites the organization’s camps, and clearing it removes the words', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      await insertCamp(ctx, organizationId, alpha);
+
+      await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
+      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBe(
+        'Sand Camp Beach volleyball Org A Alpha Field Galveston, TX',
+      );
+
+      await updateOrganizationCityState(ctx, organizationId, null);
+      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBe(
+        'Sand Camp Beach volleyball Org A Alpha Field',
+      );
+    });
+  });
+
+  test('training programs get no text from a location rename or a City, state change', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
       await insertDraftTraining(ctx, organizationId, {
         name: 'Serving Clinic',
         slug: 'serving-clinic',
@@ -819,22 +908,16 @@ describe('programs.searchText', () => {
       await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
       await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
 
-      expect((await programNamed(ctx, organizationId, 'sand-camp')).searchText).toBeUndefined();
       expect(
         (await programNamed(ctx, organizationId, 'serving-clinic')).searchText,
       ).toBeUndefined();
     });
   });
 
-  test('camp and training programs do not count toward the bound of a rename', async () => {
+  test('training programs do not count toward the bound of a rename', async () => {
     const { t, organizationId, alpha } = await world();
     await t.run(async (ctx) => {
       for (let i = 0; i <= MAX_PROGRAMS_SEARCH_UPDATED; i++) {
-        await ctx.db.insert('programs', {
-          ...tournamentProgramFields(organizationId, `camp-${i}`),
-          type: 'camp',
-          locationIds: [alpha._id],
-        });
         await ctx.db.insert('programs', {
           ...tournamentProgramFields(organizationId, `training-${i}`),
           type: 'training',
@@ -846,6 +929,63 @@ describe('programs.searchText', () => {
       await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
 
       expect((await ctx.db.get('locations', alpha._id))!.name).toBe('Omega Field');
+      const programs = await ctx.db.query('programs').collect();
+      expect(programs.every((program) => program.searchText === undefined)).toBe(true);
+    });
+  });
+
+  async function insertBulkCamps(
+    t: Awaited<ReturnType<typeof world>>['t'],
+    organizationId: Id<'organizations'>,
+    alpha: Doc<'locations'>,
+    count: number,
+  ) {
+    await t.run(async (ctx) => {
+      for (let i = 0; i < count; i++) {
+        await ctx.db.insert('programs', {
+          ...tournamentProgramFields(organizationId, `camp-${i}`),
+          type: 'camp',
+          locationIds: [alpha._id],
+        });
+      }
+    });
+  }
+
+  test('a location rename that reaches 200 camps rewrites all 200', async () => {
+    const { t, organizationId, alpha } = await world();
+    await insertBulkCamps(t, organizationId, alpha, MAX_PROGRAMS_SEARCH_UPDATED);
+    await t.run(async (ctx) => {
+      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
+
+      const programs = await ctx.db.query('programs').collect();
+      expect(programs).toHaveLength(MAX_PROGRAMS_SEARCH_UPDATED);
+      expect(programs.every((program) => program.searchText?.includes('Omega Field'))).toBe(true);
+    });
+  });
+
+  test('a location rename in an organization with 201 camps is refused with the bound, and writes nothing', async () => {
+    const { t, organizationId, alpha } = await world();
+    await insertBulkCamps(t, organizationId, alpha, MAX_PROGRAMS_SEARCH_UPDATED + 1);
+    await expect(
+      t.run((ctx) => updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address })),
+    ).rejects.toThrow(/more than 200 camp programs/);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get('locations', alpha._id))!.name).toBe('Alpha Field');
+      const programs = await ctx.db.query('programs').collect();
+      expect(programs.every((program) => program.searchText === undefined)).toBe(true);
+    });
+  });
+
+  test('a City, state change in an organization with 201 camps is refused with the bound, and writes nothing', async () => {
+    const { t, organizationId, alpha } = await world();
+    await insertBulkCamps(t, organizationId, alpha, MAX_PROGRAMS_SEARCH_UPDATED + 1);
+    await expect(
+      t.run((ctx) => updateOrganizationCityState(ctx, organizationId, 'Galveston, TX')),
+    ).rejects.toThrow(/more than 200 camp programs/);
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get('organizations', organizationId))!.cityState).toBe(
+        'Corpus Christi, TX',
+      );
       const programs = await ctx.db.query('programs').collect();
       expect(programs.every((program) => program.searchText === undefined)).toBe(true);
     });

@@ -101,10 +101,11 @@ const TITLE = 'Find a program | Omni League';
                 rule="above"
                 [path]="path"
                 [sportView]="false"
-                [filters]="filters()"
+                [filters]="formFilters()"
                 [groups]="filterGroupsOffered()"
                 [total]="leagueTotal()"
                 [matching]="matchingCount()"
+                [filterExempt]="campCount()"
                 [facets]="facets()"
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
@@ -145,6 +146,10 @@ export class FindPage {
   protected readonly filters = computed(() =>
     this.mode() === 'organizations' ? NO_DIVISION_FILTERS : this.parsedView().filters,
   );
+  // A camp has no division, so on the camp type a filter in the URL narrows nothing; the links keep it for the types it does narrow.
+  protected readonly formFilters = computed(() =>
+    this.type() === 'camp' ? NO_DIVISION_FILTERS : this.filters(),
+  );
   private readonly filterArgs = computed(() => divisionFilterQueryArgs(this.filters()));
 
   protected readonly mode = computed(() => {
@@ -169,6 +174,7 @@ export class FindPage {
       q: this.query(),
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
+      withCamps: true,
       ...this.filterArgs(),
     };
   });
@@ -185,6 +191,7 @@ export class FindPage {
     return {
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
+      withCamps: true,
       ...this.filterArgs(),
       page: this.requestedPage(),
     };
@@ -250,19 +257,35 @@ export class FindPage {
     const value = this.shownResults();
     return value && (value.facets ?? []);
   });
-  protected readonly leagueTotal = computed(() => this.shownResults()?.facets?.length);
+  // The division filters never narrow a camp, which adds no facet, so the camps are added to each count the form shows.
+  private readonly campCount = computed(() => {
+    const type = this.type();
+    if (type !== undefined && type !== 'camp') return 0;
+    return this.shownResults()?.typeCounts.find((entry) => entry.type === 'camp')?.count ?? 0;
+  });
+  protected readonly leagueTotal = computed(() => {
+    const facets = this.shownResults()?.facets;
+    return facets && facets.length + this.campCount();
+  });
   protected readonly filterGroupsOffered = computed(() => {
     const facets = this.facets();
-    return facets && filterGroups(facets, this.filters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
+    return facets && filterGroups(facets, this.formFilters(), this.sport(), YOUTH_FIRST_AGE_ORDER);
   });
 
   // While a filter change loads, the held page is the previous filters' result, so its count is not shown.
   protected readonly matchingCount = computed(() => {
     const facets = this.facets();
-    if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.filters())) {
+    if (facets === undefined || this.browseBusy() || !hasDivisionFilters(this.formFilters())) {
       return undefined;
     }
-    return draftLeagueCount(facets, this.filters(), undefined, this.sport(), facets.length);
+    return draftLeagueCount(
+      facets,
+      this.formFilters(),
+      undefined,
+      this.sport(),
+      facets.length + this.campCount(),
+      this.campCount(),
+    );
   });
 
   protected readonly queryBuilder = computed(() => {
@@ -345,7 +368,7 @@ export class FindPage {
         ogTitle: 'Find a program',
         ogDescription:
           this.mode() === 'organizations'
-            ? 'Find beach volleyball, soccer, and softball leagues and tournaments on Omni League.'
+            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.'
             : `Find ${this.noun()}s on Omni League.`,
         ogType: 'website',
         // The page of the query result, never the request's, so the canonical holds only an integer.

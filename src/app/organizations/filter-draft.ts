@@ -15,13 +15,16 @@ export function draftLeagueCount(
   sportLeagueCounts: SportCounts | undefined,
   sport: Sport | undefined,
   total: number,
+  filterExempt = 0,
 ): number | undefined {
   if (facets === undefined) return undefined;
   const filters = scopedFilters(sportLeagueCounts, sport, draft);
   if (!hasDivisionFilters(filters)) return total;
   // A facet's strings are only compared with the standard values a parsed draft holds.
-  return facets.filter((facet) => matchesDivisionFilters(facet as LeagueDivisionValues, filters))
-    .length;
+  return (
+    facets.filter((facet) => matchesDivisionFilters(facet as LeagueDivisionValues, filters))
+      .length + filterExempt
+  );
 }
 
 export interface ListedKind {

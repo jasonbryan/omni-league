@@ -39,4 +39,37 @@ describe('seed:demo and Find a program', () => {
       [...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
     );
   });
+
+  test('finds the demo camp by a search for junior, with its ages and sessions, and not the draft camp', async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.seed.insertDemoData, {});
+    const result = await t.query(api.search.programs, { q: 'junior', withCamps: true });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      type: 'camp',
+      name: 'Junior Beach Volleyball Camp',
+      minimumAge: 9,
+      maximumAge: 14,
+    });
+    expect(result.rows[0].type === 'camp' && result.rows[0].sessions).toHaveLength(4);
+    const draft = await t.query(api.search.programs, { q: 'fall break', withCamps: true });
+    expect(draft.rows).toEqual([]);
+  });
+
+  test('lists the demo camps by name for the camp type, without a search, and counts them', async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.seed.insertDemoData, {});
+    const result = await t.query(api.search.programsBrowse, {
+      type: 'camp',
+      sport: 'beachVolleyball',
+      withCamps: true,
+      page: 1,
+    });
+    expect(result.rows.map((row) => row.name)).toEqual([
+      'Adult Beach Skills Camp',
+      'Junior Beach Volleyball Camp',
+    ]);
+    expect(result.total).toBe(2);
+    expect(result.typeCounts).toContainEqual({ type: 'camp', count: 2 });
+  });
 });

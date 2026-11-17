@@ -113,6 +113,29 @@ export const searchLeaguesBySportValidator = v.object({
 
 export type SearchLeaguesBySport = Infer<typeof searchLeaguesBySportValidator>;
 
+const publicCampRowFields = {
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  minimumAge: v.number(),
+  maximumAge: v.number(),
+  locationNames: v.array(v.string()),
+};
+
+const publicCampSessionFields = {
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+  placesLeft: v.number(),
+};
+
+// `sessions` are those that had not ended when the query ran, in start order, because a query does not rerun as time passes: the page picks the next one by its own clock, and `lastSessionEndDate` lets it drop a camp that has ended since.
+const publicCampListRowFields = {
+  ...publicCampRowFields,
+  lastSessionEndDate: v.string(),
+  sessions: v.array(v.object({ name: v.string(), ...publicCampSessionFields })),
+};
+
 // Each row names its organization, so a result needs no second query.
 const searchProgramLeagueValidator = v.object({
   type: v.literal('league'),
@@ -133,9 +156,16 @@ const searchProgramTournamentValidator = v.object({
   isFull: v.optional(v.boolean()),
 });
 
+const searchProgramCampValidator = v.object({
+  type: v.literal('camp'),
+  organization: publicLeagueOrganizationValidator,
+  ...publicCampListRowFields,
+});
+
 const searchProgramValidator = v.union(
   searchProgramLeagueValidator,
   searchProgramTournamentValidator,
+  searchProgramCampValidator,
 );
 
 export type SearchProgramRow = Infer<typeof searchProgramValidator>;
@@ -401,30 +431,7 @@ export const publicOpenTournamentsValidator = v.array(
 
 export type PublicOpenTournaments = Infer<typeof publicOpenTournamentsValidator>;
 
-const publicCampRowFields = {
-  name: v.string(),
-  slug: v.string(),
-  sportName: v.string(),
-  minimumAge: v.number(),
-  maximumAge: v.number(),
-  locationNames: v.array(v.string()),
-};
-
-const publicCampSessionFields = {
-  startDate: v.string(),
-  endDate: v.string(),
-  registrationDeadline: v.string(),
-  placesLeft: v.number(),
-};
-
-// `sessions` are those that had not ended when the query ran, in start order, because a query does not rerun as time passes: the page picks the next one by its own clock, and `lastSessionEndDate` lets it drop a camp that has ended since.
-export const publicCampsValidator = publicListValidator(
-  v.object({
-    ...publicCampRowFields,
-    lastSessionEndDate: v.string(),
-    sessions: v.array(v.object({ name: v.string(), ...publicCampSessionFields })),
-  }),
-);
+export const publicCampsValidator = publicListValidator(v.object(publicCampListRowFields));
 
 export type PublicCamps = Infer<typeof publicCampsValidator>;
 
