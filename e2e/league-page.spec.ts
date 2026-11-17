@@ -1116,14 +1116,14 @@ test.describe('public league page: the names a link carried in the skeleton, lon
     });
   }
 
-  test('from a Find a league result, the names are in the skeleton and nothing moves', async ({
+  test('from a Find a program result, the names are in the skeleton and nothing moves', async ({
     page,
     consoleGuard,
   }, testInfo) => {
     test.skip(!NAMED_PROJECTS.includes(testInfo.project.name), 'one Chromium project per pointer');
     const { tenant, path, id } = await seedNamed();
     await followAndMeasure(page, tenant, async () => {
-      await page.goto(`/leagues?q=${id}`);
+      await page.goto(`/programs?q=${id}`);
       await hydrated(consoleGuard);
       await page.locator(`main a[href="${path}"]`).click();
     });

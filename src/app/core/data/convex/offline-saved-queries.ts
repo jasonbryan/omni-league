@@ -19,6 +19,8 @@ import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
   searchOrganizationsValidator,
+  searchProgramsBrowseValidator,
+  searchProgramsValidator,
 } from '../../../../../convex/lib/publicPage';
 import { api } from './api';
 
@@ -74,6 +76,8 @@ const FIND_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.search.leagues, searchLeaguesValidator, 1),
   savedQuery(api.search.leaguesBySport, searchLeaguesBySportValidator, 1),
   savedQuery(api.search.organizations, searchOrganizationsValidator, 1),
+  savedQuery(api.search.programs, searchProgramsValidator, 1),
+  savedQuery(api.search.programsBrowse, searchProgramsBrowseValidator, 1),
 ];
 
 /**

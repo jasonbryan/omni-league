@@ -24,12 +24,12 @@ const ORGANIZATIONS_QUERY = 'search:organizations';
 
 let client: FakeConvexClient;
 
-async function open(url = '/leagues'): Promise<RouterTestingHarness> {
+async function open(url = '/programs'): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
       provideRouter([
-        { path: 'leagues', component: FindPage },
+        { path: 'programs', component: FindPage },
         { path: '**', component: PlainTestPage },
       ]),
       { provide: CONVEX_CLIENT, useValue: client },
@@ -86,22 +86,22 @@ describe('FindPage organizations: the query', () => {
   });
 
   it('reads the page from the page parameter alone', async () => {
-    await open('/leagues?page=2&ott=SECRET&utm_source=x');
+    await open('/programs?page=2&ott=SECRET&utm_source=x');
     expect(subscription().args).toEqual({ page: 2 });
   });
 
   it.each(['?page=0', '?page=abc', '?page=2&page=3', '?page=-1', '?page=1000'])(
     'asks page 1 for %s',
     async (query) => {
-      await open(`/leagues${query}`);
+      await open(`/programs${query}`);
       expect(subscription().args).toEqual({ page: 1 });
     },
   );
 
   it('asks the search alone, and shows no organizations, when q is set', async () => {
-    const harness = await open('/leagues?q=coed&page=2');
-    expect(client.activeSubscriptions.map((s) => s.name)).toEqual(['search:leagues']);
-    subscription('search:leagues').emit(COED_RESULTS);
+    const harness = await open('/programs?q=coed&page=2');
+    expect(client.activeSubscriptions.map((s) => s.name)).toEqual(['search:programs']);
+    subscription('search:programs').emit(COED_RESULTS);
     await settle(harness);
     expect(section(harness)).toBeNull();
   });
@@ -163,8 +163,8 @@ describe('FindPage organizations: the list', () => {
     expect(control(harness)).toBeNull();
   });
 
-  it('sets the canonical to /leagues', () => {
-    expect(canonical()).toBe(`${location.origin}/leagues`);
+  it('sets the canonical to /programs', () => {
+    expect(canonical()).toBe(`${location.origin}/programs`);
   });
 
   it('keeps the form usable beside the list', () => {
@@ -174,7 +174,7 @@ describe('FindPage organizations: the list', () => {
 
 describe('FindPage organizations: pages', () => {
   it('shows the page control with plain links, and the canonical of page 2 carries ?page=2', async () => {
-    const harness = await open('/leagues?page=2');
+    const harness = await open('/programs?page=2');
     await emit(harness, organizationsPage(2));
     expect([...section(harness)!.querySelectorAll('ul > li h3')].map((h3) => text(h3))).toEqual([
       'Club 6',
@@ -185,18 +185,18 @@ describe('FindPage organizations: pages', () => {
       a.getAttribute('href'),
     ]);
     expect(links).toEqual([
-      ['Previous page', '/leagues'],
-      ['Page 1', '/leagues'],
-      ['Page 2', '/leagues?page=2'],
+      ['Previous page', '/programs'],
+      ['Page 1', '/programs'],
+      ['Page 2', '/programs?page=2'],
     ]);
     expect(text(control(harness)!.querySelector('p'))).toBe('6–7 of 7 organizations');
-    expect(canonical()).toBe(`${location.origin}/leagues?page=2`);
+    expect(canonical()).toBe(`${location.origin}/programs?page=2`);
   });
 
   it('shows page 1 of the query result for a page that is out of range', async () => {
-    const harness = await open('/leagues?page=9');
+    const harness = await open('/programs?page=9');
     await emit(harness, organizationsPage(1));
-    expect(canonical()).toBe(`${location.origin}/leagues`);
+    expect(canonical()).toBe(`${location.origin}/programs`);
   });
 
   it('follows Next through the router with a history entry, holds the shown page busy, then moves focus to the heading', async () => {
@@ -206,7 +206,7 @@ describe('FindPage organizations: pages', () => {
     next.click();
     await settle(harness);
 
-    expect(TestBed.inject(Router).url).toBe('/leagues?page=2');
+    expect(TestBed.inject(Router).url).toBe('/programs?page=2');
     expect(subscription().args).toEqual({ page: 2 });
     expect(section(harness)!.querySelector('ul')!.getAttribute('aria-busy')).toBe('true');
     expect(
@@ -264,7 +264,7 @@ describe('FindPage organizations: states', () => {
   });
 
   it('replaces the list with an alert and a Try again link when the query fails, and the form stays usable', async () => {
-    const harness = await open('/leagues?page=2');
+    const harness = await open('/programs?page=2');
     subscription().fail(new Error('boom'));
     await settle(harness);
 
@@ -272,7 +272,7 @@ describe('FindPage organizations: states', () => {
     expect(text(alert)).toContain('The organizations could not be loaded.');
     expectFindAlert(alert, 'mt-4');
     const retry = [...alert.querySelectorAll('a')].find((a) => text(a) === 'Try again')!;
-    expect(retry.getAttribute('href')).toBe('/leagues?page=2');
+    expect(retry.getAttribute('href')).toBe('/programs?page=2');
     expect(section(harness)!.querySelector('ul')).toBeNull();
     expect(control(harness)).toBeNull();
     const field = host(harness).querySelector<HTMLInputElement>('main form input[name="q"]')!;

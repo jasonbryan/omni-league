@@ -45,7 +45,7 @@ import {
   type FilterGroup,
   type LeagueFacet,
 } from './division-filters';
-import type { HiddenInput } from './filter-draft';
+import { LEAGUES, type HiddenInput, type ListedKind } from './filter-draft';
 import type { FilterOverlay, LeagueFilterOverlays } from './league-filter-overlays';
 import { listPagesQuery } from './organization-path';
 
@@ -83,7 +83,7 @@ const PILL =
           method="get"
           [attr.action]="path()"
           role="search"
-          aria-label="Filter leagues"
+          [attr.aria-label]="'Filter ' + kind().plural"
           (submit)="apply($event)"
         >
           @if (groups(); as groups) {
@@ -179,7 +179,7 @@ const PILL =
                     <input type="hidden" [attr.name]="field.name" [attr.value]="field.value" />
                   }
                   <button type="submit" data-slot="button" [class]="submitClass">
-                    Show leagues
+                    Show {{ kind().plural }}
                   </button>
                 </div>
               </details>
@@ -253,6 +253,7 @@ export class LeagueFilters {
   readonly carried = input<readonly HiddenInput[]>([]);
   /** What the count counts, in the singular. */
   readonly noun = input('league');
+  readonly kind = input<ListedKind>(LEAGUES);
   /** For the sheet and popovers, which list the age groups in this order. */
   readonly ageOrder = input<readonly AgeGroup[] | undefined>(undefined);
   /** `above` draws the rule over the bar, for a page whose chips and search sit in the same block. */
@@ -425,6 +426,7 @@ export class LeagueFilters {
         inputBinding('total', this.total),
         inputBinding('queryBuilder', this.queryBuilder),
         inputBinding('ageOrder', this.ageOrder),
+        inputBinding('kind', this.kind),
         inputBinding('sheetTrigger', () => this.sheetButton()?.nativeElement),
         inputBinding('focusCount', () => this.focusCountAfterRender),
       ],

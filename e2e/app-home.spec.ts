@@ -300,11 +300,11 @@ test.describe('/app: a user on no team', () => {
     await expectAccessible(page);
   });
 
-  test('Find a league opens the league search', VIEWPORT_AGNOSTIC, async ({ page }) => {
+  test('Find a league opens the leagues of Find a program', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, devon());
     await main(page).getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/leagues`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Find a league' })).toBeVisible();
+    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
   });
 
   test('a user who manages an organization is not asked to run a league, and finds it in the sidebar only', async ({

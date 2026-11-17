@@ -23,6 +23,7 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
+import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
 import { isPlainClick } from '../shell/follow-link';
@@ -34,24 +35,29 @@ import { OrganizationMark } from '../organizations/organization-mark';
 import { PageControl } from '../organizations/page-control';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { publicPageNames } from '../organizations/public-league/public-page-names';
+import { publicTournamentNames } from '../organizations/public-tournament/public-tournament-names';
+import { publicTournamentPath } from '../organizations/public-tournament/public-tournament-path';
 import { leagueSeasonStatus } from '../organizations/season-status';
+import { tournamentStatus } from '../organizations/tournament-status';
 import { HlmAlertImports } from '../ui/alert';
 import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
-import { FIND_PATH, findPath, findQuery, type FindResultRow } from './find-path';
+import { FIND_PATH, findPath, findQuery } from './find-path';
+import type { FindResultRow } from './find-types';
 import { FindSkeleton } from './find-skeleton';
+import { PROGRAM_TYPE_WORDS } from './program-type';
 
 export type FindStatus = 'start' | 'searching' | 'results' | 'error';
 
 /** What a search finds, named once so the page's copy follows the noun. */
-const RESULT_NOUN = 'league';
+const RESULT_NOUN = 'program';
 
-/** The leagues of a search or of a sport, whichever the page asked for. */
 export interface FindRows {
   readonly rows: readonly FindResultRow[];
   readonly more?: boolean;
   readonly suggestions?: readonly string[];
   readonly facets?: readonly LeagueFacet[];
+  readonly typeCounts?: readonly { readonly type: ProgramType; readonly count: number }[];
 }
 
 export interface FindPaging {
@@ -87,9 +93,9 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 md:px-8 md:pt-14 md:pb-8">
-      <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
+      <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
       <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
-        Beach volleyball, soccer, and softball leagues on Omni League.
+        Beach volleyball, soccer, and softball leagues and tournaments on Omni League.
       </p>
       @if (savedAt(); as savedAt) {
         <app-saved-copy-note [savedAt]="savedAt" />
@@ -102,7 +108,10 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
         class="mt-6 max-w-2xl"
         (submit)="submit($event)"
       >
-        <label for="find-q" class="text-sm font-medium">League, organization, or location</label>
+        @if (type(); as type) {
+          <input type="hidden" name="type" [attr.value]="type" />
+        }
+        <label for="find-q" class="text-sm font-medium">Program, organization, or location</label>
         <div class="mt-2 flex gap-2">
           <div class="relative min-w-0 flex-1">
             <ng-icon
@@ -189,9 +198,12 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                               row.name
                             }}</a>
                           </h3>
-                          @if (row.divisionLabel) {
-                            <p class="mt-0.5 text-sm font-medium">{{ row.divisionLabel }}</p>
-                          }
+                          <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                            <span hlmBadge size="fit" variant="outline">{{ row.typeLabel }}</span>
+                            @if (row.divisionLabel) {
+                              <span class="font-medium">{{ row.divisionLabel }}</span>
+                            }
+                          </p>
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ row.where }}</p>
                           @if (row.status; as status) {
                             <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -216,8 +228,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                 @if (paging(); as paging) {
                   <div class="-mx-4 mt-2 md:-mx-5">
                     <app-page-control
-                      label="Leagues pages"
-                      noun="leagues"
+                      label="Programs pages"
+                      noun="programs"
                       [page]="paging.page"
                       [pageCount]="paging.pageCount"
                       [total]="paging.total"
@@ -268,19 +280,36 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                     >Clear all</a
                   >
                 </div>
-              } @else if (emptyKind() === 'sport') {
+              } @else if (emptyKind() === 'type') {
                 <div class="flex max-w-md flex-col items-start">
                   <p #resultStatus role="status" tabindex="-1" class="font-medium">
-                    No {{ noun() }}s are published yet
+                    No {{ noun() }}s match “{{ query() }}”
                   </p>
                   <p class="mt-1 text-sm text-muted-foreground">
-                    A league appears here once its organization publishes it.
+                    {{ otherTypesSentence() }}
                   </p>
                   <a
                     [routerLink]="action"
+                    [queryParams]="clearTypeQuery()"
                     [class]="clearClasses"
                     (click)="followed('status', $event)"
-                    >All sports</a
+                    >Show all types</a
+                  >
+                </div>
+              } @else if (emptyKind() === 'sport') {
+                <div class="flex max-w-md flex-col items-start">
+                  <p #resultStatus role="status" tabindex="-1" class="font-medium">
+                    {{ emptyHeading() }}
+                  </p>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {{ emptySentence() }}
+                  </p>
+                  <a
+                    [routerLink]="action"
+                    [queryParams]="emptyBrowseQuery()"
+                    [class]="clearClasses"
+                    (click)="followed('status', $event)"
+                    >{{ type() === undefined ? 'All sports' : 'All types' }}</a
                   >
                 </div>
               } @else {
@@ -289,7 +318,7 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
                     No {{ noun() }}s match “{{ query() }}”
                   </p>
                   <p class="mt-1 text-sm text-muted-foreground">
-                    Omni League has beach volleyball, soccer, and softball leagues. Try a league
+                    Omni League has beach volleyball, soccer, and softball programs. Try a program
                     name, an organization, or a location such as “North Beach”.
                   </p>
                   @if (suggestions().length > 0) {
@@ -333,6 +362,7 @@ export class FindContent {
   readonly results = input<FindRows | undefined>(undefined);
   readonly now = input.required<number>();
   readonly savedAt = input<number | undefined>(undefined);
+  readonly type = input<ProgramType | undefined>(undefined);
   readonly sport = input<Sport | undefined>(undefined);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
   readonly paging = input<FindPaging | undefined>(undefined);
@@ -359,7 +389,7 @@ export class FindContent {
 
   protected readonly draft = linkedSignal(() => this.query());
 
-  /** What the search form submits besides the words, so a new search stays in its sport and filters. */
+  /** What the search form submits besides the type and the words, so a new search stays in its sport and filters. */
   protected readonly carried = computed(() => {
     const sport = this.sport();
     return [
@@ -369,22 +399,55 @@ export class FindContent {
   });
 
   protected readonly noun = computed(() => {
-    const sport = this.sport();
-    return sport === undefined ? RESULT_NOUN : `${sportName(sport).toLowerCase()} ${RESULT_NOUN}`;
+    const [type, sport] = [this.type(), this.sport()];
+    const typeNoun = type === undefined ? RESULT_NOUN : PROGRAM_TYPE_WORDS[type].noun;
+    return sport === undefined ? typeNoun : `${sportName(sport).toLowerCase()} ${typeNoun}`;
   });
 
   /** What the followed links change, so focus waits for the view that replaces this one. */
   private readonly viewKey = computed(() =>
-    findPath(this.query(), { sport: this.sport(), filters: this.filters() }),
+    findPath(this.query(), { type: this.type(), sport: this.sport(), filters: this.filters() }),
   );
 
   private readonly facets = computed(() => this.results()?.facets ?? []);
 
-  // The facets are the matches before the division filters, so any of them with no row left means the filters, not the words, excluded them.
-  protected readonly emptyKind = computed((): 'rows' | 'filters' | 'sport' | 'words' => {
+  private readonly otherTypeCount = computed(() =>
+    (this.results()?.typeCounts ?? []).reduce((sum, entry) => sum + entry.count, 0),
+  );
+
+  // The facets are the matches of the type before the division filters, so any of them with no row left means the filters, not the words, excluded them.
+  protected readonly emptyKind = computed((): 'rows' | 'filters' | 'type' | 'sport' | 'words' => {
     if (this.rows().length > 0) return 'rows';
     if (hasDivisionFilters(this.filters()) && this.facets().length > 0) return 'filters';
-    return this.query() === '' ? 'sport' : 'words';
+    if (this.query() === '') return 'sport';
+    return this.type() !== undefined && this.otherTypeCount() > 0 ? 'type' : 'words';
+  });
+
+  protected readonly otherTypesSentence = computed(() => {
+    const count = this.otherTypeCount();
+    return count === 1
+      ? '1 program of another type matches.'
+      : `${count} programs of other types match.`;
+  });
+
+  /** The search reads no program of these types, so an empty list says nothing about what organizations published. */
+  private readonly unlistedType = computed(() => {
+    const type = this.type();
+    return type !== undefined && !SEARCHABLE_PROGRAM_TYPES.includes(type) ? type : undefined;
+  });
+
+  protected readonly emptyHeading = computed(() => {
+    const unlisted = this.unlistedType();
+    return unlisted === undefined
+      ? `No ${this.noun()}s are published yet`
+      : `Find a program does not list ${PROGRAM_TYPE_WORDS[unlisted].noun}s yet`;
+  });
+
+  protected readonly emptySentence = computed(() => {
+    if (this.unlistedType() !== undefined) return 'Search the leagues and tournaments instead.';
+    const type = this.type();
+    const noun = type === undefined ? RESULT_NOUN : PROGRAM_TYPE_WORDS[type].noun;
+    return `A ${noun} appears here once its organization publishes it.`;
   });
 
   protected readonly filtersHeading = computed(() =>
@@ -409,39 +472,62 @@ export class FindContent {
       sportLeagueCounts: undefined,
       sport: this.sport(),
       total: this.facets().length,
-      queryFor: (without) => findQuery(this.query(), { sport: this.sport(), filters: without }),
+      queryFor: (without) =>
+        findQuery(this.query(), { type: this.type(), sport: this.sport(), filters: without }),
     }),
   );
 
   protected readonly clearFiltersQuery = computed(() =>
-    findQuery(this.query(), { sport: this.sport() }),
+    findQuery(this.query(), { type: this.type(), sport: this.sport() }),
   );
   protected readonly clearSearchQuery = computed(() =>
-    findQuery('', { sport: this.sport(), filters: this.filters() }),
+    findQuery('', { type: this.type(), sport: this.sport(), filters: this.filters() }),
+  );
+  protected readonly clearTypeQuery = computed(() =>
+    findQuery(this.query(), { sport: this.sport(), filters: this.filters() }),
+  );
+
+  protected readonly emptyBrowseQuery = computed(() =>
+    this.type() === undefined ? {} : this.clearTypeQuery(),
   );
 
   protected readonly pageQuery = computed(() => {
-    const [q, sport, filters] = [this.query(), this.sport(), this.filters()];
-    return (page: number) => findQuery(q, { sport, filters, page });
+    const [q, type, sport, filters] = [this.query(), this.type(), this.sport(), this.filters()];
+    return (page: number) => findQuery(q, { type, sport, filters, page });
   });
 
   protected suggestionQuery(suggestion: string) {
-    return findQuery(suggestion, { sport: this.sport(), filters: this.filters() });
+    return findQuery(suggestion, {
+      type: this.type(),
+      sport: this.sport(),
+      filters: this.filters(),
+    });
   }
 
   protected readonly rows = computed(() =>
-    (this.results()?.rows ?? []).map((league) => ({
-      href: publicLeaguePath(league.organization.slug, league.slug),
-      names: publicPageNames({ organization: league.organization, league }),
-      name: league.name,
-      organizationName: league.organization.name,
-      logoUrl: league.organization.logoUrl,
-      divisionLabel: league.divisionLabel,
-      where: [league.organization.name, league.locationNames.join(', ')]
-        .filter(Boolean)
-        .join(' · '),
-      status: leagueSeasonStatus(league.seasons, this.now()),
-    })),
+    (this.results()?.rows ?? []).map((row) => {
+      const shared = {
+        typeLabel: PROGRAM_TYPE_WORDS[row.type].badge,
+        name: row.name,
+        organizationName: row.organization.name,
+        logoUrl: row.organization.logoUrl,
+        divisionLabel: row.divisionLabel,
+        where: [row.organization.name, row.locationNames.join(', ')].filter(Boolean).join(' · '),
+      };
+      return row.type === 'league'
+        ? {
+            ...shared,
+            href: publicLeaguePath(row.organization.slug, row.slug),
+            names: publicPageNames({ organization: row.organization, league: row }),
+            status: leagueSeasonStatus(row.seasons, this.now()),
+          }
+        : {
+            ...shared,
+            href: publicTournamentPath(row.organization.slug, row.slug),
+            names: publicTournamentNames({ organization: row.organization, tournament: row }),
+            status: tournamentStatus(row, this.now()),
+          };
+    }),
   );
 
   protected readonly suggestions = computed(() => this.results()?.suggestions ?? []);

@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { redirectSignedIn } from './core/auth/guards';
+import { redirectLeagues } from './find/leagues-redirect';
 
 export const routes: Routes = [
   {
@@ -9,7 +10,13 @@ export const routes: Routes = [
     loadComponent: () => import('./placeholder/placeholder').then((m) => m.Placeholder),
   },
   {
+    // Redirects in the browser for an in-app link or the service worker's shell, and in the server render, where the engine sends it as a 301 (`app.routes.server.ts`).
     path: 'leagues',
+    canActivate: [redirectLeagues],
+    children: [],
+  },
+  {
+    path: 'programs',
     loadComponent: () => import('./find/find-page').then((m) => m.FindPage),
   },
   {

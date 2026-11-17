@@ -1,21 +1,10 @@
 import type { Params } from '@angular/router';
-import type { FunctionReturnType } from 'convex/server';
-import type { api } from '../../../convex/_generated/api';
 import { NO_DIVISION_FILTERS, type DivisionFilters } from '../../../convex/lib/leagueFilters';
+import type { ProgramType } from '../../../convex/lib/programs';
 import { sportSegment, type Sport } from '../../../convex/lib/sports';
 import { divisionFilterQuery } from '../organizations/division-filters';
 
-export type FindResults = FunctionReturnType<typeof api.search.leagues>;
-
-export type FindSportResults = FunctionReturnType<typeof api.search.leaguesBySport>;
-
-export type FindResultRow = FindResults['rows'][number];
-
-export type FindOrganizations = FunctionReturnType<typeof api.search.organizations>;
-
-export type FindOrganizationRow = FindOrganizations['rows'][number];
-
-export const FIND_PATH = '/leagues';
+export const FIND_PATH = '/programs';
 
 /** Built from a page number, an integer, never copied from the current URL. */
 export function organizationsPath(page: number): string {
@@ -23,15 +12,17 @@ export function organizationsPath(page: number): string {
 }
 
 export interface FindView {
+  readonly type?: ProgramType;
   readonly sport?: Sport;
   readonly filters?: DivisionFilters;
   readonly page?: number;
 }
 
-/** In the order the form submits them: the search, the sport, the filters, the page. */
+/** In the order the form submits them: the type, the search, the sport, the filters, the page. */
 export function findQuery(q: string, view: FindView = {}): Params {
-  const { sport, filters = NO_DIVISION_FILTERS, page = 1 } = view;
+  const { type, sport, filters = NO_DIVISION_FILTERS, page = 1 } = view;
   return {
+    ...(type !== undefined && { type }),
     ...(q !== '' && { q }),
     ...(sport !== undefined && { sport: sportSegment(sport) }),
     ...divisionFilterQuery(filters),
@@ -39,7 +30,7 @@ export function findQuery(q: string, view: FindView = {}): Params {
   };
 }
 
-/** Built from the parsed search, sport, filters, and page, never copied from the current URL, which can carry other parameters. */
+/** Built from the parsed search, type, sport, filters, and page, never copied from the current URL, which can carry other parameters. */
 export function findPath(q: string, view: FindView = {}): string {
   const query = Object.entries(findQuery(q, view))
     .flatMap(([name, value]) =>

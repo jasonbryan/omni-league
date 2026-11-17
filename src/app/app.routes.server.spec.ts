@@ -18,6 +18,7 @@ import { RegisterTournamentTeamPage } from './teams/register-tournament-team-pag
 import { TeamPage } from './teams/team-page';
 import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
+import { redirectLeagues } from './find/leagues-redirect';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminTournaments } from './organizations/admin/admin-tournaments';
 import { AdminCamps } from './organizations/admin/admin-camps';
@@ -57,7 +58,7 @@ function directives(value: string): Map<string, string | true> {
 }
 
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, organizations/:orgSlug/tournaments/:tournamentSlug Server, organizations/:orgSlug/camps/:campSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues 301 no-store, programs Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, organizations/:orgSlug/tournaments/:tournamentSlug Server, organizations/:orgSlug/camps/:campSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       {
@@ -92,6 +93,12 @@ describe('Route tables', () => {
       },
       {
         path: 'leagues',
+        renderMode: RenderMode.Server,
+        status: 301,
+        headers: { 'Cache-Control': 'no-store' },
+      },
+      {
+        path: 'programs',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
@@ -160,6 +167,7 @@ describe('Route tables', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'leagues',
+      'programs',
       'organizations',
       'sign-up',
       'sign-in',
@@ -174,10 +182,17 @@ describe('Route tables', () => {
     expect(home.title).toBe('Omni League');
   });
 
-  it('leagues lazy-loads the find page', async () => {
-    const route = routes.find((r) => r.path === 'leagues');
+  it('programs lazy-loads the find page', async () => {
+    const route = routes.find((r) => r.path === 'programs');
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(FindPage);
+  });
+
+  it('leagues renders nothing and sends the router to programs', () => {
+    const route = routes.find((r) => r.path === 'leagues');
+    expect(route?.component).toBeUndefined();
+    expect(route?.loadComponent).toBeUndefined();
+    expect(route?.canActivate).toEqual([redirectLeagues]);
   });
 
   it('the last client route is **, which lazy-loads the not-found page', async () => {
