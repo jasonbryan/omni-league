@@ -3,6 +3,7 @@ import type { Doc } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { requireTrainingClassOrganizer, requireTrainingOrganizer } from './lib/access';
 import { dateAtUtcMinus12 } from './lib/registration';
+import { seriesRegistrationCount } from './lib/trainingRegistrationReads';
 import { insertTrainingClasses, setTrainingClassStatus } from './lib/tenantWrites';
 import {
   TRAINING_PATTERN_MESSAGES,
@@ -131,6 +132,10 @@ export const restore = mutation({
     const { trainingClass } = await requireTrainingClassOrganizer(ctx, trainingClassId);
     if (trainingClass.status === 'scheduled') return null;
     await setTrainingClassStatus(ctx, trainingClass, 'scheduled');
+    // A class cancelled before the series registrations took no place for them, so the restore counts them.
+    await ctx.db.patch('trainingClasses', trainingClassId, {
+      registeredCount: await seriesRegistrationCount(ctx, trainingClass.trainingId),
+    });
     return null;
   },
 });

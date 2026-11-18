@@ -38,11 +38,12 @@ export function registerTrainingState({
   if (answer === null) return 'not-found';
   if (!signedIn) return 'signed-out';
   const open = isOpen(answer, nowMs);
-  if (answer.registered && (registrationOptions(answer).length === 0 || !open)) {
+  const full = answer.fullClassDate !== undefined;
+  if (answer.registered && (registrationOptions(answer).length === 0 || !open || full)) {
     return 'registered';
   }
   if (!open) return 'closed';
-  return answer.fullClassDate === undefined ? 'form' : 'full';
+  return full ? 'full' : 'form';
 }
 
 export function trainingClosedLine(answer: Schedule, nowMs: number): string {

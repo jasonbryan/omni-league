@@ -9,10 +9,11 @@ import {
   insertTrainingClasses,
   publishTraining,
 } from './lib/tenantWrites';
+import { insertMembership } from './lib/memberships';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// 2027-02-01, a Monday, at noon UTC.
+// Noon UTC on the series deadline, the day before the first class.
 export const NOW = Date.UTC(2027, 1, 1, 12, 0, 0);
 
 export const identity = (authUserId: string) => ({
@@ -24,7 +25,6 @@ export const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-// 2027-02-02 is a Tuesday; the classes fall on 2027-02-02, 02-09, and 02-16.
 export const PATTERN: TrainingPattern = {
   weekday: 2,
   startTime: '18:00',
@@ -123,9 +123,10 @@ export async function setup() {
       trainings[key] = { trainingId, classIds: classes.map((row) => row._id) };
     }
     const users: Record<string, Id<'users'>> = {};
-    for (const name of ['alice', 'bob', 'carol']) {
+    for (const name of ['alice', 'bob', 'carol', 'admin']) {
       users[name] = await ctx.db.insert('users', { authUserId: name, name, adultConfirmedAt: 1 });
     }
+    await insertMembership(ctx, users['admin'], organization, 'orgAdmin');
     return { organization, otherOrganization, trainings, users };
   });
   return {
@@ -134,6 +135,7 @@ export async function setup() {
     alice: t.withIdentity(identity('alice')),
     bob: t.withIdentity(identity('bob')),
     carol: t.withIdentity(identity('carol')),
+    admin: t.withIdentity(identity('admin')),
     ghost: t.withIdentity(identity('ghost')),
   };
 }

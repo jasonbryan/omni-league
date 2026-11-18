@@ -1,7 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { MAX_MINORS_PER_SESSION, MINOR_KEY_END, MINOR_KEY_PREFIX } from './individualRegistration';
-import { MAX_TRAINING_WEEKS } from './trainingPattern';
+import { MAX_TRAINING_CLASS_PLACES, MAX_TRAINING_WEEKS } from './trainingPattern';
 import { publishedTrainingProgramOf } from './trainingPublicList';
 
 /** A draft program, or one with no classes scheduled, answers like an unknown one, so nothing says whether it exists. */
@@ -28,6 +28,20 @@ export async function classesToAttend(
     .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId).gte('date', today))
     .take(MAX_TRAINING_WEEKS);
   return classes.filter((row) => row.status === 'scheduled');
+}
+
+// Each series registration holds a place in every class, and a program takes at most as many as its largest class has places.
+const SERIES_REGISTRATIONS_LIMIT = MAX_TRAINING_CLASS_PLACES * 2;
+
+export async function seriesRegistrationCount(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+): Promise<number> {
+  const registrations = await ctx.db
+    .query('trainingRegistrations')
+    .withIndex('by_trainingId_and_userId_and_participantKey', (q) => q.eq('trainingId', trainingId))
+    .take(SERIES_REGISTRATIONS_LIMIT);
+  return registrations.filter((row) => row.classId === undefined).length;
 }
 
 export async function minorRegistrationsOf(

@@ -82,6 +82,12 @@ describe('registerTrainingState', () => {
     ).toBe('registered');
   });
 
+  it('is registered while a class is full for an account holder who could still register a child', () => {
+    expect(state({ ...OPEN, registered: true, placesLeft: 0, fullClassDate: '2027-02-09' })).toBe(
+      'registered',
+    );
+  });
+
   it('is registered after the deadline for a guardian who could still register a child', () => {
     expect(
       state({ ...OPEN, registered: true }, { nowMs: Date.parse('2027-02-03T12:00:00Z') }),
