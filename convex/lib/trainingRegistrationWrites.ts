@@ -2,6 +2,7 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { participantKey, type Participant } from './individualRegistration';
 import { MAX_TRAINING_WEEKS } from './trainingPattern';
+import { classParticipantKey } from './trainingRegistration';
 
 interface NewRegistration {
   userId: Id<'users'>;
@@ -21,7 +22,10 @@ async function insertRegistration(
     ...(classId !== undefined && { classId }),
     trainingId: training._id,
     organizationId: training.organizationId,
-    participantKey: participantKey(fixed.participant),
+    participantKey:
+      classId === undefined
+        ? participantKey(fixed.participant)
+        : classParticipantKey(classId, fixed.participant),
     createdAt: Date.now(),
   });
 }

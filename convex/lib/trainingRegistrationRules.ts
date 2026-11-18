@@ -16,7 +16,12 @@ import {
   trainingHasAgeRange,
   type TrainingRegistrationRefusal,
 } from './trainingRegistration';
-import { minorRegistrationsOf, participantRegistrationsOf } from './trainingRegistrationReads';
+import {
+  classRegistrationOf,
+  minorRegistrationsOf,
+  seriesRegistrationOf,
+  singleClassRegistrationsOf,
+} from './trainingRegistrationReads';
 
 export function refuseTrainingRegistration(refusal: TrainingRegistrationRefusal): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -47,16 +52,21 @@ export async function requestedClassOf(
 }
 
 export type RegistrationScope =
-  { kind: 'series'; classCount: number } | { kind: 'class'; trainingClass: Doc<'trainingClasses'> };
+  | { kind: 'series'; classes: readonly Doc<'trainingClasses'>[] }
+  | { kind: 'class'; trainingClass: Doc<'trainingClasses'> };
 
 /** The stored name is the one a guardian knows the child by, whatever case or spacing they typed now. */
-function refuseIfHeld(
-  scope: RegistrationScope,
+async function refuseIfHeld(
+  ctx: Pick<QueryCtx, 'db'>,
+  {
+    training,
+    userId,
+    scope,
+  }: { training: Doc<'trainings'>; userId: Id<'users'>; scope: RegistrationScope },
   participant: Participant,
-  held: readonly Doc<'trainingRegistrations'>[],
-): void {
+): Promise<void> {
   const field = participant.kind === 'minor' ? { field: 'minorName' as const } : {};
-  const series = held.find((row) => row.classId === undefined);
+  const series = await seriesRegistrationOf(ctx, training._id, userId, participant);
   if (series) {
     refuseTrainingRegistration({
       code: 'alreadyRegistered',
@@ -64,8 +74,14 @@ function refuseIfHeld(
       message: TRAINING_REGISTRATION_MESSAGES.alreadyRegistered(series.participant),
     });
   }
-  const single =
-    scope.kind === 'class' && held.find((row) => row.classId === scope.trainingClass._id);
+  if (scope.kind !== 'class') return;
+  const single = await classRegistrationOf(
+    ctx,
+    training._id,
+    userId,
+    scope.trainingClass._id,
+    participant,
+  );
   if (single) {
     refuseTrainingRegistration({
       code: 'alreadyRegistered',
@@ -90,7 +106,7 @@ function refuseIfClosed(
         message: TRAINING_REGISTRATION_MESSAGES.classRegistrationClosed(scope.trainingClass.date),
       });
     }
-  } else if (scope.classCount === 0 || dateAtUtcMinus12(nowMs) > pattern.registrationDeadline) {
+  } else if (scope.classes.length === 0 || dateAtUtcMinus12(nowMs) > pattern.registrationDeadline) {
     refuseTrainingRegistration({
       code: 'registrationClosed',
       message: TRAINING_REGISTRATION_MESSAGES.registrationClosed,
@@ -98,7 +114,22 @@ function refuseIfClosed(
   }
 }
 
-/** Whether each class has a place is the caller's to check. */
+/** The children a guardian holds in the program, a child once however many of its classes. */
+async function minorKeysOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+): Promise<Set<string>> {
+  const series = await minorRegistrationsOf(ctx, trainingId, userId);
+  const singles = await singleClassRegistrationsOf(ctx, trainingId, userId);
+  return new Set(
+    [...series, ...singles].flatMap(({ participant }) =>
+      participant.kind === 'minor' ? [participantKey(participant)] : [],
+    ),
+  );
+}
+
+/** Whether each class has a place is the caller's to check. The single-class rows of a series registrant come back, for the series to replace. */
 export async function checkedTrainingRegistrant(
   ctx: Pick<QueryCtx, 'db'>,
   {
@@ -116,16 +147,10 @@ export async function checkedTrainingRegistrant(
     asked: Participant;
     ageConfirmed: boolean;
   },
-): Promise<{ participant: Participant; held: Doc<'trainingRegistrations'>[] }> {
+): Promise<{ participant: Participant; replaced: Doc<'trainingRegistrations'>[] }> {
   refuseIfClosed(scope, pattern);
   const participant = checkedParticipant(asked);
-  const held = await participantRegistrationsOf(
-    ctx,
-    training._id,
-    userId,
-    participantKey(participant),
-  );
-  refuseIfHeld(scope, participant, held);
+  await refuseIfHeld(ctx, { training, userId, scope }, participant);
   const { minimumAge, maximumAge } = training;
   if (participant.kind === 'self' && maximumAge !== undefined && !adultMayRegister(maximumAge)) {
     refuseTrainingRegistration({
@@ -146,9 +171,9 @@ export async function checkedTrainingRegistrant(
       message: TRAINING_REGISTRATION_MESSAGES.ageNotConfirmed(participant),
     });
   }
-  if (participant.kind === 'minor' && held.length === 0) {
-    const minors = await minorRegistrationsOf(ctx, training._id, userId);
-    if (new Set(minors.map((row) => row.participantKey)).size >= MAX_MINORS_PER_SESSION) {
+  if (participant.kind === 'minor') {
+    const keys = await minorKeysOf(ctx, training._id, userId);
+    if (!keys.has(participantKey(participant)) && keys.size >= MAX_MINORS_PER_SESSION) {
       refuseTrainingRegistration({
         code: 'minorLimit',
         field: 'minorName',
@@ -156,5 +181,11 @@ export async function checkedTrainingRegistrant(
       });
     }
   }
-  return { participant, held };
+  const replaced =
+    scope.kind === 'series'
+      ? (await singleClassRegistrationsOf(ctx, training._id, userId)).filter(
+          (row) => participantKey(row.participant) === participantKey(participant),
+        )
+      : [];
+  return { participant, replaced };
 }

@@ -1,8 +1,15 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
-import { MAX_MINORS_PER_SESSION, MINOR_KEY_END, MINOR_KEY_PREFIX } from './individualRegistration';
+import {
+  MAX_MINORS_PER_SESSION,
+  MINOR_KEY_END,
+  MINOR_KEY_PREFIX,
+  participantKey,
+  type Participant,
+} from './individualRegistration';
 import { MAX_TRAINING_CLASS_PLACES, MAX_TRAINING_WEEKS } from './trainingPattern';
 import { publishedTrainingProgramOf } from './trainingPublicList';
+import { CLASS_KEY_END, CLASS_KEY_PREFIX, classParticipantKey } from './trainingRegistration';
 
 /** A draft program, or one with no classes scheduled, answers like an unknown one, so nothing says whether it exists. */
 export async function publishedTrainingOf(
@@ -59,23 +66,40 @@ export async function heldPlacesIn(
   return (await seriesRegistrationCount(ctx, trainingClass.trainingId)) + own.length;
 }
 
-// A participant holds at most the series and one registration of each class.
-const PARTICIPANT_REGISTRATIONS_LIMIT = MAX_TRAINING_WEEKS + 1;
+export async function seriesRegistrationOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  participant: Participant,
+): Promise<Doc<'trainingRegistrations'> | null> {
+  return keyedRegistration(ctx, trainingId, userId, participantKey(participant));
+}
 
-export function participantRegistrationsOf(
+export async function classRegistrationOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  classId: Id<'trainingClasses'>,
+  participant: Participant,
+): Promise<Doc<'trainingRegistrations'> | null> {
+  return keyedRegistration(ctx, trainingId, userId, classParticipantKey(classId, participant));
+}
+
+function keyedRegistration(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
   userId: Id<'users'>,
   key: string,
-): Promise<Doc<'trainingRegistrations'>[]> {
+): Promise<Doc<'trainingRegistrations'> | null> {
   return ctx.db
     .query('trainingRegistrations')
     .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
       q.eq('trainingId', trainingId).eq('userId', userId).eq('participantKey', key),
     )
-    .take(PARTICIPANT_REGISTRATIONS_LIMIT);
+    .first();
 }
 
+/** The series registrations of the children a guardian holds. */
 export async function minorRegistrationsOf(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
@@ -90,19 +114,31 @@ export async function minorRegistrationsOf(
         .gte('participantKey', MINOR_KEY_PREFIX)
         .lt('participantKey', MINOR_KEY_END),
     )
-    .take(MAX_MINORS_PER_SESSION * PARTICIPANT_REGISTRATIONS_LIMIT);
+    .take(MAX_MINORS_PER_SESSION);
 }
 
-export function singleClassRegistrations(
-  registrations: readonly Doc<'trainingRegistrations'>[],
-): Doc<'trainingRegistrations'>[] {
-  return registrations.filter((row) => row.classId !== undefined);
+// Each of the account holder and 20 children holds at most one registration of each class.
+const SINGLE_CLASS_REGISTRATIONS_LIMIT = (MAX_MINORS_PER_SESSION + 1) * MAX_TRAINING_WEEKS;
+
+/** Every single-class registration of the account in the program, for any participant. */
+export function singleClassRegistrationsOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+): Promise<Doc<'trainingRegistrations'>[]> {
+  return ctx.db
+    .query('trainingRegistrations')
+    .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
+      q
+        .eq('trainingId', trainingId)
+        .eq('userId', userId)
+        .gte('participantKey', CLASS_KEY_PREFIX)
+        .lt('participantKey', CLASS_KEY_END),
+    )
+    .take(SINGLE_CLASS_REGISTRATIONS_LIMIT);
 }
 
-export function hasSeriesRegistration(registrations: readonly Doc<'trainingRegistrations'>[]) {
-  return registrations.some((row) => row.classId === undefined);
-}
-
+/** The class as a series registration sees it: the places held, less the participant's own place that the series replaces. */
 export function placesHeldExcluding(
   trainingClass: Doc<'trainingClasses'>,
   replaced: readonly Doc<'trainingRegistrations'>[],

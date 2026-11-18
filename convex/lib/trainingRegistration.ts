@@ -2,6 +2,7 @@
 import {
   MAX_MINORS_PER_SESSION,
   ageNotConfirmedMessage,
+  participantKey,
   type Participant,
 } from './individualRegistration';
 import { addCalendarDays, registrationIsOpen } from './registration';
@@ -50,6 +51,16 @@ export const TRAINING_REGISTRATION_MESSAGES = {
       ? `You are already registered for ${trainingClassDate(date)}.`
       : `${participant.minorName} is already registered for ${trainingClassDate(date)}.`,
 } as const;
+
+export const CLASS_KEY_PREFIX = 'class:';
+
+/** Every key that starts with `class:` sorts below this one, since `;` is the character after `:`. */
+export const CLASS_KEY_END = 'class;';
+
+// Outside `self` and the `minor:` range, so a release that reads only the series' keys never sees a single class's row as the series'.
+export function classParticipantKey(classId: string, participant: Participant): string {
+  return `${CLASS_KEY_PREFIX}${classId}:${participantKey(participant)}`;
+}
 
 /** Open through the class date, by the season rule with the class date as the deadline; the series deadline does not apply. */
 export function singleClassIsOpen(classDate: string, nowMs: number): boolean {

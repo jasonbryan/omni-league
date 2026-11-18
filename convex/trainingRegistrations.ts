@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireUser } from './lib/access';
-import { SELF_KEY, participantValidator } from './lib/individualRegistration';
+import { SELF_PARTICIPANT, participantValidator } from './lib/individualRegistration';
 import { dateAtUtcMinus12 } from './lib/registration';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
@@ -14,12 +14,11 @@ import {
 } from './lib/trainingRegistration';
 import {
   classesToAttend,
-  hasSeriesRegistration,
   minorRegistrationsOf,
-  participantRegistrationsOf,
   placesHeldExcluding,
   publishedTrainingOf,
-  singleClassRegistrations,
+  seriesRegistrationOf,
+  singleClassRegistrationsOf,
 } from './lib/trainingRegistrationReads';
 import {
   checkedTrainingRegistrant,
@@ -75,16 +74,15 @@ export const register = mutation({
       return { registrationId };
     }
     const classes = await classesToAttend(ctx, training._id, dateAtUtcMinus12(Date.now()));
-    const { participant, held } = await checkedTrainingRegistrant(ctx, {
+    const { participant, replaced } = await checkedTrainingRegistrant(ctx, {
       userId: user._id,
       training,
       pattern,
-      scope: { kind: 'series', classCount: classes.length },
+      scope: { kind: 'series', classes },
       asked,
       ageConfirmed,
     });
     // The series takes the place of the participant's single-class rows, so a class they fill alone is not full to them.
-    const replaced = singleClassRegistrations(held);
     const full = classes.find((row) => placesHeldExcluding(row, replaced) >= row.places);
     if (full) {
       refuseTrainingRegistration({
@@ -111,16 +109,16 @@ async function singleClassAnswer(
   training: Doc<'trainings'>,
   pattern: NonNullable<Doc<'trainings'>['pattern']>,
   rawClassId: string,
-  mine: readonly Doc<'trainingRegistrations'>[],
+  mine: { series: boolean; singles: readonly Doc<'trainingRegistrations'>[] },
 ) {
   const classId = ctx.db.normalizeId('trainingClasses', rawClassId);
   const trainingClass = classId && (await ctx.db.get('trainingClasses', classId));
   if (trainingClass?.trainingId !== training._id || trainingClass.status !== 'scheduled') {
     return undefined;
   }
-  const held = hasSeriesRegistration(mine)
+  const held = mine.series
     ? ('series' as const)
-    : mine.some((row) => row.classId === trainingClass._id)
+    : mine.singles.some((row) => row.classId === trainingClass._id)
       ? ('class' as const)
       : undefined;
   return {
@@ -185,16 +183,24 @@ export const getForRegistration = query({
     const { training, pattern } = published;
     const classes = await classesToAttend(ctx, training._id, dateAtUtcMinus12(Date.now()));
     const user = await getCurrentUser(ctx);
-    const mine = user
-      ? await participantRegistrationsOf(ctx, training._id, user._id, SELF_KEY)
+    const series = user
+      ? await seriesRegistrationOf(ctx, training._id, user._id, SELF_PARTICIPANT)
+      : null;
+    // A series replaces the caller's own single-class places, so a class they fill alone is not full to them.
+    const singles = user
+      ? (await singleClassRegistrationsOf(ctx, training._id, user._id)).filter(
+          (row) => row.participant.kind === 'self',
+        )
       : [];
-    const replaced = singleClassRegistrations(mine);
-    const left = classes.map((row) => Math.max(0, row.places - placesHeldExcluding(row, replaced)));
-    const fullClass = classes.find((row) => placesHeldExcluding(row, replaced) >= row.places);
+    const left = classes.map((row) => Math.max(0, row.places - placesHeldExcluding(row, singles)));
+    const fullClass = classes.find((row) => placesHeldExcluding(row, singles) >= row.places);
     const singleClass =
       classId === undefined
         ? undefined
-        : await singleClassAnswer(ctx, training, pattern, classId, mine);
+        : await singleClassAnswer(ctx, training, pattern, classId, {
+            series: series !== null,
+            singles,
+          });
     return {
       trainingId: training._id,
       organizationName: organization.name,
@@ -205,7 +211,7 @@ export const getForRegistration = query({
       classCount: classes.length,
       placesLeft: left.length === 0 ? 0 : Math.min(...left),
       ...(fullClass && { fullClassDate: fullClass.date }),
-      registered: hasSeriesRegistration(mine),
+      registered: series !== null,
       ...(singleClass && { singleClass }),
     };
   },
@@ -234,15 +240,18 @@ export const listMineForTraining = query({
     if (!organization) return none;
     const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
     if (found?.program.status !== 'published') return none;
-    const selfRows = await participantRegistrationsOf(ctx, found.training._id, user._id, SELF_KEY);
-    const minorRows = await minorRegistrationsOf(ctx, found.training._id, user._id);
-    // The index orders by name; the guardian reads them in the order they were registered.
-    const rows = [...selfRows, ...minorRows].sort((a, b) => a._creationTime - b._creationTime);
+    const trainingId = found.training._id;
+    const selfSeries = await seriesRegistrationOf(ctx, trainingId, user._id, SELF_PARTICIPANT);
+    const seriesMinors = await minorRegistrationsOf(ctx, trainingId, user._id);
+    const singles = await singleClassRegistrationsOf(ctx, trainingId, user._id);
+    // The index orders by key; the guardian reads them in the order they were registered.
+    const byRegistered = (a: Doc<'trainingRegistrations'>, b: Doc<'trainingRegistrations'>) =>
+      a._creationTime - b._creationTime;
     const classes = new Map<
       Id<'trainingClasses'>,
       { classId: Id<'trainingClasses'>; self: boolean; minorNames: string[] }
     >();
-    for (const row of rows) {
+    for (const row of singles.sort(byRegistered)) {
       if (row.classId === undefined) continue;
       const entry = classes.get(row.classId) ?? {
         classId: row.classId,
@@ -254,10 +263,9 @@ export const listMineForTraining = query({
       classes.set(row.classId, entry);
     }
     return {
-      self: hasSeriesRegistration(selfRows),
-      minorNames: minorRows
-        .filter((row) => row.classId === undefined)
-        .sort((a, b) => a._creationTime - b._creationTime)
+      self: selfSeries !== null,
+      minorNames: seriesMinors
+        .sort(byRegistered)
         .flatMap(({ participant }) =>
           participant.kind === 'minor' ? [participant.minorName] : [],
         ),

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { MAX_MINORS_PER_SESSION, type Participant } from './lib/individualRegistration';
+import { classParticipantKey } from './lib/trainingRegistration';
 import {
   CLASS_DATES,
   NOW,
@@ -79,7 +80,7 @@ describe('trainingRegistrations.register for one class', () => {
         organizationId: s.organization,
         userId: s.users['alice'],
         participant: { kind: 'self' },
-        participantKey: 'self',
+        participantKey: `class:${classOf(s, 'dropIn', 1)}:self`,
         createdAt: NOW,
       },
     ]);
@@ -102,7 +103,7 @@ describe('trainingRegistrations.register for one class', () => {
     expect(row).toMatchObject({
       classId: classOf(s, 'dropInYouth', 0),
       participant: { kind: 'minor', minorName: 'Maya R.' },
-      participantKey: 'minor:maya r.',
+      participantKey: `class:${classOf(s, 'dropInYouth', 0)}:minor:maya r.`,
       ageConfirmedAt: NOW,
     });
     expect(await registeredCounts(s, 'dropInYouth')).toEqual([1, 0, 0]);
@@ -298,13 +299,15 @@ describe('trainingRegistrations.register for one class: the age rules of the pro
     const s = await setup();
     await s.t.run(async (ctx) => {
       for (let index = 0; index < MAX_MINORS_PER_SESSION; index++) {
+        const classId = classOf(s, 'dropInYouth', index % 3);
+        const participant = MINOR(`Child ${index}`);
         await ctx.db.insert('trainingRegistrations', {
           trainingId: s.trainings['dropInYouth'].trainingId,
-          classId: classOf(s, 'dropInYouth', index % 3),
+          classId,
           organizationId: s.organization,
           userId: s.users['alice'],
-          participant: MINOR(`Child ${index}`),
-          participantKey: `minor:child ${index}`,
+          participant,
+          participantKey: classParticipantKey(classId, participant),
           createdAt: NOW,
         });
       }
@@ -367,7 +370,7 @@ describe('trainingRegistrations.register for the series after single-class regis
     expect(mine.map((row) => [row.participantKey, row.classId ?? null])).toEqual(
       expect.arrayContaining([
         ['self', null],
-        ['minor:maya r.', classOf(s, 'dropIn', 1)],
+        [`class:${classOf(s, 'dropIn', 1)}:minor:maya r.`, classOf(s, 'dropIn', 1)],
       ]),
     );
     expect(mine).toHaveLength(2);
@@ -584,12 +587,13 @@ describe('trainingClasses.restore with single-class registrations', () => {
       };
       for (let index = 0; index < SINGLE_ROWS; index++) {
         const name = `Child ${String(index).padStart(3, '0')}`;
+        const classId = classOf(s, 'dropIn', 0);
         await ctx.db.insert('trainingRegistrations', {
           ...base,
-          classId: classOf(s, 'dropIn', 0),
+          classId,
           userId: s.users['alice'],
           participant: MINOR(name),
-          participantKey: `minor:${name.toLowerCase()}`,
+          participantKey: classParticipantKey(classId, MINOR(name)),
         });
       }
       for (const user of ['alice', 'bob', 'carol']) {
@@ -616,7 +620,7 @@ describe('trainingClasses.restore with single-class registrations', () => {
         organizationId: s.organization,
         userId: s.users['bob'],
         participant: SELF,
-        participantKey: 'self',
+        participantKey: classParticipantKey(classOf(s, 'dropIn', 1), SELF),
         createdAt: NOW,
       });
     });

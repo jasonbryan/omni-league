@@ -411,7 +411,7 @@ export default defineSchema({
     /** The account holder, who is the participant for `self` and the guardian for `minor`. */
     userId: v.id('users'),
     participant: participantValidator,
-    /** `self`, or `minor:` and the lower-cased minor's name, so the one-per-participant check is an index read. */
+    /** `self`, or `minor:` and the lower-cased minor's name; for one class, `class:<classId>:` before that. The one-per-participant check is an index read. */
     participantKey: v.string(),
     /** Absent when the program has no age range, which asks no age box. */
     ageConfirmedAt: v.optional(v.number()),
