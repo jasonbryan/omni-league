@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { internal } from './_generated/api';
+import { components, internal } from './_generated/api';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -264,6 +265,121 @@ describe('testing:cancelSeededTrainingClasses', () => {
     await expect(
       t.mutation(internal.testing.cancelSeededTrainingClasses, {
         ...CANCEL,
+        trainingSlug: 'nowhere',
+      }),
+    ).rejects.toThrow(/No training program/);
+  });
+});
+
+describe('testing:seedTrainingRegistration', () => {
+  const EMAIL = 'guardian@example.test';
+  const REGISTRATION = {
+    organizationSlug: 'e2e-org-t7k2',
+    trainingSlug: 'tuesday-serving-clinic',
+    email: EMAIL,
+    participant: { kind: 'minor', minorName: 'Maya R.' } as const,
+  };
+
+  async function withClasses() {
+    const t = await seeded();
+    betterAuthTest.register(t, 'betterAuth');
+    await t.mutation(internal.testing.seedTraining, TRAINING);
+    await t.mutation(internal.testing.seedTrainingClasses, {
+      organizationSlug: REGISTRATION.organizationSlug,
+      trainingSlug: REGISTRATION.trainingSlug,
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: '2020-01-07',
+      weeks: 3,
+      placesPerClass: 12,
+      registrationDeadline: '2020-01-01',
+    });
+    await t.run(async (ctx) => {
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name: 'Demo Guardian',
+            email: EMAIL,
+            emailVerified: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      } as never)) as { _id: string };
+      await ctx.db.insert('users', {
+        authUserId: account._id,
+        name: 'Demo Guardian',
+        adultConfirmedAt: 1,
+      });
+    });
+    return t;
+  }
+
+  const countsByDate = (t: Awaited<ReturnType<typeof seeded>>) =>
+    t.run(async (ctx) =>
+      Object.fromEntries(
+        (await ctx.db.query('trainingClasses').collect()).map((row) => [
+          row.date,
+          row.registeredCount,
+        ]),
+      ),
+    );
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await withClasses();
+    vi.stubEnv('IS_TEST', value);
+    await expect(
+      t.mutation(internal.testing.seedTrainingRegistration, REGISTRATION),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toEqual([]);
+  });
+
+  test('registers the series, which holds a place in every class, passed ones included', async () => {
+    const t = await withClasses();
+    await t.mutation(internal.testing.seedTrainingRegistration, REGISTRATION);
+    expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toEqual([
+      expect.objectContaining({
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+      }),
+    ]);
+    expect(await countsByDate(t)).toEqual({ '2020-01-07': 1, '2020-01-14': 1, '2020-01-21': 1 });
+  });
+
+  test('registers one class when given its date, and counts that class only', async () => {
+    const t = await withClasses();
+    await t.mutation(internal.testing.seedTrainingRegistration, {
+      ...REGISTRATION,
+      date: '2020-01-14',
+    });
+    const [row] = await t.run((ctx) => ctx.db.query('trainingRegistrations').collect());
+    expect(row?.classId).toBeDefined();
+    expect(row?.participantKey).toBe(`class:${row?.classId}:minor:maya r.`);
+    expect(await countsByDate(t)).toEqual({ '2020-01-07': 0, '2020-01-14': 1, '2020-01-21': 0 });
+  });
+
+  test('refuses an unknown account, a date with no class, and a training program it does not have', async () => {
+    const t = await withClasses();
+    await expect(
+      t.mutation(internal.testing.seedTrainingRegistration, {
+        ...REGISTRATION,
+        email: 'no@example.test',
+      }),
+    ).rejects.toThrow(/No account/);
+    await expect(
+      t.mutation(internal.testing.seedTrainingRegistration, {
+        ...REGISTRATION,
+        date: '2020-02-02',
+      }),
+    ).rejects.toThrow(/No class/);
+    await expect(
+      t.mutation(internal.testing.seedTrainingRegistration, {
+        ...REGISTRATION,
         trainingSlug: 'nowhere',
       }),
     ).rejects.toThrow(/No training program/);

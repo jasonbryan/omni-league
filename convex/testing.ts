@@ -94,6 +94,10 @@ import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
 import { MAX_TRAINING_WEEKS } from './lib/trainingPattern';
+import {
+  insertTrainingClassRegistration,
+  insertTrainingSeriesRegistration,
+} from './lib/trainingRegistrationWrites';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
@@ -737,6 +741,47 @@ export const setTrainingClassRegistered = internalMutation({
       .first();
     if (!row) throw new Error(`No class is on ${date}`);
     await ctx.db.patch('trainingClasses', row._id, { registeredCount });
+    return null;
+  },
+});
+
+/** Skips every rule of `trainingRegistrations.register`: publication, the deadline, the minor name rule and limit, a repeat, the ages, and the places. The series takes a place in every class that is scheduled, passed ones included; `date` names the one class instead. */
+export const seedTrainingRegistration = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    trainingSlug: v.string(),
+    email: v.string(),
+    participant: participantValidator,
+    date: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug, email, participant, date }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const { training } = found;
+    const classes = await ctx.db
+      .query('trainingClasses')
+      .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', training._id))
+      .take(MAX_TRAINING_WEEKS);
+    const user = await userByEmail(ctx, email);
+    if (date === undefined) {
+      await insertTrainingSeriesRegistration(
+        ctx,
+        training,
+        classes.filter((row) => row.status === 'scheduled'),
+        { userId: user._id, participant },
+      );
+      return null;
+    }
+    const trainingClass = classes.find((row) => row.date === date);
+    if (!trainingClass) throw new Error(`No class is on ${date}`);
+    await insertTrainingClassRegistration(ctx, training, trainingClass, {
+      userId: user._id,
+      participant,
+    });
     return null;
   },
 });

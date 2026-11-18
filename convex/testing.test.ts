@@ -177,6 +177,7 @@ describe('convex/testing.ts exports', () => {
       'seedTournamentWaitlistEntry',
       'seedTraining',
       'seedTrainingClasses',
+      'seedTrainingRegistration',
       'seedWaitingFreeAgents',
       'seedWaitlistEntry',
       'setTeamPool',

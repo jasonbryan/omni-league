@@ -17,7 +17,10 @@ export interface NamedParticipant {
   guardian?: { name: string; email: string };
 }
 
-function byName(a: CampRegistrant, b: CampRegistrant): number {
+export function byName(
+  a: { name: string; registeredAt: number },
+  b: { name: string; registeredAt: number },
+): number {
   return (
     a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.registeredAt - b.registeredAt
   );

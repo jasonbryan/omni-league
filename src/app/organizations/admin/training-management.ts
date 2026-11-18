@@ -18,6 +18,8 @@ import {
   lucideCalendarDays,
   lucideCalendarPlus,
   lucideCheck,
+  lucideChevronDown,
+  lucideChevronUp,
   lucideCircleDashed,
   lucideClock,
   lucideGlobe,
@@ -67,6 +69,7 @@ import { TrainingBreadcrumb } from './training-breadcrumb';
 import { TrainingContext, type TrainingClassRow } from './training-context';
 import { TrainingNoAccess } from './training-no-access';
 import { trainingPath } from './training-path';
+import { TrainingRegistrants } from './training-registrants';
 import { SCHEDULE_FRAGMENT, TrainingScheduleLanding } from './training-schedule-landing';
 import { TrainingScheduleForm } from './training-schedule-form';
 
@@ -93,6 +96,7 @@ type Outcome =
     ServerErrorView,
     TrainingBreadcrumb,
     TrainingNoAccess,
+    TrainingRegistrants,
     TrainingScheduleForm,
   ],
   providers: [
@@ -102,6 +106,8 @@ type Outcome =
       lucideCalendarDays,
       lucideCalendarPlus,
       lucideCheck,
+      lucideChevronDown,
+      lucideChevronUp,
       lucideCircleCheck,
       lucideCircleDashed,
       lucideClock,
@@ -400,20 +406,40 @@ type Outcome =
                                 aria-hidden="true"
                               /><span>{{ timesOf(row) }}</span>
                             </p>
-                            <p
-                              data-slot="class-registered"
-                              class="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground"
-                            >
-                              <ng-icon
-                                name="lucideUsers"
-                                class="mt-0.5 shrink-0 text-base"
-                                aria-hidden="true"
-                              /><span
-                                >{{ row.registeredCount }} of {{ row.places }} registered</span
+                            @if (row.status === 'cancelled') {
+                              <p
+                                data-slot="class-registered"
+                                class="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground"
                               >
-                            </p>
+                                <ng-icon
+                                  name="lucideUsers"
+                                  class="mt-0.5 shrink-0 text-base"
+                                  aria-hidden="true"
+                                /><span
+                                  >{{ row.registeredCount }} of {{ row.places }} registered</span
+                                >
+                              </p>
+                            }
                           </div>
                           <div class="flex flex-wrap items-center gap-2">
+                            @if (row.status === 'scheduled') {
+                              <button
+                                type="button"
+                                data-slot="button"
+                                [class]="outlineButton"
+                                [attr.aria-expanded]="isOpen(row) ? 'true' : 'false'"
+                                [attr.aria-controls]="isOpen(row) ? registrantsId(row) : null"
+                                (click)="toggleRegistrants(row)"
+                              >
+                                <ng-icon
+                                  [name]="isOpen(row) ? 'lucideChevronUp' : 'lucideChevronDown'"
+                                  data-icon="inline-start"
+                                  aria-hidden="true"
+                                /><span data-slot="class-registered"
+                                  >{{ row.registeredCount }} of {{ row.places }} registered</span
+                                ><span class="sr-only"> in {{ dateOf(row) }}</span>
+                              </button>
+                            }
                             @if (row.status === 'cancelled') {
                               <button
                                 type="button"
@@ -473,6 +499,16 @@ type Outcome =
                               [rule]="classRule"
                               [save]="saveClassPlaces"
                             />
+                            @if (isOpen(row)) {
+                              <div [id]="registrantsId(row)" class="basis-full min-w-0">
+                                <app-training-registrants
+                                  [trainingClassId]="row.trainingClassId"
+                                  [className]="dateOf(row)"
+                                  [retryHref]="retryHref()"
+                                  [registeredCount]="row.registeredCount"
+                                />
+                              </div>
+                            }
                           }
                         </li>
                       }
@@ -683,6 +719,7 @@ export class TrainingManagement {
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly failure = signal<{ title: string; description: string } | null>(null);
 
+  private readonly openClasses = signal<ReadonlySet<string>>(new Set());
   private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
   private readonly publishDialog = viewChild(PublishTrainingDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
@@ -739,6 +776,22 @@ export class TrainingManagement {
     }
     afterNextRender(() => this.publishButton()?.nativeElement.focus(), {
       injector: this.injector,
+    });
+  }
+
+  protected isOpen(row: TrainingClassRow): boolean {
+    return this.openClasses().has(row.trainingClassId);
+  }
+
+  protected registrantsId(row: TrainingClassRow): string {
+    return `registrants-${row.trainingClassId}`;
+  }
+
+  protected toggleRegistrants(row: TrainingClassRow): void {
+    this.openClasses.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(row.trainingClassId)) next.add(row.trainingClassId);
+      return next;
     });
   }
 

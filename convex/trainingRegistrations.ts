@@ -1,12 +1,13 @@
 import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireUser } from './lib/access';
+import { requireTrainingClassOrganizer, requireUser } from './lib/access';
 import { SELF_PARTICIPANT, participantValidator } from './lib/individualRegistration';
 import { dateAtUtcMinus12 } from './lib/registration';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
 import { publicPattern } from './lib/trainingPublicList';
+import { trainingClassRegistrantsOf } from './lib/trainingRegistrants';
 import {
   TRAINING_NOT_FOUND_CODE,
   TRAINING_REGISTRATION_MESSAGES,
@@ -268,5 +269,22 @@ export const listMineForTraining = query({
         ),
       classes: [...classes.values()],
     };
+  },
+});
+
+export const listForClass = query({
+  args: { trainingClassId: v.id('trainingClasses') },
+  returns: v.array(
+    v.object({
+      registrationId: v.id('trainingRegistrations'),
+      name: v.string(),
+      kind: heldValidator,
+      guardian: v.optional(v.object({ name: v.string(), email: v.string() })),
+      registeredAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, { trainingClassId }) => {
+    const { trainingClass } = await requireTrainingClassOrganizer(ctx, trainingClassId);
+    return trainingClassRegistrantsOf(ctx, trainingClass);
   },
 });
