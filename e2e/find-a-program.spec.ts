@@ -1720,6 +1720,16 @@ test.describe('find a program: camps', () => {
   });
 });
 
+/** No other test seeds a tournament in this division, so a browse of it lists only these, and no tournament from a parallel test joins the page mid-scan. */
+const OVER_50_WOMENS_SOFTBALL = {
+  gender: 'womens',
+  playersPerSide: 10,
+  level: 'rec',
+  ageGroup: 'over50',
+} as const;
+
+const ENDED_TOURNAMENT_BROWSE = '/programs?type=tournament&sport=softball&gender=womens&age=over50';
+
 interface EndedTournamentSeeded extends Seeded {
   upcomingName: string;
   endedName: string;
@@ -1733,8 +1743,9 @@ async function seedWithEndedTournament(prefix = ''): Promise<EndedTournamentSeed
   const tournament = (name: string, slug: string, dates: [number, number, number]) => ({
     name,
     slug,
+    sport: 'softball' as const,
     locations: [NORTH_BEACH],
-    division: BEACH_OPEN_DIVISION,
+    division: OVER_50_WOMENS_SOFTBALL,
     startDate: dateFromToday(dates[0]),
     endDate: dateFromToday(dates[1]),
     registrationDeadline: dateFromToday(dates[2]),
@@ -1767,7 +1778,7 @@ test.describe('find a program: ended tournaments', () => {
       const { id } = await seedWithEndedTournament();
       const { html } = await raw(request, url(`ended ${id}`));
       expect(resultNames(html)).toEqual([]);
-      expect(chipNames(html)).toEqual([]);
+      expect(chipNames(html)).not.toContain('Tournaments');
     },
   );
 
@@ -1776,7 +1787,7 @@ test.describe('find a program: ended tournaments', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { upcomingName, endedName } = await seedWithEndedTournament('Aaa ');
-      const { html } = await raw(request, '/programs?type=tournament&sport=beach-volleyball');
+      const { html } = await raw(request, '/programs?type=tournament&sport=softball');
       expect(resultNames(html)).toContain(upcomingName);
       expect(resultNames(html)).not.toContain(endedName);
     },
@@ -1786,7 +1797,7 @@ test.describe('find a program: ended tournaments', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { id, upcomingName } = await seedWithEndedTournament('Aaa ');
+    const { id, upcomingName } = await seedWithEndedTournament();
     await page.goto(url(id));
     await hydrated(consoleGuard);
     await expect(rowNames(page)).toHaveCount(3);
@@ -1795,9 +1806,9 @@ test.describe('find a program: ended tournaments', () => {
     await expectAccessible(page);
     await screenshot(page, testInfo, '782-programs-ended-tournament-left-out');
 
-    await page.goto('/programs?type=tournament&sport=beach-volleyball');
+    await page.goto(ENDED_TOURNAMENT_BROWSE);
     await hydrated(consoleGuard);
-    await expect(results(page)).toContainText(upcomingName);
+    await expect(rowNames(page)).toHaveText([upcomingName]);
     await expect(results(page)).not.toContainText('Ended Beach Open');
     await expectAccessible(page);
 
