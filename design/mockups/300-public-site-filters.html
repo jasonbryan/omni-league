@@ -69,16 +69,16 @@
               >
             </li>
           </ul>
-          <p class="mt-3 text-xs font-medium text-muted-foreground">Find a league</p>
+          <p class="mt-3 text-xs font-medium text-muted-foreground">Find a program</p>
           <ul role="list" class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
             <li>
               <a class="text-primary underline underline-offset-4" href="#find-filtered"
-                >5. Find a league: Soccer, U10, Girls</a
+                >5. Find a program: Soccer, U10, Girls</a
               >
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#find-sheet"
-                >6. Find a league: phone filter sheet</a
+                >6. Find a program: phone filter sheet</a
               >
             </li>
           </ul>
@@ -221,27 +221,27 @@
       </section>
       <section id="find-filtered" aria-labelledby="find-filtered-label" class="mt-12">
         <h2 id="find-filtered-label" class="text-lg font-semibold">
-          5. Find a league: Soccer, U10, Girls
+          5. Find a program: Soccer, U10, Girls
         </h2>
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
-            <code>/leagues?sport=soccer&amp;age=u10&amp;gender=girls</code>. The same filters across
-            organizations. The values are the platform&apos;s standard ones, so they mean the same
-            everywhere. With a youth age group, gender reads Boys and Girls. The youth leagues are
-            illustrative.
+            <code>/programs?sport=soccer&amp;age=u10&amp;gender=girls</code>. The same filters
+            across organizations. The values are the platform&apos;s standard ones, so they mean the
+            same everywhere. With a youth age group, gender reads Boys and Girls. The youth leagues
+            are illustrative.
           </p>
         </div>
         <div
           tabindex="0"
           role="region"
-          aria-label="5. Find a league: Soccer, U10, Girls: frames"
+          aria-label="5. Find a program: Soccer, U10, Girls: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=find-filtered"
-              title="5. Find a league: Soccer, U10, Girls at 360px"
+              title="5. Find a program: Soccer, U10, Girls at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -251,7 +251,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=find-filtered"
-              title="5. Find a league: Soccer, U10, Girls at 1280px"
+              title="5. Find a program: Soccer, U10, Girls at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -261,7 +261,7 @@
       </section>
       <section id="find-sheet" aria-labelledby="find-sheet-label" class="mt-12">
         <h2 id="find-sheet-label" class="text-lg font-semibold">
-          6. Find a league: phone filter sheet
+          6. Find a program: phone filter sheet
         </h2>
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
@@ -271,14 +271,14 @@
         <div
           tabindex="0"
           role="region"
-          aria-label="6. Find a league: phone filter sheet: frames"
+          aria-label="6. Find a program: phone filter sheet: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=find-sheet"
-              title="6. Find a league: phone filter sheet at 360px"
+              title="6. Find a program: phone filter sheet at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -319,10 +319,10 @@
             >
             <form
               role="search"
-              action="/leagues"
+              action="/programs"
               class="hidden w-full max-w-sm md:mx-auto md:block"
             >
-              <label for="top-find" class="sr-only">Find a league</label>
+              <label for="top-find" class="sr-only">Find a program</label>
               <div class="relative">
                 <ng-icon
                   role="img"
@@ -344,14 +344,14 @@
                   name="q"
                   type="search"
                   value=""
-                  placeholder="Find a league"
+                  placeholder="Find a program"
                   autocomplete="off"
                   class="h-10 w-full rounded-full border border-input bg-card ps-10 pe-4 text-sm placeholder:text-muted-foreground"
                 />
               </div>
             </form>
             <a
-              href="/leagues"
+              href="/programs"
               class="ms-auto flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
               ><ng-icon role="img" aria-hidden="true" class="text-xl"
                 ><svg
@@ -365,7 +365,7 @@
                 >
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.34-4.34"></path></svg></ng-icon
-              ><span class="sr-only">Find a league</span></a
+              ><span class="sr-only">Find a program</span></a
             >
             <div class="md:ms-0 flex shrink-0 items-center">
               <a
@@ -689,9 +689,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -781,10 +781,10 @@
             >
             <form
               role="search"
-              action="/leagues"
+              action="/programs"
               class="hidden w-full max-w-sm md:mx-auto md:block"
             >
-              <label for="top-find" class="sr-only">Find a league</label>
+              <label for="top-find" class="sr-only">Find a program</label>
               <div class="relative">
                 <ng-icon
                   role="img"
@@ -806,14 +806,14 @@
                   name="q"
                   type="search"
                   value=""
-                  placeholder="Find a league"
+                  placeholder="Find a program"
                   autocomplete="off"
                   class="h-10 w-full rounded-full border border-input bg-card ps-10 pe-4 text-sm placeholder:text-muted-foreground"
                 />
               </div>
             </form>
             <a
-              href="/leagues"
+              href="/programs"
               class="ms-auto flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
               ><ng-icon role="img" aria-hidden="true" class="text-xl"
                 ><svg
@@ -827,7 +827,7 @@
                 >
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.34-4.34"></path></svg></ng-icon
-              ><span class="sr-only">Find a league</span></a
+              ><span class="sr-only">Find a program</span></a
             >
             <div class="md:ms-0 flex shrink-0 items-center">
               <a
@@ -1327,10 +1327,10 @@
             >
             <form
               role="search"
-              action="/leagues"
+              action="/programs"
               class="hidden w-full max-w-sm md:mx-auto md:block"
             >
-              <label for="top-find" class="sr-only">Find a league</label>
+              <label for="top-find" class="sr-only">Find a program</label>
               <div class="relative">
                 <ng-icon
                   role="img"
@@ -1352,14 +1352,14 @@
                   name="q"
                   type="search"
                   value=""
-                  placeholder="Find a league"
+                  placeholder="Find a program"
                   autocomplete="off"
                   class="h-10 w-full rounded-full border border-input bg-card ps-10 pe-4 text-sm placeholder:text-muted-foreground"
                 />
               </div>
             </form>
             <a
-              href="/leagues"
+              href="/programs"
               class="ms-auto flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
               ><ng-icon role="img" aria-hidden="true" class="text-xl"
                 ><svg
@@ -1373,7 +1373,7 @@
                 >
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.34-4.34"></path></svg></ng-icon
-              ><span class="sr-only">Find a league</span></a
+              ><span class="sr-only">Find a program</span></a
             >
             <div class="md:ms-0 flex shrink-0 items-center">
               <a
@@ -1783,9 +1783,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -1875,10 +1875,10 @@
             >
             <form
               role="search"
-              action="/leagues"
+              action="/programs"
               class="hidden w-full max-w-sm md:mx-auto md:block"
             >
-              <label for="top-find" class="sr-only">Find a league</label>
+              <label for="top-find" class="sr-only">Find a program</label>
               <div class="relative">
                 <ng-icon
                   role="img"
@@ -1900,14 +1900,14 @@
                   name="q"
                   type="search"
                   value=""
-                  placeholder="Find a league"
+                  placeholder="Find a program"
                   autocomplete="off"
                   class="h-10 w-full rounded-full border border-input bg-card ps-10 pe-4 text-sm placeholder:text-muted-foreground"
                 />
               </div>
             </form>
             <a
-              href="/leagues"
+              href="/programs"
               class="ms-auto flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
               ><ng-icon role="img" aria-hidden="true" class="text-xl"
                 ><svg
@@ -1921,7 +1921,7 @@
                 >
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.34-4.34"></path></svg></ng-icon
-              ><span class="sr-only">Find a league</span></a
+              ><span class="sr-only">Find a program</span></a
             >
             <div class="md:ms-0 flex shrink-0 items-center">
               <a
@@ -2204,9 +2204,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -2264,7 +2264,7 @@
         </footer>
       </div></template
     >
-    <template id="state-find-filtered" data-title="Soccer | Find a league | Omni League"
+    <template id="state-find-filtered" data-title="Soccer | Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -2296,7 +2296,7 @@
             >
             <div class="ms-auto flex shrink-0 items-center">
               <a
-                href="/sign-in?returnTo=%2Fleagues%3Fsport%3Dsoccer%26gender%3Dgirls%26age%3Du10"
+                href="/sign-in?returnTo=%2Fprograms%3Fsport%3Dsoccer%26gender%3Dgirls%26age%3Du10"
                 data-slot="button"
                 class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-11 gap-1.5 px-4 md:h-9 md:px-3"
                 >Sign in</a
@@ -2306,8 +2306,8 @@
         </header>
         <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-5 md:pt-14 md:pb-6">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -2350,21 +2350,21 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues?sport=all-sports"
+                    href="/programs?sport=all-sports"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >All sports</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=beach-volleyball"
+                    href="/programs?sport=beach-volleyball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Beach volleyball</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=soccer"
+                    href="/programs?sport=soccer"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >Soccer</a
@@ -2372,7 +2372,7 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=softball"
+                    href="/programs?sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -2560,7 +2560,7 @@
                     </li>
                   </ul>
                   <a
-                    href="/leagues?sport=soccer"
+                    href="/programs?sport=soccer"
                     class="inline-flex min-h-11 items-center rounded-md text-sm font-medium underline underline-offset-4 md:min-h-0"
                     >Clear all</a
                   >
@@ -2712,9 +2712,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -2772,7 +2772,7 @@
         </footer>
       </div></template
     >
-    <template id="state-find-sheet" data-title="Soccer | Find a league | Omni League"
+    <template id="state-find-sheet" data-title="Soccer | Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -2814,8 +2814,8 @@
         </header>
         <main id="main" tabindex="-1">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-5 md:pt-14 md:pb-6">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -2858,21 +2858,21 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues?sport=all-sports"
+                    href="/programs?sport=all-sports"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >All sports</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=beach-volleyball"
+                    href="/programs?sport=beach-volleyball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Beach volleyball</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=soccer"
+                    href="/programs?sport=soccer"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >Soccer</a
@@ -2880,7 +2880,7 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=softball"
+                    href="/programs?sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -3068,7 +3068,7 @@
                     </li>
                   </ul>
                   <a
-                    href="/leagues?sport=soccer"
+                    href="/programs?sport=soccer"
                     class="inline-flex min-h-11 items-center rounded-md text-sm font-medium underline underline-offset-4 md:min-h-0"
                     >Clear all</a
                   >
@@ -3350,7 +3350,7 @@
           </div>
           <div class="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
             <a
-              href="/leagues?sport=soccer"
+              href="/programs?sport=soccer"
               class="inline-flex min-h-11 items-center rounded-md text-sm font-medium underline underline-offset-4"
               >Clear all</a
             ><button

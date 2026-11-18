@@ -24,10 +24,10 @@ const ICON_TILE =
           You&apos;re not on a team yet
         </h2>
         <p class="mt-1 text-sm text-muted-foreground">
-          Find a league, then register a team or register as a free agent. Got an invite link from a
-          captain? Open it to join their team.
+          Find a program, then register a team or register as a free agent. Got an invite link from
+          a captain? Open it to join their team.
         </p>
-        <a routerLink="/leagues" data-slot="button" [class]="findButton">Find a league</a>
+        <a routerLink="/programs" data-slot="button" [class]="findButton">Find a program</a>
       </div>
     </section>
     @if (canRunLeague()) {

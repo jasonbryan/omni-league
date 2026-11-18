@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideSearch } from '@ng-icons/lucide';
 
-const FIND_PATH = '/leagues';
+const FIND_PATH = '/programs';
 
 /** A plain GET form, so a search works before hydration. */
 @Component({
@@ -15,13 +15,13 @@ const FIND_PATH = '/leagues';
   template: `
     <form
       role="search"
-      aria-label="Find a league"
+      aria-label="Find a program"
       [action]="action"
       method="get"
       class="hidden w-full md:col-start-2 md:block"
       (submit)="submit($event, field.value)"
     >
-      <label for="top-find" class="sr-only">Find a league</label>
+      <label for="top-find" class="sr-only">Find a program</label>
       <div class="relative">
         <ng-icon
           name="lucideSearch"
@@ -33,18 +33,18 @@ const FIND_PATH = '/leagues';
           id="top-find"
           name="q"
           type="search"
-          placeholder="Find a league"
+          placeholder="Find a program"
           autocomplete="off"
           class="h-10 w-full rounded-full border border-input bg-card ps-10 pe-4 text-sm placeholder:text-muted-foreground pointer-coarse:h-11"
         />
       </div>
     </form>
     <a
-      routerLink="/leagues"
+      routerLink="/programs"
       class="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
     >
       <ng-icon name="lucideSearch" class="text-xl" aria-hidden="true" />
-      <span class="sr-only">Find a league</span>
+      <span class="sr-only">Find a program</span>
     </a>
   `,
 })

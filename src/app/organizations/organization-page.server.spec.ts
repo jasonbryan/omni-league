@@ -219,7 +219,7 @@ describe('OrganizationPage server render', () => {
     );
     expect([...body.querySelectorAll('header a')].map(text)).toEqual([
       'Omni League',
-      'Find a league',
+      'Find a program',
       'Sign in',
     ]);
     expect(body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]')).toBeNull();

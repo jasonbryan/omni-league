@@ -410,7 +410,7 @@ describe('AccountPage', () => {
   });
 
   describe('new user', () => {
-    it('shows "You\'re not on a team yet" with Find a league, and "Run a league?" with no organization', async () => {
+    it('shows "You\'re not on a team yet" with Find a program, and "Run a league?" with no organization', async () => {
       await show([], []);
       expect(text(page.querySelector('main > div > p'))).toBe(
         'Your teams and registrations will show here.',
@@ -419,10 +419,10 @@ describe('AccountPage', () => {
       expect(heading(2, 'Your teams')).toBeUndefined();
       expect(heading(2, "You're not on a team yet")).toBeTruthy();
       expect(main().textContent).toContain(
-        'Find a league, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
+        'Find a program, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
       );
-      const find = [...main().querySelectorAll('a')].find((a) => text(a) === 'Find a league')!;
-      expect(find.getAttribute('href')).toBe('/leagues');
+      const find = [...main().querySelectorAll('a')].find((a) => text(a) === 'Find a program')!;
+      expect(find.getAttribute('href')).toBe('/programs');
       expect(heading(2, 'Run a league?')).toBeTruthy();
       const create = [...main().querySelectorAll('a')].find(
         (a) => text(a) === 'Create an organization',
@@ -547,7 +547,7 @@ describe('AccountPage', () => {
       it('shows the new-user state to a user with no team whose only registration has ended', async () => {
         await show([], [], undefined, [WAITING], NEXT_DATE);
         expect(heading(2, "You're not on a team yet")).toBeTruthy();
-        expect(main().textContent).toContain('Find a league');
+        expect(main().textContent).toContain('Find a program');
         expect(freeAgentSection()).toBeNull();
         expect(text(page.querySelector('main > div > p'))).toBe(
           'Your teams and registrations will show here.',
@@ -571,7 +571,7 @@ describe('AccountPage', () => {
     it('is the home of a user whose only registration is a waiting free agent: no new-user state, no team cards', async () => {
       await show([], [], undefined, [WAITING]);
       expect(heading(2, "You're not on a team yet")).toBeUndefined();
-      expect(main().textContent).not.toContain('Find a league, then register');
+      expect(main().textContent).not.toContain('Find a program, then register');
       expect(text(page.querySelector('main > div > p'))).toBe('Your teams and registrations.');
       expect(heading(2, 'Your teams')).toBeUndefined();
       expect(nextStepRegion()).toBeNull();

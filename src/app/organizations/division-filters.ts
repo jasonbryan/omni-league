@@ -23,7 +23,7 @@ const ALL_LEVELS = Object.keys(STANDARD_LEVEL_LABELS) as StandardLevel[];
 
 const AGE_GROUP_KEYS = AGE_GROUPS.map((group) => group.key);
 
-/** Find a league offers the U-ages first, then Adult and its brackets, so a youth list does not open on Adult. */
+/** Find a program offers the U-ages first, then Adult and its brackets, so a youth list does not open on Adult. */
 export const YOUTH_FIRST_AGE_ORDER = [
   ...AGE_GROUP_KEYS.filter(isYouth),
   ...AGE_GROUP_KEYS.filter((key) => !isYouth(key)),

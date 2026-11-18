@@ -179,7 +179,7 @@ test.describe('/app: a user with teams', () => {
     await expectAccessible(page);
   });
 
-  test('the sidebar holds Home as current, Find a league, and each team', async ({ page }) => {
+  test('the sidebar holds Home as current, Find a program, and each team', async ({ page }) => {
     const user = tasha();
     await signUp(page, user);
     const { sharks, aces } = await seedTashasTeams(user);
@@ -201,8 +201,8 @@ test.describe('/app: a user with teams', () => {
     });
     await expect(home).toHaveAttribute('aria-current', 'page');
     await expect(
-      sidebar(page).getByRole('link', { name: 'Find a league', includeHidden: true }),
-    ).toHaveAttribute('href', '/leagues');
+      sidebar(page).getByRole('link', { name: 'Find a program', includeHidden: true }),
+    ).toHaveAttribute('href', '/programs');
     await expect(sidebar(page).locator('[aria-current]')).toHaveCount(1);
   });
 
@@ -269,7 +269,7 @@ test.describe('/app: a user with teams', () => {
 test.describe('/app: a user on no team', () => {
   const devon = (): TestUser => ({ ...newUser('Devon'), name: '  Devon  Park ' });
 
-  test('is pointed to Find a league and to creating an organization', async ({
+  test('is pointed to Find a program and to creating an organization', async ({
     page,
   }, testInfo) => {
     const user = devon();
@@ -281,11 +281,11 @@ test.describe('/app: a user on no team', () => {
       main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
     ).toBeVisible();
     await expect(main(page)).toContainText(
-      'Find a league, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
+      'Find a program, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
     );
-    await expect(main(page).getByRole('link', { name: 'Find a league' })).toHaveAttribute(
+    await expect(main(page).getByRole('link', { name: 'Find a program' })).toHaveAttribute(
       'href',
-      '/leagues',
+      '/programs',
     );
     await expect(
       main(page).getByRole('heading', { level: 2, name: 'Run a league?' }),
@@ -300,10 +300,10 @@ test.describe('/app: a user on no team', () => {
     await expectAccessible(page);
   });
 
-  test('Find a league opens the leagues of Find a program', VIEWPORT_AGNOSTIC, async ({ page }) => {
+  test('Find a program opens the search page', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, devon());
-    await main(page).getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await main(page).getByRole('link', { name: 'Find a program' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
   });
 
@@ -460,9 +460,9 @@ test.describe('/app: a free agent whose season has ended', () => {
     await expect(
       main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
     ).toBeVisible();
-    await expect(main(page).getByRole('link', { name: 'Find a league' })).toHaveAttribute(
+    await expect(main(page).getByRole('link', { name: 'Find a program' })).toHaveAttribute(
       'href',
-      '/leagues',
+      '/programs',
     );
     await expect(freeAgent(page)).toHaveCount(0);
     await expect(main(page)).not.toContainText(ENDED.name);

@@ -19,7 +19,7 @@ import { injectSignInReturnTo } from '../shell/sign-in-return-to';
 import { TopBarAccount } from '../shell/top-bar-account';
 import { TopBarFind } from './top-bar-find';
 
-const SEARCH_PAGE_PATHS = ['leagues', 'programs'];
+const SEARCH_PAGE_PATH = 'programs';
 
 const FOOTER_LINK_CLASSES =
   'inline-flex items-center rounded-md hover:text-foreground hover:underline pointer-coarse:min-h-11';
@@ -94,7 +94,7 @@ const FOOTER_LINK_CLASSES =
                   class="mt-2 text-muted-foreground md:mt-3 md:space-y-2 pointer-fine:space-y-2"
                 >
                   <li>
-                    <a routerLink="/leagues" [class]="footerLink">Find a league</a>
+                    <a routerLink="/programs" [class]="footerLink">Find a program</a>
                   </li>
                   <li>
                     <a routerLink="/app" [class]="footerLink">Your account</a>
@@ -150,10 +150,10 @@ export class PublicLayout {
 
   protected readonly signIn = injectSignInReturnTo();
   protected readonly footerLink = FOOTER_LINK_CLASSES;
-  // The search page has a larger field of its own, and `/leagues` redirects to it.
+  // The search page has a larger field of its own.
   protected readonly showFind = computed(() => {
     const segments = this.router.parseUrl(this.url()).root.children[PRIMARY_OUTLET]?.segments ?? [];
-    return !(segments.length === 1 && SEARCH_PAGE_PATHS.includes(segments[0]?.path ?? ''));
+    return !(segments.length === 1 && segments[0]?.path === SEARCH_PAGE_PATH);
   });
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),

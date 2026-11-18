@@ -213,7 +213,7 @@ test.describe('the page control at each width', () => {
   });
 
   for (const width of WIDTHS) {
-    test(`the organizations list of the Find a league page fits and keeps 44px targets at ${width}px`, async ({
+    test(`the organizations list of the Find a program page fits and keeps 44px targets at ${width}px`, async ({
       page,
       consoleGuard,
     }) => {

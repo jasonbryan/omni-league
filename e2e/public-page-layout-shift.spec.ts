@@ -317,7 +317,7 @@ test.describe('a hard load of a public page', () => {
     });
 
     test('a page with no skeleton shows the footer on a hard load', async ({ page }) => {
-      await page.goto('/leagues');
+      await page.goto('/programs?type=league');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(footer(page)).toBeVisible();
     });
@@ -333,7 +333,7 @@ test.describe('a hard load of a public page', () => {
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(footer(page)).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Footer' })).toHaveCount(0);
-    await expect(page.locator('footer').getByRole('link', { name: 'Find a league' })).toHaveCount(
+    await expect(page.locator('footer').getByRole('link', { name: 'Find a program' })).toHaveCount(
       0,
     );
 
@@ -342,14 +342,14 @@ test.describe('a hard load of a public page', () => {
     await expect(footer(page)).toBeVisible();
     const footerLinks = page.getByRole('navigation', { name: 'Footer' }).getByRole('link');
     await expect(footerLinks).toHaveText([
-      'Find a league',
+      'Find a program',
       'Your account',
       'Create an organization',
       'Sign in to manage',
     ]);
     const walk = await tabWalk(page);
     expect(walk.failures).toEqual([]);
-    for (const name of ['Find a league', 'Your account', 'Create an organization']) {
+    for (const name of ['Find a program', 'Your account', 'Create an organization']) {
       expect(
         walk.order.some((step) => step.includes(`"${name}"`)),
         name,

@@ -98,7 +98,7 @@ describe('NotFoundView', () => {
   });
 
   describe('with the way on to the search', () => {
-    it('renders one h1, one sentence, and two links: "Find a league" to /leagues, then "Go to the home page" to /', async () => {
+    it('renders one h1, one sentence, and two links: "Find a program" to /programs, then "Go to the home page" to /', async () => {
       const host = await render(undefined, true);
       expect(host.querySelectorAll('h1')).toHaveLength(1);
       expect(host.querySelector('p')?.textContent.trim()).toBe(
@@ -106,7 +106,7 @@ describe('NotFoundView', () => {
       );
       const links = [...host.querySelectorAll('a')];
       expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
-        ['Find a league', '/leagues'],
+        ['Find a program', '/programs'],
         ['Go to the home page', '/'],
       ]);
     });
@@ -129,11 +129,11 @@ describe('NotFoundView', () => {
       const icons = host.querySelectorAll('ng-icon');
       expect(icons).toHaveLength(2);
       for (const icon of icons) expect(icon.getAttribute('aria-hidden')).toBe('true');
-      expect(icons[1].closest('a')?.getAttribute('href')).toBe('/leagues');
+      expect(icons[1].closest('a')?.getAttribute('href')).toBe('/programs');
       expect(icons[1].getAttribute('data-icon')).toBe('inline-start');
     });
 
-    it('styles "Find a league" as the large primary button and the home link as the large outline button, in a row with mt-8', async () => {
+    it('styles "Find a program" as the large primary button and the home link as the large outline button, in a row with mt-8', async () => {
       const host = await render(undefined, true);
       const [find, home] = [...host.querySelectorAll('a')];
       expect(classList(find)).toEqual(buttonVariants({ size: 'lg' }).split(/\s+/).sort());

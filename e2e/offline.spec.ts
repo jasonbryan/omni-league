@@ -423,7 +423,7 @@ test.describe('find a program offline', () => {
   });
 });
 
-test.describe('find a league by sport offline', () => {
+test.describe('find a program by sport offline', () => {
   test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
 
   test('a sport view with a filter, viewed online, opens from its saved copy with its filters offered', async ({

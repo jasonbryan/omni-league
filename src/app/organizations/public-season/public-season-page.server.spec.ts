@@ -218,7 +218,7 @@ describe('PublicSeasonPage server render', () => {
     expect(body.querySelector('a')?.getAttribute('href')).toBe(`${SEASON_PATH}#main`);
     expect([...body.querySelectorAll('header a')].map(text)).toEqual([
       'Omni League',
-      'Find a league',
+      'Find a program',
       'Sign in',
     ]);
 
