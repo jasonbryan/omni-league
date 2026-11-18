@@ -966,7 +966,12 @@ test.describe('Training: who registered', () => {
   const LIST = 'trainingRegistrations:listForClass';
   const toggleOf = (row: Locator) => row.getByRole('button', { name: /registered in / });
   const registrantsOf = (row: Locator) => row.locator('app-training-registrants');
-  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  // Against the page, not the viewport, which the scrolling that a check does moves.
+  const box = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x: x + window.scrollX, y: y + window.scrollY, width, height };
+    });
 
   async function classesWith(page: Page, role: Role | null = 'orgAdmin') {
     const admin = await memberOf(page, role);

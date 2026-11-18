@@ -14,6 +14,7 @@ import { RegistrantsList } from './registrants-list';
     [subject]="className()"
     [retryHref]="retryHref()"
     [expected]="registered()"
+    [kinds]="true"
   />`,
 })
 export class TrainingRegistrants {

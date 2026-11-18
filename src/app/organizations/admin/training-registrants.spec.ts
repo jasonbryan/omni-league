@@ -127,7 +127,7 @@ describe('TrainingManagement registrants', () => {
     expect(panel(SECOND)!.querySelectorAll('tbody tr')).toHaveLength(3);
     expect(panel(SECOND)!.querySelector('caption')).toBeNull();
     expect(panel(SECOND)!.querySelector('[role="region"]')).toBeNull();
-    expectSkeletonBoxes(panel(SECOND)!, { 'rounded-md': 6 });
+    expectSkeletonBoxes(panel(SECOND)!, { 'rounded-md': 9 });
   });
 
   it('loading: a single line for a class with no registrations, the room of the empty message', async () => {

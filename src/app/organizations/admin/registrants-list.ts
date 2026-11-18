@@ -58,13 +58,14 @@ export interface RegistrantRow {
                   <th hlmTh scope="row" class="text-start">
                     {{ row.name }}
                     @if (row.kind; as kind) {
-                      <span
-                        hlmBadge
-                        [variant]="kind === 'series' ? 'secondary' : 'outline'"
-                        data-slot="registrant-kind"
-                        class="ms-1.5 align-middle"
-                        >{{ kind === 'series' ? 'Series' : 'This class' }}</span
-                      >
+                      <span class="flex">
+                        <span
+                          hlmBadge
+                          [variant]="kind === 'series' ? 'secondary' : 'outline'"
+                          data-slot="registrant-kind"
+                          >{{ kind === 'series' ? 'Series' : 'This class' }}</span
+                        >
+                      </span>
                     }
                     @if (row.guardian; as guardian) {
                       <span
@@ -108,7 +109,14 @@ export interface RegistrantRow {
               @for (row of skeletonRows(); track row) {
                 <tr hlmTr>
                   <th hlmTh scope="row">
-                    <div hlmSkeleton class="h-4 w-40 max-w-full rounded-md"></div>
+                    <div class="flex h-5 items-center">
+                      <div hlmSkeleton class="h-4 w-40 max-w-full rounded-md"></div>
+                    </div>
+                    @if (kinds()) {
+                      <div class="flex h-5 items-center">
+                        <div hlmSkeleton class="h-3.5 w-16 rounded-md"></div>
+                      </div>
+                    }
                   </th>
                   <td hlmTd class="text-end">
                     <div hlmSkeleton class="ms-auto h-4 w-20 rounded-md"></div>
@@ -128,6 +136,8 @@ export class RegistrantsList {
   readonly failed = input.required<boolean>();
   readonly subject = input.required<string>();
   readonly retryHref = input.required<string>();
+  /** Rows carry a `kind` line, so the skeleton rows have the line too. */
+  readonly kinds = input(false);
   /** The count the page already shows, so the skeleton takes the room the rows will. */
   readonly expected = input.required<number>();
 
