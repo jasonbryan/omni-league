@@ -809,3 +809,90 @@ test.describe('the classes when the viewer’s places arrive', () => {
     await expectAccessible(page);
   });
 });
+
+test.describe('the series when the last place of a class is the viewer’s own', () => {
+  const CLASS_ONE_IN_DAYS = FIRST_IN_DAYS + 7;
+  const fullNote = (page: Page) => page.locator('[data-slot="series-full"]');
+
+  test('an adult whose single-class place fills a class still sees Register for the series and registers for it', async ({
+    page,
+  }) => {
+    const { tenant, programs, paths } = await seedSingle();
+    await setTrainingClassRegistered(
+      tenant,
+      programs.adult.slug,
+      dateFromToday(CLASS_ONE_IN_DAYS),
+      11,
+    );
+    await signUp(page, newUser('OwnLast'));
+    await page.goto(paths.adult);
+    await classLink(page, 1).click();
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+    await expect(classPlaces(page, 1)).toHaveText('Full');
+    await expect(classRegisteredLine(page, 1)).toHaveText("You're registered");
+    await expect(fullNote(page)).toHaveCount(0);
+    await expect(registerLink(page)).toBeVisible();
+
+    await registerLink(page).click();
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+    await expect(registeredLine(page)).toHaveText("You're registered");
+    await expect(classPlaces(page, 0)).toHaveText('11 places left');
+    await expect(classPlaces(page, 1)).toHaveText('Full');
+    await expect(classPlaces(page, 2)).toHaveText('11 places left');
+  });
+
+  test('a signed-in adult who holds no place in a full class sees the full note and no series link', async ({
+    page,
+  }) => {
+    const { tenant, programs, paths } = await seedSingle();
+    await setTrainingClassRegistered(
+      tenant,
+      programs.adult.slug,
+      dateFromToday(CLASS_ONE_IN_DAYS),
+      12,
+    );
+    await signUp(page, newUser('Bystander'));
+    await page.goto(paths.adult);
+    await expect(classPlaces(page, 1)).toHaveText('Full');
+    await expect(fullNote(page)).toBeVisible();
+    await expect(registerLink(page)).toHaveCount(0);
+  });
+
+  test('a guardian whose child holds the last place of a class registers that child for the series', async ({
+    page,
+  }) => {
+    const { tenant, programs, paths } = await seedSingle();
+    await setTrainingClassRegistered(
+      tenant,
+      programs.youth.slug,
+      dateFromToday(CLASS_ONE_IN_DAYS),
+      11,
+    );
+    await signUp(page, newUser('GuardianLast'));
+    await page.goto(paths.youth);
+    await classLink(page, 1).click();
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+    await expect(classPlaces(page, 1)).toHaveText('Full');
+    await expect(classRegisteredLine(page, 1)).toHaveText('Maya R. is registered');
+    await expect(fullNote(page)).toHaveCount(0);
+    await expect(registerLink(page)).toBeVisible();
+
+    await registerLink(page).click();
+    await childName(page).fill('Maya R.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+    await expect(registeredLine(page)).toHaveText('Maya R. is registered');
+    await expect(classPlaces(page, 0)).toHaveText('11 places left');
+    await expect(classPlaces(page, 1)).toHaveText('Full');
+    await expect(classPlaces(page, 2)).toHaveText('11 places left');
+    await expect(page.locator('[data-slot="class-registered"]')).toHaveCount(0);
+  });
+});
