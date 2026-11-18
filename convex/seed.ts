@@ -28,6 +28,7 @@ import { findTrainingBySlugs } from './lib/trainingLookup';
 import { hasScheduledClass } from './lib/trainingPublicList';
 import { classesToAttend } from './lib/trainingRegistrationReads';
 import { insertTrainingSeriesRegistration } from './lib/trainingRegistrationWrites';
+import { insertTrainingWaitlistEntry } from './lib/trainingWaitlistWrites';
 import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
 import {
@@ -916,6 +917,25 @@ const DEMO_TRAININGS: readonly DemoTraining[] = [
       allowSingleRegistration: true,
     },
   },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    name: 'Thursday Drop-in Clinic',
+    slug: 'thursday-drop-in-clinic',
+    sport: 'beachVolleyball',
+    locations: ['North Beach Sand Courts'],
+    coachName: 'Marcus Webb',
+    published: true,
+    classes: {
+      weekday: WEEKDAY_NAMES.indexOf('Thursday'),
+      firstDaysFromRun: 14,
+      deadlineDaysFromRun: 7,
+      startTime: '18:00',
+      endTime: '19:00',
+      weeks: 4,
+      placesPerClass: 1,
+      allowSingleRegistration: true,
+    },
+  },
 ];
 
 async function ensureTraining(ctx: MutationCtx, demo: DemoTraining): Promise<boolean> {
@@ -1772,6 +1792,19 @@ const DEMO_TRAINING_REGISTRATION = {
   participant: SELF_PARTICIPANT,
 } as const;
 
+/**
+ * player@ holds the one place in every class of the Thursday Drop-in Clinic series, so each class reads Full, and guardian@'s child
+ * "Maya R." waits for the series at position 1. Inserted once: any registration of player@ in the series, or any entry of guardian@, means it was.
+ */
+const DEMO_TRAINING_WAITLIST = {
+  organizationSlug: 'gulf-coast-sport-social',
+  trainingSlug: 'thursday-drop-in-clinic',
+  holderEmail: `player@${DEMO_ACCOUNT_DOMAIN}`,
+  holding: SELF_PARTICIPANT,
+  waitingEmail: `guardian@${DEMO_ACCOUNT_DOMAIN}`,
+  waiting: { kind: 'minor', minorName: 'Maya R.' },
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -1808,6 +1841,7 @@ const demoResultValidator = v.object({
   campRegistrations: v.number(),
   campWaitlistEntries: v.number(),
   trainingRegistrations: v.number(),
+  trainingWaitlistEntries: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -2695,6 +2729,53 @@ export const insertDemoTrainingRegistration = internalMutation({
   },
 });
 
+export const insertDemoTrainingWaitlist = internalMutation({
+  args: { holderAuthUserId: v.string(), waitingAuthUserId: v.string() },
+  returns: v.object({ registrations: v.number(), entries: v.number() }),
+  handler: async (ctx, { holderAuthUserId, waitingAuthUserId }) => {
+    assertPreviewDeployment();
+    const none = { registrations: 0, entries: 0 };
+    const demo = DEMO_TRAINING_WAITLIST;
+    const organization = await organizationBySlug(ctx, demo.organizationSlug);
+    const found = organization && (await findTrainingBySlugs(ctx, organization, demo.trainingSlug));
+    if (found?.program.status !== 'published') return none;
+    const userOf = (authUserId: string) =>
+      ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+        .unique();
+    const holder = await userOf(holderAuthUserId);
+    const waiting = await userOf(waitingAuthUserId);
+    if (!holder || !waiting) return none;
+    const held = await ctx.db
+      .query('trainingRegistrations')
+      .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
+        q.eq('trainingId', found.training._id).eq('userId', holder._id),
+      )
+      .first();
+    const entered = await ctx.db
+      .query('trainingWaitlistEntries')
+      .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
+        q.eq('trainingId', found.training._id).eq('userId', waiting._id),
+      )
+      .first();
+    if (held || entered) return none;
+    const classes = await classesToAttend(ctx, found.training._id, dateAtUtcMinus12(Date.now()));
+    if (classes.length === 0 || classes.some((row) => row.registeredCount >= row.places)) {
+      return none;
+    }
+    await insertTrainingSeriesRegistration(ctx, found.training, classes, {
+      userId: holder._id,
+      participant: demo.holding,
+    });
+    await insertTrainingWaitlistEntry(ctx, found.training, {
+      userId: waiting._id,
+      participant: demo.waiting,
+    });
+    return { registrations: 1, entries: 1 };
+  },
+});
+
 export const insertDemoCampWaitlist = internalMutation({
   args: { authUserId: v.string() },
   returns: v.number(),
@@ -2942,6 +3023,7 @@ export const demo = internalAction({
     let campRegistrations = 0;
     let campWaitlistEntries = 0;
     let trainingRegistrations = 0;
+    let trainingWaitlistEntries = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
       const people: { email: string; authUserId: string }[] = [];
@@ -3004,6 +3086,18 @@ export const demo = internalAction({
             authUserId: waitingGuardian.authUserId,
           });
         }
+        const holder = people.find((person) => person.email === DEMO_TRAINING_WAITLIST.holderEmail);
+        const waiter = people.find(
+          (person) => person.email === DEMO_TRAINING_WAITLIST.waitingEmail,
+        );
+        if (holder && waiter) {
+          const waitlist = await ctx.runMutation(internal.seed.insertDemoTrainingWaitlist, {
+            holderAuthUserId: holder.authUserId,
+            waitingAuthUserId: waiter.authUserId,
+          });
+          trainingRegistrations += waitlist.registrations;
+          trainingWaitlistEntries = waitlist.entries;
+        }
       }
     }
     return {
@@ -3017,6 +3111,7 @@ export const demo = internalAction({
       campRegistrations,
       campWaitlistEntries,
       trainingRegistrations,
+      trainingWaitlistEntries,
       accounts,
     };
   },

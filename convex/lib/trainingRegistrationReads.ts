@@ -136,6 +136,25 @@ export function singleClassRegistrationsOf(
     .take(SINGLE_CLASS_REGISTRATIONS_LIMIT);
 }
 
+export async function replacedBySeries(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  participant: Participant,
+): Promise<Doc<'trainingRegistrations'>[]> {
+  const key = participantKey(participant);
+  return (await singleClassRegistrationsOf(ctx, trainingId, userId)).filter(
+    (row) => participantKey(row.participant) === key,
+  );
+}
+
+export function everyClassHasPlace(
+  classes: readonly Doc<'trainingClasses'>[],
+  replaced: readonly Doc<'trainingRegistrations'>[],
+): boolean {
+  return classes.every((row) => placesHeldExcluding(row, replaced) < row.places);
+}
+
 export function placesHeldExcluding(
   trainingClass: Doc<'trainingClasses'>,
   replaced: readonly Doc<'trainingRegistrations'>[],

@@ -21,6 +21,7 @@ import type { PublicTrainingData } from './public-training-view';
 
 const TRAINING = 'trainings:getPublicPage';
 const MINE = 'trainingRegistrations:listMineForTraining';
+const WAITING = 'trainingWaitlist:listMineForTraining';
 const REGISTER_PATH = `/app/organizations/${ORG_SLUG}/training/${TRAINING_SLUG}/register`;
 const NONE = { self: false, minorNames: [] as string[], classes: [] as MineClass[] };
 
@@ -86,7 +87,10 @@ async function settle(): Promise<void> {
   }
 }
 
-async function emit(name: string, value: unknown): Promise<void> {
+/** The caller's registrations apply with their waitlist spots, so an answer to the first also answers the second with none, unless `alone`. */
+async function emit(name: string, value: unknown, { alone = false } = {}): Promise<void> {
+  const waitlist = client.activeSubscriptions.find((s) => s.name === WAITING);
+  if (name === MINE && waitlist && !alone) waitlist.emit([]);
   client.activeSubscriptions.find((s) => s.name === name)!.emit(value);
   await settle();
 }
@@ -105,6 +109,11 @@ const classRegistered = () => [...host().querySelectorAll('[data-slot="class-reg
 const registered = () => host().querySelector('[data-slot="series-registered"]');
 const actions = () => host().querySelector('[data-slot="series-actions"]');
 const fullNote = () => host().querySelector('[data-slot="series-full"]');
+const waiting = () => [...host().querySelectorAll('[data-slot="series-waitlist"]')];
+const joinLink = () =>
+  [...host().querySelectorAll<HTMLAnchorElement>('[data-slot="series-actions"] a')].find((link) =>
+    text(link).startsWith('Join the waitlist'),
+  );
 
 afterEach(() => {
   vi.useRealTimers();
@@ -141,10 +150,32 @@ describe('PublicTrainingPage registration, signed out', () => {
     expect(registerLink()).toBeNull();
   });
 
-  it('leaves the link off while a class is full and says so, naming no registrant', async () => {
+  it('offers the waitlist in place of Register while a class is full, and says so, naming no registrant', async () => {
     await emit(TRAINING, TUESDAY_CLINIC);
-    expect(registerLink()).toBeNull();
+    expect(registerLink()).toBe(joinLink());
+    expect(text(joinLink())).toBe('Join the waitlist for the series');
+    expect(joinLink()?.getAttribute('href')).toBe(REGISTER_PATH);
+    expect(joinLink()?.getAttribute('data-slot')).toBe('button');
     expect(text(fullNote())).toBe('A class is full, so no place is left for the whole series.');
+  });
+
+  it('reads that people are waiting when the places are held for the waitlist, though a class has places', async () => {
+    await emit(TRAINING, {
+      ...OPEN_SERIES,
+      seriesWaitlist: true,
+      classes: OPEN_SERIES.classes.map((row) => ({ ...row, placesLeft: 0 })),
+    });
+    expect(text(fullNote())).toBe(
+      'People are waiting for a place, so no place is left for the whole series.',
+    );
+    expect(text(joinLink())).toBe('Join the waitlist for the series');
+    expect(classRows().map((row) => text(row.querySelector('[data-slot="class-places"]')))).toEqual(
+      ['Full', 'Full', 'Full'],
+    );
+  });
+
+  it('shows no waiting line to a signed-out visitor', () => {
+    expect(waiting()).toEqual([]);
   });
 });
 
@@ -445,7 +476,8 @@ describe('PublicTrainingPage registration of the series when a class is full', (
   it('says a class is full, with no series link, while the viewer holds no place in it', async () => {
     await emit(MINE, NONE);
     expect(text(fullNote())).toBe('A class is full, so no place is left for the whole series.');
-    expect(registerLink()).toBeNull();
+    expect(text(joinLink())).toBe('Join the waitlist for the series');
+    expect(text(registerLink())).toBe('Join the waitlist for the series');
   });
 
   it('offers the series when the only place of the full class is the viewer’s own', async () => {
@@ -504,5 +536,163 @@ describe('PublicTrainingPage registration of one class, a guardian’s children'
       classes: [{ classId: CLASS_IDS[0], self: false, minorNames: names }],
     });
     expect(classLinks()).toHaveLength(3);
+  });
+});
+
+describe('PublicTrainingPage registration, the waitlist, signed in', () => {
+  const FULL_SERIES: PublicTrainingData = {
+    ...WITH_CHILDREN,
+    seriesWaitlist: true,
+    classes: WITH_CHILDREN.classes.map((row) => ({ ...row, placesLeft: 0 })),
+  };
+  const FULL_ADULTS: PublicTrainingData = { ...FULL_SERIES, minimumAge: 18, maximumAge: undefined };
+  const SELF = { kind: 'self' } as const;
+  const MINOR = (minorName: string) => ({ kind: 'minor', minorName }) as const;
+  const answers = async (mine: unknown, waitingFor: unknown) => {
+    await emit(MINE, mine);
+    await emit(WAITING, waitingFor);
+  };
+
+  beforeEach(async () => {
+    await open({ signedIn: true });
+  });
+
+  it('asks for the caller’s waitlist spots in this program with the route’s slugs, once signed in', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    expect(
+      client.activeSubscriptions.filter(({ name }) => name === WAITING).map(({ args }) => args),
+    ).toEqual([TRAINING_ARGS]);
+  });
+
+  it('reads "You\'re on the waitlist, position N" for the account holder, in place of the link, on a program for adults', async () => {
+    await emit(TRAINING, FULL_ADULTS);
+    await answers(NONE, [{ participant: SELF, position: 2 }]);
+    expect(waiting().map(text)).toEqual(["You're on the waitlist, position 2"]);
+    expect(joinLink()).toBeUndefined();
+    expect(registerLink()).toBeNull();
+  });
+
+  it('reads a child’s spot by name, and keeps the link for another child', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await answers(NONE, [{ participant: MINOR('Maya R.'), position: 1 }]);
+    expect(waiting().map(text)).toEqual(['Maya R. is on the waitlist, position 1']);
+    expect(joinLink()).toBeDefined();
+  });
+
+  it('reads one line for each spot, in the order the server gives them', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await answers(NONE, [
+      { participant: MINOR('Maya R.'), position: 1 },
+      { participant: SELF, position: 3 },
+    ]);
+    expect(waiting().map(text)).toEqual([
+      'Maya R. is on the waitlist, position 1',
+      "You're on the waitlist, position 3",
+    ]);
+  });
+
+  it('shows a registered child and a waiting one together, each on a line of its own', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await answers({ self: false, minorNames: ['Sam R.'], classes: [] }, [
+      { participant: MINOR('Maya R.'), position: 1 },
+    ]);
+    expect(text(registered())).toBe('Sam R. is registered');
+    expect(waiting().map(text)).toEqual(['Maya R. is on the waitlist, position 1']);
+  });
+
+  it('applies the answers together, so the row changes once and not for each answer', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await emit(MINE, { self: false, minorNames: ['Sam R.'], classes: [] }, { alone: true });
+    expect(registered()).toBeNull();
+    expect(waiting()).toEqual([]);
+    await emit(WAITING, [{ participant: MINOR('Maya R.'), position: 1 }]);
+    expect(text(registered())).toBe('Sam R. is registered');
+    expect(waiting()).toHaveLength(1);
+  });
+
+  it('shows what did answer when the other answer fails', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await emit(MINE, { self: false, minorNames: ['Sam R.'], classes: [] }, { alone: true });
+    client.activeSubscriptions.find((s) => s.name === WAITING)!.fail(new Error('Server Error'));
+    await settle();
+    expect(text(registered())).toBe('Sam R. is registered');
+  });
+
+  it('is plain lines that announce nothing on load, and wrap a long name rather than cut it', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    await answers(NONE, [{ participant: MINOR('W'.repeat(60)), position: 1 }]);
+    const [line] = waiting();
+    expect(line.tagName).toBe('P');
+    expect(line.hasAttribute('role')).toBe(false);
+    expect(line.querySelector('.wrap-anywhere')).not.toBeNull();
+    expect(line.querySelector('.truncate')).toBeNull();
+  });
+
+  it('keeps the lines in the one row of the series actions, which wraps only while lines wait', async () => {
+    await emit(TRAINING, FULL_SERIES);
+    expect(actions()?.classList).not.toContain('flex-wrap');
+    await answers(NONE, [{ participant: MINOR('Maya R.'), position: 1 }]);
+    expect(actions()?.classList).toContain('flex-wrap');
+    expect(waiting()[0].closest('[data-slot="series-actions"]')).toBe(actions());
+    expect(joinLink()?.parentElement).toBe(actions());
+    expect(host().querySelectorAll('[data-slot="series-actions"]')).toHaveLength(1);
+  });
+
+  it('counts a guardian’s waiting children toward the most one account can hold', async () => {
+    const children = (count: number) =>
+      Array.from({ length: count }, (_v, index) => MINOR(`Child ${index + 1}`));
+    await emit(TRAINING, FULL_SERIES);
+    await answers({ self: true, minorNames: [], classes: [] }, []);
+    expect(joinLink()).toBeDefined();
+    await emit(
+      WAITING,
+      children(MAX_MINORS_PER_SESSION - 1).map((participant, index) => ({
+        participant,
+        position: index + 1,
+      })),
+    );
+    expect(joinLink()).toBeDefined();
+    await emit(
+      WAITING,
+      children(MAX_MINORS_PER_SESSION).map((participant, index) => ({
+        participant,
+        position: index + 1,
+      })),
+    );
+    expect(joinLink()).toBeUndefined();
+  });
+
+  it('keeps the waiting lines after the series closes, with no link to join', async () => {
+    await emit(TRAINING, FULL_ADULTS);
+    await answers(NONE, [{ participant: SELF, position: 1 }]);
+    vi.setSystemTime(at('2027-02-01'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle();
+    expect(waiting().map(text)).toEqual(["You're on the waitlist, position 1"]);
+    expect(joinLink()).toBeUndefined();
+  });
+
+  it('offers Register, not the waitlist, once no class is full and no one waits', async () => {
+    await emit(TRAINING, OPEN_SERIES);
+    await answers(NONE, []);
+    expect(joinLink()).toBeUndefined();
+    expect(text(registerLink())).toBe('Register for the series');
+  });
+
+  it('keeps the series row for a guardian whose own place fills a class: the series replaces it', async () => {
+    const heldClass: PublicTrainingData = {
+      ...SINGLE_CLASS,
+      classes: SINGLE_CLASS.classes.map((row, index) => ({
+        ...row,
+        placesLeft: index === 0 ? 0 : 5,
+      })),
+    };
+    await emit(TRAINING, heldClass);
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[0], self: true, minorNames: [] }],
+    });
+    expect(joinLink()).toBeUndefined();
+    expect(text(registerLink())).toBe('Register for the series');
   });
 });

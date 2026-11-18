@@ -87,8 +87,20 @@ export const REGISTER_TRAINING_MESSAGES = {
   fullTitle: 'A class is full.',
   fullDescription: (date: string | undefined) =>
     date === undefined
-      ? 'A series registration holds a place in every class, so it cannot be taken while one is full.'
-      : `${trainingClassDate(date)} has no place left, and a series registration holds a place in every class.`,
+      ? 'A series registration holds a place in every class, so it cannot be taken while one is full. You can join the waitlist instead.'
+      : `${trainingClassDate(date)} has no place left, and a series registration holds a place in every class. You can join the waitlist instead.`,
+  joinWaitlist: 'Join the waitlist',
+  hasPlaceTitle: 'Every class has a place free.',
+  hasPlaceDescription: 'Register for the series instead.',
+  registerInstead: 'Register',
+  waitlistNoteTitle: 'A class is full.',
+  waitlistNoteDescription:
+    'Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
+  joinFailedTitle: 'You could not be added to the waitlist.',
+  joinFailedDescription: 'You were not added. Check your connection and try again.',
+  waitlistedTitle: (name: string) => `You're on the waitlist for ${name}.`,
+  waitlistedDescription:
+    'The organizer offers the series to the first person waiting. Your position is on the training page.',
   adultNotAllowedTitle: (maximumAge: number | undefined) =>
     maximumAge === undefined
       ? 'This training program is not for adults.'
@@ -121,7 +133,9 @@ const ATTENDING_LABELS: Readonly<Record<Attending, string>> = { self: 'Me', mino
 type Refusal =
   | 'closed'
   | 'full'
+  | 'has-place'
   | 'registered'
+  | 'waitlisted'
   | 'adult-not-allowed'
   | 'minor-not-allowed'
   | 'no-training'
@@ -130,18 +144,23 @@ type Refusal =
 
 type FormAlert = 'offline' | 'failed';
 
-type NoticeState = Exclude<RegisterTrainingState, 'loading' | 'not-found' | 'signed-out' | 'form'>;
+type NoticeState =
+  | Exclude<RegisterTrainingState, 'loading' | 'not-found' | 'signed-out' | 'form' | 'waitlist'>
+  | 'has-place';
 
 interface Notice {
   icon: string;
   title: string;
   description: string;
+  action?: string;
 }
 
 const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   registrationClosed: 'closed',
   classFull: 'full',
+  seriesHasPlace: 'has-place',
   alreadyRegistered: 'registered',
+  alreadyWaiting: 'waitlisted',
   adultNotAllowed: 'adult-not-allowed',
   minorNotAllowed: 'minor-not-allowed',
   trainingNotFound: 'no-training',
@@ -207,6 +226,7 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
               [training]="training"
               [trainingHref]="trainingHref()"
               [classAsked]="classAsked()"
+              [joining]="joining()"
             >
               @if (notice(); as notice) {
                 <div class="px-4 pt-5 pb-6 md:px-8 md:pb-8">
@@ -225,6 +245,16 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       <span class="wrap-anywhere">{{ notice.description }}</span>
                     </div>
                   </div>
+                  @if (notice.action; as action) {
+                    <button
+                      type="button"
+                      data-slot="refusal-action"
+                      [class]="primaryButton + ' mt-4 w-full'"
+                      (click)="showForm()"
+                    >
+                      {{ action }}
+                    </button>
+                  }
                   <a
                     [routerLink]="trainingHref()"
                     data-slot="button"
@@ -244,6 +274,13 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                   class="px-4 pt-5 pb-4 md:px-8 md:pb-8"
                   (submit)="submit($event)"
                 >
+                  @if (joining()) {
+                    <div hlmAlert role="note" class="mb-5">
+                      <ng-icon name="lucideUsers" aria-hidden="true" />
+                      <div hlmAlertTitle>{{ messages.waitlistNoteTitle }}</div>
+                      <div hlmAlertDescription>{{ messages.waitlistNoteDescription }}</div>
+                    </div>
+                  }
                   @if (formAlert(); as alert) {
                     @if (alert === 'offline') {
                       <app-admin-offline-alert
@@ -255,8 +292,10 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       <app-admin-alert
                         #formAlertBox
                         kind="error"
-                        [title]="messages.failedTitle"
-                        [description]="messages.failedDescription"
+                        [title]="joining() ? messages.joinFailedTitle : messages.failedTitle"
+                        [description]="
+                          joining() ? messages.joinFailedDescription : messages.failedDescription
+                        "
                         class="mb-5"
                       />
                     }
@@ -368,14 +407,16 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
                     >
                       @if (submitting()) {
-                        <hlm-spinner data-icon="inline-start" />Registering…
+                        <hlm-spinner data-icon="inline-start" />{{
+                          joining() ? 'Joining…' : 'Registering…'
+                        }}
                       } @else {
-                        Register
+                        {{ joining() ? messages.joinWaitlist : 'Register' }}
                       }
                     </button>
                   </div>
                   <p role="status" class="sr-only">
-                    {{ submitting() ? 'Registering for ' + training.name + '.' : '' }}
+                    {{ submitting() ? pendingStatus(training.name) : '' }}
                   </p>
                 </form>
               }
@@ -392,6 +433,7 @@ export class RegisterTrainingPage {
   private readonly injector = inject(Injector);
   private readonly pageTitle = inject(PageTitle);
   private readonly register = injectMutation(api.trainingRegistrations.register);
+  private readonly join = injectMutation(api.trainingWaitlist.join);
 
   protected readonly messages = REGISTER_TRAINING_MESSAGES;
   protected readonly attendingLabels = ATTENDING_LABELS;
@@ -461,8 +503,9 @@ export class RegisterTrainingPage {
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
     const refusal = this.refusal();
-    return state === 'form' && refusal !== null ? refusal : state;
+    return (state === 'form' || state === 'waitlist') && refusal !== null ? refusal : state;
   });
+  protected readonly joining = computed(() => this.state() === 'waitlist');
 
   protected readonly notice = computed<Notice | null>(() => {
     const state = this.state();
@@ -503,6 +546,18 @@ export class RegisterTrainingPage {
         description: singleClass
           ? messages.classFullDescription(singleClass.date)
           : messages.fullDescription(training.fullClassDate),
+        ...(!singleClass && { action: messages.joinWaitlist }),
+      }),
+      'has-place': () => ({
+        icon: 'lucideCircleCheck',
+        title: messages.hasPlaceTitle,
+        description: messages.hasPlaceDescription,
+        action: messages.registerInstead,
+      }),
+      waitlisted: () => ({
+        icon: 'lucideCircleCheck',
+        title: messages.waitlistedTitle(training.name),
+        description: messages.waitlistedDescription,
       }),
       'class-not-open': () => ({
         icon: 'lucideCalendarX',
@@ -614,8 +669,9 @@ export class RegisterTrainingPage {
     effect(() => {
       const training = this.training();
       if (training) {
+        const subject = this.classAsked() ? 'a class' : 'a training series';
         this.pageTitle.set([
-          this.classAsked() ? 'Register for a class' : 'Register for a training series',
+          `${this.joining() ? 'Join the waitlist for' : 'Register for'} ${subject}`,
           training.name,
         ]);
       }
@@ -652,12 +708,17 @@ export class RegisterTrainingPage {
     this.submitting.set(true);
     const request = {
       trainingId: training.trainingId,
-      ...(this.classAsked() && training.singleClass && { classId: training.singleClass.classId }),
       participant: minorName === null ? participant : ({ kind: 'minor', minorName } as const),
       ageConfirmed: this.model().ageConfirmed,
     };
     try {
-      await this.register.run(request);
+      await (this.joining()
+        ? this.join.run(request)
+        : this.register.run({
+            ...request,
+            ...(this.classAsked() &&
+              training.singleClass && { classId: training.singleClass.classId }),
+          }));
     } catch (failure) {
       this.submitting.set(false);
       this.showFailure(failure);
@@ -666,6 +727,14 @@ export class RegisterTrainingPage {
     // A finished one-time form is replaced in history, so Back returns to where the visitor came from.
     await this.router.navigateByUrl(this.trainingHref(), { replaceUrl: true });
     this.submitting.set(false);
+  }
+
+  protected pendingStatus(name: string): string {
+    return this.joining() ? `Joining the waitlist for ${name}.` : `Registering for ${name}.`;
+  }
+
+  protected showForm(): void {
+    this.refusal.set(null);
   }
 
   protected choose(kind: string): void {

@@ -426,6 +426,38 @@ export default defineSchema({
     // `classId` absent reads the series rows and `classId` set reads one class's, so neither count is cut short by rows of the other kind.
     .index('by_trainingId_and_classId', ['trainingId', 'classId']),
 
+  // People waiting for a place in every class of a full training series, written only by `convex/lib/trainingWaitlistWrites.ts`.
+  // A waiting entry holds no place; promotion writes the series registration and sets `registrationId`. Deleting the account deletes its rows.
+  trainingWaitlistEntries: defineTable({
+    trainingId: v.id('trainings'),
+    /** Set for a wait for one class; absent for the series. */
+    classId: v.optional(v.id('trainingClasses')),
+    organizationId: v.id('organizations'),
+    /** The account holder, who is the participant for `self` and the guardian for `minor`. */
+    userId: v.id('users'),
+    participant: participantValidator,
+    /** As on `trainingRegistrations`, so the one-per-participant check is an index read. */
+    participantKey: v.string(),
+    ageConfirmedAt: v.optional(v.number()),
+    status: waitlistEntryStatusValidator,
+    requestedAt: v.number(),
+    promotedAt: v.optional(v.number()),
+    registrationId: v.optional(v.id('trainingRegistrations')),
+  })
+    // `classId` absent reads the series entries, in the order they joined.
+    .index('by_trainingId_and_classId_and_status_and_requestedAt', [
+      'trainingId',
+      'classId',
+      'status',
+      'requestedAt',
+    ])
+    .index('by_trainingId_and_userId_and_participantKey', [
+      'trainingId',
+      'userId',
+      'participantKey',
+    ])
+    .index('by_userId', ['userId']),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.

@@ -1,6 +1,8 @@
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
 import { expect } from 'vitest';
+import { components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { TrainingPattern } from './lib/trainingPattern';
 import {
@@ -185,3 +187,91 @@ export async function registeredCounts(s: Setup, key: string): Promise<number[]>
     return counts;
   });
 }
+
+type Role = 'orgAdmin' | 'leagueOrganizer';
+
+export async function setupWithPeople() {
+  const s = await setup();
+  betterAuthTest.register(s.t, 'betterAuth');
+  const people = await s.t.run(async (ctx) => {
+    const programOf = async (key: string) =>
+      (await ctx.db.get('trainings', s.trainings[key].trainingId))!.programId;
+    const dropIn = await programOf('dropIn');
+    const open = await programOf('open');
+    const person = async (
+      authUserId: string,
+      name: string,
+      membership: {
+        organizationId: Id<'organizations'>;
+        role: Role;
+        programIds?: Id<'programs'>[];
+      } | null,
+    ) => {
+      const now = Date.now();
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name,
+            email: `${authUserId}@example.test`,
+            emailVerified: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      } as never)) as { _id: string };
+      const userId = await ctx.db.insert('users', {
+        authUserId: account._id,
+        name,
+        adultConfirmedAt: 1,
+      });
+      if (membership) {
+        await insertMembership(
+          ctx,
+          userId,
+          membership.organizationId,
+          membership.role,
+          [],
+          membership.programIds,
+        );
+      }
+      return { authUserId: account._id, userId };
+    };
+    return {
+      otherAdmin: await person('admin-b', 'Bo Admin', {
+        organizationId: s.otherOrganization,
+        role: 'orgAdmin',
+      }),
+      assigned: await person('assigned', 'Olive Organizer', {
+        organizationId: s.organization,
+        role: 'leagueOrganizer',
+        programIds: [dropIn],
+      }),
+      unassigned: await person('unassigned', 'Uma Organizer', {
+        organizationId: s.organization,
+        role: 'leagueOrganizer',
+        programIds: [open],
+      }),
+      leagueOnly: await person('league-only', 'Lee Organizer', {
+        organizationId: s.organization,
+        role: 'leagueOrganizer',
+      }),
+      guardian: await person('guardian', 'Gail Guardian', null),
+      adult: await person('player', 'Pat Player', null),
+      zed: await person('zed', 'Zed Zimmer', null),
+    };
+  });
+  const as = (who: { authUserId: string }) => s.t.withIdentity(identity(who.authUserId));
+  return {
+    ...s,
+    ...people,
+    asOtherAdmin: as(people.otherAdmin),
+    asAssigned: as(people.assigned),
+    asUnassigned: as(people.unassigned),
+    asLeagueOnly: as(people.leagueOnly),
+    asPlayer: as(people.guardian),
+    signedOut: s.t,
+  };
+}
+
+export type SetupWithPeople = Awaited<ReturnType<typeof setupWithPeople>>;

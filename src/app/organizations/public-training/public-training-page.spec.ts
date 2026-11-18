@@ -224,7 +224,7 @@ describe('PublicTrainingPage populated', () => {
       'Ages 16 or older',
       'Location North Beach Sand Courts 3500 Sandcourt Ln, Corpus Christi, TX 78402',
       'Schedule Tuesdays, 6 to 7 pm, 3 weeks First class Feb 2, 2027',
-      'Registration Registration open Closes Feb 1, 2027 A class is full, so no place is left for the whole series.',
+      'Registration Registration open Closes Feb 1, 2027 A class is full, so no place is left for the whole series. Join the waitlist for the series',
     ]);
   });
 
@@ -236,10 +236,11 @@ describe('PublicTrainingPage populated', () => {
     expect(spaced(host(noAges).querySelector('main dl'))).not.toContain('Ages');
   });
 
-  it('offers no Register control while a class is full, and says so', () => {
+  it('offers no Register control while a class is full, and the waitlist in its place', () => {
     const main = host(harness).querySelector('main')!;
-    expect(text(main)).not.toMatch(/Register|Join the waitlist/);
-    expect(main.querySelector('a[href*="register"]')).toBeNull();
+    expect(text(main)).not.toMatch(/Register/);
+    const links = [...main.querySelectorAll('a[href*="register"]')];
+    expect(links.map((link) => text(link))).toEqual(['Join the waitlist for the series']);
   });
 
   it('writes no price, which the page does not hold', () => {
@@ -316,7 +317,7 @@ describe('PublicTrainingPage clock', () => {
       return spaced(fact);
     };
     expect(await registration(at('2027-01-25'))).toBe(
-      'Registration Registration open Closes Jan 25, 2027 A class is full, so no place is left for the whole series.',
+      'Registration Registration open Closes Jan 25, 2027 A class is full, so no place is left for the whole series. Join the waitlist for the series',
     );
     expect(await registration(at('2027-01-30'))).toBe('Registration Registration closed');
     expect(await registration(at('2027-02-02'))).toBe('Registration In progress');

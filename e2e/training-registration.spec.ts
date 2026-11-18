@@ -12,7 +12,11 @@ import {
   setTrainingClassRegistered,
   type PublishedTrainingSeed,
 } from './support/training';
-import { newUser } from './support/users';
+import {
+  seedTrainingRegistration,
+  seedTrainingWaitlistEntry,
+} from './support/training-registrations';
+import { newUser, seedUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -190,7 +194,7 @@ test.describe('register for a training series', () => {
     await expectEveryClassPlacesLeft(page, 11);
   });
 
-  test('a closed series and a full one show their reason with a link back and no form', async ({
+  test('a closed series shows its reason with a link back and no form, and a full one offers its waitlist', async ({
     page,
   }, testInfo) => {
     const { paths } = await seed();
@@ -207,12 +211,15 @@ test.describe('register for a training series', () => {
 
     await page.goto(paths.full);
     await expect(registerLink(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'Join the waitlist for the series' }),
+    ).toBeVisible();
     await expect(page.locator('[data-slot="series-full"]')).toHaveText(
       'A class is full, so no place is left for the whole series.',
     );
     await page.goto(registerPathOf(paths.full));
-    await expect(alert(page)).toContainText('A class is full.');
-    await expect(page.locator('form')).toHaveCount(0);
+    await expect(page.locator('form [role="note"]')).toContainText('A class is full.');
+    await expect(page.getByRole('button', { name: 'Join the waitlist' })).toBeVisible();
     await expectAccessible(page);
     await screenshot(page, testInfo, '362-register-full');
   });
@@ -860,6 +867,9 @@ test.describe('the series when the last place of a class is the viewer’s own',
     await expect(classPlaces(page, 1)).toHaveText('Full');
     await expect(fullNote(page)).toBeVisible();
     await expect(registerLink(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'Join the waitlist for the series' }),
+    ).toBeVisible();
   });
 
   test('a guardian whose child holds the last place of a class registers that child for the series', async ({
@@ -894,5 +904,307 @@ test.describe('the series when the last place of a class is the viewer’s own',
     await expect(classPlaces(page, 1)).toHaveText('Full');
     await expect(classPlaces(page, 2)).toHaveText('11 places left');
     await expect(page.locator('[data-slot="class-registered"]')).toHaveCount(0);
+  });
+});
+
+test.describe('the series waitlist', () => {
+  const WAITING = 'trainingWaitlist:listMineForTraining';
+  const SELF = { kind: 'self' } as const;
+  const MAYA = { kind: 'minor', minorName: 'Maya R.' } as const;
+  const waitingLines = (page: Page) => page.locator('[data-slot="series-waitlist"]');
+  const joinLink = (page: Page) =>
+    page.getByRole('link', { name: 'Join the waitlist for the series' });
+  const joinButton = (page: Page) =>
+    page.getByRole('button', { name: 'Join the waitlist', exact: true });
+
+  /** One place in every class, held by another account, so every class is full. */
+  async function fullSeries(over: Partial<PublishedTrainingSeed> = {}) {
+    const tenant = await seedTenant({
+      name: 'E2E Training Waitlist',
+      locations: [{ name: PLACE, address: ADDRESS }],
+    });
+    const program = clinic('Waitlist Clinic', {
+      classes: { ...classes(FIRST_IN_DAYS), placesPerClass: 1 },
+      ...over,
+    });
+    const path = await seedPublishedTraining(tenant, program);
+    const holder = await seedUser(newUser('Holder'));
+    await seedTrainingRegistration(tenant, program.slug, holder, SELF);
+    return { tenant, program, path };
+  }
+
+  test('a person joins the waitlist of a full series, and the training page reads their position, also after a reload', async ({
+    page,
+  }, testInfo) => {
+    const { path, program } = await fullSeries({ minimumAge: 18, maximumAge: 99 });
+    await signUp(page, newUser('Joiner'));
+    await page.goto(path);
+    await expect(classRows(page).first().locator('[data-slot="class-places"]')).toHaveText('Full');
+    await expect(registerLink(page)).toHaveCount(0);
+    await expect(waitingLines(page)).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '365-training-full');
+
+    await joinLink(page).click();
+    await expect(page).toHaveURL(`${baseURL}${registerPathOf(path)}`);
+    await expect(page).toHaveTitle(
+      new RegExp(`^Join the waitlist for a training series \\| ${program.name}`),
+    );
+    await expect(page.locator('form [role="note"]')).toContainText('A class is full.');
+    await expect(page.getByRole('radio', { name: 'Me' })).toBeChecked();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '365-join-form');
+
+    await joinButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toHaveText('Confirm your age to continue.');
+    await ageBox(page).click();
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+    await expect(waitingLines(page)).toHaveText("You're on the waitlist, position 1");
+    await expect(joinLink(page)).toHaveCount(0);
+    await expect(registeredLine(page)).toHaveCount(0);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '365-training-waiting');
+
+    await page.reload();
+    await expect(waitingLines(page)).toHaveText("You're on the waitlist, position 1");
+    await page.goto(registerPathOf(path));
+    await expect(alert(page)).toContainText(`You're on the waitlist for ${program.name}`);
+    await expect(page.locator('form')).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '365-register-waiting');
+  });
+
+  for (const width of [320, 360, 1280]) {
+    test(`a second person waits behind the first, and a guardian's child reads by name, with nothing scrolling sideways at ${width}px`, async ({
+      page,
+      browser,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { path, program, tenant } = await fullSeries({ minimumAge: 9, maximumAge: 99 });
+      const first = await otherUser(browser, newUser('First'));
+      await first.goto(registerPathOf(path));
+      await first.getByRole('radio', { name: 'Me' }).check();
+      await ageBox(first).click();
+      await joinButton(first).click();
+      await expect(first).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+      await expect(waitingLines(first)).toHaveText("You're on the waitlist, position 1");
+      await first.context().close();
+
+      const guardian = newUser('Guardian');
+      await signUp(page, guardian);
+      await page.goto(registerPathOf(path));
+      await page.getByRole('radio', { name: 'My child' }).check();
+      await childName(page).fill(LONG);
+      await ageBox(page).click();
+      await joinButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+      await expect(waitingLines(page)).toHaveText(`${LONG} is on the waitlist, position 2`);
+      await expect(joinLink(page)).toBeVisible();
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectAccessible(page);
+
+      await seedTrainingWaitlistEntry(tenant, program.slug, guardian, MAYA);
+      await page.reload();
+      await expect(waitingLines(page)).toHaveText([
+        `${LONG} is on the waitlist, position 2`,
+        'Maya R. is on the waitlist, position 3',
+      ]);
+      for (const line of await waitingLines(page).all()) {
+        const clipped = await line
+          .locator('span')
+          .evaluate(
+            (span) =>
+              span.scrollWidth > span.clientWidth + 1 || span.scrollHeight > span.clientHeight + 1,
+          );
+        expect(clipped).toBe(false);
+      }
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectAccessible(page);
+    });
+  }
+
+  test('a waiting entry holds the places: a series with places left reads Full, refuses a registration, and takes the next person into the waitlist', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seedTenant({
+      name: 'E2E Training Queue',
+      locations: [{ name: PLACE, address: ADDRESS }],
+    });
+    const program = clinic('Queue Clinic');
+    const path = await seedPublishedTraining(tenant, program);
+    const earlier = await seedUser(newUser('Earlier'));
+    await seedTrainingWaitlistEntry(tenant, program.slug, earlier, SELF);
+
+    await signUp(page, newUser('Later'));
+    await page.goto(path);
+    for (const index of [0, 1, 2]) {
+      await expect(classRows(page).nth(index).locator('[data-slot="class-places"]')).toHaveText(
+        'Full',
+      );
+    }
+    await expect(page.locator('[data-slot="series-full"]')).toHaveText(
+      'People are waiting for a place, so no place is left for the whole series.',
+    );
+    await expect(registerLink(page)).toHaveCount(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '365-training-queue');
+
+    await joinLink(page).click();
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+    await expect(waitingLines(page)).toHaveText("You're on the waitlist, position 2");
+  });
+
+  test('a series with a place in every class and no one waiting offers Register, and the waitlist is refused', async ({
+    page,
+  }) => {
+    const tenant = await seedTenant({
+      name: 'E2E Training Open',
+      locations: [{ name: PLACE, address: ADDRESS }],
+    });
+    const path = await seedPublishedTraining(tenant, clinic('Open Queue Clinic'));
+    await signUp(page, newUser('Early'));
+    await page.goto(path);
+    await expect(joinLink(page)).toHaveCount(0);
+    await expect(registerLink(page)).toBeVisible();
+    await page.goto(registerPathOf(path));
+    await expect(registerButton(page)).toBeVisible();
+    await expect(page.locator('form [role="note"]')).toHaveCount(0);
+  });
+
+  test('a person offline presses Join the waitlist: nothing is sent and the box stays ticked', async ({
+    page,
+  }) => {
+    const { path } = await fullSeries({ minimumAge: 18, maximumAge: 99 });
+    await signUp(page, newUser('Offline'));
+    await page.goto(registerPathOf(path));
+    await ageBox(page).click();
+    await page.context().setOffline(true);
+    try {
+      await expect(joinButton(page)).toHaveAttribute('aria-disabled', 'true');
+      await joinButton(page).click({ force: true });
+      await expect(alert(page).filter({ hasText: "You're offline" })).toBeFocused();
+      await expect(ageBox(page)).toBeChecked();
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await expect(joinButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+    await joinButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+    await expect(waitingLines(page)).toHaveText("You're on the waitlist, position 1");
+  });
+
+  test.describe('the training page rows when the waitlist answers after sign-in', () => {
+    const TOLERANCE = 0.5;
+    const BOXES = [
+      '#classes',
+      '#details-heading + dl > div:nth-child(-n+4)',
+      '[data-slot="series-actions"]',
+    ];
+
+    /**
+     * Holds the caller's waitlist answer, lets the page draw, then releases it and records every frame. The classes and the facts
+     * above the Registration fact never move, and the series row changes height at most once.
+     */
+    async function expectRowGrowsOnce(page: Page, path: string, lines: string[]) {
+      const held = await holdQueries(page, [WAITING]);
+      await page.goto(path);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.locator('[data-slot="series-actions"]')).toBeVisible();
+      await expect(waitingLines(page)).toHaveCount(0);
+      await page.evaluate((selectors) => {
+        const state = {
+          stop: false,
+          frames: [] as { top: number; height: number }[][],
+        };
+        const sample = () => {
+          state.frames.push(
+            selectors.map((selector) => {
+              const [first, ...rest] = [...document.querySelectorAll(selector)];
+              const boxes = [first, ...rest]
+                .filter(Boolean)
+                .map((el) => el.getBoundingClientRect());
+              const top = Math.min(...boxes.map((box) => box.top)) + window.scrollY;
+              const bottom = Math.max(...boxes.map((box) => box.bottom)) + window.scrollY;
+              return { top, height: bottom - top };
+            }),
+          );
+          if (!state.stop) requestAnimationFrame(sample);
+        };
+        sample();
+        (window as unknown as { __recorder: typeof state }).__recorder = state;
+      }, BOXES);
+      held.release();
+      await expect(waitingLines(page)).toHaveText(lines);
+      await page.waitForTimeout(700);
+      const frames = await page.evaluate(() => {
+        const state = (
+          window as unknown as {
+            __recorder: { stop: boolean; frames: { top: number; height: number }[][] };
+          }
+        ).__recorder;
+        state.stop = true;
+        return state.frames;
+      });
+      for (const box of [0, 1]) {
+        const tops = frames.map((frame) => frame[box].top);
+        const heights = frames.map((frame) => frame[box].height);
+        expect(Math.max(...tops) - Math.min(...tops), `box ${box} moves`).toBeLessThanOrEqual(
+          TOLERANCE,
+        );
+        expect(
+          Math.max(...heights) - Math.min(...heights),
+          `box ${box} resizes`,
+        ).toBeLessThanOrEqual(TOLERANCE);
+      }
+      const rowHeights = frames.map((frame) => frame[2].height);
+      const changes = rowHeights.filter(
+        (height, index) => index > 0 && Math.abs(height - rowHeights[index - 1]) > TOLERANCE,
+      );
+      expect(changes.length, 'the series row changes height at most once').toBeLessThanOrEqual(1);
+      expect(rowHeights.at(-1)! - rowHeights[0]).toBeGreaterThanOrEqual(-TOLERANCE);
+      for (const line of await waitingLines(page).all()) {
+        const clipped = await line
+          .locator('span')
+          .evaluate(
+            (span) =>
+              span.scrollWidth > span.clientWidth + 1 || span.scrollHeight > span.clientHeight + 1,
+          );
+        expect(clipped, 'a waiting line is clipped').toBe(false);
+      }
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectAccessible(page);
+    }
+
+    for (const width of [320, 360, 1280]) {
+      test(`an adult, a child with a 60-character name, and two children arrive at ${width}px without moving the page above the series row`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { tenant, program, path } = await fullSeries({ minimumAge: 9, maximumAge: 99 });
+        const viewer = newUser('Waiting');
+        await signUp(page, viewer);
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, SELF);
+        await expectRowGrowsOnce(page, path, ["You're on the waitlist, position 1"]);
+
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, {
+          kind: 'minor',
+          minorName: LONG,
+        });
+        await expectRowGrowsOnce(page, path, [
+          "You're on the waitlist, position 1",
+          `${LONG} is on the waitlist, position 2`,
+        ]);
+
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, MAYA);
+        await expectRowGrowsOnce(page, path, [
+          "You're on the waitlist, position 1",
+          `${LONG} is on the waitlist, position 2`,
+          'Maya R. is on the waitlist, position 3',
+        ]);
+      });
+    }
   });
 });
