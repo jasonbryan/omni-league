@@ -1,6 +1,11 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
-import { everyClassHasPlace, replacedBySeries } from './trainingRegistrationReads';
+import {
+  classRegistrationOf,
+  everyClassHasPlace,
+  replacedBySeries,
+  seriesRegistrationOf,
+} from './trainingRegistrationReads';
 import { waitingClassEntriesOf, waitingSeriesEntriesOf } from './trainingWaitlistReads';
 import { WAITLIST_READ_LIMIT } from './waitlist';
 
@@ -19,13 +24,18 @@ export async function waitingQueueOf(
   return queue.sort(byJoined).slice(0, WAITLIST_READ_LIMIT);
 }
 
+/** Two entries compete when they need a place in common: a series entry needs one in every class. */
+function competes(entry: Entry, other: Entry): boolean {
+  return (
+    entry.classId === undefined || other.classId === undefined || other.classId === entry.classId
+  );
+}
+
 /** An entry waits behind the earlier entries that need a place it needs: a series entry behind all of them, a class entry behind the series and its own class. */
 export function positionIn(queue: readonly Entry[], entry: Entry): number {
-  const competes = (other: Entry) =>
-    entry.classId === undefined || other.classId === undefined || other.classId === entry.classId;
   const index = queue.findIndex((row) => row._id === entry._id);
   const ahead = index === -1 ? queue : queue.slice(0, index);
-  return ahead.filter(competes).length + 1;
+  return ahead.filter((other) => competes(entry, other)).length + 1;
 }
 
 export async function entryHasPlace(
@@ -42,16 +52,46 @@ export async function entryHasPlace(
   return everyClassHasPlace(classes, replaced);
 }
 
-/** A free place goes to the earliest entry that it satisfies, so an earlier entry that still lacks a place elsewhere does not hold up a later one. */
-export async function firstServableEntry(
+/** A rolled-back release let a participant register while an entry of theirs waited, and a second place would double it. */
+export async function participantHoldsPlace(
+  ctx: Pick<QueryCtx, 'db'>,
+  entry: Entry,
+): Promise<boolean> {
+  const { trainingId, userId, participant, classId } = entry;
+  if (await seriesRegistrationOf(ctx, trainingId, userId, participant)) return true;
+  return (
+    classId !== undefined &&
+    (await classRegistrationOf(ctx, trainingId, userId, classId, participant)) !== null
+  );
+}
+
+export interface QueueRow {
+  entry: Entry;
+  hasPlace: boolean;
+  /** No earlier entry that needs a place this one needs can be served, so a free place goes to this one. */
+  next: boolean;
+}
+
+/** An entry whose account is gone, or whose participant already holds the place, cannot be given one, and must not hold up the entries behind it. */
+export async function queueRowsOf(
   ctx: Pick<QueryCtx, 'db'>,
   classes: readonly Doc<'trainingClasses'>[],
   queue: readonly Entry[],
-): Promise<Entry | null> {
+): Promise<QueueRow[]> {
+  const rows: QueueRow[] = [];
+  const served: Entry[] = [];
   for (const entry of queue) {
-    // An entry whose account is gone cannot be given a place, and must not hold up the entries behind it.
-    if (!(await ctx.db.get('users', entry.userId))) continue;
-    if (await entryHasPlace(ctx, classes, entry)) return entry;
+    const hasPlace = await entryHasPlace(ctx, classes, entry);
+    const servable =
+      hasPlace &&
+      (await ctx.db.get('users', entry.userId)) !== null &&
+      !(await participantHoldsPlace(ctx, entry));
+    rows.push({
+      entry,
+      hasPlace,
+      next: servable && !served.some((other) => competes(entry, other)),
+    });
+    if (servable) served.push(entry);
   }
-  return null;
+  return rows;
 }

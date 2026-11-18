@@ -560,18 +560,70 @@ describe('trainingWaitlist.listForTraining with class entries', () => {
     expect(row).not.toHaveProperty('participantKey');
   });
 
-  test('marks one entry promotable: the earliest that has a place', async () => {
+  test('marks an entry promotable when no earlier entry that needs a place it needs can be served', async () => {
     const s = await setup();
     await registerClass(s.alice, s, LAST, 0);
     await registerClass(s.alice, s, LAST, 1);
     await joinClass(s.bob, s, LAST, 0);
     later();
     await joinClass(s.carol, s, LAST, 1);
+    later();
+    await joinClass(s.t.withIdentity(identity(s.zed.authUserId)), s, LAST, 1);
     const canPromote = async () => (await listFor(s.admin, s, LAST)).map((row) => row.canPromote);
-    expect(await canPromote()).toEqual([false, false]);
+    expect(await canPromote()).toEqual([false, false, false]);
     await setPlaces(s, LAST, 0, 2);
     await setPlaces(s, LAST, 1, 2);
-    expect(await canPromote()).toEqual([true, false]);
+    expect(await canPromote()).toEqual([true, true, false]);
+  });
+
+  test('promotes a later class entry of another class while an earlier one waits, and refuses the second of one class', async () => {
+    const s = await setup();
+    await registerClass(s.alice, s, LAST, 0);
+    await registerClass(s.alice, s, LAST, 1);
+    const first = await joinClass(s.bob, s, LAST, 0);
+    later();
+    const other = await joinClass(s.carol, s, LAST, 1);
+    later();
+    const behind = await joinClass(s.t.withIdentity(identity(s.zed.authUserId)), s, LAST, 1);
+    await setPlaces(s, LAST, 0, 2);
+    await setPlaces(s, LAST, 1, 2);
+    expect((await refusal(promote(s.admin, behind.trainingWaitlistEntryId))).code).toBe('notNext');
+    await expect(promote(s.admin, other.trainingWaitlistEntryId)).resolves.toMatchObject({});
+    await expect(promote(s.admin, first.trainingWaitlistEntryId)).resolves.toMatchObject({});
+    expect(await registeredCounts(s, LAST)).toEqual([2, 2, 0]);
+  });
+
+  test('holds a later class entry behind an earlier series entry that can be served', async () => {
+    const s = await setup();
+    await fillSeries(s);
+    await joinSeries(s.bob, s, LAST);
+    later();
+    await joinClass(s.carol, s, LAST, 1);
+    await raiseAll(s, LAST, 1);
+    expect((await listFor(s.admin, s, LAST)).map((row) => row.canPromote)).toEqual([true, false]);
+  });
+
+  test('skips an entry whose participant already holds the place, which Promote refuses', async () => {
+    const s = await setup();
+    await registerClass(s.alice, s, LAST, 1);
+    const held = await seedEntry(s, LAST, s.users['alice'], 1);
+    later();
+    const next = await joinClass(s.bob, s, LAST, 1);
+    await setPlaces(s, LAST, 1, 3);
+    expect((await listFor(s.admin, s, LAST)).map((row) => row.canPromote)).toEqual([false, true]);
+    const data = await refusal(promote(s.admin, held));
+    expect(data.code).toBe('alreadyRegistered');
+    expect(await registeredCounts(s, LAST)).toEqual([0, 1, 0]);
+    await expect(promote(s.admin, next.trainingWaitlistEntryId)).resolves.toMatchObject({});
+  });
+
+  test('refuses a series entry whose participant already holds the series', async () => {
+    const s = await setup();
+    await fillSeries(s);
+    const held = await seedEntry(s, LAST, s.users['alice'], undefined);
+    await raiseAll(s, LAST, 1);
+    expect((await refusal(promote(s.admin, held))).code).toBe('alreadyRegistered');
+    expect(await registeredCounts(s, LAST)).toEqual([1, 1, 1]);
   });
 
   test('counts the class entries in the management page’s waitlist count', async () => {
@@ -846,6 +898,16 @@ describe('a series replaces the participant’s class waitlist entries', () => {
       { classId: classOf(s, LAST, 1), participant: MINOR('Sam R.'), position: 2 },
     ]);
     expect(await registeredCounts(s, LAST)).toEqual([1, 1, 1]);
+  });
+
+  test('a series replaces the entries of a class that is cancelled or has passed, which no list shows', async () => {
+    const s = await setup();
+    const gone = await seedEntry(s, OPEN, s.users['alice'], 0);
+    await s.t.run((ctx) =>
+      ctx.db.patch('trainingClasses', classOf(s, OPEN, 0), { status: 'cancelled' }),
+    );
+    await registerSeries(s.alice, s, OPEN);
+    expect(await entry(s, gone)).toBeNull();
   });
 
   test('joining the series waitlist with no class entry changes nothing else', async () => {

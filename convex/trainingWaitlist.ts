@@ -25,9 +25,9 @@ import {
 } from './lib/trainingRegistrationRules';
 import { TRAINING_WAITLIST_MESSAGES } from './lib/trainingWaitlist';
 import {
-  entryHasPlace,
-  firstServableEntry,
+  participantHoldsPlace,
   positionIn,
+  queueRowsOf,
   waitingQueueOf,
 } from './lib/trainingWaitlistQueue';
 import {
@@ -161,7 +161,15 @@ export const promote = mutation({
         message: TRAINING_WAITLIST_MESSAGES.noUpcomingClass,
       });
     }
-    if (!(await entryHasPlace(ctx, classes, entry))) {
+    if (await participantHoldsPlace(ctx, entry)) {
+      refuseTrainingRegistration({
+        code: 'alreadyRegistered',
+        message: TRAINING_REGISTRATION_MESSAGES.alreadyRegistered(entry.participant),
+      });
+    }
+    const rows = await queueRowsOf(ctx, classes, await waitingQueueOf(ctx, training._id, classes));
+    const row = rows.find((other) => other.entry._id === entry._id);
+    if (!row?.hasPlace) {
       refuseTrainingRegistration({
         code: 'noFreePlace',
         message:
@@ -170,12 +178,7 @@ export const promote = mutation({
             : TRAINING_WAITLIST_MESSAGES.noFreePlaceInClass,
       });
     }
-    const first = await firstServableEntry(
-      ctx,
-      classes,
-      await waitingQueueOf(ctx, training._id, classes),
-    );
-    if (first?._id !== entry._id) {
+    if (!row.next) {
       refuseTrainingRegistration({ code: 'notNext', message: TRAINING_WAITLIST_MESSAGES.notNext });
     }
     if (trainingClass) {
@@ -213,22 +216,14 @@ export const listForTraining = query({
     const classes = await classesToAttend(ctx, trainingId, dateAtUtcMinus12(Date.now()));
     const waiting = await waitingQueueOf(ctx, trainingId, classes);
     const named = await namedParticipants(ctx, waiting);
-    const places: { hasPlace: boolean; accountThere: boolean }[] = [];
-    for (const entry of waiting) {
-      places.push({
-        hasPlace: await entryHasPlace(ctx, classes, entry),
-        accountThere: (await ctx.db.get('users', entry.userId)) !== null,
-      });
-    }
-    const first =
-      waiting[places.findIndex(({ hasPlace, accountThere }) => hasPlace && accountThere)];
+    const rows = await queueRowsOf(ctx, classes, waiting);
     return waiting.map((entry, index) => {
       const trainingClass = classes.find((row) => row._id === entry.classId);
       return {
         trainingWaitlistEntryId: entry._id,
         requestedAt: entry.requestedAt,
-        canPromote: entry._id === first?._id,
-        hasPlace: places[index].hasPlace,
+        canPromote: rows[index].next,
+        hasPlace: rows[index].hasPlace,
         ...(trainingClass && { classId: trainingClass._id, classDate: trainingClass.date }),
         ...named[index],
       };
