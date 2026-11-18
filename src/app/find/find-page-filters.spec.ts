@@ -134,6 +134,7 @@ describe('FindPage queries by sport', () => {
     expect(subscription('search:programsBrowse').args).toEqual({
       sport: 'soccer',
       withCamps: true,
+      withTraining: true,
       page: 1,
     });
   });
@@ -145,6 +146,7 @@ describe('FindPage queries by sport', () => {
       q: 'coed',
       sport: 'beachVolleyball',
       withCamps: true,
+      withTraining: true,
     });
   });
 
@@ -153,6 +155,7 @@ describe('FindPage queries by sport', () => {
     expect(subscription('search:programsBrowse').args).toEqual({
       sport: 'soccer',
       withCamps: true,
+      withTraining: true,
       gender: ['womens'],
       ageGroup: ['u10'],
       page: 2,
@@ -165,6 +168,7 @@ describe('FindPage queries by sport', () => {
       q: 'coed',
       ageGroup: ['over40'],
       withCamps: true,
+      withTraining: true,
     });
   });
 
@@ -173,6 +177,7 @@ describe('FindPage queries by sport', () => {
     expect(subscription('search:programsBrowse').args).toEqual({
       sport: 'softball',
       withCamps: true,
+      withTraining: true,
       page: 1,
     });
     TestBed.resetTestingModule();

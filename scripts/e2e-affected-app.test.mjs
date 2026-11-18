@@ -503,6 +503,56 @@ describe('the admin camp page specs', () => {
   });
 });
 
+describe('the training page specs', () => {
+  const TRAINING_ADMIN_FILES = [
+    'training-breadcrumb',
+    'training-context',
+    'training-create-form',
+    'training-form',
+    'training-management',
+    'training-no-access',
+    'training-page',
+    'training-path',
+    'training-schedule-form',
+    'training-schedule-form-state',
+    'training-schedule-landing',
+    'publish-training-dialog',
+  ];
+
+  it('runs the training page and organization training specs for every file of the admin training page', () => {
+    for (const name of TRAINING_ADMIN_FILES) {
+      const specs = specsFor([`src/app/organizations/admin/${name}.ts`]);
+      for (const spec of ['training-page', 'organization-training']) {
+        assert.ok(specs.includes(specFile(spec)), `${name}: ${spec}`);
+      }
+    }
+  });
+
+  it('runs the training page spec for the public training page, its path, and its status', () => {
+    for (const file of [
+      'src/app/organizations/public-training/public-training-content.ts',
+      'src/app/organizations/public-training/public-training-page.ts',
+      'src/app/organizations/public-training/public-training-path.ts',
+    ]) {
+      assert.ok(specsFor([file]).includes(specFile('training-page')), file);
+    }
+  });
+
+  it('runs the training page and route preload specs for the public route, and the training page spec for the convex files', () => {
+    assert.deepEqual(ROUTE_SPECS['organizations/:orgSlug/training/:trainingSlug'], [
+      'training-page',
+      'organization-route-preload',
+    ]);
+    for (const file of [
+      'convex/trainings.ts',
+      'convex/lib/trainingPublicList.ts',
+      'convex/lib/trainingPattern.ts',
+    ]) {
+      assert.ok(specsFor([file]).includes(specFile('training-page')), file);
+    }
+  });
+});
+
 describe('the route tables', () => {
   /**
    * Written apart from the rule: the route file's text with each `loadChildren: () => import('./file').then((m) => m.name)`
@@ -644,7 +694,7 @@ describe('the route tables', () => {
     const pages = routes.filter(
       (route) => route.component && route.path.startsWith('organizations/:orgSlug'),
     );
-    assert.equal(pages.length, 6);
+    assert.equal(pages.length, 7);
     for (const route of pages) {
       assert.ok(ROUTE_SPECS[route.path].includes('organization-route-preload'), route.path);
     }

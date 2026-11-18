@@ -40,3 +40,62 @@ export async function setTrainingClassRegistered(
     registeredCount,
   });
 }
+
+export interface TrainingClassesSeed {
+  /** Sunday is 0; `firstDate` falls on it. */
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  firstDate: string;
+  weeks: number;
+  placesPerClass?: number;
+  registrationDeadline?: string;
+}
+
+/** Skips the rules of `trainingClasses.schedule`, so the classes may have passed. Local runs only. */
+export async function seedTrainingClasses(
+  tenant: Tenant,
+  trainingSlug: string,
+  classes: TrainingClassesSeed,
+): Promise<void> {
+  await convexRun('testing:seedTrainingClasses', {
+    organizationSlug: tenant.slug,
+    trainingSlug,
+    ...classes,
+    placesPerClass: classes.placesPerClass ?? 12,
+    registrationDeadline: classes.registrationDeadline ?? classes.firstDate,
+  });
+}
+
+export interface PublishedTrainingSeed extends TrainingSeed {
+  classes: TrainingClassesSeed;
+  status?: 'draft' | 'published';
+}
+
+/** Skips the rules of `trainings.publish`. Local runs only. */
+export async function seedPublishedTraining(
+  tenant: Tenant,
+  training: PublishedTrainingSeed,
+): Promise<string> {
+  const { classes, status = 'published', ...fields } = training;
+  const slug = await seedTraining(tenant, fields);
+  await seedTrainingClasses(tenant, slug, classes);
+  if (status === 'published') {
+    await convexRun('testing:publishSeededTraining', {
+      organizationSlug: tenant.slug,
+      trainingSlug: slug,
+    });
+  }
+  return `${tenant.path}/training/${slug}`;
+}
+
+/** Local runs only. */
+export async function cancelSeededTrainingClasses(
+  tenant: Tenant,
+  trainingSlug: string,
+): Promise<void> {
+  await convexRun('testing:cancelSeededTrainingClasses', {
+    organizationSlug: tenant.slug,
+    trainingSlug,
+  });
+}

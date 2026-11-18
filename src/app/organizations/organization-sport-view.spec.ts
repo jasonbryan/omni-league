@@ -155,6 +155,10 @@ describe('the sport view queries', () => {
         name: 'tournaments:listPublic',
         args: { organizationSlug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' },
       },
+      {
+        name: 'trainings:listPublic',
+        args: { organizationSlug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' },
+      },
     ]);
   });
 

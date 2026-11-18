@@ -112,6 +112,10 @@ describe('OrganizationPage', () => {
       { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
       { name: OPEN_TOURNAMENTS, args: { organizationSlug: 'gulf-coast-sport-social' } },
       { name: TOURNAMENTS, args: { organizationSlug: 'gulf-coast-sport-social', page: 1 } },
+      {
+        name: 'trainings:listPublic',
+        args: { organizationSlug: 'gulf-coast-sport-social', page: 1 },
+      },
     ]);
   });
 

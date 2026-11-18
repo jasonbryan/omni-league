@@ -171,3 +171,52 @@ describe('the camps page', () => {
     });
   });
 });
+
+describe('the training page', () => {
+  it('is trainingPage after campsPage, on the organization page and the sport view, and omitted on page 1', () => {
+    const pages = { leagues: 3, locations: 2, tournaments: 4, camps: 2, training: 3 };
+    for (const sportView of [false, true]) {
+      const query = listPagesQuery(pages, sportView);
+      expect(Object.keys(query)).toEqual([
+        sportView ? 'page' : 'leagues',
+        'locations',
+        'tournamentsPage',
+        'campsPage',
+        'trainingPage',
+      ]);
+      expect(query['trainingPage']).toBe(3);
+    }
+    expect(
+      listPagesQuery({ leagues: 1, locations: 1, tournaments: 1, camps: 1, training: 1 }, false),
+    ).toEqual({});
+  });
+
+  it('is in the path of the page', () => {
+    expect(listPagesPath('gulf', undefined, { leagues: 1, locations: 1, training: 2 })).toBe(
+      '/organizations/gulf?trainingPage=2',
+    );
+  });
+
+  it('is kept in each other list’s link, and the other lists in each training link', () => {
+    const pages = { leagues: 3, locations: 2, tournaments: 4, camps: 5, training: 6 };
+    expect(pageQueryFor('camps', pages, false)(1)).toEqual({
+      leagues: 3,
+      locations: 2,
+      tournamentsPage: 4,
+      trainingPage: 6,
+    });
+    expect(pageQueryFor('training', pages, false)(1)).toEqual({
+      leagues: 3,
+      locations: 2,
+      tournamentsPage: 4,
+      campsPage: 5,
+    });
+    expect(pageQueryFor('training', pages, true)(7)).toEqual({
+      page: 3,
+      locations: 2,
+      tournamentsPage: 4,
+      campsPage: 5,
+      trainingPage: 7,
+    });
+  });
+});

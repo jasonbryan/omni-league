@@ -15,7 +15,11 @@ import {
   hasDivisionFilters,
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
-import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
+import {
+  DIVISIONLESS_PROGRAM_TYPES,
+  SEARCHABLE_PROGRAM_TYPES,
+  type ProgramType,
+} from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
 import { api, injectOnline, injectQuery, skipToken } from '../core/data/convex';
@@ -105,7 +109,7 @@ const TITLE = 'Find a program | Omni League';
                 [groups]="filterGroupsOffered()"
                 [total]="leagueTotal()"
                 [matching]="matchingCount()"
-                [filterExempt]="campCount()"
+                [filterExempt]="divisionlessCount()"
                 [facets]="facets()"
                 [sport]="sport()"
                 [queryBuilder]="queryBuilder()"
@@ -146,10 +150,13 @@ export class FindPage {
   protected readonly filters = computed(() =>
     this.mode() === 'organizations' ? NO_DIVISION_FILTERS : this.parsedView().filters,
   );
-  // A camp has no division, so on the camp type a filter in the URL narrows nothing; the links keep it for the types it does narrow.
-  protected readonly formFilters = computed(() =>
-    this.type() === 'camp' ? NO_DIVISION_FILTERS : this.filters(),
-  );
+  // A camp or a training program has no division, so on their types a filter in the URL narrows nothing; the links keep it for the types it does narrow.
+  protected readonly formFilters = computed(() => {
+    const type = this.type();
+    return type !== undefined && DIVISIONLESS_PROGRAM_TYPES.includes(type)
+      ? NO_DIVISION_FILTERS
+      : this.filters();
+  });
   private readonly filterArgs = computed(() => divisionFilterQueryArgs(this.filters()));
 
   protected readonly mode = computed(() => {
@@ -175,6 +182,7 @@ export class FindPage {
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
       withCamps: true,
+      withTraining: true,
       ...this.filterArgs(),
     };
   });
@@ -192,6 +200,7 @@ export class FindPage {
       ...(type !== undefined && { type }),
       ...(sport !== undefined && { sport }),
       withCamps: true,
+      withTraining: true,
       ...this.filterArgs(),
       page: this.requestedPage(),
     };
@@ -257,15 +266,20 @@ export class FindPage {
     const value = this.shownResults();
     return value && (value.facets ?? []);
   });
-  // The division filters never narrow a camp, which adds no facet, so the camps are added to each count the form shows.
-  private readonly campCount = computed(() => {
+  // The division filters never narrow a camp or a training program, which add no facet, so they are added to each count the form shows.
+  private readonly divisionlessCount = computed(() => {
     const type = this.type();
-    if (type !== undefined && type !== 'camp') return 0;
-    return this.shownResults()?.typeCounts.find((entry) => entry.type === 'camp')?.count ?? 0;
+    return (this.shownResults()?.typeCounts ?? [])
+      .filter(
+        (entry) =>
+          DIVISIONLESS_PROGRAM_TYPES.includes(entry.type) &&
+          (type === undefined || type === entry.type),
+      )
+      .reduce((sum, entry) => sum + entry.count, 0);
   });
   protected readonly leagueTotal = computed(() => {
     const facets = this.shownResults()?.facets;
-    return facets && facets.length + this.campCount();
+    return facets && facets.length + this.divisionlessCount();
   });
   protected readonly filterGroupsOffered = computed(() => {
     const facets = this.facets();
@@ -283,8 +297,8 @@ export class FindPage {
       this.formFilters(),
       undefined,
       this.sport(),
-      facets.length + this.campCount(),
-      this.campCount(),
+      facets.length + this.divisionlessCount(),
+      this.divisionlessCount(),
     );
   });
 
@@ -368,7 +382,7 @@ export class FindPage {
         ogTitle: 'Find a program',
         ogDescription:
           this.mode() === 'organizations'
-            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.'
+            ? 'Find beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on Omni League.'
             : `Find ${this.noun()}s on Omni League.`,
         ogType: 'website',
         // The page of the query result, never the request's, so the canonical holds only an integer.

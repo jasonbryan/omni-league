@@ -297,6 +297,7 @@ const NO_BACKFILL = {
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
   campFields: 0,
+  trainingFields: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -454,7 +455,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(
         await admin.query(api.trainings.listForOrganization, { organizationId: gulfCoast._id }),
       ).toMatchObject([
-        { name: 'Tuesday Serving Clinic', coachName: 'Dana Ruiz', status: 'draft' },
+        { name: 'Tuesday Serving Clinic', coachName: 'Dana Ruiz', status: 'published' },
       ]);
       const pending = await admin.query(api.invites.listPending, {
         organizationId: gulfCoast._id,

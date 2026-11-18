@@ -10,6 +10,8 @@ import {
   TRAINING_PATTERN_MESSAGES,
   trainingClassDate,
   trainingClassTimes,
+  trainingHours,
+  trainingPatternText,
   weekdayOf,
   type TrainingPatternValues,
   WEEKDAY_NAMES,
@@ -387,5 +389,33 @@ describe('checkTrainingClassPlaces', () => {
     expect(TRAINING_PATTERN_MESSAGES.classBelowRegistered('2027-01-12', 15)).toBe(
       'Tue, Jan 12, 2027 has 15 registered, so it needs at least 15 places. Nothing was changed.',
     );
+  });
+});
+
+describe('trainingHours', () => {
+  test.each([
+    ['18:00', '19:00', '6 to 7 pm'],
+    ['18:30', '19:45', '6:30 to 7:45 pm'],
+    ['09:00', '10:30', '9 to 10:30 am'],
+    ['11:00', '13:00', '11 am to 1 pm'],
+    ['12:00', '13:00', '12 to 1 pm'],
+    ['00:00', '01:00', '12 to 1 am'],
+    ['11:00', '12:00', '11 am to 12 pm'],
+  ])('%s to %s reads %s', (start, end, text) => {
+    expect(trainingHours(start, end)).toBe(text);
+  });
+});
+
+describe('trainingPatternText', () => {
+  test('names the weekday, the hours, and the weeks', () => {
+    expect(
+      trainingPatternText({ weekday: TUESDAY, startTime: '18:00', endTime: '19:00', weeks: 8 }),
+    ).toBe('Tuesdays, 6 to 7 pm, 8 weeks');
+  });
+
+  test('says "1 week" for one week', () => {
+    expect(
+      trainingPatternText({ weekday: 0, startTime: '09:00', endTime: '10:00', weeks: 1 }),
+    ).toBe('Sundays, 9 to 10 am, 1 week');
   });
 });

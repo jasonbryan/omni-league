@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { seedPublishedTraining } from './support/training';
 import { seedPublishedCamp } from './support/camp';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -40,6 +41,7 @@ const LEAGUE_SLUG = 'coed-league';
 const SEASON_SLUG = 'summer-2027';
 const TOURNAMENT_SLUG = 'beach-open';
 const CAMP_SLUG = 'beach-camp';
+const TRAINING_SLUG = 'beach-clinic';
 
 interface PublicPage {
   name: string;
@@ -85,6 +87,12 @@ const PUBLIC_PAGES: PublicPage[] = [
     pageClass: 'PublicCampPage',
     path: (organization) => `${organization}/camps/${CAMP_SLUG}`,
   },
+  {
+    name: 'training page',
+    manifestRoute: '/organizations/*/training/*',
+    pageClass: 'PublicTrainingPage',
+    path: (organization) => `${organization}/training/${TRAINING_SLUG}`,
+  },
 ];
 
 async function seedPublicPages(): Promise<string> {
@@ -117,6 +125,21 @@ async function seedPublicPages(): Promise<string> {
         registrationDeadline: dateFromToday(20),
       },
     ],
+  });
+  const firstDate = dateFromToday(30);
+  await seedPublishedTraining(tenant, {
+    name: 'Beach Clinic',
+    slug: TRAINING_SLUG,
+    locations: [COURTS.name],
+    coachName: 'Dana Ruiz',
+    classes: {
+      weekday: new Date(`${firstDate}T00:00:00Z`).getUTCDay(),
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate,
+      weeks: 2,
+      registrationDeadline: dateFromToday(20),
+    },
   });
   return tenant.path;
 }

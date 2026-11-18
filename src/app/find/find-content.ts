@@ -24,7 +24,7 @@ import {
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
 import { campAgesLabel } from '../../../convex/lib/campInput';
-import { SEARCHABLE_PROGRAM_TYPES, type ProgramType } from '../../../convex/lib/programs';
+import type { ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
 import { isPlainClick } from '../shell/follow-link';
@@ -41,6 +41,10 @@ import { publicPageNames } from '../organizations/public-league/public-page-name
 import { publicTournamentNames } from '../organizations/public-tournament/public-tournament-names';
 import { publicTournamentPath } from '../organizations/public-tournament/public-tournament-path';
 import { campStatus, shownCampSession, upcomingCamps } from '../organizations/camp-status';
+import { trainingStatusLine, upcomingTrainings } from '../organizations/training-status';
+import { publicTrainingNames } from '../organizations/public-training/public-training-names';
+import { publicTrainingPath } from '../organizations/public-training/public-training-path';
+import { trainingPatternText } from '../../../convex/lib/trainingPattern';
 import { leagueSeasonStatus } from '../organizations/season-status';
 import { tournamentStatus } from '../organizations/tournament-status';
 import { HlmAlertImports } from '../ui/alert';
@@ -52,10 +56,6 @@ import { FindSkeleton } from './find-skeleton';
 import { PROGRAM_TYPE_WORDS } from './program-type';
 
 export type FindStatus = 'start' | 'searching' | 'results' | 'error';
-
-const LISTED_TYPES = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format(
-  SEARCHABLE_PROGRAM_TYPES.map((type) => PROGRAM_TYPE_WORDS[type].chip.toLowerCase()),
-);
 
 /** What a search finds, named once so the page's copy follows the noun. */
 const RESULT_NOUN = 'program';
@@ -103,7 +103,8 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
     <div class="mx-auto w-full max-w-6xl px-4 pt-8 pb-6 md:px-8 md:pt-14 md:pb-8">
       <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
       <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
-        Beach volleyball, soccer, and softball leagues, tournaments, and camps on Omni League.
+        Beach volleyball, soccer, and softball leagues, tournaments, camps, and training programs on
+        Omni League.
       </p>
       @if (savedAt(); as savedAt) {
         <app-saved-copy-note [savedAt]="savedAt" />
@@ -440,21 +441,9 @@ export class FindContent {
       : `${count} programs of other types match.`;
   });
 
-  /** The search reads no program of these types, so an empty list says nothing about what organizations published. */
-  private readonly unlistedType = computed(() => {
-    const type = this.type();
-    return type !== undefined && !SEARCHABLE_PROGRAM_TYPES.includes(type) ? type : undefined;
-  });
-
-  protected readonly emptyHeading = computed(() => {
-    const unlisted = this.unlistedType();
-    return unlisted === undefined
-      ? `No ${this.noun()}s are published yet`
-      : `Find a program does not list ${PROGRAM_TYPE_WORDS[unlisted].noun}s yet`;
-  });
+  protected readonly emptyHeading = computed(() => `No ${this.noun()}s are published yet`);
 
   protected readonly emptySentence = computed(() => {
-    if (this.unlistedType() !== undefined) return `Search the ${LISTED_TYPES} instead.`;
     const type = this.type();
     const noun = type === undefined ? RESULT_NOUN : PROGRAM_TYPE_WORDS[type].noun;
     return `A ${noun} appears here once its organization publishes it.`;
@@ -536,6 +525,18 @@ export class FindContent {
             shownCampSession(camp.sessions, this.now()) ?? camp.sessions[0],
             this.now(),
           ),
+        };
+      }
+      if (row.type === 'training') {
+        // The query keeps the training programs whose last class had not passed when it ran; the clock here drops one that has passed since.
+        const [training] = upcomingTrainings([row], this.now());
+        if (!training) return [];
+        return {
+          ...shared,
+          detail: trainingPatternText(training),
+          href: publicTrainingPath(training.organization.slug, training.slug),
+          names: publicTrainingNames({ organization: training.organization, training }),
+          status: trainingStatusLine(training, this.now()),
         };
       }
       return row.type === 'league'

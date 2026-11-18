@@ -5,6 +5,7 @@ import type {
   FindResultRow,
   FindResults,
   FindTournamentRow,
+  FindTrainingRow,
 } from '../find-types';
 
 // On this date Summer 2027 is open for registration (see the public league page's test data).
@@ -94,6 +95,25 @@ export const JUNIOR_CAMP_ROW: FindCampRow = {
       placesLeft: 20,
     },
   ],
+};
+
+// 2027-02-02 is a Tuesday.
+export const SERVING_CLINIC_ROW: FindTrainingRow = {
+  type: 'training',
+  organization: GULF,
+  name: 'Tuesday Serving Clinic',
+  slug: 'tuesday-serving-clinic',
+  sportName: 'Beach volleyball',
+  coachName: 'Dana Ruiz',
+  minimumAge: 16,
+  locationNames: ['North Beach Sand Courts'],
+  weekday: 2,
+  startTime: '18:00',
+  endTime: '19:00',
+  firstDate: '2027-07-06',
+  registrationDeadline: '2027-07-01',
+  weeks: 8,
+  lastClassDate: '2027-08-24',
 };
 
 export const COED_RESULTS: FindResults = {

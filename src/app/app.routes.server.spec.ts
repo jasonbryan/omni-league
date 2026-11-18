@@ -58,7 +58,7 @@ function directives(value: string): Map<string, string | true> {
 }
 
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues 301 no-store, programs Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, organizations/:orgSlug/tournaments/:tournamentSlug Server, organizations/:orgSlug/camps/:campSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues 301 no-store, programs Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, organizations/:orgSlug/tournaments/:tournamentSlug Server, organizations/:orgSlug/camps/:campSlug Server, organizations/:orgSlug/training/:trainingSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       {
@@ -129,6 +129,11 @@ describe('Route tables', () => {
       },
       {
         path: 'organizations/:orgSlug/camps/:campSlug',
+        renderMode: RenderMode.Server,
+        headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+      },
+      {
+        path: 'organizations/:orgSlug/training/:trainingSlug',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },

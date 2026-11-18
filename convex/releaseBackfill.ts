@@ -8,6 +8,7 @@ import { BACKFILL_TEAM_COUNT_SCAN_LIMIT, recountTeams, recountWaiting } from './
 import {
   BACKFILL_SCAN_LIMIT,
   backfillCampFields,
+  backfillTrainingFields,
   backfillOrganizationTenantFields,
   recountDraftLeagues,
   recountPublishedSeasons,
@@ -23,6 +24,7 @@ const phaseValidator = v.union(
   v.literal('seasons'),
   v.literal('teams'),
   v.literal('camps'),
+  v.literal('trainings'),
 );
 type Phase = Infer<typeof phaseValidator>;
 
@@ -34,9 +36,10 @@ const PHASES: readonly Phase[] = [
   'seasons',
   'teams',
   'camps',
+  'trainings',
 ];
 
-// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A camp reads its sessions, at most 200.
+// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A camp reads its sessions, at most 200; a training program its classes, at most 52.
 export const BATCH_SIZE: Record<Phase, number> = {
   locations: 100,
   leagues: 10,
@@ -44,6 +47,7 @@ export const BATCH_SIZE: Record<Phase, number> = {
   seasons: 5,
   teams: 100,
   camps: 20,
+  trainings: 50,
 };
 
 const backfilledValidator = v.object({
@@ -57,6 +61,7 @@ const backfilledValidator = v.object({
   waitlistCounts: v.number(),
   pendingInviteCounts: v.number(),
   campFields: v.number(),
+  trainingFields: v.number(),
 });
 type Backfilled = Infer<typeof backfilledValidator>;
 
@@ -72,6 +77,7 @@ function noneBackfilled(): Backfilled {
     waitlistCounts: 0,
     pendingInviteCounts: 0,
     campFields: 0,
+    trainingFields: 0,
   };
 }
 
@@ -232,6 +238,15 @@ async function backfillPhase(
       const { page, continueCursor, isDone } = await ctx.db.query('camps').paginate(paginationOpts);
       for (const camp of page) {
         if (await backfillCampFields(ctx, camp)) backfilled.campFields++;
+      }
+      return { continueCursor, isDone };
+    }
+    case 'trainings': {
+      const { page, continueCursor, isDone } = await ctx.db
+        .query('trainings')
+        .paginate(paginationOpts);
+      for (const training of page) {
+        if (await backfillTrainingFields(ctx, training)) backfilled.trainingFields++;
       }
       return { continueCursor, isDone };
     }
