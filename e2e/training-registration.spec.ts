@@ -1515,6 +1515,115 @@ test.describe('the waitlist of one class', () => {
       });
     }
 
+    for (const width of [320, 360, 1280]) {
+      test(`entries for two classes arrive at ${width}px: the class above stays, and each waiting row grows once`, async ({
+        page,
+      }, testInfo) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { tenant, program, path } = await fullClass({ minimumAge: 9, maximumAge: 99 });
+        const viewer = newUser('Waiting twice');
+        await signUp(page, viewer);
+        const second = 2;
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, SELF, classDay(FULL_CLASS));
+        await seedTrainingWaitlistEntry(
+          tenant,
+          program.slug,
+          viewer,
+          { kind: 'minor', minorName: LONG },
+          classDay(FULL_CLASS),
+        );
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, SELF, classDay(second));
+        await seedTrainingWaitlistEntry(tenant, program.slug, viewer, MAYA, classDay(second));
+
+        const held = await holdQueries(page, [WAITING_CLASSES]);
+        await page.goto(path);
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await expect(classRows(page)).toHaveCount(3);
+        await expect(classWaitLines(page, FULL_CLASS)).toHaveCount(0);
+        await expect(classWaitLines(page, second)).toHaveCount(0);
+        await page.evaluate((selectors) => {
+          const state = { stop: false, frames: [] as { top: number; height: number }[][] };
+          const sample = () => {
+            state.frames.push(
+              selectors.map((selector) => {
+                const rect = document.querySelector(selector)!.getBoundingClientRect();
+                return { top: rect.top + window.scrollY, height: rect.height };
+              }),
+            );
+            if (!state.stop) requestAnimationFrame(sample);
+          };
+          sample();
+          (window as unknown as { __recorder: typeof state }).__recorder = state;
+        }, BOXES);
+        held.release();
+        await expect(classWaitLines(page, FULL_CLASS)).toHaveText([
+          "You're on the waitlist, position 1",
+          `${LONG} is on the waitlist, position 2`,
+        ]);
+        await expect(classWaitLines(page, second)).toHaveText([
+          "You're on the waitlist, position 1",
+          'Maya R. is on the waitlist, position 2',
+        ]);
+        await page.waitForTimeout(700);
+        const frames = await page.evaluate(() => {
+          const state = (
+            window as unknown as {
+              __recorder: { stop: boolean; frames: { top: number; height: number }[][] };
+            }
+          ).__recorder;
+          state.stop = true;
+          return state.frames;
+        });
+        const column = (box: number, key: 'top' | 'height') =>
+          frames.map((frame) => frame[box][key]);
+        const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+        const changes = (values: number[]) =>
+          values.filter(
+            (value, index) => index > 0 && Math.abs(value - values[index - 1]) > TOLERANCE,
+          ).length;
+        expect(spread(column(0, 'top')), 'the class above moves').toBeLessThanOrEqual(TOLERANCE);
+        expect(spread(column(0, 'height')), 'the class above resizes').toBeLessThanOrEqual(
+          TOLERANCE,
+        );
+        expect(spread(column(1, 'top')), 'the first waiting row moves').toBeLessThanOrEqual(
+          TOLERANCE,
+        );
+        expect(
+          changes(column(1, 'height')),
+          'the first waiting row grows once',
+        ).toBeLessThanOrEqual(1);
+        expect(
+          changes(column(2, 'height')),
+          'the second waiting row grows once',
+        ).toBeLessThanOrEqual(1);
+        expect(changes(column(2, 'top')), 'the second waiting row moves once').toBeLessThanOrEqual(
+          1,
+        );
+        for (const box of [1, 2]) {
+          expect(
+            column(box, 'height').at(-1)! - column(box, 'height')[0],
+            'a waiting row shrinks',
+          ).toBeGreaterThanOrEqual(-TOLERANCE);
+        }
+        expect(changes(column(3, 'height')), 'the card grows once').toBeLessThanOrEqual(1);
+        for (const index of [FULL_CLASS, second]) {
+          for (const line of await classWaitLines(page, index).all()) {
+            const clipped = await line
+              .locator('span')
+              .evaluate(
+                (span) =>
+                  span.scrollWidth > span.clientWidth + 1 ||
+                  span.scrollHeight > span.clientHeight + 1,
+              );
+            expect(clipped, 'a waiting line is clipped').toBe(false);
+          }
+        }
+        expect(await overflow(page)).toBeLessThanOrEqual(0);
+        await expectAccessible(page);
+        await screenshot(page, testInfo, `368-two-classes-arrived-${width}`);
+      });
+    }
+
     test('the register page for a full class stays inside the card at 320px with a long program name and a long child name', async ({
       page,
     }, testInfo) => {
