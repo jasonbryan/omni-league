@@ -501,6 +501,43 @@ describe('AdminTraining', () => {
         expect(seen).toEqual([null]);
       });
 
+      it('shows the live answer again once the create fails offline at call time', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBeNull();
+        o.convex.calls[0].reject(new ConvexOfflineError());
+        await o.flush();
+        expect(error('slug')).toBe(
+          'tuesday-serving-clinic is already taken. Choose another web address.',
+        );
+      });
+
+      it('shows the live answer for the same address typed again after a success clears the form', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        o.convex.calls[0].resolve({ trainingId: 'tr_new' });
+        await o.flush();
+        expect(input('slug').value).toBe('');
+        await type('name', 'Tuesday Serving Clinic');
+        await pause();
+        expect(input('slug').value).toBe('tuesday-serving-clinic');
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(error('slug')).toBe(
+          'tuesday-serving-clinic is already taken. Choose another web address.',
+        );
+      });
+
       it('shows the live answer again once the create fails with the failed alert', async () => {
         await open([]);
         await fill();

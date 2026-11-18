@@ -983,6 +983,43 @@ describe('AdminTournaments', () => {
       expect(seen).toEqual([null]);
     });
 
+    it('shows the live answer again once the create fails offline at call time', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      asked().at(-1)!.emit(true);
+      await o.flush();
+      await submit();
+      asked().at(-1)!.emit(false);
+      await o.flush();
+      expect(page.querySelector('#slug-error')).toBeNull();
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(error('slug')).toBe(
+        'winter-doubles-classic is already taken. Choose another web address.',
+      );
+    });
+
+    it('shows the live answer for the same address typed again after a success clears the form', async () => {
+      await open([]);
+      await fill();
+      await pause();
+      asked().at(-1)!.emit(true);
+      await o.flush();
+      await submit();
+      o.convex.calls[0].resolve({ tournamentId: 'tn_new' });
+      await o.flush();
+      expect(input('slug').value).toBe('');
+      await type('name', 'Winter Doubles Classic');
+      await pause();
+      expect(input('slug').value).toBe('winter-doubles-classic');
+      asked().at(-1)!.emit(false);
+      await o.flush();
+      expect(error('slug')).toBe(
+        'winter-doubles-classic is already taken. Choose another web address.',
+      );
+    });
+
     it('shows the live answer again once the create fails with the failed alert', async () => {
       await open([]);
       await fill();
