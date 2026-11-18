@@ -448,6 +448,29 @@ describe('trainingRegistrations.getForRegistration and listMineForTraining with 
     expect(own).not.toHaveProperty('fullClassDate');
   });
 
+  test('does not count a child’s place in a class against the series the guardian registers them for', async () => {
+    const s = await setup();
+    await s.t.run((ctx) =>
+      ctx.db.patch('trainingClasses', classOf(s, 'dropInYouth', 1), { registeredCount: 11 }),
+    );
+    await registerClass(s, 'alice', 'dropInYouth', 1, { participant: MINOR('Maya R.') });
+    const answer = await s.alice.query(api.trainingRegistrations.getForRegistration, {
+      orgSlug: 'org-a',
+      trainingSlug: 'drop-in-youth-clinic',
+    });
+    expect(answer).toMatchObject({ placesLeft: 1 });
+    expect(answer).not.toHaveProperty('fullClassDate');
+    await registerSeries(s, 'alice', 'dropInYouth', MINOR('Maya R.'));
+    expect(await registeredCounts(s, 'dropInYouth')).toEqual([1, 12, 1]);
+  });
+
+  test('says the class is held by the account holder only for their own place, not a child’s', async () => {
+    const s = await setup();
+    await registerClass(s, 'alice', 'dropIn', 1, { participant: MINOR('Maya R.') });
+    const answer = await ask(s.alice, classOf(s, 'dropIn', 1));
+    expect(answer?.singleClass).not.toHaveProperty('held');
+  });
+
   test('answers with the class asked for: its date, places left, whether single-class is allowed, and who holds a place', async () => {
     const s = await setup();
     await registerClass(s, 'bob', 'dropIn', 1);

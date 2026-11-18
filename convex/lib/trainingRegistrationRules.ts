@@ -18,7 +18,7 @@ import {
 } from './trainingRegistration';
 import {
   classRegistrationOf,
-  minorRegistrationsOf,
+  minorSeriesRegistrationsOf,
   seriesRegistrationOf,
   singleClassRegistrationsOf,
 } from './trainingRegistrationReads';
@@ -114,13 +114,12 @@ function refuseIfClosed(
   }
 }
 
-/** The children a guardian holds in the program, a child once however many of its classes. */
-async function minorKeysOf(
+async function distinctMinorKeysOf(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
   userId: Id<'users'>,
 ): Promise<Set<string>> {
-  const series = await minorRegistrationsOf(ctx, trainingId, userId);
+  const series = await minorSeriesRegistrationsOf(ctx, trainingId, userId);
   const singles = await singleClassRegistrationsOf(ctx, trainingId, userId);
   return new Set(
     [...series, ...singles].flatMap(({ participant }) =>
@@ -172,7 +171,7 @@ export async function checkedTrainingRegistrant(
     });
   }
   if (participant.kind === 'minor') {
-    const keys = await minorKeysOf(ctx, training._id, userId);
+    const keys = await distinctMinorKeysOf(ctx, training._id, userId);
     if (!keys.has(participantKey(participant)) && keys.size >= MAX_MINORS_PER_SESSION) {
       refuseTrainingRegistration({
         code: 'minorLimit',

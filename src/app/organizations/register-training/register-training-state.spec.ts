@@ -95,6 +95,13 @@ describe('registerTrainingState', () => {
     ).toBe('registered');
   });
 
+  it('is the form for a guardian who can register only a child, once no class reads full', () => {
+    expect(state({ ...OPEN, maximumAge: 17, placesLeft: 1 })).toBe('form');
+    expect(state({ ...OPEN, maximumAge: 17, placesLeft: 0, fullClassDate: '2027-02-09' })).toBe(
+      'full',
+    );
+  });
+
   it('keeps the form for a registered account holder who can still register a child', () => {
     expect(state({ ...OPEN, registered: true })).toBe('form');
   });

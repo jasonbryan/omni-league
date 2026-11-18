@@ -99,8 +99,7 @@ function keyedRegistration(
     .first();
 }
 
-/** The series registrations of the children a guardian holds. */
-export async function minorRegistrationsOf(
+export async function minorSeriesRegistrationsOf(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
   userId: Id<'users'>,
@@ -120,7 +119,6 @@ export async function minorRegistrationsOf(
 // Each of the account holder and 20 children holds at most one registration of each class.
 const SINGLE_CLASS_REGISTRATIONS_LIMIT = (MAX_MINORS_PER_SESSION + 1) * MAX_TRAINING_WEEKS;
 
-/** Every single-class registration of the account in the program, for any participant. */
 export function singleClassRegistrationsOf(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
@@ -138,7 +136,6 @@ export function singleClassRegistrationsOf(
     .take(SINGLE_CLASS_REGISTRATIONS_LIMIT);
 }
 
-/** The class as a series registration sees it: the places held, less the participant's own place that the series replaces. */
 export function placesHeldExcluding(
   trainingClass: Doc<'trainingClasses'>,
   replaced: readonly Doc<'trainingRegistrations'>[],

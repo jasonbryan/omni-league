@@ -14,7 +14,7 @@ import {
 } from './lib/trainingRegistration';
 import {
   classesToAttend,
-  minorRegistrationsOf,
+  minorSeriesRegistrationsOf,
   placesHeldExcluding,
   publishedTrainingOf,
   seriesRegistrationOf,
@@ -186,12 +186,9 @@ export const getForRegistration = query({
     const series = user
       ? await seriesRegistrationOf(ctx, training._id, user._id, SELF_PARTICIPANT)
       : null;
-    // A series replaces the caller's own single-class places, so a class they fill alone is not full to them.
-    const singles = user
-      ? (await singleClassRegistrationsOf(ctx, training._id, user._id)).filter(
-          (row) => row.participant.kind === 'self',
-        )
-      : [];
+    // A series replaces the single-class places of the account, so a class they fill alone is not full to them.
+    // The server's `classFull` answers for a participant who does not hold the place.
+    const singles = user ? await singleClassRegistrationsOf(ctx, training._id, user._id) : [];
     const left = classes.map((row) => Math.max(0, row.places - placesHeldExcluding(row, singles)));
     const fullClass = classes.find((row) => placesHeldExcluding(row, singles) >= row.places);
     const singleClass =
@@ -199,7 +196,7 @@ export const getForRegistration = query({
         ? undefined
         : await singleClassAnswer(ctx, training, pattern, classId, {
             series: series !== null,
-            singles,
+            singles: singles.filter((row) => row.participant.kind === 'self'),
           });
     return {
       trainingId: training._id,
@@ -242,7 +239,7 @@ export const listMineForTraining = query({
     if (found?.program.status !== 'published') return none;
     const trainingId = found.training._id;
     const selfSeries = await seriesRegistrationOf(ctx, trainingId, user._id, SELF_PARTICIPANT);
-    const seriesMinors = await minorRegistrationsOf(ctx, trainingId, user._id);
+    const seriesMinors = await minorSeriesRegistrationsOf(ctx, trainingId, user._id);
     const singles = await singleClassRegistrationsOf(ctx, trainingId, user._id);
     // The index orders by key; the guardian reads them in the order they were registered.
     const byRegistered = (a: Doc<'trainingRegistrations'>, b: Doc<'trainingRegistrations'>) =>

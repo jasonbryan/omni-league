@@ -427,6 +427,55 @@ describe('PublicTrainingPage registration of one class, signed in', () => {
   });
 });
 
+describe('PublicTrainingPage registration of the series when a class is full', () => {
+  const FULL_BY_VIEWER: PublicTrainingData = {
+    ...SINGLE_CLASS,
+    minimumAge: 18,
+    classes: SINGLE_CLASS.classes.map((row, index) => ({
+      ...row,
+      placesLeft: index === 1 ? 0 : 5,
+    })),
+  };
+
+  beforeEach(async () => {
+    await open({ signedIn: true });
+    await emit(TRAINING, FULL_BY_VIEWER);
+  });
+
+  it('says a class is full, with no series link, while the viewer holds no place in it', async () => {
+    await emit(MINE, NONE);
+    expect(text(fullNote())).toBe('A class is full, so no place is left for the whole series.');
+    expect(registerLink()).toBeNull();
+  });
+
+  it('offers the series when the only place of the full class is the viewer’s own', async () => {
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[1], self: true, minorNames: [] }],
+    });
+    expect(fullNote()).toBeNull();
+    expect(registerLink()).not.toBeNull();
+  });
+
+  it('offers the series to a guardian whose child holds the last place', async () => {
+    await emit(TRAINING, { ...FULL_BY_VIEWER, minimumAge: 9, maximumAge: 30 });
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[1], self: false, minorNames: ['Maya R.'] }],
+    });
+    expect(fullNote()).toBeNull();
+    expect(registerLink()).not.toBeNull();
+  });
+
+  it('still says full for a class the viewer holds no place in, while holding another', async () => {
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[0], self: true, minorNames: [] }],
+    });
+    expect(text(fullNote())).toBe('A class is full, so no place is left for the whole series.');
+  });
+});
+
 describe('PublicTrainingPage registration of one class, a guardian’s children', () => {
   beforeEach(async () => {
     await open({ signedIn: true });
@@ -447,25 +496,13 @@ describe('PublicTrainingPage registration of one class, a guardian’s children'
     expect(classLinks()).toHaveLength(3);
   });
 
-  it('counts a child once however many classes, and takes the links away at the most one guardian can register', async () => {
+  it('keeps the link at the most children one guardian can register, because a child already held may take another class', async () => {
     const names = Array.from({ length: MAX_MINORS_PER_SESSION }, (_v, i) => `Child ${i + 1}`);
     await emit(MINE, {
       ...NONE,
       self: true,
-      classes: [
-        { classId: CLASS_IDS[0], self: false, minorNames: names.slice(0, 12) },
-        { classId: CLASS_IDS[1], self: false, minorNames: names.slice(0, 12) },
-      ],
+      classes: [{ classId: CLASS_IDS[0], self: false, minorNames: names }],
     });
     expect(classLinks()).toHaveLength(3);
-    await emit(MINE, {
-      ...NONE,
-      self: true,
-      classes: [
-        { classId: CLASS_IDS[0], self: false, minorNames: names.slice(0, 12) },
-        { classId: CLASS_IDS[1], self: false, minorNames: names.slice(8) },
-      ],
-    });
-    expect(classLinks()).toEqual([]);
   });
 });

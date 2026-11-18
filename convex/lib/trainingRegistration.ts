@@ -62,7 +62,6 @@ export function classParticipantKey(classId: string, participant: Participant): 
   return `${CLASS_KEY_PREFIX}${classId}:${participantKey(participant)}`;
 }
 
-/** Open through the class date, by the season rule with the class date as the deadline; the series deadline does not apply. */
 export function singleClassIsOpen(classDate: string, nowMs: number): boolean {
   return registrationIsOpen(
     { registrationDeadline: classDate, startDate: addCalendarDays(classDate, 1) },

@@ -327,6 +327,8 @@ export class PublicTrainingContent {
         day: trainingClassDate(row.date),
         hours: trainingHours(row.startTime, row.endTime),
         full,
+        // The series replaces a place of the viewer's own in the class, so it is not full to them.
+        fullForSeries: full && held === undefined,
         places: full
           ? 'Full'
           : `${row.placesLeft} ${row.placesLeft === 1 ? 'place' : 'places'} left`,
@@ -351,7 +353,7 @@ export class PublicTrainingContent {
           this.now(),
         ),
   );
-  protected readonly full = computed(() => this.classes().some((row) => row.full));
+  protected readonly full = computed(() => this.classes().some((row) => row.fullForSeries));
   protected readonly registeredText = computed(() =>
     registeredLine(this.registeredSelf(), this.registeredMinors()),
   );
@@ -362,21 +364,12 @@ export class PublicTrainingContent {
       (offered.includes('minor') && this.registeredMinors().length < MAX_MINORS_PER_SESSION)
     );
   });
-  /** A child counts once however many classes it is in, as the server counts it. */
-  private readonly childCount = computed(
-    () =>
-      new Set(
-        [
-          ...this.registeredMinors(),
-          ...this.registeredClasses().flatMap((row) => row.minorNames),
-        ].map((name) => name.toLowerCase()),
-      ).size,
-  );
   private canAddToClass(held: RegisteredClass | undefined): boolean {
     const offered = participantsOffered(this.training());
+    // A child already held may take another class, so the link stays at the most children.
     return (
       (offered.includes('self') && !this.registeredSelf() && held?.self !== true) ||
-      (offered.includes('minor') && this.childCount() < MAX_MINORS_PER_SESSION)
+      offered.includes('minor')
     );
   }
   protected readonly canRegister = computed(
