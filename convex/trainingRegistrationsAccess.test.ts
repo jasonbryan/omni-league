@@ -152,9 +152,13 @@ describe('who may change a class or read a registration', () => {
         orgSlug: 'org-a',
         trainingSlug: 'tuesday-serving-clinic',
       });
-    expect(await mine(s.alice)).toEqual({ self: false, minorNames: ['Maya R.'] });
-    expect(await mine(s.bob)).toEqual({ self: false, minorNames: [] });
-    expect(await mine(s.t as unknown as typeof s.alice)).toEqual({ self: false, minorNames: [] });
+    expect(await mine(s.alice)).toEqual({ self: false, minorNames: ['Maya R.'], classes: [] });
+    expect(await mine(s.bob)).toEqual({ self: false, minorNames: [], classes: [] });
+    expect(await mine(s.t as unknown as typeof s.alice)).toEqual({
+      self: false,
+      minorNames: [],
+      classes: [],
+    });
   });
 });
 

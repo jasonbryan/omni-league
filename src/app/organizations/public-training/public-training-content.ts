@@ -28,7 +28,7 @@ import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
 import { OUTLINE_BUTTON } from '../../ui/button/button-classes';
 import { HlmCard } from '../../ui/card';
 import { organizationPath } from '../organization-path';
-import { registerTrainingPath } from '../register-training/register-training-path';
+import { CLASS_QUERY, registerTrainingPath } from '../register-training/register-training-path';
 import { registeredLine } from '../registered-line';
 import {
   CRUMB_LINK,
@@ -45,6 +45,12 @@ const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
 const CLASS_LINE = 'mt-1.5 flex items-start gap-1.5 text-sm text-muted-foreground';
 const CLASS_ICON = 'mt-0.5 shrink-0 text-base';
+
+export interface RegisteredClass {
+  readonly classId: string;
+  readonly self: boolean;
+  readonly minorNames: readonly string[];
+}
 
 const ENDED_TEXT = 'This training has ended.';
 const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
@@ -129,6 +135,31 @@ const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
                         >{{ row.places }}</span
                       >
                     </p>
+                    @if (row.single) {
+                      <div data-slot="class-actions" [class]="actionsRow">
+                        @if (row.registeredLine; as line) {
+                          <p
+                            data-slot="class-registered"
+                            class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
+                          >
+                            <ng-icon
+                              name="lucideCircleCheck"
+                              class="shrink-0 text-base"
+                              aria-hidden="true"
+                            /><span class="truncate">{{ line }}</span>
+                          </p>
+                        }
+                        @if (row.canRegister) {
+                          <a
+                            [routerLink]="registerPath()"
+                            [queryParams]="row.query"
+                            data-slot="button"
+                            [class]="registerButton + ' ms-auto shrink-0'"
+                            >Register<span class="sr-only"> for {{ row.day }}</span></a
+                          >
+                        }
+                      </div>
+                    }
                   </li>
                 }
               </ul>
@@ -260,6 +291,8 @@ export class PublicTrainingContent {
   readonly now = input.required<number>();
   readonly registeredSelf = input(false);
   readonly registeredMinors = input<readonly string[]>([]);
+  /** What the viewer holds in single classes; the series is in `registeredSelf` and `registeredMinors`. */
+  readonly registeredClasses = input<readonly RegisteredClass[]>([]);
 
   protected readonly endedText = ENDED_TEXT;
   protected readonly cancelledText = CANCELLED_TEXT;
@@ -283,18 +316,30 @@ export class PublicTrainingContent {
       ? null
       : trainingAgesLabel(minimumAge, maximumAge);
   });
-  protected readonly classes = computed(() =>
-    upcomingClasses(this.training().classes, this.now()).map((row) => ({
-      date: row.date,
-      day: trainingClassDate(row.date),
-      hours: trainingHours(row.startTime, row.endTime),
-      full: row.placesLeft === 0,
-      places:
-        row.placesLeft === 0
+  protected readonly classes = computed(() => {
+    const { allowSingleRegistration } = this.training();
+    return upcomingClasses(this.training().classes, this.now()).map((row) => {
+      const { classId } = row;
+      const full = row.placesLeft === 0;
+      const held = this.registeredClasses().find((entry) => entry.classId === classId);
+      return {
+        date: row.date,
+        day: trainingClassDate(row.date),
+        hours: trainingHours(row.startTime, row.endTime),
+        full,
+        // The series replaces a place of the viewer's own in the class, so it is not full to them.
+        fullForSeries: full && held === undefined,
+        places: full
           ? 'Full'
           : `${row.placesLeft} ${row.placesLeft === 1 ? 'place' : 'places'} left`,
-    })),
-  );
+        // A copy saved before classes were named has no id to link to.
+        single: allowSingleRegistration === true && classId !== undefined,
+        query: { [CLASS_QUERY]: classId },
+        registeredLine: held ? registeredLine(held.self, held.minorNames) : null,
+        canRegister: !full && this.canAddToClass(held),
+      };
+    });
+  });
   /** With no class left there is nothing to register for, so no status is shown. */
   protected readonly status = computed(() =>
     this.classes().length === 0
@@ -308,7 +353,7 @@ export class PublicTrainingContent {
           this.now(),
         ),
   );
-  protected readonly full = computed(() => this.classes().some((row) => row.full));
+  protected readonly full = computed(() => this.classes().some((row) => row.fullForSeries));
   protected readonly registeredText = computed(() =>
     registeredLine(this.registeredSelf(), this.registeredMinors()),
   );
@@ -319,6 +364,14 @@ export class PublicTrainingContent {
       (offered.includes('minor') && this.registeredMinors().length < MAX_MINORS_PER_SESSION)
     );
   });
+  private canAddToClass(held: RegisteredClass | undefined): boolean {
+    const offered = participantsOffered(this.training());
+    // A child already held may take another class, so the link stays at the most children.
+    return (
+      (offered.includes('self') && !this.registeredSelf() && held?.self !== true) ||
+      offered.includes('minor')
+    );
+  }
   protected readonly canRegister = computed(
     () => this.status()?.registrationOpen === true && !this.full() && this.canAdd(),
   );

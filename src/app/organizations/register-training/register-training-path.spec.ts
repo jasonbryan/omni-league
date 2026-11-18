@@ -12,4 +12,16 @@ describe('registerTrainingPath', () => {
       '/app/organizations/org/training/a%26b/register',
     );
   });
+
+  it('names a class in the query, which the register page reads', () => {
+    expect(registerTrainingPath('org', 'clinic', 'class_2')).toBe(
+      '/app/organizations/org/training/clinic/register?class=class_2',
+    );
+  });
+
+  it('encodes the class it is given', () => {
+    expect(registerTrainingPath('org', 'clinic', 'a&b')).toBe(
+      '/app/organizations/org/training/clinic/register?class=a%26b',
+    );
+  });
 });
