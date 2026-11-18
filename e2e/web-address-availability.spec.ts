@@ -160,6 +160,8 @@ const SLUG_PEEK = 20;
 
 async function scrollSlugJustBelowViewport(page: Page, form: Form) {
   await expect(page.locator('#slug')).toBeVisible();
+  // A form resize makes the sticky footer's focus fix scroll a focused control below the slug into view.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.evaluate((peek) => {
     const slug = document.querySelector('#slug')!.getBoundingClientRect();
     scrollBy(0, slug.top - (innerHeight - peek));
