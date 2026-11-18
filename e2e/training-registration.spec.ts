@@ -1099,7 +1099,7 @@ test.describe('the series waitlist', () => {
   test.describe('the training page rows when the waitlist answers after sign-in', () => {
     const TOLERANCE = 0.5;
     const BOXES = [
-      '#classes',
+      '#classes > div',
       '#details-heading + dl > div:nth-child(-n+4)',
       '[data-slot="series-actions"]',
     ];

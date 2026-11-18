@@ -1325,6 +1325,7 @@ test.describe('Training: the series waitlist', () => {
   const LIST = 'trainingWaitlist:listForTraining';
   const UNBROKEN = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
   const panel = (page: Page) => page.locator('app-training-waitlist');
+  const listRegion = (page: Page) => panel(page).getByRole('region', { name: /^Waitlist of / });
   const waitingRows = (page: Page) => panel(page).locator('tbody tr');
   const promoteButton = (page: Page) => panel(page).getByRole('button', { name: /^Promote/ });
   const box = (locator: Locator) =>
@@ -1406,7 +1407,7 @@ test.describe('Training: the series waitlist', () => {
     await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
     await page.goto(path);
     await expect(promoteButton(page)).toHaveAttribute('aria-disabled', 'true');
-    await promoteButton(page).click();
+    await promoteButton(page).click({ force: true });
     const result = panel(page).getByRole('alert');
     await expect(result).toContainText(`${player.name} could not be given a place.`);
     await expect(result).toContainText('No place is free in every class. Raise the places first.');
@@ -1436,7 +1437,7 @@ test.describe('Training: the series waitlist', () => {
     await promoteButton(page).click();
     const result = panel(page).getByRole('status').filter({ hasText: 'has a place' });
     await expect(result).toContainText(
-      `${player.name} has a place.Registered for every class of ${SERVING.name}.`,
+      `${player.name} has a place. Registered for every class of ${SERVING.name}.`,
     );
     await expect(result).toBeFocused();
     await expect(waitingRows(page)).toHaveCount(1);
@@ -1536,7 +1537,7 @@ test.describe('Training: the series waitlist', () => {
       await screenshot(page, testInfo, `365-waitlist-loading-${width}`);
       await expectAccessible(page);
       held.release();
-      await expect(panel(page).getByRole('region')).toBeVisible();
+      await expect(listRegion(page)).toBeVisible();
       await expect(panel(page)).toContainText(guardian.email);
       const loaded = await measure();
       expect(loaded.classes).toEqual(loading.classes);
@@ -1544,7 +1545,7 @@ test.describe('Training: the series waitlist', () => {
       expect(Math.abs(loaded.section.y - loading.section.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(loaded.section.height - loading.section.height)).toBeLessThanOrEqual(1);
       expect(Math.abs(loaded.page - loading.page)).toBeLessThanOrEqual(1);
-      const region = panel(page).getByRole('region');
+      const region = listRegion(page);
       const sizes = await region.evaluate((element) => ({
         pageScroll: document.documentElement.scrollWidth,
         pageClient: document.documentElement.clientWidth,
