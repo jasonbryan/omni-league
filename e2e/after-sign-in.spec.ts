@@ -26,12 +26,11 @@ const organization = () =>
 const SCRIPT_URL = /\/(main|chunk-[^/]+)\.js$/;
 const SLOW_SCRIPT_MS = 1500;
 
-// Only the first request of each script is slow, so a full page load of /sign-in is not.
-async function delayFirstScriptLoads(page: Page) {
+async function delayScriptsUntilHydrated(page: Page, consoleGuard: ConsoleGuard) {
   const delayed = new Set<string>();
   await page.route(SCRIPT_URL, async (route) => {
     const url = route.request().url();
-    if (!delayed.has(url)) {
+    if (!consoleGuard.hydrated && !delayed.has(url)) {
       delayed.add(url);
       await new Promise((resolve) => setTimeout(resolve, SLOW_SCRIPT_MS));
     }
@@ -93,7 +92,7 @@ test.describe('after sign-in', () => {
       const tenant = await organization();
       const user = await seedUser(newUser('Slow'));
       const from = `${tenant.path}?utm=a#leagues`;
-      await delayFirstScriptLoads(page);
+      await delayScriptsUntilHydrated(page, consoleGuard);
 
       const { tokens } = await signInFrom(page, consoleGuard, user, from, 'top-bar');
 
