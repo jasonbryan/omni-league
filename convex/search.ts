@@ -9,7 +9,12 @@ import {
 } from './lib/leagueFilters';
 import { logoUrlField } from './lib/organizationLogo';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
-import { programTypeValidator, searchableProgramTypes, type ProgramType } from './lib/programs';
+import {
+  DIVISIONLESS_PROGRAM_TYPES,
+  programTypeValidator,
+  searchableProgramTypes,
+  type ProgramType,
+} from './lib/programs';
 import {
   searchLeaguesBySportValidator,
   searchLeaguesValidator,
@@ -22,7 +27,12 @@ import {
   type SearchPrograms,
   type SearchProgramsBrowse,
 } from './lib/publicPage';
-import { campIsUpcoming, searchProgramRows, searchRows } from './lib/searchRows';
+import {
+  campIsUpcoming,
+  searchProgramRows,
+  searchRows,
+  trainingIsUpcoming,
+} from './lib/searchRows';
 import {
   matchesEveryWord,
   parseSearchQuery,
@@ -128,24 +138,32 @@ function typeCountsOf(
     .filter(({ count }) => count > 0);
 }
 
-// A camp has no division, so the division filters leave it listed and it adds no facet.
+const isDivisionless = (program: Doc<'programs'>) =>
+  DIVISIONLESS_PROGRAM_TYPES.includes(program.type);
+
 function narrowedByDivision(program: Doc<'programs'>, filters: DivisionFilters): boolean {
-  return program.type === 'camp' || matchesDivisionFilters(program, filters);
+  return isDivisionless(program) || matchesDivisionFilters(program, filters);
 }
 
-async function withoutEndedCamps(
+async function isUpcoming(ctx: QueryCtx, program: Doc<'programs'>): Promise<boolean> {
+  if (program.type === 'camp') return campIsUpcoming(ctx, program);
+  if (program.type === 'training') return trainingIsUpcoming(ctx, program);
+  return true;
+}
+
+async function withoutEnded(
   ctx: QueryCtx,
   programs: readonly Doc<'programs'>[],
 ): Promise<Doc<'programs'>[]> {
   const kept: Doc<'programs'>[] = [];
   for (const program of programs) {
-    if (program.type !== 'camp' || (await campIsUpcoming(ctx, program))) kept.push(program);
+    if (await isUpcoming(ctx, program)) kept.push(program);
   }
   return kept;
 }
 
 const divisionFacets = (programs: readonly Doc<'programs'>[]) =>
-  programs.filter(({ type }) => type !== 'camp').map(facetOf);
+  programs.filter((program) => !isDivisionless(program)).map(facetOf);
 
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.
 export const programs = query({
@@ -153,8 +171,9 @@ export const programs = query({
     q: v.string(),
     type: v.optional(programTypeValidator),
     sport: v.optional(sportValidator),
-    // Without it the call is the previous release's, whose page renders a camp as a tournament.
+    // Without them the call is an earlier release's, whose page renders a camp or a training program as a tournament.
     withCamps: v.optional(v.boolean()),
+    withTraining: v.optional(v.boolean()),
     ...divisionFilterArgs,
   },
   returns: searchProgramsValidator,
@@ -163,8 +182,8 @@ export const programs = query({
     const q = stripPossessives(parseSearchQuery([args.q]));
     if (q === '') return { rows: [], more: false, typeCounts: [] };
     const { sport, type } = args;
-    const types = searchableProgramTypes(args.withCamps);
-    const scanned = await withoutEndedCamps(
+    const types = searchableProgramTypes(args.withCamps, args.withTraining);
+    const scanned = await withoutEnded(
       ctx,
       (
         await ctx.db
@@ -234,17 +253,18 @@ export const programsBrowse = query({
     sport: v.optional(sportValidator),
     // As on `programs`.
     withCamps: v.optional(v.boolean()),
+    withTraining: v.optional(v.boolean()),
     ...divisionFilterArgs,
     page: v.number(),
   },
   returns: searchProgramsBrowseValidator,
   handler: async (ctx, args): Promise<SearchProgramsBrowse> => {
     const { sport, type } = args;
-    const types = searchableProgramTypes(args.withCamps);
+    const types = searchableProgramTypes(args.withCamps, args.withTraining);
     // Every listed type is read, so the type chips count them all; the chosen type is applied after.
     const read: Doc<'programs'>[] = [];
     for (const listed of types) {
-      read.push(...(await withoutEndedCamps(ctx, await firstByName(ctx, listed, sport))));
+      read.push(...(await withoutEnded(ctx, await firstByName(ctx, listed, sport))));
     }
     read.sort(bySortName);
     const filters = filtersInScope(args, sport);

@@ -40,6 +40,7 @@ import {
   type PublicOpenSeasonRows,
   type PublicOpenTournamentRows,
   type PublicTournamentRows,
+  type PublicTrainingRows,
   type PublicLocationRows,
   type PublicOrganizationHeader,
   type PublicSport,
@@ -49,6 +50,11 @@ import { leadingKind, openIntro, registerForText, type OpenCardKind } from './op
 import { campAgesLabel } from '../../../convex/lib/campInput';
 import { campStatus, shownCampSession, upcomingCamps } from './camp-status';
 import { pagingWithoutDropped, type ListPaging } from './list-paging';
+import { trainingAgesLabel } from '../../../convex/lib/trainingInput';
+import { trainingPatternText } from '../../../convex/lib/trainingPattern';
+import { publicTrainingNames } from './public-training/public-training-names';
+import { publicTrainingPath } from './public-training/public-training-path';
+import { trainingStatusLine, upcomingTrainings } from './training-status';
 import { publicCampNames } from './public-camp/public-camp-names';
 import { publicCampPath } from './public-camp/public-camp-path';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
@@ -90,6 +96,7 @@ const LOCATIONS_ROW_SPAN: Readonly<Record<number, string>> = {
   1: 'lg:row-span-1',
   2: 'lg:row-span-2',
   3: 'lg:row-span-3',
+  4: 'lg:row-span-4',
 };
 
 /** A page left with no row after a date change still shows its section, for the way back to the pages before it. */
@@ -98,7 +105,7 @@ function sectionShown(rowCount: number, paging: ListPaging | undefined): boolean
 }
 
 function rowId(
-  list: 'league' | 'location' | 'tournament' | 'camp',
+  list: 'league' | 'location' | 'tournament' | 'camp' | 'training',
   paging: ListPaging | undefined,
   i: number,
 ): string {
@@ -232,7 +239,8 @@ function rowId(
       locationsLoading() ||
       locationRows().length ||
       tournamentsShown() ||
-      campsShown()
+      campsShown() ||
+      trainingShown()
     ) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
         @if (registrationOpenShown()) {
@@ -617,6 +625,76 @@ function rowId(
               }
             </section>
           }
+          @if (trainingShown()) {
+            <section id="training" aria-labelledby="training-heading" [class]="trainingClass()">
+              <h2
+                #trainingHeading
+                id="training-heading"
+                tabindex="-1"
+                class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+              >
+                {{ trainingHeadingText() }}
+              </h2>
+              <ul
+                role="list"
+                class="mt-2 divide-y divide-border"
+                [attr.aria-busy]="trainingBusy() ? 'true' : null"
+              >
+                @for (program of trainingListRows(); track program.id) {
+                  <li [id]="program.id" class="group relative">
+                    <div class="flex min-h-18 items-center gap-4 py-4">
+                      <div class="min-w-0 flex-1">
+                        <h3 class="font-medium wrap-anywhere">
+                          <a
+                            [routerLink]="program.href"
+                            [state]="program.names"
+                            class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
+                            >{{ program.name }}</a
+                          >
+                        </h3>
+                        <p class="mt-0.5 text-sm font-medium">{{ program.pattern }}</p>
+                        <p class="mt-0.5 text-sm text-muted-foreground wrap-anywhere">
+                          {{ program.who }}
+                        </p>
+                        <p class="mt-0.5 text-sm text-muted-foreground wrap-anywhere">
+                          {{ program.where }}
+                        </p>
+                        <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span hlmBadge size="fit" [variant]="program.status.badgeVariant">{{
+                            program.status.badge
+                          }}</span>
+                          <span class="text-xs text-muted-foreground">{{
+                            program.status.text
+                          }}</span>
+                        </p>
+                      </div>
+                      <ng-icon
+                        name="lucideChevronRight"
+                        class="shrink-0 text-lg text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (shownTrainingPaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Training pages"
+                    noun="training programs"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [shown]="trainingListRows().length"
+                    [path]="pagePath()"
+                    fragment="training"
+                    [queryFor]="trainingQueryFor()"
+                    (pageActivated)="pageRequested.training = true"
+                  />
+                </div>
+              }
+            </section>
+          }
           @if (locationsLoading() || locationRows().length) {
             <section id="locations" aria-labelledby="locations-heading" [class]="locationsClass()">
               <h2
@@ -691,6 +769,9 @@ export class OrganizationOverview {
   readonly camps = input<PublicCampRows | undefined>(undefined);
   readonly campPaging = input<ListPaging | undefined>(undefined);
   readonly campsBusy = input(false);
+  readonly training = input<PublicTrainingRows | undefined>(undefined);
+  readonly trainingPaging = input<ListPaging | undefined>(undefined);
+  readonly trainingBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly openTournaments = input<PublicOpenTournamentRows | undefined>(undefined);
   readonly openCamps = input<PublicOpenCampRows | undefined>(undefined);
@@ -718,6 +799,7 @@ export class OrganizationOverview {
   private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');
   private readonly tournamentsHeading = viewChild<ElementRef<HTMLElement>>('tournamentsHeading');
   private readonly campsHeading = viewChild<ElementRef<HTMLElement>>('campsHeading');
+  private readonly trainingHeading = viewChild<ElementRef<HTMLElement>>('trainingHeading');
   private readonly injector = inject(Injector);
 
   protected readonly pageRequested: Record<PagedList, boolean> = {
@@ -725,6 +807,7 @@ export class OrganizationOverview {
     locations: false,
     tournaments: false,
     camps: false,
+    training: false,
   };
 
   protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
@@ -753,15 +836,20 @@ export class OrganizationOverview {
     return names ? `${names} · ${counts}` : counts;
   });
 
-  // Beside Leagues, Tournaments, and Camps, which stack in the first two columns.
+  // Beside Leagues, Tournaments, Camps, and Training, which stack in the first two columns.
   protected readonly locationsClass = computed(() => {
     if (this.isEmpty()) return 'py-8 md:py-12 lg:col-span-3';
-    const stacked = 1 + Number(this.tournamentsShown()) + Number(this.campsShown());
+    const stacked =
+      1 +
+      Number(this.tournamentsShown()) +
+      Number(this.campsShown()) +
+      Number(this.trainingShown());
     return `border-t border-border py-8 md:py-12 lg:col-start-3 lg:row-start-1 lg:border-t-0 ${LOCATIONS_ROW_SPAN[stacked]}`;
   });
 
   protected readonly tournamentsClass = computed(() => this.stackedSectionClass());
   protected readonly campsClass = computed(() => this.stackedSectionClass());
+  protected readonly trainingClass = computed(() => this.stackedSectionClass());
 
   private stackedSectionClass(): string {
     return this.isEmpty()
@@ -818,6 +906,11 @@ export class OrganizationOverview {
     return sport ? `${sport.name} tournaments` : 'Tournaments';
   });
 
+  protected readonly trainingHeadingText = computed(() => {
+    const sport = this.sport();
+    return sport ? `${sport.name} training` : 'Training';
+  });
+
   protected readonly campsHeadingText = computed(() => {
     const sport = this.sport();
     return sport ? `${sport.name} camps` : 'Camps';
@@ -841,6 +934,7 @@ export class OrganizationOverview {
     locations: this.locationPaging()?.page ?? 1,
     tournaments: this.tournamentPaging()?.page ?? 1,
     camps: this.campPaging()?.page ?? 1,
+    training: this.trainingPaging()?.page ?? 1,
   }));
   protected readonly leagueQueryFor = computed(() =>
     pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined, this.filters()),
@@ -853,6 +947,9 @@ export class OrganizationOverview {
   );
   protected readonly campQueryFor = computed(() =>
     pageQueryFor('camps', this.shownPages(), this.sport() !== undefined, this.filters()),
+  );
+  protected readonly trainingQueryFor = computed(() =>
+    pageQueryFor('training', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
 
   protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);
@@ -1015,6 +1112,42 @@ export class OrganizationOverview {
     })),
   );
 
+  private readonly upcomingTrainingRows = computed(() =>
+    upcomingTrainings(this.training() ?? [], this.now()),
+  );
+
+  protected readonly shownTrainingPaging = computed(() =>
+    pagingWithoutDropped(
+      this.trainingPaging(),
+      this.training()?.length ?? 0,
+      this.upcomingTrainingRows().length,
+    ),
+  );
+
+  protected readonly trainingShown = computed(() =>
+    sectionShown(this.trainingListRows().length, this.shownTrainingPaging()),
+  );
+
+  protected readonly trainingListRows = computed(() =>
+    this.upcomingTrainingRows().map((program, i) => {
+      const status = trainingStatusLine(program, this.now());
+      const ages =
+        program.minimumAge === undefined && program.maximumAge === undefined
+          ? []
+          : [trainingAgesLabel(program.minimumAge, program.maximumAge)];
+      return {
+        id: rowId('training', this.trainingPaging(), i),
+        name: program.name,
+        href: publicTrainingPath(this.page().slug, program.slug),
+        names: publicTrainingNames({ organization: this.page(), training: program }),
+        pattern: trainingPatternText(program),
+        who: [`Coach ${program.coachName}`, ...ages].join(' · '),
+        where: [program.sportName, program.locationNames.join(', ')].filter(Boolean).join(' · '),
+        status,
+      };
+    }),
+  );
+
   protected readonly tournamentRows = computed(() =>
     this.upcoming().map((tournament, i) => ({
       id: rowId('tournament', this.tournamentPaging(), i),
@@ -1070,6 +1203,7 @@ export class OrganizationOverview {
     this.focusHeadingAfterPageChange('locations', this.locations, this.locationsHeading);
     this.focusHeadingAfterPageChange('tournaments', this.tournaments, this.tournamentsHeading);
     this.focusHeadingAfterPageChange('camps', this.camps, this.campsHeading);
+    this.focusHeadingAfterPageChange('training', this.training, this.trainingHeading);
   }
 
   // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.

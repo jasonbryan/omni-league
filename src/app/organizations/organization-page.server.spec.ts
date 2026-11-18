@@ -155,6 +155,7 @@ describe('OrganizationPage server render', () => {
       { name: 'seasons:listOpenForOrganization', args: { orgSlug: slug } },
       { name: 'tournaments:listOpenForOrganization', args: { organizationSlug: slug } },
       { name: 'tournaments:listPublic', args: { organizationSlug: slug, page: 1 } },
+      { name: 'trainings:listPublic', args: { organizationSlug: slug, page: 1 } },
     ]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
@@ -368,6 +369,7 @@ describe('OrganizationPage server render', () => {
     'tournaments:listOpenForOrganization',
     'camps:listPublic',
     'camps:listOpenForOrganization',
+    'trainings:listPublic',
     'organizations:listPublicLeagueFacets',
   ]) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
@@ -551,6 +553,10 @@ describe('sport view server render', () => {
         name: 'tournaments:listPublic',
         args: { organizationSlug: slug, page: 1, sport: 'soccer' },
       },
+      {
+        name: 'trainings:listPublic',
+        args: { organizationSlug: slug, page: 1, sport: 'soccer' },
+      },
     ]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
@@ -665,6 +671,7 @@ describe('sport view server render', () => {
     'tournaments:listOpenForOrganization',
     'camps:listPublic',
     'camps:listOpenForOrganization',
+    'trainings:listPublic',
     'organizations:listPublicLeagueFacets',
   ]) {
     it(`answers 503 with no-store when ${failing} fails`, async () => {

@@ -159,7 +159,7 @@ export default defineSchema({
     ageGroup: ageGroupValidator,
     /** Set on a program of the league type. */
     leagueId: v.optional(v.id('leagues')),
-    /** The words a search finds the program by: its name, sport, division, organization's name, locations' names, and City, state. Absent on camp and training programs. */
+    /** The words a search finds the program by: its name, sport, division, organization's name, locations' names, and City, state; a camp's or training program's hold no division words. Absent on a program written before its type was searchable. */
     searchText: v.optional(v.string()),
   })
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
@@ -364,9 +364,27 @@ export default defineSchema({
     maximumAge: v.optional(v.number()),
     /** Set once, when the classes are scheduled; `trainingClasses` holds the dated classes it produced. */
     pattern: v.optional(trainingPatternValidator),
+    /** The program's `status` and `sport`, kept equal to it by the tenant writers so the date indexes can serve the public lists. */
+    status: v.optional(programStatusValidator),
+    sport: v.optional(sportValidator),
+    /** The latest date of the scheduled classes, `YYYY-MM-DD`; it changes only when classes are scheduled, cancelled, or restored, never with time. Absent while no class is scheduled. */
+    lastClassDate: v.optional(v.string()),
   })
     .index('by_programId', ['programId'])
-    .index('by_organizationId', ['organizationId']),
+    // The admin list reads newest first, which the status index below cannot give.
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes
+    .index('by_organizationId', ['organizationId'])
+    .index('by_organizationId_and_status_and_lastClassDate', [
+      'organizationId',
+      'status',
+      'lastClassDate',
+    ])
+    .index('by_organizationId_and_sport_and_status_and_lastClassDate', [
+      'organizationId',
+      'sport',
+      'status',
+      'lastClassDate',
+    ]),
 
   trainingClasses: defineTable({
     trainingId: v.id('trainings'),

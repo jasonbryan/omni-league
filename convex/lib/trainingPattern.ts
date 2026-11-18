@@ -340,3 +340,33 @@ export function firstTrainingPatternError(errors: Errors): TrainingPatternError 
 export function trainingClassDate(date: string): string {
   return `${WEEKDAY_NAMES[weekdayOf(date)].slice(0, 3)}, ${formatCalendarDate(date)}`;
 }
+
+function hourAndMinute(time: string): { hour: number; minute: string; meridiem: 'am' | 'pm' } {
+  const [hours, minutes] = time.split(':').map(Number) as [number, number];
+  return {
+    hour: hours % 12 === 0 ? 12 : hours % 12,
+    minute: minutes === 0 ? '' : `:${String(minutes).padStart(2, '0')}`,
+    meridiem: hours < 12 ? 'am' : 'pm',
+  };
+}
+
+/** Read as text, never as an instant, so a browser in any time zone writes the same hours. */
+export function trainingHours(startTime: string, endTime: string): string {
+  const start = hourAndMinute(startTime);
+  const end = hourAndMinute(endTime);
+  const startText = `${start.hour}${start.minute}`;
+  const endText = `${end.hour}${end.minute} ${end.meridiem}`;
+  return start.meridiem === end.meridiem
+    ? `${startText} to ${endText}`
+    : `${startText} ${start.meridiem} to ${endText}`;
+}
+
+export function trainingPatternText(pattern: {
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  weeks: number;
+}): string {
+  const weeks = `${pattern.weeks} ${pattern.weeks === 1 ? 'week' : 'weeks'}`;
+  return `${WEEKDAY_NAMES[pattern.weekday]}s, ${trainingHours(pattern.startTime, pattern.endTime)}, ${weeks}`;
+}

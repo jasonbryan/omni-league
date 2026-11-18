@@ -265,6 +265,7 @@ describe('a league written before the backfill, then the backfill', () => {
         staffInviteCounts: 0,
         draftLeagueCounts: 0,
         campFields: 0,
+        trainingFields: 0,
       },
     });
     expect(await stored(t, organizationId)).toEqual(before);

@@ -14,6 +14,7 @@ import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { seedBracket } from './support/bracket';
 import { seedDoubleTournament } from './support/double-bracket';
 import { seedPublishedCamp, seedTenantWithCamps } from './support/camp';
+import { seedPublishedTraining } from './support/training';
 import { convexRun } from './support/convex';
 import { seedPoolPlay, seedPoolResult, seedPoolsStructure } from './support/pools';
 import { seedTournament } from './support/tournament';
@@ -711,6 +712,71 @@ test.describe('a camp page offline', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Viewed Camp' })).toBeVisible();
     await expect(note).toBeVisible();
     await expect(page.locator('#sessions')).toContainText('20 places left');
+
+    // The router follows a history entry the way it follows Back, so the page opens without a request.
+    await page.evaluate((path) => {
+      history.pushState({}, '', path);
+      dispatchEvent(new PopStateEvent('popstate'));
+    }, never);
+    await expect(
+      page.getByRole('heading', { level: 1, name: "This page isn't saved on this device" }),
+    ).toBeVisible();
+    await expect(note).toHaveCount(0);
+    const results = await axeScan(page);
+    expect(describeViolations(results.violations)).toEqual([]);
+
+    await context.setOffline(false);
+  });
+});
+
+test.describe('a training page offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('a page viewed online opens from its saved copy with the note, and one never viewed shows the not-saved view', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Training',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+    });
+    const firstDate = dateFromToday(30);
+    const seed = (name: string, slug: string) =>
+      seedPublishedTraining(tenant, {
+        name,
+        slug,
+        locations: ['Alpha Field'],
+        coachName: 'Dana Ruiz',
+        classes: {
+          weekday: new Date(`${firstDate}T00:00:00Z`).getUTCDay(),
+          startTime: '18:00',
+          endTime: '19:00',
+          firstDate,
+          weeks: 2,
+          placesPerClass: 12,
+          registrationDeadline: dateFromToday(20),
+        },
+      });
+    const viewed = await seed('Viewed Clinic', 'viewed-clinic');
+    const never = await seed('Never Viewed Clinic', 'never-viewed-clinic');
+    const note = page.locator('app-saved-copy-note');
+
+    await page.goto(viewed);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Clinic' })).toBeVisible();
+    await expect(note).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(tenant.path);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(viewed);
+    await expect(page.getByRole('heading', { level: 1, name: 'Viewed Clinic' })).toBeVisible();
+    await expect(note).toBeVisible();
+    await expect(page.locator('#classes')).toContainText('12 places left');
 
     // The router follows a history entry the way it follows Back, so the page opens without a request.
     await page.evaluate((path) => {

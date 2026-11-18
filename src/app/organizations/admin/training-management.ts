@@ -10,6 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBan,
@@ -19,6 +20,7 @@ import {
   lucideCheck,
   lucideCircleDashed,
   lucideClock,
+  lucideGlobe,
   lucideMapPin,
   lucideRepeat,
   lucideCircleCheck,
@@ -54,7 +56,11 @@ import { HlmBadge } from '../../ui/badge';
 import { HlmCard } from '../../ui/card';
 import { HlmSkeleton } from '../../ui/skeleton';
 import { AdminAlert } from './admin-alert';
-import { OUTLINE_BUTTON } from './button-classes';
+import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { publicTrainingNames } from '../public-training/public-training-names';
+import { publicTrainingPath } from '../public-training/public-training-path';
+import { PublishTrainingDialog, type PublishTrainingOutcome } from './publish-training-dialog';
+import { TRAINING_PUBLISH_MESSAGES } from '../../../../convex/lib/trainingInput';
 import { PlacesEditor, type PlacesRule, type PlacesSave } from './places-editor';
 import { injectSectionJump } from './section-jump';
 import { TrainingBreadcrumb } from './training-breadcrumb';
@@ -82,6 +88,8 @@ type Outcome =
     NgIcon,
     NotFoundView,
     PlacesEditor,
+    PublishTrainingDialog,
+    RouterLink,
     ServerErrorView,
     TrainingBreadcrumb,
     TrainingNoAccess,
@@ -97,6 +105,7 @@ type Outcome =
       lucideCircleCheck,
       lucideCircleDashed,
       lucideClock,
+      lucideGlobe,
       lucideMapPin,
       lucideRepeat,
       lucideUndo2,
@@ -105,7 +114,7 @@ type Outcome =
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block' },
+  host: { class: 'block', '[attr.inert]': 'publishOpen() ? "" : null' },
   template: `
     @switch (state()) {
       @case ('ready') {
@@ -146,13 +155,59 @@ type Outcome =
                   <span hlmBadge variant="secondary">{{ training.sportName }}</span>
                 </div>
               </div>
+              <div class="flex flex-col items-start gap-1.5 md:items-end">
+                @if (training.status === 'published') {
+                  <a
+                    [routerLink]="publicPath()"
+                    [state]="names()"
+                    data-slot="button"
+                    [class]="outlineButton"
+                    ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />View
+                    public page</a
+                  >
+                } @else {
+                  <button
+                    #publishButton
+                    type="button"
+                    data-slot="button"
+                    aria-haspopup="dialog"
+                    [class]="primaryButton"
+                    [class.opacity-50]="noClasses()"
+                    [attr.aria-disabled]="noClasses() ? 'true' : null"
+                    [attr.aria-describedby]="noClasses() ? 'publish-hint' : null"
+                    (click)="publish()"
+                  >
+                    <ng-icon
+                      name="lucideGlobe"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Publish
+                  </button>
+                  @if (noClasses()) {
+                    <p id="publish-hint" class="text-sm text-muted-foreground">
+                      {{ noClassesHint }}
+                    </p>
+                  }
+                }
+              </div>
             </div>
-            @if (training.status === 'draft') {
+            @if (published()) {
+              <app-admin-alert
+                #publishedNotice
+                class="mt-6"
+                kind="success"
+                [title]="training.name + ' is published.'"
+                description="Its page is public now."
+                ><a [routerLink]="publicPath()" [state]="names()"
+                  >View public page</a
+                ></app-admin-alert
+              >
+            } @else if (training.status === 'draft') {
               <app-admin-alert
                 class="mt-6"
                 kind="info"
                 title="This training program is a draft"
-                description="Only your staff can see it."
+                description="Only your staff can see it. Publish it to put its page online."
               />
             }
             <section
@@ -499,6 +554,7 @@ type Outcome =
               </section>
             }
           </div>
+          <app-publish-training-dialog (dismissed)="publishDismissed($event)" />
         }
       }
       @case ('loading') {
@@ -552,6 +608,8 @@ export class TrainingManagement {
 
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
+  protected readonly primaryButton = PRIMARY_BUTTON;
+  protected readonly noClassesHint = TRAINING_PUBLISH_MESSAGES.noClasses;
   protected readonly statusClass =
     'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground';
   protected readonly placeholders = [1, 2];
@@ -590,6 +648,20 @@ export class TrainingManagement {
         : 'Single-class registration is not allowed.',
     };
   });
+  protected readonly noClasses = computed(() => {
+    const view = this.classes();
+    return view.status === 'ready' && !view.classes.some((row) => row.status === 'scheduled');
+  });
+  protected readonly publicPath = computed(() => {
+    const training = this.training();
+    return training ? publicTrainingPath(training.organization.slug, training.slug) : '';
+  });
+  protected readonly names = computed(() => {
+    const training = this.training();
+    return training
+      ? publicTrainingNames({ organization: training.organization, training })
+      : undefined;
+  });
   protected readonly scheduling = computed<'form' | 'loading' | 'no'>(() => {
     const view = this.classes();
     if (view.status === 'error') return 'no';
@@ -604,11 +676,16 @@ export class TrainingManagement {
     trainingPath(this.context.orgSlug(), this.context.trainingSlug()),
   );
 
+  protected readonly published = signal(false);
+  protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
   protected readonly working = signal<string | null>(null);
   protected readonly undoNote = signal<string | null>(null);
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly failure = signal<{ title: string; description: string } | null>(null);
 
+  private readonly publishButton = viewChild<ElementRef<HTMLButtonElement>>('publishButton');
+  private readonly publishDialog = viewChild(PublishTrainingDialog);
+  private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly scheduleSection = viewChild<ElementRef<HTMLElement>>('scheduleSection');
@@ -645,6 +722,25 @@ export class TrainingManagement {
       undo: () => this.restorePlacesCall.run({ trainingId, classes: previous }),
     };
   };
+
+  protected publish(): void {
+    const training = this.training();
+    if (!training || this.noClasses()) return;
+    this.published.set(false);
+    this.publishDialog()?.open({ trainingId: training.trainingId, name: training.name });
+  }
+
+  /** A published training program moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on Publish. */
+  protected publishDismissed(outcome: PublishTrainingOutcome): void {
+    if (outcome.published) {
+      this.published.set(true);
+      afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(() => this.publishButton()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
+  }
 
   protected dateOf(row: { date: string }): string {
     return trainingClassDate(row.date);

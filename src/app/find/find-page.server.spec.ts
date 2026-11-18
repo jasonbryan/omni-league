@@ -29,6 +29,7 @@ import {
   GIRLS_SELECT_ROW,
   GULF_OPEN_ROW,
   JUNIOR_CAMP_ROW,
+  SERVING_CLINIC_ROW,
   NO_RESULTS,
   OPEN_DAY,
   SATURDAY_6S_ROW,
@@ -247,7 +248,9 @@ describe('FindPage server render', () => {
     const { html, body, head, responseInit, queries } = await render(
       '/programs?q=coed&ott=SECRET&utm_source=CANARYabc',
     );
-    expect(queries).toEqual([{ name: 'search:programs', args: { q: 'coed', withCamps: true } }]);
+    expect(queries).toEqual([
+      { name: 'search:programs', args: { q: 'coed', withCamps: true, withTraining: true } },
+    ]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
     expect(text(body.querySelector('main section [role="status"]'))).toBe(
@@ -302,11 +305,15 @@ describe('FindPage server render', () => {
   });
 
   it.each([
-    ['?q=a&q=b', { q: 'a', withCamps: true }],
-    [`?q=${'x'.repeat(300)}`, { q: 'x'.repeat(100), withCamps: true }],
+    ['?q=a&q=b', { q: 'a', withCamps: true, withTraining: true }],
+    [`?q=${'x'.repeat(300)}`, { q: 'x'.repeat(100), withCamps: true, withTraining: true }],
     [
       `?q=${Array.from({ length: 20 }, (_, i) => `w${i + 1}`).join('+')}`,
-      { q: Array.from({ length: 16 }, (_, i) => `w${i + 1}`).join(' '), withCamps: true },
+      {
+        q: Array.from({ length: 16 }, (_, i) => `w${i + 1}`).join(' '),
+        withCamps: true,
+        withTraining: true,
+      },
     ],
   ])('%s asks %j with 200', async (query, args) => {
     const { responseInit, queries } = await render(`/programs${query}`);
@@ -371,7 +378,14 @@ describe('FindPage server render by sport', () => {
     expect(queries).toEqual([
       {
         name: BY_SPORT,
-        args: { sport: 'soccer', withCamps: true, gender: ['womens'], ageGroup: ['u10'], page: 1 },
+        args: {
+          sport: 'soccer',
+          withCamps: true,
+          withTraining: true,
+          gender: ['womens'],
+          ageGroup: ['u10'],
+          page: 1,
+        },
       },
     ]);
     expect(responseInit.status).toBeUndefined();
@@ -452,7 +466,7 @@ describe('FindPage server render by sport', () => {
       answer(browseResults([], {}, [{ gender: 'coed', playersPerSide: 10, level: 'rec' }])),
     );
     expect(queries).toEqual([
-      { name: BY_SPORT, args: { sport: 'softball', withCamps: true, page: 1 } },
+      { name: BY_SPORT, args: { sport: 'softball', withCamps: true, withTraining: true, page: 1 } },
     ]);
     expect(body.querySelector('main')!.innerHTML).not.toContain('bb');
   });
@@ -505,7 +519,9 @@ describe('FindPage server render by type', () => {
 
   it('renders a league and a tournament with their badges and the tournament’s dates and status in the raw HTML', async () => {
     const { body, queries } = await render('/programs?q=beach', answer(mixed));
-    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach', withCamps: true } }]);
+    expect(queries).toEqual([
+      { name: SEARCH, args: { q: 'beach', withCamps: true, withTraining: true } },
+    ]);
     const [league, tournament] = [...body.querySelectorAll('main section ul > li')];
     expect(text(league.querySelector('[data-slot="badge"]'))).toBe('League');
     expect(text(tournament.querySelector('[data-slot="badge"]'))).toBe('Tournament');
@@ -534,7 +550,13 @@ describe('FindPage server render by type', () => {
     expect(queries).toEqual([
       {
         name: BROWSE,
-        args: { type: 'tournament', sport: 'beachVolleyball', withCamps: true, page: 1 },
+        args: {
+          type: 'tournament',
+          sport: 'beachVolleyball',
+          withCamps: true,
+          withTraining: true,
+          page: 1,
+        },
       },
     ]);
     expect(responseInit.status).toBeUndefined();
@@ -580,7 +602,9 @@ describe('FindPage server render by type', () => {
 
   it('ignores an unknown type: no argument, no chip, and the value nowhere in the HTML', async () => {
     const { html, body, queries } = await render('/programs?type=zzz&q=beach', answer(mixed));
-    expect(queries).toEqual([{ name: SEARCH, args: { q: 'beach', withCamps: true } }]);
+    expect(queries).toEqual([
+      { name: SEARCH, args: { q: 'beach', withCamps: true, withTraining: true } },
+    ]);
     expect(typeChips(body).map(([name]) => name)).toEqual(['All', 'Leagues', 'Tournaments']);
     expect(html).not.toContain('zzz');
   });
@@ -595,7 +619,9 @@ describe('FindPage server render by type', () => {
         typeCounts: [{ type: 'camp', count: 1 }],
       }),
     );
-    expect(queries).toEqual([{ name: SEARCH, args: { q: 'junior', withCamps: true } }]);
+    expect(queries).toEqual([
+      { name: SEARCH, args: { q: 'junior', withCamps: true, withTraining: true } },
+    ]);
     const [camp] = [...body.querySelectorAll('main section ul > li')];
     expect(text(camp.querySelector('[data-slot="badge"]'))).toBe('Camp');
     expect(text(camp)).toContain('Ages 9 to 14');
@@ -608,6 +634,34 @@ describe('FindPage server render by type', () => {
     expect(typeChips(body)).toEqual([
       ['All', '/programs?q=junior', 'page'],
       ['Camps', '/programs?type=camp&q=junior', null],
+    ]);
+  });
+
+  it('renders a training program with its badge, pattern, and the series status in the raw HTML', async () => {
+    const { body, queries } = await render(
+      '/programs?q=serving',
+      answer({
+        more: false,
+        rows: [SERVING_CLINIC_ROW],
+        facets: [],
+        typeCounts: [{ type: 'training', count: 1 }],
+      }),
+    );
+    expect(queries).toEqual([
+      { name: SEARCH, args: { q: 'serving', withCamps: true, withTraining: true } },
+    ]);
+    const [training] = [...body.querySelectorAll('main section ul > li')];
+    expect(text(training.querySelector('[data-slot="badge"]'))).toBe('Training');
+    expect(text(training)).toContain('Tuesdays, 6 to 7 pm, 8 weeks');
+    expect(text(training.querySelector('p:last-of-type'))).toBe(
+      'Registration openJul 6 – Aug 24, 2027 · closes Jul 1',
+    );
+    expect(path(training.querySelector('h3 a')!)).toBe(
+      '/organizations/gulf-coast-sport-social/training/tuesday-serving-clinic',
+    );
+    expect(typeChips(body)).toEqual([
+      ['All', '/programs?q=serving', 'page'],
+      ['Training', '/programs?type=training&q=serving', null],
     ]);
   });
 
@@ -627,17 +681,17 @@ describe('FindPage server render by type', () => {
     );
   });
 
-  it('says training programs are not listed and names the types that are, and answers 200', async () => {
+  it('says no training program is published yet, and answers 200', async () => {
     const { body, responseInit } = await render(
       '/programs?type=training',
       answer({ ...browseResults([], {}, []), typeCounts: [] }),
     );
     expect(responseInit.status).toBeUndefined();
     expect(text(body.querySelector('main section [role="status"]'))).toBe(
-      'Find a program does not list training programs yet',
+      'No training programs are published yet',
     );
     expect(text(body.querySelector('main section [role="status"] + p'))).toBe(
-      'Search the leagues, tournaments, and camps instead.',
+      'A training program appears here once its organization publishes it.',
     );
   });
 });

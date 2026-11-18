@@ -25,6 +25,7 @@ import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import { findTrainingBySlugs } from './lib/trainingLookup';
+import { hasScheduledClass } from './lib/trainingPublicList';
 import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
 import {
@@ -77,6 +78,7 @@ import { scoreWinnerSide, type Score, type Sport } from './lib/sports';
 import {
   backfilledValidator,
   backfillAllCampFields,
+  backfillAllTrainingFields,
   backfillDraftLeagueCounts,
   backfillTenantFields,
   findCustomLevel,
@@ -89,6 +91,7 @@ import {
   insertTrainingClasses,
   insertDraftTournament,
   publishCamp,
+  publishTraining,
   publishTournament,
   insertSeason,
   insertTenant,
@@ -877,6 +880,7 @@ interface DemoTraining {
   sport: Sport;
   locations: readonly string[];
   coachName: string;
+  published: boolean;
   classes: {
     weekday: number;
     firstDaysFromRun: number;
@@ -896,6 +900,7 @@ const DEMO_TRAININGS: readonly DemoTraining[] = [
     sport: 'beachVolleyball',
     locations: ['North Beach Sand Courts'],
     coachName: 'Dana Ruiz',
+    published: true,
     classes: {
       weekday: WEEKDAY_NAMES.indexOf('Tuesday'),
       firstDaysFromRun: 14,
@@ -1004,6 +1009,15 @@ async function ensureCampPublished(ctx: MutationCtx, demo: DemoCamp): Promise<vo
   await publishCamp(ctx, found.camp);
 }
 
+async function ensureTrainingPublished(ctx: MutationCtx, demo: DemoTraining): Promise<void> {
+  if (!demo.published) return;
+  const organization = await organizationBySlug(ctx, demo.organizationSlug);
+  if (!organization) return;
+  const found = await findTrainingBySlugs(ctx, organization, demo.slug);
+  if (!found || !(await hasScheduledClass(ctx, found.training._id))) return;
+  await publishTraining(ctx, found.training);
+}
+
 async function ensureTournament(
   ctx: MutationCtx,
   demo: DemoTournament,
@@ -1052,6 +1066,7 @@ const resultValidator = v.object({
     staffInviteCounts: v.number(),
     draftLeagueCounts: v.number(),
     campFields: v.number(),
+    trainingFields: v.number(),
   }),
 });
 
@@ -1136,6 +1151,7 @@ export const insertDemoData = internalMutation({
       staffInviteCounts: await backfillPendingInviteCounts(ctx),
       draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
       campFields: await backfillAllCampFields(ctx),
+      trainingFields: await backfillAllTrainingFields(ctx),
     };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
@@ -1197,6 +1213,7 @@ export const insertDemoData = internalMutation({
     for (const demo of DEMO_TRAININGS) {
       if (await ensureTraining(ctx, demo)) inserted.trainings++;
       inserted.trainingClasses += await ensureTrainingClasses(ctx, demo, today);
+      await ensureTrainingPublished(ctx, demo);
     }
     return { ...inserted, backfilled };
   },

@@ -19,6 +19,7 @@ import {
   MAX_PROGRAMS_SEARCH_UPDATED,
   programSlugTaken,
   publishCamp,
+  publishTraining,
   publishLeague,
   publishTournament,
   restoreLeague,
@@ -894,27 +895,80 @@ describe('programs.searchText', () => {
     });
   });
 
-  test('training programs get no text from a location rename or a City, state change', async () => {
+  const SERVING_CLINIC = {
+    name: 'Serving Clinic',
+    slug: 'serving-clinic',
+    sport: 'beachVolleyball' as const,
+    coachName: 'Dana Ruiz',
+  };
+
+  test('a draft training program holds its name, sport, organization, location, and City, state, and no division word or coach', async () => {
     const { t, organizationId, alpha } = await world();
     await t.run(async (ctx) => {
       await insertDraftTraining(ctx, organizationId, {
-        name: 'Serving Clinic',
-        slug: 'serving-clinic',
-        sport: 'beachVolleyball',
+        ...SERVING_CLINIC,
         locationIds: [alpha._id],
-        coachName: 'Dana Ruiz',
       });
+
+      expect((await programNamed(ctx, organizationId, 'serving-clinic')).searchText).toBe(
+        'Serving Clinic Beach volleyball Org A Alpha Field Corpus Christi, TX',
+      );
+    });
+  });
+
+  test('publishing a training program rewrites its program’s text from the row, and publishing again leaves it', async () => {
+    const { t, organizationId, alpha } = await world();
+    await t.run(async (ctx) => {
+      const trainingId = await insertDraftTraining(ctx, organizationId, {
+        ...SERVING_CLINIC,
+        locationIds: [alpha._id],
+      });
+      const training = (await ctx.db.get('trainings', trainingId))!;
+      await ctx.db.patch('programs', training.programId, { searchText: 'stale' });
+
+      await publishTraining(ctx, training);
+
+      const program = (await ctx.db.get('programs', training.programId))!;
+      expect(program.status).toBe('published');
+      expect(program.searchText).toBe(
+        'Serving Clinic Beach volleyball Org A Alpha Field Corpus Christi, TX',
+      );
+      await publishTraining(ctx, training);
+      expect((await ctx.db.get('programs', training.programId))!.searchText).toBe(
+        program.searchText,
+      );
+    });
+  });
+
+  test('renaming a location and changing City, state rewrite the training programs held there, and one elsewhere keeps its text', async () => {
+    const { t, organizationId, alpha, bravo } = await world();
+    await t.run(async (ctx) => {
+      await insertDraftTraining(ctx, organizationId, {
+        ...SERVING_CLINIC,
+        locationIds: [alpha._id],
+      });
+      await insertDraftTraining(ctx, organizationId, {
+        ...SERVING_CLINIC,
+        name: 'Bravo Clinic',
+        slug: 'bravo-clinic',
+        locationIds: [bravo._id],
+      });
+      const before = (await programNamed(ctx, organizationId, 'bravo-clinic')).searchText;
 
       await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
       await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
 
-      expect(
-        (await programNamed(ctx, organizationId, 'serving-clinic')).searchText,
-      ).toBeUndefined();
+      expect((await programNamed(ctx, organizationId, 'serving-clinic')).searchText).toBe(
+        'Serving Clinic Beach volleyball Org A Omega Field Galveston, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'bravo-clinic')).searchText).toContain(
+        'Galveston, TX',
+      );
+      expect((await programNamed(ctx, organizationId, 'bravo-clinic')).searchText).not.toBe(before);
     });
   });
 
-  test('training programs do not count toward the bound of a rename', async () => {
+  test('more than 200 training programs stop a rename, as for the other searched types', async () => {
     const { t, organizationId, alpha } = await world();
     await t.run(async (ctx) => {
       for (let i = 0; i <= MAX_PROGRAMS_SEARCH_UPDATED; i++) {
@@ -925,12 +979,9 @@ describe('programs.searchText', () => {
         });
       }
 
-      await updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address });
-      await updateOrganizationCityState(ctx, organizationId, 'Galveston, TX');
-
-      expect((await ctx.db.get('locations', alpha._id))!.name).toBe('Omega Field');
-      const programs = await ctx.db.query('programs').collect();
-      expect(programs.every((program) => program.searchText === undefined)).toBe(true);
+      await expect(
+        updateLocation(ctx, alpha, { name: 'Omega Field', address: alpha.address }),
+      ).rejects.toThrow(/more than 200 training programs/);
     });
   });
 

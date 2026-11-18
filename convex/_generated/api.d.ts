@@ -108,6 +108,7 @@ import type * as lib_tournamentPools from "../lib/tournamentPools.js";
 import type * as lib_trainingInput from "../lib/trainingInput.js";
 import type * as lib_trainingLookup from "../lib/trainingLookup.js";
 import type * as lib_trainingPattern from "../lib/trainingPattern.js";
+import type * as lib_trainingPublicList from "../lib/trainingPublicList.js";
 import type * as lib_userName from "../lib/userName.js";
 import type * as lib_users from "../lib/users.js";
 import type * as lib_waitlist from "../lib/waitlist.js";
@@ -241,6 +242,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trainingInput": typeof lib_trainingInput;
   "lib/trainingLookup": typeof lib_trainingLookup;
   "lib/trainingPattern": typeof lib_trainingPattern;
+  "lib/trainingPublicList": typeof lib_trainingPublicList;
   "lib/userName": typeof lib_userName;
   "lib/users": typeof lib_users;
   "lib/waitlist": typeof lib_waitlist;

@@ -57,6 +57,7 @@ const NONE = {
   staffInviteCounts: 0,
   draftLeagueCounts: 0,
   campFields: 0,
+  trainingFields: 0,
 };
 const NO_ROWS = {
   organizations: 0,
@@ -876,6 +877,7 @@ describe('seed:demo', () => {
         staffInviteCounts: 2,
         draftLeagueCounts: 2,
         campFields: 0,
+        trainingFields: 0,
       },
     });
 
@@ -1492,7 +1494,7 @@ describe('seed:demo training', () => {
     });
   }
 
-  test('adds the draft Tuesday Serving Clinic, coached by Dana Ruiz with no ages, to Gulf Coast Sport & Social, and a second run adds none', async () => {
+  test('adds the published Tuesday Serving Clinic, coached by Dana Ruiz with no ages, to Gulf Coast Sport & Social, and a second run adds none', async () => {
     const t = setup();
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(1);
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
@@ -1504,16 +1506,87 @@ describe('seed:demo training', () => {
       name: 'Tuesday Serving Clinic',
       slug: 'tuesday-serving-clinic',
       sport: 'beachVolleyball',
-      status: 'draft',
+      status: 'published',
       locationIds: [location],
     });
     expect(trainings[0]).toMatchObject({
       organizationId,
       programId: programs[0]?._id,
+      status: 'published',
+      sport: 'beachVolleyball',
       coachName: 'Dana Ruiz',
     });
+    expect(trainings[0]?.lastClassDate).toBeDefined();
     expect(trainings[0]).not.toHaveProperty('minimumAge');
     expect(trainings[0]).not.toHaveProperty('maximumAge');
+  });
+
+  test('publishes a Tuesday Serving Clinic an earlier run left as a draft, and a second run changes nothing', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      const training = (await ctx.db.query('trainings').first())!;
+      await ctx.db.patch('programs', training.programId, { status: 'draft' });
+      await ctx.db.patch('trainings', training._id, { status: 'draft' });
+    });
+    await t.mutation(internal.seed.insertDemoData, {});
+    const published = await trainingRows(t);
+    expect(published.programs[0]?.status).toBe('published');
+    expect(published.trainings[0]?.status).toBe('published');
+    await t.mutation(internal.seed.insertDemoData, {});
+    expect(await trainingRows(t)).toEqual(published);
+  });
+
+  test('shows the Tuesday Serving Clinic on the organization page, the public page, and Find a program', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const rows = await t.query(api.trainings.listPublic, {
+      organizationSlug: 'gulf-coast-sport-social',
+      page: 1,
+    });
+    expect(rows.rows.map((row) => row.name)).toEqual(['Tuesday Serving Clinic']);
+    const page = await t.query(api.trainings.getPublicPage, {
+      orgSlug: 'gulf-coast-sport-social',
+      trainingSlug: 'tuesday-serving-clinic',
+    });
+    expect(page?.classes).toHaveLength(8);
+    const found = await t.query(api.search.programs, { q: 'serving', withTraining: true });
+    expect(found.rows.map((row) => [row.type, row.name])).toEqual([
+      ['training', 'Tuesday Serving Clinic'],
+    ]);
+  });
+
+  test('sets the status, sport, and last class date of training rows written before they were kept, and a second run changes none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.run(async (ctx) => {
+      for (const training of await ctx.db.query('trainings').collect()) {
+        await ctx.db.patch('trainings', training._id, {
+          status: undefined,
+          sport: undefined,
+          lastClassDate: undefined,
+        });
+      }
+    });
+    const args = { organizationSlug: 'gulf-coast-sport-social', page: 1 };
+    expect((await t.query(api.trainings.listPublic, args)).rows).toEqual([]);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(1);
+    expect((await t.query(api.trainings.listPublic, args)).rows).toHaveLength(1);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(0);
+  });
+
+  test('corrects the last class date of a row that has every field, after a release that cancelled a class without keeping it, and a second run changes none', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const before = (await trainingRows(t)).trainings[0].lastClassDate;
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query('trainingClasses').collect();
+      const last = rows.sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      await ctx.db.patch('trainingClasses', last._id, { status: 'cancelled' });
+    });
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(1);
+    expect((await trainingRows(t)).trainings[0].lastClassDate).not.toBe(before);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(0);
   });
 
   test('adds none where a program already holds the web address', async () => {
@@ -1812,6 +1885,7 @@ describe('seed:demo backfill against a recount', () => {
       staffInviteCounts: 1,
       draftLeagueCounts: 1,
       campFields: 0,
+      trainingFields: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({

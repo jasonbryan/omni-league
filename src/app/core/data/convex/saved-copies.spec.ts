@@ -4,11 +4,13 @@ import { convexToJson, type Value } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
 import {
   getCampPublicPageReturns,
+  getTrainingPublicPageReturns,
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
   getTournamentPublicPageReturns,
   publicCampsValidator,
+  publicTrainingsValidator,
   publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
@@ -79,7 +81,7 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists the organization, league, season, tournament, camp, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+  it('lists the organization, league, season, tournament, camp, training, and find page queries, deliberately public and caller-independent, each with its own returns validator', () => {
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
     ).toEqual([
@@ -91,6 +93,7 @@ describe('ConvexSavedCopies', () => {
       ['tournaments:listOpenForOrganization', publicOpenTournamentsValidator],
       ['camps:listPublic', publicCampsValidator],
       ['camps:listOpenForOrganization', publicOpenCampSessionsValidator],
+      ['trainings:listPublic', publicTrainingsValidator],
       ['organizations:listPublicLeagueFacets', publicLeagueFacetsValidator],
       ['leagues:getPublicPage', getLeaguePublicPageReturns],
       ['seasons:listPublic', publicSeasonsValidator],
@@ -98,6 +101,7 @@ describe('ConvexSavedCopies', () => {
       ['teams:listPublic', publicTeamsValidator],
       ['tournaments:getPublicPage', getTournamentPublicPageReturns],
       ['camps:getPublicPage', getCampPublicPageReturns],
+      ['trainings:getPublicPage', getTrainingPublicPageReturns],
       ['search:leagues', searchLeaguesValidator],
       ['search:leaguesBySport', searchLeaguesBySportValidator],
       ['search:organizations', searchOrganizationsValidator],

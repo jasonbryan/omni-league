@@ -45,6 +45,9 @@ import {
   insertCampSession,
   insertDraftCamp,
   insertDraftTraining,
+  insertTrainingClasses,
+  setTrainingClassStatus,
+  publishTraining,
   publishCamp,
   insertDraftTournament,
   insertLeague,
@@ -90,6 +93,7 @@ import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
 import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
+import { MAX_TRAINING_WEEKS } from './lib/trainingPattern';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
@@ -644,6 +648,68 @@ export const seedTraining = internalMutation({
     }
     await insertDraftTraining(ctx, organization._id, { ...training, locationIds });
     return { slug: training.slug };
+  },
+});
+
+/** Skips the rules of `trainingClasses.schedule`, so a test can seed classes that have passed. */
+export const seedTrainingClasses = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    trainingSlug: v.string(),
+    weekday: v.number(),
+    startTime: v.string(),
+    endTime: v.string(),
+    firstDate: v.string(),
+    weeks: v.number(),
+    placesPerClass: v.number(),
+    registrationDeadline: v.string(),
+  },
+  returns: v.object({ classCount: v.number() }),
+  handler: async (ctx, { organizationSlug, trainingSlug, ...pattern }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const classCount = await insertTrainingClasses(ctx, found.training, {
+      ...pattern,
+      allowSingleRegistration: false,
+    });
+    return { classCount };
+  },
+});
+
+/** Cancels every class the way `trainingClasses.cancel` does, which the e2e has no sign-in for. */
+export const cancelSeededTrainingClasses = internalMutation({
+  args: { organizationSlug: v.string(), trainingSlug: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const classes = await ctx.db
+      .query('trainingClasses')
+      .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', found.training._id))
+      .take(MAX_TRAINING_WEEKS);
+    for (const row of classes) await setTrainingClassStatus(ctx, row, 'cancelled');
+    return null;
+  },
+});
+
+/** Skips the rule that a training program has a class. */
+export const publishSeededTraining = internalMutation({
+  args: { organizationSlug: v.string(), trainingSlug: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    await publishTraining(ctx, found.training);
+    return null;
   },
 });
 

@@ -143,6 +143,8 @@ describe('trainings.create', () => {
       _creationTime: training._creationTime,
       programId: program?._id,
       organizationId: s.organizationA,
+      status: 'draft',
+      sport: 'beachVolleyball',
       coachName: 'Dana Ruiz',
     });
     expect(program).toMatchObject({

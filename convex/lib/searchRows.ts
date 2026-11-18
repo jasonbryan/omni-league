@@ -6,6 +6,7 @@ import { logoUrlField } from './organizationLogo';
 import { leagueLocationNames, leagueLocations, leagueRowSeasons } from './publicLeague';
 import type { SearchLeagues, SearchProgramRow } from './publicPage';
 import { sportName } from './sports';
+import { publicTrainingRow } from './trainingPublicList';
 import { tournamentIsFull } from './tournamentInput';
 
 type OrganizationCache = Map<Id<'organizations'>, Doc<'organizations'> | null>;
@@ -67,6 +68,45 @@ export async function campIsUpcoming(
   return camp?.lastSessionEndDate !== undefined && camp.lastSessionEndDate >= today();
 }
 
+export function trainingOfProgram(
+  ctx: Pick<QueryCtx, 'db'>,
+  program: Doc<'programs'>,
+): Promise<Doc<'trainings'> | null> {
+  return ctx.db
+    .query('trainings')
+    .withIndex('by_programId', (q) => q.eq('programId', program._id))
+    .unique();
+}
+
+/** The `programs` row holds no class date, so the training program's last class is read from its own row. */
+export async function trainingIsUpcoming(
+  ctx: Pick<QueryCtx, 'db'>,
+  program: Doc<'programs'>,
+): Promise<boolean> {
+  const training = await trainingOfProgram(ctx, program);
+  return training?.lastClassDate !== undefined && training.lastClassDate >= today();
+}
+
+async function trainingRow(
+  ctx: QueryCtx,
+  organization: Doc<'organizations'>,
+  program: Doc<'programs'>,
+): Promise<SearchProgramRow | null> {
+  const training = await trainingOfProgram(ctx, program);
+  if (training?.organizationId !== program.organizationId) return null;
+  const row = await publicTrainingRow(ctx, organization, training, program);
+  if (!row || row.lastClassDate < today()) return null;
+  return {
+    type: 'training',
+    organization: {
+      name: organization.name,
+      slug: organization.slug,
+      ...(await logoUrlField(ctx, organization)),
+    },
+    ...row,
+  };
+}
+
 async function campRow(
   ctx: QueryCtx,
   organization: Doc<'organizations'>,
@@ -104,6 +144,7 @@ async function programRow(
     return league ? { type: 'league', ...(await leagueRow(ctx, organization, league)) } : null;
   }
   if (program.type === 'camp') return campRow(ctx, organization, program);
+  if (program.type === 'training') return trainingRow(ctx, organization, program);
   if (program.type !== 'tournament') return null;
   const tournament = await ctx.db
     .query('tournaments')
