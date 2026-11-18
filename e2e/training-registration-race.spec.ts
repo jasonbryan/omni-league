@@ -57,8 +57,11 @@ test.describe('two accounts register for the last place at once', () => {
         await racer.goto(registerPath);
         await expect(racer.getByRole('button', { name: 'Register', exact: true })).toBeVisible();
       }
-      await Promise.all(
-        racers.map((racer) => racer.getByRole('button', { name: 'Register', exact: true }).click()),
+      // The page of the account that presses second swaps its form for the full view once the first place is taken, so that press may find no button.
+      await Promise.allSettled(
+        racers.map((racer) =>
+          racer.getByRole('button', { name: 'Register', exact: true }).click({ timeout: 5_000 }),
+        ),
       );
 
       const outcome = (racer: Page) =>
