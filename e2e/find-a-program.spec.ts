@@ -1720,7 +1720,7 @@ test.describe('find a program: camps', () => {
   });
 });
 
-/** No other test seeds a tournament in this division, so a browse of it lists only these, and no tournament from a parallel test joins the page mid-scan. */
+/** No other spec seeds a tournament in this division, so a browse of it lists only these tests' tournaments. */
 const OVER_50_WOMENS_SOFTBALL = {
   gender: 'womens',
   playersPerSide: 10,
@@ -1808,8 +1808,12 @@ test.describe('find a program: ended tournaments', () => {
 
     await page.goto(ENDED_TOURNAMENT_BROWSE);
     await hydrated(consoleGuard);
+    await expect(rowNames(page).filter({ hasText: id })).toHaveText([upcomingName]);
+
+    // Tests in parallel add tournaments to the browse as it is scanned, so the axe helper's tab walk runs on a view only this test's tenant fills.
+    await page.goto(`/programs?type=tournament&sport=softball&q=${id}`);
+    await hydrated(consoleGuard);
     await expect(rowNames(page)).toHaveText([upcomingName]);
-    await expect(results(page)).not.toContainText('Ended Beach Open');
     await expectAccessible(page);
 
     await page.setViewportSize({ width: 320, height: 800 });
