@@ -14,7 +14,10 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
 import { seedTraining, seedTrainingClasses, setTrainingClassRegistered } from './support/training';
-import { seedTrainingRegistration } from './support/training-registrations';
+import {
+  seedTrainingRegistration,
+  seedTrainingWaitlistEntry,
+} from './support/training-registrations';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -1313,5 +1316,267 @@ test.describe('Training: who registered', () => {
       player.name,
     );
     await screenshot(page, testInfo, 'training-registrants-organizer');
+  });
+});
+
+test.describe('Training: the series waitlist', () => {
+  const MAYA = { kind: 'minor', minorName: 'Maya R.' } as const;
+  const SELF = { kind: 'self' } as const;
+  const LIST = 'trainingWaitlist:listForTraining';
+  const UNBROKEN = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
+  const panel = (page: Page) => page.locator('app-training-waitlist');
+  const listRegion = (page: Page) => panel(page).getByRole('region', { name: /^Waitlist of / });
+  const waitingRows = (page: Page) => panel(page).locator('tbody tr');
+  const promoteButton = (page: Page) => panel(page).getByRole('button', { name: /^Promote/ });
+  const box = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x: x + window.scrollX, y: y + window.scrollY, width, height };
+    });
+
+  /** A published program whose every class holds `held` of `places`, so a series with `held` equal to `places` is full. */
+  async function waitingProgram(page: Page, places: number) {
+    const admin = await memberOf(page, 'orgAdmin');
+    await seedTraining(admin.tenant, { ...SERVING, locations: [PELICAN], coachName: 'Dana Ruiz' });
+    await seedTrainingClasses(admin.tenant, SERVING.slug, {
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: firstTuesdayTwoWeeksOut(),
+      weeks: 3,
+      registrationDeadline: dateFromToday(7),
+      allowSingleRegistration: true,
+      placesPerClass: places,
+    });
+    await convexRun('testing:publishSeededTraining', {
+      organizationSlug: admin.tenant.slug,
+      trainingSlug: SERVING.slug,
+    });
+    const holder = await seedUser(newUser('Holder'));
+    await seedTrainingRegistration(admin.tenant, SERVING.slug, holder, SELF);
+    return { ...admin, path: `${admin.base}/training/${SERVING.slug}` };
+  }
+
+  test('an org admin sees who waits, in the order they joined, a child with the guardian’s name and email, and the section passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await waitingProgram(page, 1);
+    const player = await seedUser(newUser('Player'));
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, guardian, MAYA);
+    await page.goto(path);
+    await expect(waitingRows(page)).toHaveCount(2);
+    await expect(panel(page).locator('[data-slot="waitlist-count"]')).toHaveText('2 waiting');
+    await expect(waitingRows(page).nth(0)).toContainText(player.name);
+    await expect(waitingRows(page).nth(1)).toContainText('Maya R.');
+    await expect(waitingRows(page).nth(1).getByRole('rowheader')).toContainText(
+      `Guardian: ${guardian.name}, ${guardian.email}`,
+    );
+    await expect(waitingRows(page).locator('[data-slot="waiting-kind"]')).toHaveText([
+      'Series',
+      'Series',
+    ]);
+    await screenshot(page, testInfo, '365-waitlist');
+    await expectAccessible(page);
+  });
+
+  test('a section with no one waiting says so', async ({ page }, testInfo) => {
+    const { path } = await waitingProgram(page, 1);
+    await page.goto(path);
+    await expect(panel(page).locator('[data-slot="waitlist-empty"]')).toHaveText(
+      'No one is waiting.',
+    );
+    await screenshot(page, testInfo, '365-waitlist-empty');
+    await expectAccessible(page);
+  });
+
+  test('a draft program has no waitlist section', async ({ page }) => {
+    const admin = await memberOf(page, 'orgAdmin');
+    await seedTraining(admin.tenant, { ...SERVING, locations: [PELICAN], coachName: 'Dana Ruiz' });
+    await page.goto(`${admin.base}/training/${SERVING.slug}`);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(SERVING.name);
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test('Promote is dimmed while a class is full, and pressing it says how to make a place, in an alert that takes focus', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await waitingProgram(page, 1);
+    const player = await seedUser(newUser('Player'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
+    await page.goto(path);
+    await expect(promoteButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await expect(panel(page).locator('[data-slot="promote-hint"]')).toBeVisible();
+    await expect(panel(page).locator('[data-slot="promote-hint"]')).toHaveText(
+      'Promote needs a place free in every class. Raise the places first if one is full.',
+    );
+    await promoteButton(page).click({ force: true });
+    const result = panel(page).getByRole('alert');
+    await expect(result).toContainText(`${player.name} could not be given a place.`);
+    await expect(result).toContainText('No place is free in every class. Raise the places first.');
+    await expect(result).toBeFocused();
+    await expect(waitingRows(page)).toHaveCount(1);
+    await screenshot(page, testInfo, '365-waitlist-refused');
+    await expectAccessible(page);
+  });
+
+  test('with a place in every class, Promote registers the first person for the series at once, and the list and counts follow', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await waitingProgram(page, 2);
+    const player = await seedUser(newUser('Player'));
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, guardian, MAYA);
+    await page.goto(path);
+    await expect(
+      classRows(page)
+        .first()
+        .getByRole('button', { name: /registered in / }),
+    ).toHaveText(/^1 of 2 registered in /);
+    await expect(promoteButton(page)).toHaveCount(1);
+    await expect(promoteButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(promoteButton(page)).toHaveAccessibleName(`Promote ${player.name}`);
+    await promoteButton(page).click();
+    const result = panel(page).getByRole('status').filter({ hasText: 'has a place' });
+    await expect(result).toContainText(
+      `${player.name} has a place. Registered for every class of ${SERVING.name}.`,
+    );
+    await expect(result).toBeFocused();
+    await expect(waitingRows(page)).toHaveCount(1);
+    await expect(waitingRows(page).first()).toContainText('Maya R.');
+    await expect(
+      classRows(page)
+        .first()
+        .getByRole('button', { name: /registered in / }),
+    ).toHaveText(/^2 of 2 registered in /);
+    await expect(promoteButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await screenshot(page, testInfo, '365-waitlist-promoted');
+    await expectAccessible(page);
+  });
+
+  test('a league organizer assigned to the training program sees the waitlist', async ({
+    page,
+  }) => {
+    const admin = await memberOf(page, null);
+    await seedTraining(admin.tenant, { ...SERVING, locations: [PELICAN], coachName: 'Dana Ruiz' });
+    await seedTrainingClasses(admin.tenant, SERVING.slug, {
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: firstTuesdayTwoWeeksOut(),
+      weeks: 3,
+      registrationDeadline: dateFromToday(7),
+      placesPerClass: 1,
+    });
+    await convexRun('testing:publishSeededTraining', {
+      organizationSlug: admin.tenant.slug,
+      trainingSlug: SERVING.slug,
+    });
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: admin.tenant.slug,
+      email: admin.user.email,
+      leagueSlugs: [],
+      trainingSlugs: [SERVING.slug],
+    });
+    const player = await seedUser(newUser('Player'));
+    await seedTrainingWaitlistEntry(admin.tenant, SERVING.slug, player, SELF);
+    await page.goto(`${admin.base}/training/${SERVING.slug}`);
+    await expect(waitingRows(page)).toHaveCount(1);
+  });
+
+  test('a list the server fails shows the alert with Try again and the rest of the page stays', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await waitingProgram(page, 1);
+    await failFirstAnswer(page, LIST);
+    await page.goto(path);
+    await expect(panel(page).getByRole('alert')).toContainText('The waitlist could not be loaded.');
+    await expect(panel(page).getByRole('link', { name: 'Try again' })).toBeVisible();
+    await expect(page.locator('#classes-list')).toBeVisible();
+    await screenshot(page, testInfo, '365-waitlist-error');
+    await expectAccessible(page);
+  });
+
+  const WAITING_PEOPLE = [
+    { owner: 'player', participant: SELF },
+    { owner: 'guardian', participant: MAYA },
+    { owner: 'guardian', participant: { kind: 'minor', minorName: UNBROKEN } as const },
+  ] as const;
+
+  for (const width of [320, 360, 1280]) {
+    test(`the list takes the room of its skeleton at ${width}px, with minors and a long email: nothing above it moves and the section keeps its height`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { tenant, path } = await waitingProgram(page, 1);
+      const base = newUser('Guardian');
+      const guardian = await seedUser({
+        ...base,
+        name: 'Gwendolyn'.repeat(6),
+        email: `e2e-a-very-long-guardian-address-${base.email}`,
+      });
+      const player = await seedUser(newUser('Player'));
+      for (const { owner, participant } of WAITING_PEOPLE) {
+        await seedTrainingWaitlistEntry(
+          tenant,
+          SERVING.slug,
+          owner === 'player' ? player : guardian,
+          participant,
+        );
+      }
+      const held = await holdQueries(page, [LIST]);
+      await page.goto(path);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(classRows(page)).toHaveCount(3);
+      await expect(waitingRows(page)).toHaveCount(3);
+      const measure = async () => ({
+        classes: await box(page.locator('#classes')),
+        section: await box(panel(page).locator('section')),
+        heading: await box(panel(page).locator('h2')),
+        page: await page.evaluate(() => document.documentElement.scrollHeight),
+      });
+      const loading = await measure();
+      await screenshot(page, testInfo, `365-waitlist-loading-${width}`);
+      await expectAccessible(page);
+      held.release();
+      await expect(listRegion(page)).toBeVisible();
+      await expect(panel(page)).toContainText(guardian.email);
+      const loaded = await measure();
+      expect(loaded.classes).toEqual(loading.classes);
+      expect(loaded.heading.y).toBe(loading.heading.y);
+      expect(Math.abs(loaded.section.y - loading.section.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(loaded.section.height - loading.section.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(loaded.page - loading.page)).toBeLessThanOrEqual(1);
+      const region = listRegion(page);
+      const sizes = await region.evaluate((element) => ({
+        pageScroll: document.documentElement.scrollWidth,
+        pageClient: document.documentElement.clientWidth,
+        promote: element.querySelector('button')!.getBoundingClientRect().right,
+        regionRight: element.getBoundingClientRect().right,
+      }));
+      expect(sizes.pageScroll).toBeLessThanOrEqual(sizes.pageClient);
+      expect(sizes.promote).toBeLessThanOrEqual(sizes.regionRight + 1);
+      await screenshot(page, testInfo, `365-waitlist-loaded-${width}`);
+      await expectAccessible(page);
+      if (width === 320) expect(await checkReflow(page)).toMatchObject({ passed: true });
+    });
+  }
+
+  test('a section with no one waiting holds the same room while it loads as its message does', async ({
+    page,
+  }) => {
+    const { path } = await waitingProgram(page, 1);
+    const held = await holdQueries(page, [LIST]);
+    await page.goto(path);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(classRows(page)).toHaveCount(3);
+    const loading = await box(panel(page).locator('section'));
+    held.release();
+    await expect(panel(page).locator('[data-slot="waitlist-empty"]')).toBeVisible();
+    const loaded = await box(panel(page).locator('section'));
+    expect(Math.abs(loaded.height - loading.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loaded.y - loading.y)).toBeLessThanOrEqual(1);
   });
 });

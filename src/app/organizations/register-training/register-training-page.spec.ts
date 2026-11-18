@@ -21,6 +21,7 @@ const PATH = `/app/organizations/${SLUGS.orgSlug}/training/${SLUGS.trainingSlug}
 const TRAINING_PATH = `/organizations/${SLUGS.orgSlug}/training/${SLUGS.trainingSlug}`;
 const GET = 'trainingRegistrations:getForRegistration';
 const REGISTER = 'trainingRegistrations:register';
+const JOIN = 'trainingWaitlist:join';
 const TRAINING_ID = 'training_1';
 const NO_AGES = {
   trainingId: TRAINING_ID,
@@ -37,6 +38,7 @@ const NO_AGES = {
   classCount: 8,
   placesLeft: 12,
   registered: false,
+  waitlisted: false,
 };
 const OPEN = { ...NO_AGES, minimumAge: 18, maximumAge: 99 };
 const REGISTERED = { ...OPEN, registered: true };
@@ -194,15 +196,18 @@ describe('RegisterTrainingPage', () => {
       expect(backLink()).toBeDefined();
     });
 
-    it('full: names the first full class, with no form and a link back', async () => {
+    it('full: offers the waitlist for the series, naming the full class, with the age box and a link back', async () => {
       await open();
       await answer(FULL);
-      const alert = page.querySelector('[data-slot="alert"]');
-      expect(alertText(alert)).toBe(
-        'A class is full. Tue, Feb 16, 2027 has no place left, and a series registration holds a place in every class.',
+      const note = page.querySelector('form [role="note"]');
+      expect(alertText(note)).toBe(
+        'A class is full. Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
       );
-      expect(page.querySelector('form')).toBeNull();
-      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
+      expect(ageBox()).not.toBeNull();
+      expect(text(page.querySelector('main p.text-muted-foreground'))).toBe(
+        'Join the waitlist for a training series',
+      );
     });
 
     it('open: the series facts, the form, and the title', async () => {
@@ -752,6 +757,263 @@ describe('RegisterTrainingPage', () => {
       await answer(OPEN);
       expect(registration()?.args).toEqual(SLUGS);
       expect(facts()[0]).toEqual(['Schedule', 'Tuesdays, 6 to 7 pm, 8 weeks']);
+    });
+  });
+
+  describe('the series waitlist', () => {
+    const joins = () => convex.calls.filter((call) => call.name === JOIN);
+    const submitButton = () => page.querySelector('button[type="submit"]');
+
+    beforeEach(async () => {
+      await open();
+      await answer(FULL);
+    });
+
+    it('titles the page for joining the waitlist', () => {
+      expect(document.title).toBe(
+        'Join the waitlist for a training series | Tuesday Serving Clinic | Omni League',
+      );
+    });
+
+    it('sends the join with the participant and the age box, and no class, shows the pending state, then opens the training page in place of this entry', async () => {
+      await tick();
+      await submit();
+      expect(registers()).toEqual([]);
+      expect(joins().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      expect(text(submitButton())).toBe('Joining…');
+      expect(submitButton()?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(submitButton());
+      expect(text(page.querySelector('form > p[role="status"]'))).toBe(
+        'Joining the waitlist for Tuesday Serving Clinic.',
+      );
+      joins()[0].resolve({ trainingWaitlistEntryId: 'entry_1', position: 1 });
+      await flush();
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
+    it('an unticked submit asks for the age box and sends nothing', async () => {
+      await submit();
+      expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+        'Confirm your age to continue.',
+      );
+      expect(joins()).toEqual([]);
+    });
+
+    it('a failure shows the waitlist alert, focused, keeps the box ticked, and leaves the button to try again', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(new Error('network'));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"][role="alert"]');
+      expect(text(alert)).toBe(
+        'You could not be added to the waitlist. You were not added. Check your connection and try again.',
+      );
+      expect(document.activeElement).toBe(alert);
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      expect(text(submitButton())).toBe('Join the waitlist');
+    });
+
+    it('a series that has a place by now says so and offers Register, which shows the registration form once the answer catches up', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(
+        new ConvexError({ code: 'seriesHasPlace', message: 'Every class has a place free.' }),
+      );
+      await flush();
+      const card = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alertText(card)).toBe(
+        'Every class has a place free. Register for the series instead.',
+      );
+      expect(card?.getAttribute('role')).toBe('alert');
+      expect(document.activeElement).toBe(card);
+      await answer(OPEN);
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Register');
+      expect(page.querySelector('form [role="note"]')).toBeNull();
+    });
+
+    it('a duplicate entry says the account holder is on the waitlist already, with a link back', async () => {
+      await tick();
+      await submit();
+      joins()[0].reject(new ConvexError({ code: 'alreadyWaiting', message: 'x' }));
+      await flush();
+      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
+        "You're on the waitlist for Tuesday Serving Clinic. The organizer offers the series to the first person waiting. Your position is on the training page.",
+      );
+      expect(page.querySelector('[data-slot="refusal-action"]')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+    });
+
+    it('the server refusing a child’s name as a duplicate shows under the name', async () => {
+      await answer({ ...FULL, minimumAge: 9, maximumAge: 17 });
+      const input = page.querySelector<HTMLInputElement>('#minor-name')!;
+      input.value = 'Maya R.';
+      input.dispatchEvent(new Event('input'));
+      await flush();
+      await tick();
+      await submit();
+      joins()[0].reject(
+        new ConvexError({
+          code: 'alreadyWaiting',
+          field: 'minorName',
+          message: 'Maya R. is already on the waitlist for this training program.',
+        }),
+      );
+      await flush();
+      expect(text(page.querySelector('#minor-name-error'))).toBe(
+        'Maya R. is already on the waitlist for this training program.',
+      );
+      expect(document.activeElement).toBe(input);
+    });
+
+    it('is offline: refuses with the offline alert and sends nothing', async () => {
+      await tick();
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await harness.fixture.whenStable();
+      await submit();
+      expect(joins()).toEqual([]);
+      expect(text(page.querySelector('form [data-slot="alert"][role="alert"]'))).toBe(
+        "You're offline. Nothing was sent. Your answers are still here. Try again when you're connected.",
+      );
+      vi.restoreAllMocks();
+    });
+
+    it('a registration refused for a class that filled meanwhile offers the waitlist, which opens the join form', async () => {
+      await answer(OPEN);
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain('A class is full.');
+      await answer(FULL);
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Join the waitlist');
+    });
+
+    it('the join action puts the page into join mode, though the account’s answer still reads open', async () => {
+      const BOTH_OPEN = { ...OPEN, minimumAge: 9, maximumAge: 30 };
+      await answer(BOTH_OPEN);
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain('A class is full.');
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Join the waitlist');
+      expect(page.querySelector('form [role="note"]')).not.toBeNull();
+      expect(document.title).toContain('Join the waitlist for a training series');
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      await submit();
+      expect(joins().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      expect(registers()).toHaveLength(1);
+    });
+
+    it('a sibling refused for a place that another child holds keeps the name, and joins the waitlist as that child', async () => {
+      await answer(YOUTH);
+      await tick();
+      const input = page.querySelector<HTMLInputElement>('#minor-name')!;
+      input.value = 'Child B';
+      input.dispatchEvent(new Event('input'));
+      await flush();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Join the waitlist');
+      expect(page.querySelector<HTMLInputElement>('#minor-name')!.value).toBe('Child B');
+      await submit();
+      expect(joins().map((call) => call.args)).toEqual([
+        {
+          trainingId: TRAINING_ID,
+          participant: { kind: 'minor', minorName: 'Child B' },
+          ageConfirmed: true,
+        },
+      ]);
+      expect(registers()).toHaveLength(1);
+      joins()[0].resolve({ trainingWaitlistEntryId: 'entry_1', position: 1 });
+      await flush();
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
+    it('Register after a join refused for a place gives the registration form back, and the join action does not stick', async () => {
+      await answer({ ...OPEN, minimumAge: 9, maximumAge: 30 });
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      await submit();
+      joins()[0].reject(new ConvexError({ code: 'seriesHasPlace', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Register');
+      expect(page.querySelector('form [role="note"]')).toBeNull();
+    });
+
+    it('says people are waiting, not that a class is full, when only the queue makes the series full', async () => {
+      await answer({ ...FULL, seriesWaitlist: true });
+      expect(alertText(page.querySelector('form [role="note"]'))).toBe(
+        'People are waiting for a place. Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
+      );
+    });
+
+    it('a registration refused while people wait offers the waitlist in the same words', async () => {
+      await answer(OPEN);
+      await tick();
+      await submit();
+      await answer({ ...FULL, seriesWaitlist: true });
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
+        'People are waiting for a place. A new registration waits behind them, so no place is left for the series. You can join the waitlist instead.',
+      );
+    });
+
+    it('reads the places fact as full with people on the waitlist while the series has a queue', async () => {
+      await answer({ ...FULL, seriesWaitlist: true });
+      const places = [...page.querySelectorAll('main dl > div')].find(
+        (row) => text(row.querySelector('dt')) === 'Places left',
+      );
+      expect(text(places?.querySelector('dd'))).toBe('Full, with people on the waitlist');
+    });
+
+    it('a waiting account holder sees their spot, with a link back, and no form', async () => {
+      await answer({ ...FULL, minimumAge: 18, waitlisted: true });
+      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
+        "You're on the waitlist for Tuesday Serving Clinic. The organizer offers the series to the first person waiting. Your position is on the training page.",
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+    });
+
+    it('offers a waiting guardian only a child, on the waitlist form', async () => {
+      await answer({ ...FULL, minimumAge: 14, maximumAge: 30, waitlisted: true });
+      const radios = [...page.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+      expect(radios.map((radio) => radio.value)).toEqual(['minor']);
+      expect(text(submitButton())).toBe('Join the waitlist');
+    });
+
+    it('a class with no place has no waitlist to join yet', async () => {
+      TestBed.resetTestingModule();
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...OPEN_CLASS, singleClass: { ...SINGLE, placesLeft: 0 } });
+      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
+        'This class is full. Tue, Feb 9, 2027 has no place left.',
+      );
+      expect(page.querySelector('[data-slot="refusal-action"]')).toBeNull();
+      expect(page.querySelector('form')).toBeNull();
     });
   });
 

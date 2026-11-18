@@ -50,6 +50,7 @@ function description(training: PublicTrainingData): string {
           [registeredSelf]="registeredSelf()"
           [registeredMinors]="registeredMinors()"
           [registeredClasses]="registeredClasses()"
+          [waitlist]="waitlist()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -93,9 +94,30 @@ export class PublicTrainingPage {
       ? { orgSlug: this.orgSlug(), trainingSlug: this.trainingSlug() }
       : skipToken,
   );
-  protected readonly registeredSelf = computed(() => this.mine.value()?.self ?? false);
-  protected readonly registeredMinors = computed(() => this.mine.value()?.minorNames ?? []);
-  protected readonly registeredClasses = computed(() => this.mine.value()?.classes ?? []);
+  private readonly waiting = injectQuery(api.trainingWaitlist.listMineForTraining, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), trainingSlug: this.trainingSlug() }
+      : skipToken,
+  );
+  /** The two answers apply together, so the series row changes once and not for each answer. */
+  private readonly viewerReady = computed(() => {
+    if (!this.auth.signedIn() || !this.auth.convexAuthenticated()) return true;
+    return [this.mine, this.waiting].every(
+      (query) => query.value() !== undefined || query.error() !== undefined,
+    );
+  });
+  protected readonly registeredSelf = computed(() =>
+    this.viewerReady() ? (this.mine.value()?.self ?? false) : false,
+  );
+  protected readonly registeredMinors = computed(() =>
+    this.viewerReady() ? (this.mine.value()?.minorNames ?? []) : [],
+  );
+  protected readonly registeredClasses = computed(() =>
+    this.viewerReady() ? (this.mine.value()?.classes ?? []) : [],
+  );
+  protected readonly waitlist = computed(() =>
+    this.viewerReady() ? (this.waiting.value() ?? []) : [],
+  );
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

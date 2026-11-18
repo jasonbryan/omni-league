@@ -12,6 +12,16 @@ import {
 import { HlmCard } from '../../ui/card';
 import type { TrainingRegistrationAnswer } from './register-training-state';
 
+function seriesPlacesText(
+  placesLeft: number,
+  fullClassDate: string | undefined,
+  waiting: boolean,
+): string {
+  if (waiting) return 'Full, with people on the waitlist';
+  if (fullClassDate !== undefined) return `${trainingClassDate(fullClassDate)} is full`;
+  return `At least ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left in every class`;
+}
+
 /** Clips its overflow rather than hiding it, because a hidden overflow makes the card the sticky footer's scroll container. */
 @Component({
   selector: 'app-register-training-card',
@@ -63,14 +73,25 @@ export class RegisterTrainingCard {
   readonly training = input.required<NonNullable<TrainingRegistrationAnswer>>();
   readonly trainingHref = input.required<string>();
   readonly classAsked = input(false);
+  readonly joining = input(false);
 
-  protected readonly kicker = computed(() =>
-    this.classAsked() ? 'Register for a class' : 'Register for a training series',
-  );
+  protected readonly kicker = computed(() => {
+    if (this.classAsked()) return 'Register for a class';
+    return this.joining()
+      ? 'Join the waitlist for a training series'
+      : 'Register for a training series';
+  });
 
   protected readonly facts = computed(() => {
-    const { pattern, minimumAge, maximumAge, placesLeft, fullClassDate, singleClass } =
-      this.training();
+    const {
+      pattern,
+      minimumAge,
+      maximumAge,
+      placesLeft,
+      fullClassDate,
+      seriesWaitlist,
+      singleClass,
+    } = this.training();
     const ages =
       minimumAge === undefined && maximumAge === undefined
         ? []
@@ -99,10 +120,7 @@ export class RegisterTrainingCard {
       ...ages,
       {
         label: 'Places left',
-        value:
-          fullClassDate === undefined
-            ? `At least ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left in every class`
-            : `${trainingClassDate(fullClassDate)} is full`,
+        value: seriesPlacesText(placesLeft, fullClassDate, seriesWaitlist === true),
       },
       { label: 'Registration closes', value: formatCalendarDate(pattern.registrationDeadline) },
     ];

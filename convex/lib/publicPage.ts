@@ -461,6 +461,8 @@ export const publicTrainingPageValidator = v.object({
   everyClassCancelled: v.optional(v.boolean()),
   // Set only when the program takes registrations for a single class, so a page saved before it existed reads as one that does not.
   allowSingleRegistration: v.optional(v.boolean()),
+  // Set only while someone waits for the series, so a page saved before it existed reads as one that has no waitlist.
+  seriesWaitlist: v.optional(v.boolean()),
   classes: v.array(
     v.object({
       // Optional so a page saved before it existed stays valid; the registration link needs it.

@@ -4,6 +4,7 @@ import { today } from './campPublicList';
 import { leagueLocations } from './publicLeague';
 import { sportName, type Sport } from './sports';
 import { MAX_TRAINING_WEEKS } from './trainingPattern';
+import { seriesEntryWaits } from './trainingWaitlistReads';
 
 export function upcomingTrainings(
   ctx: Pick<QueryCtx, 'db'>,
@@ -47,6 +48,8 @@ export async function upcomingClassesOf(ctx: Pick<QueryCtx, 'db'>, trainingId: I
     .query('trainingClasses')
     .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId).gte('date', from))
     .take(MAX_TRAINING_WEEKS);
+  // A waiting series entry holds the next place in every class, so each reads as full.
+  const seriesWaits = await seriesEntryWaits(ctx, trainingId);
   return classes
     .filter((row) => row.status === 'scheduled')
     .map((row) => ({
@@ -54,7 +57,7 @@ export async function upcomingClassesOf(ctx: Pick<QueryCtx, 'db'>, trainingId: I
       date: row.date,
       startTime: row.startTime,
       endTime: row.endTime,
-      placesLeft: Math.max(0, row.places - row.registeredCount),
+      placesLeft: seriesWaits ? 0 : Math.max(0, row.places - row.registeredCount),
     }));
 }
 

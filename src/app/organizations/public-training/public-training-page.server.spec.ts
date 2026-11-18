@@ -196,7 +196,7 @@ describe('PublicTrainingPage server render', () => {
       'Ages 16 or older',
       'Location North Beach Sand Courts 3500 Sandcourt Ln, Corpus Christi, TX 78402',
       'Schedule Tuesdays, 6 to 7 pm, 3 weeks First class Feb 2, 2027',
-      'Registration Registration open Closes Feb 1, 2027 A class is full, so no place is left for the whole series.',
+      'Registration Registration open Closes Feb 1, 2027 A class is full, so no place is left for the whole series. Join the waitlist for the series',
     ]);
     const markup = html.slice(html.indexOf('<body'));
     const order = [
@@ -211,7 +211,7 @@ describe('PublicTrainingPage server render', () => {
     ].map((marker) => markup.indexOf(marker));
     expect(order.every((position) => position > 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(text(body.querySelector('main'))).not.toMatch(/Register|Join the waitlist|\$|price/i);
+    expect(text(body.querySelector('main'))).not.toMatch(/Register|\$|price/i);
   });
 
   it('puts the classes card’s slot, size, and classes in the raw HTML as static attributes', async () => {

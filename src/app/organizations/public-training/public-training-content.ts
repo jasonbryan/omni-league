@@ -6,6 +6,7 @@ import {
   lucideCalendarDays,
   lucideCircleCheck,
   lucideClock,
+  lucideListOrdered,
   lucideMapPin,
   lucideRepeat,
   lucideUserRound,
@@ -14,6 +15,7 @@ import {
 import {
   MAX_MINORS_PER_SESSION,
   participantsOffered,
+  type Participant,
 } from '../../../../convex/lib/individualRegistration';
 import { trainingAgesLabel } from '../../../../convex/lib/trainingInput';
 import {
@@ -55,6 +57,17 @@ export interface RegisteredClass {
 const ENDED_TEXT = 'This training has ended.';
 const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
 const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
+const WAITING_TEXT = 'People are waiting for a place, so no place is left for the whole series.';
+
+export interface WaitingSpot {
+  readonly participant: Participant;
+  readonly position: number;
+}
+
+function waitingLine({ participant, position }: WaitingSpot): string {
+  const who = participant.kind === 'self' ? "You're" : `${participant.minorName} is`;
+  return `${who} on the waitlist, position ${position}`;
+}
 
 /** The dates are written from the stored text, never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
@@ -66,6 +79,7 @@ const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
       lucideCalendarDays,
       lucideCircleCheck,
       lucideClock,
+      lucideListOrdered,
       lucideMapPin,
       lucideRepeat,
       lucideUserRound,
@@ -250,22 +264,45 @@ const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
                   </dd>
                   @if (full()) {
                     <dd data-slot="series-full" class="mt-1 text-sm text-muted-foreground">
-                      {{ fullText }}
+                      {{ seriesWaitlist() ? waitingText : fullText }}
                     </dd>
                   }
                 }
-                <dd data-slot="series-actions" [class]="actionsRow">
-                  @if (registeredText(); as line) {
-                    <p
-                      data-slot="series-registered"
-                      class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
+                <dd
+                  data-slot="series-actions"
+                  [class]="actionsRow"
+                  [class.flex-wrap]="waitingLines().length > 0"
+                >
+                  @if (registeredText() || waitingLines().length > 0) {
+                    <div
+                      class="flex min-w-0 flex-1 flex-col justify-center gap-0.5"
+                      [class.basis-full]="waitingLines().length > 0"
                     >
-                      <ng-icon
-                        name="lucideCircleCheck"
-                        class="shrink-0 text-base"
-                        aria-hidden="true"
-                      /><span class="truncate">{{ line }}</span>
-                    </p>
+                      @if (registeredText(); as line) {
+                        <p
+                          data-slot="series-registered"
+                          class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
+                        >
+                          <ng-icon
+                            name="lucideCircleCheck"
+                            class="shrink-0 text-base"
+                            aria-hidden="true"
+                          /><span class="truncate">{{ line }}</span>
+                        </p>
+                      }
+                      @for (line of waitingLines(); track line) {
+                        <p
+                          data-slot="series-waitlist"
+                          class="flex min-w-0 items-start gap-1.5 text-sm font-medium"
+                        >
+                          <ng-icon
+                            name="lucideListOrdered"
+                            class="mt-0.5 shrink-0 text-base"
+                            aria-hidden="true"
+                          /><span class="wrap-anywhere">{{ line }}</span>
+                        </p>
+                      }
+                    </div>
                   }
                   @if (canRegister()) {
                     <a
@@ -273,6 +310,14 @@ const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
                       data-slot="button"
                       [class]="registerButton + ' ms-auto shrink-0'"
                       >Register<span class="sr-only"> for the series</span></a
+                    >
+                  }
+                  @if (canJoin()) {
+                    <a
+                      [routerLink]="registerPath()"
+                      data-slot="button"
+                      [class]="registerButton + ' ms-auto shrink-0'"
+                      >Join the waitlist<span class="sr-only"> for the series</span></a
                     >
                   }
                 </dd>
@@ -293,10 +338,12 @@ export class PublicTrainingContent {
   readonly registeredMinors = input<readonly string[]>([]);
   /** What the viewer holds in single classes; the series is in `registeredSelf` and `registeredMinors`. */
   readonly registeredClasses = input<readonly RegisteredClass[]>([]);
+  readonly waitlist = input<readonly WaitingSpot[]>([]);
 
   protected readonly endedText = ENDED_TEXT;
   protected readonly cancelledText = CANCELLED_TEXT;
   protected readonly fullText = FULL_TEXT;
+  protected readonly waitingText = WAITING_TEXT;
   protected readonly registerButton = OUTLINE_BUTTON;
   protected readonly actionsRow = ACTIONS_ROW;
   protected readonly fact = FACT;
@@ -353,15 +400,25 @@ export class PublicTrainingContent {
           this.now(),
         ),
   );
-  protected readonly full = computed(() => this.classes().some((row) => row.fullForSeries));
+  /** A waiting entry holds the next place in every class, so the series is full to the viewer whatever they hold. */
+  protected readonly seriesWaitlist = computed(() => this.training().seriesWaitlist === true);
+  protected readonly full = computed(
+    () => this.seriesWaitlist() || this.classes().some((row) => row.fullForSeries),
+  );
   protected readonly registeredText = computed(() =>
     registeredLine(this.registeredSelf(), this.registeredMinors()),
   );
+  protected readonly waitingLines = computed(() => this.waitlist().map(waitingLine));
   private readonly canAdd = computed(() => {
     const offered = participantsOffered(this.training());
+    const waitingSelf = this.waitlist().some(({ participant }) => participant.kind === 'self');
+    const waitingChildren = this.waitlist().filter(
+      ({ participant }) => participant.kind === 'minor',
+    );
     return (
-      (offered.includes('self') && !this.registeredSelf()) ||
-      (offered.includes('minor') && this.registeredMinors().length < MAX_MINORS_PER_SESSION)
+      (offered.includes('self') && !this.registeredSelf() && !waitingSelf) ||
+      (offered.includes('minor') &&
+        this.registeredMinors().length + waitingChildren.length < MAX_MINORS_PER_SESSION)
     );
   });
   private canAddToClass(held: RegisteredClass | undefined): boolean {
@@ -372,9 +429,9 @@ export class PublicTrainingContent {
       offered.includes('minor')
     );
   }
-  protected readonly canRegister = computed(
-    () => this.status()?.registrationOpen === true && !this.full() && this.canAdd(),
-  );
+  private readonly asks = computed(() => this.status()?.registrationOpen === true && this.canAdd());
+  protected readonly canRegister = computed(() => this.asks() && !this.full());
+  protected readonly canJoin = computed(() => this.asks() && this.full());
   protected readonly registerPath = computed(() =>
     registerTrainingPath(this.training().organization.slug, this.training().slug),
   );

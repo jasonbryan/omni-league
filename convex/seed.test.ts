@@ -43,8 +43,8 @@ const ROWS = {
   tournaments: 7,
   camps: 3,
   campSessions: 5,
-  trainings: 1,
-  trainingClasses: 8,
+  trainings: 2,
+  trainingClasses: 12,
 };
 const NONE = {
   organizations: 0,
@@ -1144,6 +1144,7 @@ describe('seed:demo', () => {
       'insertDemoTeams',
       'insertDemoTournamentInvites',
       'insertDemoTrainingRegistration',
+      'insertDemoTrainingWaitlist',
       'setDemoLogo',
     ]);
     for (const [name, fn] of exports) {
@@ -1495,31 +1496,36 @@ describe('seed:demo training', () => {
     });
   }
 
-  test('adds the published Tuesday Serving Clinic, coached by Dana Ruiz with no ages, to Gulf Coast Sport & Social, and a second run adds none', async () => {
+  test('adds the published Tuesday Serving Clinic, coached by Dana Ruiz with no ages, and the Thursday Drop-in Clinic, coached by Marcus Webb, to Gulf Coast Sport & Social, and a second run adds none', async () => {
     const t = setup();
-    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(1);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(2);
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
     const { organizationId, location, trainings, programs } = await trainingRows(t);
-    expect(trainings).toHaveLength(1);
-    expect(programs[0]).toMatchObject({
-      organizationId,
-      type: 'training',
-      name: 'Tuesday Serving Clinic',
-      slug: 'tuesday-serving-clinic',
-      sport: 'beachVolleyball',
-      status: 'published',
-      locationIds: [location],
-    });
-    expect(trainings[0]).toMatchObject({
-      organizationId,
-      programId: programs[0]?._id,
-      status: 'published',
-      sport: 'beachVolleyball',
-      coachName: 'Dana Ruiz',
-    });
-    expect(trainings[0]?.lastClassDate).toBeDefined();
-    expect(trainings[0]).not.toHaveProperty('minimumAge');
-    expect(trainings[0]).not.toHaveProperty('maximumAge');
+    expect(trainings).toHaveLength(2);
+    for (const [index, [name, slug, coachName]] of [
+      ['Tuesday Serving Clinic', 'tuesday-serving-clinic', 'Dana Ruiz'],
+      ['Thursday Drop-in Clinic', 'thursday-drop-in-clinic', 'Marcus Webb'],
+    ].entries()) {
+      expect(programs[index]).toMatchObject({
+        organizationId,
+        type: 'training',
+        name,
+        slug,
+        sport: 'beachVolleyball',
+        status: 'published',
+        locationIds: [location],
+      });
+      expect(trainings[index]).toMatchObject({
+        organizationId,
+        programId: programs[index]?._id,
+        status: 'published',
+        sport: 'beachVolleyball',
+        coachName,
+      });
+      expect(trainings[index]?.lastClassDate).toBeDefined();
+      expect(trainings[index]).not.toHaveProperty('minimumAge');
+      expect(trainings[index]).not.toHaveProperty('maximumAge');
+    }
   });
 
   test('publishes a Tuesday Serving Clinic an earlier run left as a draft, and a second run changes nothing', async () => {
@@ -1545,7 +1551,10 @@ describe('seed:demo training', () => {
       organizationSlug: 'gulf-coast-sport-social',
       page: 1,
     });
-    expect(rows.rows.map((row) => row.name)).toEqual(['Tuesday Serving Clinic']);
+    expect(rows.rows.map((row) => row.name).sort()).toEqual([
+      'Thursday Drop-in Clinic',
+      'Tuesday Serving Clinic',
+    ]);
     const page = await t.query(api.trainings.getPublicPage, {
       orgSlug: 'gulf-coast-sport-social',
       trainingSlug: 'tuesday-serving-clinic',
@@ -1571,8 +1580,8 @@ describe('seed:demo training', () => {
     });
     const args = { organizationSlug: 'gulf-coast-sport-social', page: 1 };
     expect((await t.query(api.trainings.listPublic, args)).rows).toEqual([]);
-    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(1);
-    expect((await t.query(api.trainings.listPublic, args)).rows).toHaveLength(1);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(2);
+    expect((await t.query(api.trainings.listPublic, args)).rows).toHaveLength(2);
     expect((await t.mutation(internal.seed.insertDemoData, {})).backfilled.trainingFields).toBe(0);
   });
 
@@ -1606,7 +1615,7 @@ describe('seed:demo training', () => {
         ],
       });
     });
-    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(0);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainings).toBe(1);
   });
 });
 
@@ -1629,7 +1638,7 @@ describe('seed:demo training classes', () => {
 
   test('gives the Tuesday Serving Clinic 8 weekly classes on Tuesdays, 6 to 7 PM, 12 places each, the first on or after 14 days after the run, and a second run adds none', async () => {
     const t = setup();
-    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(8);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(12);
     expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(0);
     const { training, rows } = await classesOfServing(t);
     const today = dateAtUtcMinus12(Date.now());
@@ -1659,6 +1668,49 @@ describe('seed:demo training classes', () => {
       firstDate: first,
       weeks: 8,
       placesPerClass: 12,
+      registrationDeadline: addCalendarDays(today, 7),
+      allowSingleRegistration: true,
+    });
+    expect(checkTrainingPattern(training.pattern!, today)).toEqual({});
+  });
+
+  test('gives the Thursday Drop-in Clinic 4 weekly classes on Thursdays, 6 to 7 PM, 1 place each, with single-class registration, the first on or after 14 days after the run', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { training, rows } = await t.run(async (ctx) => {
+      const program = (await ctx.db.query('programs').collect()).find(
+        (row) => row.slug === 'thursday-drop-in-clinic',
+      )!;
+      const found = (await ctx.db
+        .query('trainings')
+        .withIndex('by_programId', (q) => q.eq('programId', program._id))
+        .unique())!;
+      const classes = await ctx.db
+        .query('trainingClasses')
+        .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', found._id))
+        .collect();
+      return { training: found, rows: classes };
+    });
+    const today = dateAtUtcMinus12(Date.now());
+    const first = rows[0].date;
+    expect(rows).toHaveLength(4);
+    expect(weekdayOf(first)).toBe(WEEKDAY_NAMES.indexOf('Thursday'));
+    expect(first >= addCalendarDays(today, 14)).toBe(true);
+    expect(first <= addCalendarDays(today, 20)).toBe(true);
+    expect(rows.map((row) => row.date)).toEqual(
+      Array.from({ length: 4 }, (_, week) => addCalendarDays(first, week * 7)),
+    );
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        places: 1,
+        registeredCount: 0,
+        startTime: '18:00',
+        endTime: '19:00',
+      });
+    }
+    expect(training.pattern).toMatchObject({
+      placesPerClass: 1,
+      weeks: 4,
       registrationDeadline: addCalendarDays(today, 7),
       allowSingleRegistration: true,
     });

@@ -25,6 +25,7 @@ import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs, trainingDetails } from './lib/trainingLookup';
 import { trainingPatternValidator } from './lib/trainingPattern';
+import { seriesEntryWaits, waitingSeriesEntriesOf } from './lib/trainingWaitlistReads';
 import { programStatusValidator } from './lib/programs';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
@@ -171,6 +172,7 @@ export const getForManagement = query({
       maximumAge: v.optional(v.number()),
       pattern: v.optional(trainingPatternValidator),
       locations: v.array(v.object({ name: v.string(), address: v.string() })),
+      waitlistCount: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, { orgSlug, trainingSlug }) => {
@@ -184,11 +186,13 @@ export const getForManagement = query({
       return null;
     }
     const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
+    const waiting = await waitingSeriesEntriesOf(ctx, found.training._id);
     return {
       trainingId: found.training._id,
       organizationId: organization._id,
       role: membership.role,
       ...(await trainingDetails(ctx, organization, found)),
+      ...(waiting.length > 0 && { waitlistCount: waiting.length }),
     };
   },
 });
@@ -237,6 +241,7 @@ export const getPublicPage = query({
       pattern: publicPattern(found.training.pattern),
       ...(everyClassCancelled && { everyClassCancelled }),
       ...(found.training.pattern.allowSingleRegistration && { allowSingleRegistration: true }),
+      ...((await seriesEntryWaits(ctx, found.training._id)) && { seriesWaitlist: true }),
       classes,
     };
   },

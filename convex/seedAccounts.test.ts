@@ -283,8 +283,8 @@ const DATA = {
   tournaments: 7,
   camps: 3,
   campSessions: 5,
-  trainings: 1,
-  trainingClasses: 8,
+  trainings: 2,
+  trainingClasses: 12,
 };
 const NO_BACKFILL = {
   organizations: 0,
@@ -317,7 +317,8 @@ describe('seed:demo accounts: a new deployment', () => {
         freeAgents: 6,
         campRegistrations: 2,
         campWaitlistEntries: 1,
-        trainingRegistrations: 1,
+        trainingRegistrations: 2,
+        trainingWaitlistEntries: 1,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -456,6 +457,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(
         await admin.query(api.trainings.listForOrganization, { organizationId: gulfCoast._id }),
       ).toMatchObject([
+        { name: 'Thursday Drop-in Clinic', coachName: 'Marcus Webb', status: 'published' },
         { name: 'Tuesday Serving Clinic', coachName: 'Dana Ruiz', status: 'published' },
       ]);
       const pending = await admin.query(api.invites.listPending, {
@@ -1109,12 +1111,21 @@ describe('seed:demo accounts: training registration', () => {
     'player@ holds a place in every class of the Tuesday Serving Clinic series, which only that account sees, and a rerun adds none',
     async () => {
       const t = setup();
-      expect((await run(t)).trainingRegistrations).toBe(1);
-      const { rows, classes, users } = await t.run(async (ctx) => ({
-        rows: await ctx.db.query('trainingRegistrations').collect(),
-        classes: await ctx.db.query('trainingClasses').collect(),
-        users: await ctx.db.query('users').collect(),
-      }));
+      expect((await run(t)).trainingRegistrations).toBe(2);
+      const { rows, classes, users } = await t.run(async (ctx) => {
+        const training = (await ctx.db.query('trainings').collect()).find(
+          (row) => row.coachName === 'Dana Ruiz',
+        )!;
+        return {
+          rows: (await ctx.db.query('trainingRegistrations').collect()).filter(
+            (row) => row.trainingId === training._id,
+          ),
+          classes: (await ctx.db.query('trainingClasses').collect()).filter(
+            (row) => row.trainingId === training._id,
+          ),
+          users: await ctx.db.query('users').collect(),
+        };
+      });
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         participant: { kind: 'self' },
@@ -1144,7 +1155,78 @@ describe('seed:demo accounts: training registration', () => {
       expect(page?.classes.map((row) => row.placesLeft)).toEqual(Array(8).fill(11));
 
       expect((await run(t)).trainingRegistrations).toBe(0);
-      expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toHaveLength(1);
+      expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toHaveLength(2);
+    },
+    SLOW,
+  );
+});
+
+describe('seed:demo accounts: training waitlist', () => {
+  const DROP_IN = { orgSlug: GULF_COAST, trainingSlug: 'thursday-drop-in-clinic' };
+
+  test(
+    'player@ holds the one place in every class of the Thursday Drop-in Clinic, so each class reads Full and guardian@ waits there with Maya R. at position 1, and a rerun adds none',
+    async () => {
+      const t = setup();
+      expect((await run(t)).trainingWaitlistEntries).toBe(1);
+      const { training, classes, entries, registrations, users } = await t.run(async (ctx) => {
+        const found = (await ctx.db.query('trainings').collect()).find(
+          (row) => row.coachName === 'Marcus Webb',
+        )!;
+        return {
+          training: found,
+          classes: (await ctx.db.query('trainingClasses').collect()).filter(
+            (row) => row.trainingId === found._id,
+          ),
+          entries: await ctx.db.query('trainingWaitlistEntries').collect(),
+          registrations: (await ctx.db.query('trainingRegistrations').collect()).filter(
+            (row) => row.trainingId === found._id,
+          ),
+          users: await ctx.db.query('users').collect(),
+        };
+      });
+      expect(classes).toHaveLength(4);
+      expect(classes.map((row) => [row.places, row.registeredCount])).toEqual(
+        Array(4).fill([1, 1]),
+      );
+      expect(registrations).toHaveLength(1);
+      expect(registrations[0]).toMatchObject({
+        participant: { kind: 'self' },
+        userId: users.find((user) => user.name === 'Demo Player')!._id,
+      });
+      expect(registrations[0]).not.toHaveProperty('classId');
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        trainingId: training._id,
+        status: 'waiting',
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+        userId: users.find((user) => user.name === 'Demo Guardian')!._id,
+      });
+      expect(entries[0]).not.toHaveProperty('classId');
+
+      const guardian = await as(t, EMAILS.guardian);
+      expect(await guardian.query(api.trainingWaitlist.listMineForTraining, DROP_IN)).toEqual([
+        { participant: { kind: 'minor', minorName: 'Maya R.' }, position: 1 },
+      ]);
+      const page = await guardian.query(api.trainings.getPublicPage, DROP_IN);
+      expect(page?.classes.map((row) => row.placesLeft)).toEqual(Array(4).fill(0));
+      const player = await as(t, EMAILS.player);
+      expect(await player.query(api.trainingWaitlist.listMineForTraining, DROP_IN)).toEqual([]);
+      expect(
+        (await player.query(api.trainingRegistrations.getForRegistration, DROP_IN))?.registered,
+      ).toBe(true);
+      const admin = await as(t, EMAILS.admin);
+      expect(
+        (await admin.query(api.trainingWaitlist.listForTraining, { trainingId: training._id })).map(
+          ({ name, guardian: holder, canPromote }) => [name, holder?.name, canPromote],
+        ),
+      ).toEqual([['Maya R.', 'Demo Guardian', false]]);
+
+      expect((await run(t)).trainingWaitlistEntries).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect())).toHaveLength(
+        1,
+      );
     },
     SLOW,
   );
@@ -1185,6 +1267,7 @@ describe('seed:demo accounts: a second run', () => {
         campRegistrations: 0,
         campWaitlistEntries: 0,
         trainingRegistrations: 0,
+        trainingWaitlistEntries: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -1315,6 +1398,7 @@ describe('seed:demo accounts: the password', () => {
         campRegistrations: 0,
         campWaitlistEntries: 0,
         trainingRegistrations: 0,
+        trainingWaitlistEntries: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -1392,6 +1476,7 @@ describe('seed:demo accounts: the password', () => {
         campRegistrations: 0,
         campWaitlistEntries: 0,
         trainingRegistrations: 0,
+        trainingWaitlistEntries: 0,
       });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);
