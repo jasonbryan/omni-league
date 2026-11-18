@@ -23,3 +23,18 @@ export async function seedTrainingRegistration(
     ...(date !== undefined && { date }),
   });
 }
+
+/** Skips the rules of joining, the places included, so a series can wait with places free. Local runs only. `user` must already have an account (`seedUser`). */
+export async function seedTrainingWaitlistEntry(
+  tenant: Tenant,
+  trainingSlug: string,
+  user: TestUser,
+  participant: TrainingParticipant,
+): Promise<void> {
+  await convexRun('testing:seedTrainingWaitlistEntry', {
+    organizationSlug: tenant.slug,
+    trainingSlug,
+    email: user.email,
+    participant,
+  });
+}

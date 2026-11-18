@@ -23,7 +23,17 @@ const OPEN: Answer = {
   classCount: 3,
   placesLeft: 12,
   registered: false,
+  waitlisted: false,
 };
+const SINGLE_CLASS: NonNullable<Answer['singleClass']> = {
+  classId: 'class_2' as NonNullable<Answer['singleClass']>['classId'],
+  date: '2027-02-09',
+  startTime: '18:00',
+  endTime: '19:00',
+  placesLeft: 12,
+  allowed: true,
+};
+const FULL: Answer = { ...OPEN, placesLeft: 0, fullClassDate: '2027-02-09' };
 const NOON = Date.parse('2027-02-01T12:00:00Z');
 
 const state = (answer: Parameters<typeof registerTrainingState>[0]['answer'], over = {}) =>
@@ -45,6 +55,13 @@ describe('registrationOptions', () => {
   it('leaves out the account holder once they hold a place', () => {
     expect(registrationOptions({ ...OPEN, registered: true })).toEqual(['minor']);
   });
+
+  it('leaves out the account holder once they wait for the series, for a class as well', () => {
+    expect(registrationOptions({ ...OPEN, waitlisted: true })).toEqual(['minor']);
+    expect(registrationOptions({ ...OPEN, waitlisted: true, singleClass: SINGLE_CLASS })).toEqual([
+      'minor',
+    ]);
+  });
 });
 
 describe('registerTrainingState', () => {
@@ -64,8 +81,35 @@ describe('registerTrainingState', () => {
     expect(state({ ...OPEN, classCount: 0 })).toBe('closed');
   });
 
-  it('is full while any class has no place', () => {
-    expect(state({ ...OPEN, placesLeft: 0, fullClassDate: '2027-02-09' })).toBe('full');
+  it('offers the series waitlist while any class has no place', () => {
+    expect(state(FULL)).toBe('waitlist');
+    expect(state({ ...FULL, seriesWaitlist: true })).toBe('waitlist');
+  });
+
+  it('is full, with no waitlist to join, for a class with no place', () => {
+    const full = { ...FULL, singleClass: { ...SINGLE_CLASS, placesLeft: 0 } };
+    expect(state(full, { classAsked: true })).toBe('full');
+  });
+
+  it('is the form for a class that has a place while another class is full', () => {
+    expect(state({ ...FULL, singleClass: SINGLE_CLASS }, { classAsked: true })).toBe('form');
+  });
+
+  it('is waitlisted once nothing else can be asked for, even when the series is full or closed', () => {
+    const waiting = { ...FULL, minimumAge: 18, waitlisted: true };
+    expect(state(waiting)).toBe('waitlisted');
+    expect(state({ ...waiting, placesLeft: 12, fullClassDate: undefined })).toBe('waitlisted');
+    expect(state(waiting, { nowMs: Date.parse('2027-02-03T12:00:00Z') })).toBe('waitlisted');
+  });
+
+  it('is the waitlist form for a guardian whose own wait leaves only a child to add', () => {
+    expect(state({ ...FULL, waitlisted: true })).toBe('waitlist');
+  });
+
+  it('is registered, not waitlisted, for a participant who holds a place', () => {
+    expect(state({ ...FULL, minimumAge: 18, registered: true, waitlisted: true })).toBe(
+      'registered',
+    );
   });
 
   it('is registered once nothing else can be asked for, even after the deadline', () => {
@@ -98,7 +142,7 @@ describe('registerTrainingState', () => {
   it('is the form for a guardian who can register only a child, once no class reads full', () => {
     expect(state({ ...OPEN, maximumAge: 17, placesLeft: 1 })).toBe('form');
     expect(state({ ...OPEN, maximumAge: 17, placesLeft: 0, fullClassDate: '2027-02-09' })).toBe(
-      'full',
+      'waitlist',
     );
   });
 

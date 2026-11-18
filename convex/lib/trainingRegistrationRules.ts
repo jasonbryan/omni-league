@@ -16,14 +16,21 @@ import {
   trainingHasAgeRange,
   type TrainingRegistrationRefusal,
 } from './trainingRegistration';
+import { TRAINING_WAITLIST_MESSAGES, type TrainingWaitlistCode } from './trainingWaitlist';
+import { waitingMinorEntriesOf, waitingSeriesEntryOf } from './trainingWaitlistReads';
 import {
   classRegistrationOf,
   minorSeriesRegistrationsOf,
+  replacedBySeries,
   seriesRegistrationOf,
   singleClassRegistrationsOf,
 } from './trainingRegistrationReads';
 
-export function refuseTrainingRegistration(refusal: TrainingRegistrationRefusal): never {
+export function refuseTrainingRegistration(
+  refusal: Omit<TrainingRegistrationRefusal, 'code'> & {
+    code: TrainingRegistrationRefusal['code'] | TrainingWaitlistCode;
+  },
+): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...refusal });
 }
@@ -74,6 +81,14 @@ async function refuseIfHeld(
       message: TRAINING_REGISTRATION_MESSAGES.alreadyRegistered(series.participant),
     });
   }
+  const waiting = await waitingSeriesEntryOf(ctx, training._id, userId, participant);
+  if (waiting) {
+    refuseTrainingRegistration({
+      code: 'alreadyWaiting',
+      ...field,
+      message: TRAINING_WAITLIST_MESSAGES.alreadyWaiting(waiting.participant),
+    });
+  }
   if (scope.kind !== 'class') return;
   const single = await classRegistrationOf(
     ctx,
@@ -121,14 +136,15 @@ async function distinctMinorKeysOf(
 ): Promise<Set<string>> {
   const series = await minorSeriesRegistrationsOf(ctx, trainingId, userId);
   const singles = await singleClassRegistrationsOf(ctx, trainingId, userId);
+  const waiting = await waitingMinorEntriesOf(ctx, trainingId, userId);
   return new Set(
-    [...series, ...singles].flatMap(({ participant }) =>
+    [...series, ...singles, ...waiting].flatMap(({ participant }) =>
       participant.kind === 'minor' ? [participantKey(participant)] : [],
     ),
   );
 }
 
-/** Whether each class has a place is the caller's to check. The single-class rows of a series registrant come back, for the series to replace. */
+/** Whether each class has a place, and whether a series entry waits, is the caller's to check. The single-class rows of a series registrant come back, for the series to replace. */
 export async function checkedTrainingRegistrant(
   ctx: Pick<QueryCtx, 'db'>,
   {
@@ -181,10 +197,6 @@ export async function checkedTrainingRegistrant(
     }
   }
   const replaced =
-    scope.kind === 'series'
-      ? (await singleClassRegistrationsOf(ctx, training._id, userId)).filter(
-          (row) => participantKey(row.participant) === participantKey(participant),
-        )
-      : [];
+    scope.kind === 'series' ? await replacedBySeries(ctx, training._id, userId, participant) : [];
   return { participant, replaced };
 }

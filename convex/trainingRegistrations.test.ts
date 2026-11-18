@@ -513,6 +513,7 @@ describe('trainingRegistrations.getForRegistration', () => {
       classCount: 3,
       placesLeft: 12,
       registered: false,
+      waitlisted: false,
     });
   });
 

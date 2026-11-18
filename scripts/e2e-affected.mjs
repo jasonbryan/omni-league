@@ -1234,7 +1234,12 @@ export const AREAS = [
   {
     name: 'convex training',
     test: (file) =>
-      named('convex/', ['trainings', 'trainingClasses', 'trainingRegistrations'])(file) ||
+      named('convex/', [
+        'trainings',
+        'trainingClasses',
+        'trainingRegistrations',
+        'trainingWaitlist',
+      ])(file) ||
       named('convex/lib/', [
         'individualRegistration',
         'trainingInput',
@@ -1245,6 +1250,9 @@ export const AREAS = [
         'trainingRegistrationReads',
         'trainingRegistrationRules',
         'trainingRegistrationWrites',
+        'trainingWaitlist',
+        'trainingWaitlistReads',
+        'trainingWaitlistWrites',
       ])(file),
     specs: ['organization-training', ...TRAINING_PAGE],
   },

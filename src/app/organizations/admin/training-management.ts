@@ -70,6 +70,7 @@ import { TrainingContext, type TrainingClassRow } from './training-context';
 import { TrainingNoAccess } from './training-no-access';
 import { trainingPath } from './training-path';
 import { TrainingRegistrants } from './training-registrants';
+import { TrainingWaitlist } from './training-waitlist';
 import { SCHEDULE_FRAGMENT, TrainingScheduleLanding } from './training-schedule-landing';
 import { TrainingScheduleForm } from './training-schedule-form';
 
@@ -98,6 +99,7 @@ type Outcome =
     TrainingNoAccess,
     TrainingRegistrants,
     TrainingScheduleForm,
+    TrainingWaitlist,
   ],
   providers: [
     provideIcons({
@@ -554,6 +556,14 @@ type Outcome =
                 }
               }
             </section>
+            @if (training.status === 'published' && rows().length > 0) {
+              <app-training-waitlist
+                [trainingId]="training.trainingId"
+                [trainingName]="training.name"
+                [retryHref]="retryHref()"
+                [waitlistCount]="training.waitlistCount ?? 0"
+              />
+            }
             @if (scheduling() !== 'no') {
               <section
                 #scheduleSection

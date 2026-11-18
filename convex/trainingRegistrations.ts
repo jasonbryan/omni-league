@@ -30,6 +30,7 @@ import {
   insertTrainingClassRegistration,
   insertTrainingSeriesRegistration,
 } from './lib/trainingRegistrationWrites';
+import { seriesEntryWaits, waitingSeriesEntryOf } from './lib/trainingWaitlistReads';
 import { getCurrentUser } from './lib/users';
 
 export const register = mutation({
@@ -61,7 +62,11 @@ export const register = mutation({
         asked,
         ageConfirmed,
       });
-      if (trainingClass.registeredCount >= trainingClass.places) {
+      // A waiting series entry holds the next place in every class, so a place raised or freed goes to the waitlist.
+      if (
+        trainingClass.registeredCount >= trainingClass.places ||
+        (await seriesEntryWaits(ctx, training._id))
+      ) {
         refuseTrainingRegistration({
           code: 'classFull',
           message: TRAINING_REGISTRATION_MESSAGES.classFull(trainingClass.date),
@@ -84,7 +89,9 @@ export const register = mutation({
       ageConfirmed,
     });
     // The series takes the place of the participant's single-class rows, so a class they fill alone is not full to them.
-    const full = classes.find((row) => placesHeldExcluding(row, replaced) >= row.places);
+    const full =
+      classes.find((row) => placesHeldExcluding(row, replaced) >= row.places) ??
+      ((await seriesEntryWaits(ctx, training._id)) ? classes[0] : undefined);
     if (full) {
       refuseTrainingRegistration({
         code: 'classFull',
@@ -111,6 +118,7 @@ async function singleClassAnswer(
   pattern: NonNullable<Doc<'trainings'>['pattern']>,
   rawClassId: string,
   mine: { series: boolean; singles: readonly Doc<'trainingRegistrations'>[] },
+  seriesWaits: boolean,
 ) {
   const classId = ctx.db.normalizeId('trainingClasses', rawClassId);
   const trainingClass = classId && (await ctx.db.get('trainingClasses', classId));
@@ -127,7 +135,7 @@ async function singleClassAnswer(
     date: trainingClass.date,
     startTime: trainingClass.startTime,
     endTime: trainingClass.endTime,
-    placesLeft: Math.max(0, trainingClass.places - trainingClass.registeredCount),
+    placesLeft: seriesWaits ? 0 : Math.max(0, trainingClass.places - trainingClass.registeredCount),
     allowed: pattern.allowSingleRegistration,
     ...(held && { held }),
   };
@@ -161,6 +169,10 @@ export const getForRegistration = query({
       placesLeft: v.number(),
       fullClassDate: v.optional(v.string()),
       registered: v.boolean(),
+      /** The account holder waits for the series; a child's wait is on the training page. */
+      waitlisted: v.boolean(),
+      /** Set only while someone waits for the series, so every class counts as full to a new registration. */
+      seriesWaitlist: v.optional(v.boolean()),
       singleClass: v.optional(
         v.object({
           classId: v.id('trainingClasses'),
@@ -190,15 +202,30 @@ export const getForRegistration = query({
     // A series replaces the single-class places of the account, so a class they fill alone is not full to them.
     // The server's `classFull` answers for a participant who does not hold the place.
     const singles = user ? await singleClassRegistrationsOf(ctx, training._id, user._id) : [];
-    const left = classes.map((row) => Math.max(0, row.places - placesHeldExcluding(row, singles)));
-    const fullClass = classes.find((row) => placesHeldExcluding(row, singles) >= row.places);
+    const seriesWaits = await seriesEntryWaits(ctx, training._id);
+    const left = classes.map((row) =>
+      seriesWaits ? 0 : Math.max(0, row.places - placesHeldExcluding(row, singles)),
+    );
+    const fullClass = seriesWaits
+      ? classes[0]
+      : classes.find((row) => placesHeldExcluding(row, singles) >= row.places);
+    const waiting = user
+      ? await waitingSeriesEntryOf(ctx, training._id, user._id, SELF_PARTICIPANT)
+      : null;
     const singleClass =
       classId === undefined
         ? undefined
-        : await singleClassAnswer(ctx, training, pattern, classId, {
-            series: series !== null,
-            singles: singles.filter((row) => row.participant.kind === 'self'),
-          });
+        : await singleClassAnswer(
+            ctx,
+            training,
+            pattern,
+            classId,
+            {
+              series: series !== null,
+              singles: singles.filter((row) => row.participant.kind === 'self'),
+            },
+            seriesWaits,
+          );
     return {
       trainingId: training._id,
       organizationName: organization.name,
@@ -210,6 +237,8 @@ export const getForRegistration = query({
       placesLeft: left.length === 0 ? 0 : Math.min(...left),
       ...(fullClass && { fullClassDate: fullClass.date }),
       registered: series !== null,
+      waitlisted: waiting !== null,
+      ...(seriesWaits && { seriesWaitlist: true }),
       ...(singleClass && { singleClass }),
     };
   },

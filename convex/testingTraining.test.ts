@@ -385,3 +385,78 @@ describe('testing:seedTrainingRegistration', () => {
     ).rejects.toThrow(/No training program/);
   });
 });
+
+describe('testing:seedTrainingWaitlistEntry', () => {
+  const EMAIL = 'guardian@example.test';
+  const ENTRY = {
+    organizationSlug: 'e2e-org-t7k2',
+    trainingSlug: 'tuesday-serving-clinic',
+    email: EMAIL,
+    participant: { kind: 'minor', minorName: 'Maya R.' } as const,
+  };
+
+  async function withAccount() {
+    const t = await seeded();
+    betterAuthTest.register(t, 'betterAuth');
+    await t.mutation(internal.testing.seedTraining, TRAINING);
+    await t.run(async (ctx) => {
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name: 'Demo Guardian',
+            email: EMAIL,
+            emailVerified: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      } as never)) as { _id: string };
+      await ctx.db.insert('users', {
+        authUserId: account._id,
+        name: 'Demo Guardian',
+        adultConfirmedAt: 1,
+      });
+    });
+    return t;
+  }
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await withAccount();
+    vi.stubEnv('IS_TEST', value);
+    await expect(t.mutation(internal.testing.seedTrainingWaitlistEntry, ENTRY)).rejects.toThrow(
+      /IS_TEST/,
+    );
+    expect(await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect())).toEqual([]);
+  });
+
+  test('puts the participant on the series waitlist with no class, whether or not a class is full', async () => {
+    const t = await withAccount();
+    await t.mutation(internal.testing.seedTrainingWaitlistEntry, ENTRY);
+    const rows = await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect());
+    expect(rows).toEqual([
+      expect.objectContaining({
+        participant: { kind: 'minor', minorName: 'Maya R.' },
+        participantKey: 'minor:maya r.',
+        status: 'waiting',
+      }),
+    ]);
+    expect(rows[0]).not.toHaveProperty('classId');
+  });
+
+  test('refuses an unknown account and a training program it does not have', async () => {
+    const t = await withAccount();
+    await expect(
+      t.mutation(internal.testing.seedTrainingWaitlistEntry, {
+        ...ENTRY,
+        email: 'no@example.test',
+      }),
+    ).rejects.toThrow(/No account/);
+    await expect(
+      t.mutation(internal.testing.seedTrainingWaitlistEntry, { ...ENTRY, trainingSlug: 'nowhere' }),
+    ).rejects.toThrow(/No training program/);
+  });
+});

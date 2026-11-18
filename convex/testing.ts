@@ -90,6 +90,7 @@ import {
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
+import { insertTrainingWaitlistEntry } from './lib/trainingWaitlistWrites';
 import { participantValidator } from './lib/individualRegistration';
 import { findTournamentBySlugs } from './lib/tournamentLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
@@ -782,6 +783,27 @@ export const seedTrainingRegistration = internalMutation({
       userId: user._id,
       participant,
     });
+    return null;
+  },
+});
+
+/** Skips every rule of `trainingWaitlist.join`, the places included, so a series can wait with a place free. */
+export const seedTrainingWaitlistEntry = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    trainingSlug: v.string(),
+    email: v.string(),
+    participant: participantValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, trainingSlug, email, participant }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
+    if (!found)
+      throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
+    const user = await userByEmail(ctx, email);
+    await insertTrainingWaitlistEntry(ctx, found.training, { userId: user._id, participant });
     return null;
   },
 });
