@@ -7,7 +7,15 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Locator, Page, Request, Route, TestInfo } from '@playwright/test';
+import type {
+  APIRequestContext,
+  BrowserContext,
+  Locator,
+  Page,
+  Request,
+  Route,
+  TestInfo,
+} from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { initials } from '../src/app/organizations/initials';
@@ -60,6 +68,29 @@ async function routeConvexSockets(
     if (offline || fieldWifi || (localOnly && origin !== LOCAL_CONVEX_URL)) void ws.close();
     else ws.connectToServer();
   });
+}
+
+/**
+ * A public query through the Convex HTTP API of the backend the built app's socket opened, since
+ * `convexRun` makes no Convex CLI call when E2E_BASE_URL is set.
+ */
+async function builtAppQuery(
+  request: APIRequestContext,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  if (firstSocketOrigin === undefined) {
+    throw new Error(`builtAppQuery ${name}: the page has opened no Convex socket yet`);
+  }
+  const answer = await request.post(`${firstSocketOrigin}/api/query`, {
+    data: { path: name, args, format: 'json' },
+  });
+  const body = (await answer.json()) as
+    { status: 'success'; value: unknown } | { status: 'error'; errorMessage: string };
+  if (body.status !== 'success') {
+    throw new Error(`builtAppQuery ${name} at ${firstSocketOrigin}: ${body.errorMessage}`);
+  }
+  return body.value;
 }
 
 async function setOffline(context: BrowserContext, value: boolean): Promise<void> {
@@ -806,6 +837,9 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       const mark = page.locator('app-organization-mark');
       await expectLogoLoaded(mark);
       await expectSavedCopies(page, organizationPageSavedKeys(organization.slug));
+      const filledCampSessions = await filledDemoCampSessions(organization.slug, (name, args) =>
+        builtAppQuery(page.request, name, args),
+      );
       const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
       const savedNote = page.locator('main [data-saved-copy-note]');
       const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
@@ -833,7 +867,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       const expectedCards = expectedRegistrationOpenCards(
         organization.slug,
         Date.now(),
-        await filledDemoCampSessions(organization.slug),
+        filledCampSessions,
       );
       if (expectedCards.length === 0) {
         await expect(registrationOpen.getByText(/^No season is open/)).toBeVisible();
