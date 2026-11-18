@@ -12,6 +12,8 @@ import { expectPendingSpinner } from '../../ui/testing/spinner';
 import { AdminArea } from './admin-area';
 import { AdminCamps } from './admin-camps';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { CampForm } from './camp-form';
+import { WEB_ADDRESS_CLEARANCE } from './sticky-footer';
 import { ROW_TITLE_LINK } from './link-classes';
 import {
   adminRoutes,
@@ -342,6 +344,180 @@ describe('AdminCamps', () => {
           'junior-beach-volleyball-camp is already taken. Choose another web address.',
         );
         expect(calls()).toEqual([]);
+      });
+
+      it('keeps the Web address children in the order label, input, status, error, description', async () => {
+        await open([]);
+        const order = () =>
+          [...input('slug').closest('[data-slot="field"]')!.children].map(
+            (child) => child.getAttribute('data-slot') ?? child.tagName.toLowerCase(),
+          );
+        expect(order()).toEqual(['field-label', 'input', 'field-status', 'field-description']);
+        await submit();
+        expect(order()).toEqual([
+          'field-label',
+          'input',
+          'field-status',
+          'field-error',
+          'field-description',
+        ]);
+        expect(page.querySelector('#slug-availability')?.getAttribute('role')).toBe('status');
+      });
+
+      it('ties the Web address input to its error first, then its description', async () => {
+        await open([]);
+        expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description');
+        await submit();
+        expect(input('slug').getAttribute('aria-describedby')).toBe('slug-error slug-description');
+      });
+
+      it('adds the web address clearance to the field group so a focus scroll leaves the status above the footer', async () => {
+        await open([]);
+        const classes = form().querySelector('[data-slot="field-group"]')!.className;
+        expect(classes.split(' ')).toEqual(expect.arrayContaining(tokens(WEB_ADDRESS_CLEARANCE)));
+      });
+
+      it('says the address is unique across leagues, tournaments, camps, and training programs', async () => {
+        await open([]);
+        expect(text(page.querySelector('#slug-description'))).toBe(
+          '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coastal Bend Rec Club, across its leagues, tournaments, camps, and training programs.',
+        );
+      });
+
+      it('keeps the taken message, the same element with the same text, through the flight and the refusal', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        const shown = page.querySelector('#slug-error');
+        const message =
+          'junior-beach-volleyball-camp is already taken. Choose another web address.';
+        expect(error('slug')).toBe(message);
+        await submit();
+        expect(o.convex.calls).toHaveLength(1);
+        expect(page.querySelector('#slug-error')).toBe(shown);
+        expect(error('slug')).toBe(message);
+        o.convex.calls[0].reject(
+          new ConvexError({
+            field: 'slug',
+            code: 'slugTaken',
+            message: CAMP_MESSAGES.slugTaken('junior-beach-volleyball-camp'),
+          }),
+        );
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBe(shown);
+        expect(error('slug')).toBe(message);
+      });
+
+      it('keeps Available through the flight', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        expect(text(page.querySelector('#slug-availability'))).toBe('Available');
+        await submit();
+        expect(o.convex.calls).toHaveLength(1);
+        expect(text(page.querySelector('#slug-availability'))).toBe('Available');
+      });
+
+      it('ignores an answer that turns taken in flight, in flight and after a success', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBeNull();
+        expect(text(page.querySelector('#slug-availability'))).toBe('Available');
+        o.convex.calls[0].resolve({ campId: 'cp_new' });
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBeNull();
+      });
+
+      it('shows no taken message at the moment the page clears the form after a success', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        const clear = Object.getOwnPropertyDescriptor(CampForm.prototype, 'clear')!.value as (
+          this: CampForm,
+        ) => void;
+        const seen: (string | null)[] = [];
+        const spy = vi.spyOn(CampForm.prototype, 'clear').mockImplementation(function (
+          this: CampForm,
+        ) {
+          seen.push(this.errors.slug());
+          clear.call(this);
+        });
+        try {
+          o.convex.calls[0].resolve({ campId: 'cp_new' });
+          await o.flush();
+        } finally {
+          spy.mockRestore();
+        }
+        expect(seen).toEqual([null]);
+      });
+
+      it('shows the live answer again once the create fails offline at call time', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBeNull();
+        o.convex.calls[0].reject(new ConvexOfflineError());
+        await o.flush();
+        expect(error('slug')).toBe(
+          'junior-beach-volleyball-camp is already taken. Choose another web address.',
+        );
+      });
+
+      it('shows the live answer for the same address typed again after a success clears the form', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        o.convex.calls[0].resolve({ campId: 'cp_new' });
+        await o.flush();
+        expect(input('slug').value).toBe('');
+        await type('name', 'Junior Beach Volleyball Camp');
+        await pause();
+        expect(input('slug').value).toBe('junior-beach-volleyball-camp');
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(error('slug')).toBe(
+          'junior-beach-volleyball-camp is already taken. Choose another web address.',
+        );
+      });
+
+      it('shows the live answer again once the create fails with the failed alert', async () => {
+        await open([]);
+        await fill();
+        await pause();
+        asked().at(-1)!.emit(true);
+        await o.flush();
+        await submit();
+        asked().at(-1)!.emit(false);
+        await o.flush();
+        expect(page.querySelector('#slug-error')).toBeNull();
+        o.convex.calls[0].reject(new Error('Server Error: secret'));
+        await o.flush();
+        expect(error('slug')).toBe(
+          'junior-beach-volleyball-camp is already taken. Choose another web address.',
+        );
       });
     });
 

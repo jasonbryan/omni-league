@@ -31,7 +31,7 @@ import { campPath } from './camp-path';
 import { CAMP_FORM_ALERTS, CampForm, type CampField } from './camp-form';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
-import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter, WEB_ADDRESS_CLEARANCE } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { WebAddressStatus } from './web-address-status';
 
@@ -159,15 +159,11 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
             [formField]="form.fields.slug"
             (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
-            [attr.aria-describedby]="describedBy('slug', 'slug-description')"
+            [attr.aria-describedby]="slugDescribedBy()"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           />
-          <p hlmFieldDescription id="slug-description">
-            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ organizationName() }}, across its leagues, tournaments, and camps.
-          </p>
           <app-web-address-status
             [available]="form.slugAvailable()"
             [reserveRoom]="form.slugStatusReservesRoom()"
@@ -194,6 +190,10 @@ const AGE_FOCUS_SELECTOR: Record<'minimumAge' | 'maximumAge', string> = {
               }
             </div>
           }
+          <p hlmFieldDescription id="slug-description">
+            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
+            {{ organizationName() }}, across its leagues, tournaments, camps, and training programs.
+          </p>
         </div>
         <app-chip-radio-group
           #sportGroup
@@ -357,7 +357,7 @@ export class CampCreateForm {
   );
 
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
-  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly clearanceClass = `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
@@ -375,6 +375,10 @@ export class CampCreateForm {
   protected chooseSport(key: string): void {
     const sport = (Object.keys(SPORT_NAMES) as Sport[]).find((candidate) => candidate === key);
     if (sport) this.form.chooseSport(sport);
+  }
+
+  protected slugDescribedBy(): string {
+    return this.form.errors.slug() ? 'slug-error slug-description' : 'slug-description';
   }
 
   protected describedBy(

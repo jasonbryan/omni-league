@@ -39,7 +39,7 @@ import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
 import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields, type DivisionErrors } from './league-division-fields';
-import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter, WEB_ADDRESS_CLEARANCE } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
 import { tournamentPath } from './tournament-path';
 import {
@@ -207,15 +207,11 @@ const FOCUS_SELECTOR: Record<
             [formField]="form.fields.slug"
             (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
-            [attr.aria-describedby]="describedBy('slug', 'slug-description')"
+            [attr.aria-describedby]="slugDescribedBy()"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-invalid]="form.errors.slug() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="form.errors.slug() ? 'true' : null"
           />
-          <p hlmFieldDescription id="slug-description">
-            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
-            {{ organizationName() }}, across its leagues and tournaments.
-          </p>
           <app-web-address-status
             [available]="form.slugAvailable()"
             [reserveRoom]="form.slugStatusReservesRoom()"
@@ -242,6 +238,10 @@ const FOCUS_SELECTOR: Record<
               }
             </div>
           }
+          <p hlmFieldDescription id="slug-description">
+            3 to 60 lowercase letters and digits, with single hyphens between them. Unique within
+            {{ organizationName() }}, across its leagues, tournaments, camps, and training programs.
+          </p>
         </div>
         <app-chip-radio-group
           #sportGroup
@@ -493,7 +493,7 @@ export class TournamentCreateForm {
   };
 
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
-  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly clearanceClass = `${STICKY_FOOTER_CLEARANCE} ${WEB_ADDRESS_CLEARANCE}`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
 
@@ -531,6 +531,10 @@ export class TournamentCreateForm {
     if (!sport) return;
     this.divisionFields()?.closeCustomLevelPanel();
     this.form.chooseSport(sport);
+  }
+
+  protected slugDescribedBy(): string {
+    return this.form.errors.slug() ? 'slug-error slug-description' : 'slug-description';
   }
 
   protected describedBy(

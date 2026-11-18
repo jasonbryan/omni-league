@@ -22,7 +22,8 @@ const FORMAT_MESSAGE =
   'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some web addresses, like new, are reserved.';
 
 interface Form {
-  name: 'league' | 'season';
+  name: 'league' | 'season' | 'tournament' | 'camp' | 'training';
+  preview: boolean;
   taken: string;
   nameForTaken: string;
   open(page: Page): Promise<void>;
@@ -57,6 +58,7 @@ async function adminOfTenant(page: Page) {
 const FORMS: Form[] = [
   {
     name: 'league',
+    preview: true,
     taken: 'sand-4s',
     nameForTaken: 'Sand 4s',
     container: '#create-league',
@@ -72,6 +74,7 @@ const FORMS: Form[] = [
   },
   {
     name: 'season',
+    preview: true,
     taken: 'fall-2026',
     nameForTaken: 'Fall 2026',
     container: '#create-season',
@@ -89,6 +92,59 @@ const FORMS: Form[] = [
       await page.goto(`${base}/leagues/sand-4s`);
     },
   },
+  {
+    name: 'tournament',
+    preview: false,
+    taken: 'sand-4s',
+    nameForTaken: 'Sand 4s',
+    container: '#create-tournament',
+    create: 'tournaments:create',
+    complete: async (page) => {
+      await chooseChip(chipLabel(page, 'Beach volleyball'));
+      await chooseChip(chipLabel(page, '2v2'));
+      await page.locator('#start-date').fill('2031-01-16');
+      await page.locator('#end-date').fill('2031-01-17');
+      await page.locator('#registration-deadline').fill('2031-01-09');
+      await page.locator('#maximum-teams').fill('16');
+    },
+    open: async (page) => {
+      const { base } = await adminOfTenant(page);
+      await page.goto(`${base}/tournaments`);
+    },
+  },
+  {
+    name: 'camp',
+    preview: false,
+    taken: 'sand-4s',
+    nameForTaken: 'Sand 4s',
+    container: '#create-camp',
+    create: 'camps:create',
+    complete: async (page) => {
+      await chooseChip(chipLabel(page, 'Beach volleyball'));
+      await page.locator('#minimum-age').fill('9');
+      await page.locator('#maximum-age').fill('14');
+    },
+    open: async (page) => {
+      const { base } = await adminOfTenant(page);
+      await page.goto(`${base}/camps`);
+    },
+  },
+  {
+    name: 'training',
+    preview: false,
+    taken: 'sand-4s',
+    nameForTaken: 'Sand 4s',
+    container: '#create-training',
+    create: 'trainings:create',
+    complete: async (page) => {
+      await chooseChip(chipLabel(page, 'Beach volleyball'));
+      await page.locator('#coach-name').fill('Dana Ruiz');
+    },
+    open: async (page) => {
+      const { base } = await adminOfTenant(page);
+      await page.goto(`${base}/training`);
+    },
+  },
 ];
 
 const field = (page: Page) => page.locator('#slug');
@@ -104,6 +160,8 @@ const SLUG_PEEK = 20;
 
 async function scrollSlugJustBelowViewport(page: Page, form: Form) {
   await expect(page.locator('#slug')).toBeVisible();
+  // A form resize makes the sticky footer's focus fix scroll a focused control below the slug into view.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.evaluate((peek) => {
     const slug = document.querySelector('#slug')!.getBoundingClientRect();
     scrollBy(0, slug.top - (innerHeight - peek));
@@ -152,11 +210,13 @@ for (const form of FORMS) {
       await expect(description).toContainText(
         '3 to 60 lowercase letters and digits, with single hyphens between them.',
       );
-      await expect(description).toContainText(`${new URL(page.url()).host}/organizations/`);
-      await expect(description).toContainText('your-address');
+      if (form.preview) {
+        await expect(description).toContainText(`${new URL(page.url()).host}/organizations/`);
+        await expect(description).toContainText('your-address');
+      }
       await expect(availability(page)).toHaveAttribute('role', 'status');
       await field(page).fill('typed-address');
-      await expect(description.locator('strong')).toHaveText('typed-address');
+      if (form.preview) await expect(description.locator('strong')).toHaveText('typed-address');
       await screenshot(page, testInfo, `208-${form.name}-web-address`);
       await expectAccessible(page);
     });
@@ -164,6 +224,7 @@ for (const form of FORMS) {
     test('keeps the description as tall as for the empty field while the address is typed', async ({
       page,
     }) => {
+      test.skip(!form.preview, 'the form shows no public address, so the description cannot grow');
       await form.open(page);
       await expectDescriptionHeightHeldWhileTyping(page, 'free-address');
     });
@@ -173,7 +234,9 @@ for (const form of FORMS) {
     }, testInfo) => {
       await form.open(page);
       await field(page).pressSequentially('free-address');
-      await expect(page.locator('#slug-description strong')).toHaveText('free-address');
+      if (form.preview) {
+        await expect(page.locator('#slug-description strong')).toHaveText('free-address');
+      }
       const before = await top(nextGroup(page));
       await expect(availability(page)).toHaveText('Available');
       expect(await top(nextGroup(page))).toBe(before);
