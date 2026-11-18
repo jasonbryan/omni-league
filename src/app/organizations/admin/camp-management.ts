@@ -425,6 +425,7 @@ type Outcome = { kind: 'deleted'; session: CampSessionRow } | { kind: 'restored'
                                 [sessionId]="row.campSessionId"
                                 [sessionName]="row.name"
                                 [retryHref]="retryHref()"
+                                [registered]="row.registeredCount"
                               />
                               <app-camp-waitlist
                                 class="mt-5"

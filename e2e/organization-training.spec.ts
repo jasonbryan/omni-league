@@ -13,7 +13,8 @@ import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type TenantSeed } from './support/tenant';
-import { seedTraining, setTrainingClassRegistered } from './support/training';
+import { seedTraining, seedTrainingClasses, setTrainingClassRegistered } from './support/training';
+import { seedTrainingRegistration } from './support/training-registrations';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -956,5 +957,243 @@ test.describe('Training: names with no break', () => {
     await screenshot(page, testInfo, 'training-page-long-names-scheduled');
     await expectAccessible(page);
     expect(await checkReflow(page)).toMatchObject({ passed: true });
+  });
+});
+
+test.describe('Training: who registered', () => {
+  const MAYA = { kind: 'minor', minorName: 'Maya R.' } as const;
+  const SELF = { kind: 'self' } as const;
+  const LIST = 'trainingRegistrations:listForClass';
+  const toggleOf = (row: Locator) => row.getByRole('button', { name: /registered in / });
+  const registrantsOf = (row: Locator) => row.locator('app-training-registrants');
+  const box = async (locator: Locator) => (await locator.boundingBox())!;
+
+  async function classesWith(page: Page, role: Role | null = 'orgAdmin') {
+    const admin = await memberOf(page, role);
+    await seedTraining(admin.tenant, { ...SERVING, locations: [PELICAN], coachName: 'Dana Ruiz' });
+    await seedTrainingClasses(admin.tenant, SERVING.slug, {
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: firstTuesdayTwoWeeksOut(),
+      weeks: 3,
+      registrationDeadline: dateFromToday(7),
+      allowSingleRegistration: true,
+    });
+    return { ...admin, path: `${admin.base}/training/${SERVING.slug}` };
+  }
+
+  test('series and single-class registrants show marked, a minor with the guardian’s name and email, and the list passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await classesWith(page);
+    const player = await seedUser(newUser('Player'));
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedTrainingRegistration(tenant, SERVING.slug, player, SELF);
+    await seedTrainingRegistration(tenant, SERVING.slug, guardian, MAYA, firstTuesdayTwoWeeksOut());
+    await page.goto(path);
+    const [first, second] = [classRows(page).nth(0), classRows(page).nth(1)];
+    await expect(toggleOf(first)).toHaveText(/^2 of 12 registered in /);
+    await expect(toggleOf(second)).toHaveText(/^1 of 12 registered in /);
+    await expect(toggleOf(first)).toHaveAttribute('aria-expanded', 'false');
+
+    await toggleOf(first).click();
+    await expect(toggleOf(first)).toHaveAttribute('aria-expanded', 'true');
+    const rows = registrantsOf(first).locator('tbody tr');
+    await expect(rows).toHaveCount(2);
+    const maya = rows.filter({ hasText: 'Maya R.' });
+    await expect(maya.locator('[data-slot="registrant-kind"]')).toHaveText('This class');
+    await expect(maya.getByRole('rowheader')).toContainText(
+      `Guardian: ${guardian.name}, ${guardian.email}`,
+    );
+    const series = rows.filter({ hasText: player.name });
+    await expect(series.locator('[data-slot="registrant-kind"]')).toHaveText('Series');
+    await expect(series).not.toContainText('Guardian');
+    await expect(maya.getByRole('cell')).toHaveText(/[A-Z][a-z]{2} \d{1,2}, \d{4}/);
+    await expect(toggleOf(first)).toBeFocused();
+    await screenshot(page, testInfo, 'training-registrants');
+    await expectAccessible(page);
+
+    await toggleOf(second).click();
+    const secondRows = registrantsOf(second).locator('tbody tr');
+    await expect(secondRows).toHaveCount(1);
+    await expect(secondRows.locator('[data-slot="registrant-kind"]')).toHaveText('Series');
+    await expect(secondRows).toContainText(player.name);
+    await toggleOf(first).click();
+    await expect(registrantsOf(first)).toHaveCount(0);
+  });
+
+  test('a class no one registered for says so', async ({ page }, testInfo) => {
+    const { path } = await classesWith(page);
+    await page.goto(path);
+    await toggleOf(classRows(page).first()).click();
+    await expect(registrantsOf(classRows(page).first())).toHaveText('No one has registered yet.');
+    await screenshot(page, testInfo, 'training-registrants-empty');
+    await expectAccessible(page);
+  });
+
+  test('a cancelled class shows its count as text, with no list to open', async ({ page }) => {
+    const { path } = await classesWith(page);
+    await page.goto(path);
+    const first = classRows(page).first();
+    await first.getByRole('button', { name: /^Cancel/ }).click();
+    await expect(first).toHaveAttribute('data-status', 'cancelled');
+    await expect(first.locator('[data-slot="class-registered"]')).toHaveText('0 of 12 registered');
+    await expect(first.getByRole('button', { name: /registered in / })).toHaveCount(0);
+  });
+
+  test('the list takes the room of its skeleton: nothing above or beside it moves, and the rows below stay put', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await classesWith(page);
+    for (const label of ['Player', 'Player', 'Player']) {
+      await seedTrainingRegistration(tenant, SERVING.slug, await seedUser(newUser(label)), SELF);
+    }
+    const held = await holdQueries(page, [LIST], { watchFromStart: false });
+    await page.goto(path);
+    await expect(classRows(page)).toHaveCount(3);
+    held.watchNewSubscriptions();
+    const first = classRows(page).first();
+    await toggleOf(first).click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(registrantsOf(first).locator('tbody tr')).toHaveCount(3);
+    const measure = async () => ({
+      date: await box(first.locator('[data-slot="class-date"]')),
+      toggle: await box(toggleOf(first)),
+      places: await box(first.getByLabel(/^Places for /)),
+      panel: await box(registrantsOf(first)),
+      next: await box(classRows(page).nth(1)),
+    });
+    const loading = await measure();
+    await screenshot(page, testInfo, 'training-registrants-loading');
+    await expectAccessible(page);
+    held.release();
+    await expect(registrantsOf(first).getByRole('region')).toBeVisible();
+    const loaded = await measure();
+    expect(loaded.date).toEqual(loading.date);
+    expect(loaded.toggle).toEqual(loading.toggle);
+    expect(loaded.places).toEqual(loading.places);
+    expect(loaded.panel.y).toBe(loading.panel.y);
+    expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
+    await screenshot(page, testInfo, 'training-registrants-loaded');
+  });
+
+  test('a class with no registrations holds the same room while it loads as its message does', async ({
+    page,
+  }) => {
+    const { path } = await classesWith(page);
+    const held = await holdQueries(page, [LIST], { watchFromStart: false });
+    await page.goto(path);
+    await expect(classRows(page)).toHaveCount(3);
+    held.watchNewSubscriptions();
+    const first = classRows(page).first();
+    await toggleOf(first).click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(
+      registrantsOf(first).getByRole('status').filter({ hasText: 'Loading the registrants.' }),
+    ).toBeAttached();
+    const loading = await box(registrantsOf(first));
+    const nextLoading = await box(classRows(page).nth(1));
+    held.release();
+    await expect(registrantsOf(first)).toHaveText('No one has registered yet.');
+    const loaded = await box(registrantsOf(first));
+    expect(Math.abs(loaded.height - loading.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await box(classRows(page).nth(1))).y - nextLoading.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('a list the server fails shows the alert with Try again and the rest of the page stays', async ({
+    page,
+  }, testInfo) => {
+    const { path } = await classesWith(page);
+    await failFirstAnswer(page, LIST);
+    await page.goto(path);
+    await toggleOf(classRows(page).first()).click();
+    const panel = registrantsOf(classRows(page).first());
+    await expect(panel.getByRole('alert')).toContainText('The registrants could not be loaded.');
+    await expect(panel.getByRole('link', { name: 'Try again' })).toBeVisible();
+    await expect(page.locator('#classes-list')).toBeVisible();
+    await screenshot(page, testInfo, 'training-registrants-error');
+    await expectAccessible(page);
+  });
+
+  test('opened offline, the list says it will load when connected', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { path } = await classesWith(page);
+    await page.goto(path);
+    await expect(classRows(page)).toHaveCount(3);
+    await context.setOffline(true);
+    await toggleOf(classRows(page).first()).click();
+    await expect(registrantsOf(classRows(page).first()).getByRole('status')).toHaveText(
+      "You're offline. The registrants will load when you’re connected.",
+    );
+    await screenshot(page, testInfo, 'training-registrants-offline');
+    await expectAccessible(page);
+    await context.setOffline(false);
+  });
+
+  test('a long name and a long guardian email stay inside the list at 320px, and the row above does not move', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await classesWith(page);
+    const base = newUser('Guardian');
+    const guardian = await seedUser({
+      ...base,
+      name: 'Gwendolyn'.repeat(6),
+      email: `e2e-a-very-long-guardian-address-${base.email}`,
+    });
+    const unbroken = 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60);
+    await seedTrainingRegistration(tenant, SERVING.slug, guardian, {
+      kind: 'minor',
+      minorName: unbroken,
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto(path);
+    const first = classRows(page).first();
+    const before = {
+      date: await box(first.locator('[data-slot="class-date"]')),
+      toggle: await box(toggleOf(first)),
+    };
+    await toggleOf(first).click();
+    const region = registrantsOf(first).getByRole('region', {
+      name: /^Registrants of /,
+    });
+    await expect(region).toContainText(unbroken);
+    await expect(region).toContainText(guardian.email);
+    expect(await box(first.locator('[data-slot="class-date"]'))).toEqual(before.date);
+    expect(await box(toggleOf(first))).toEqual(before.toggle);
+    const sizes = await region.evaluate((element) => ({
+      regionScroll: element.scrollWidth,
+      regionClient: element.clientWidth,
+      pageScroll: document.documentElement.scrollWidth,
+      pageClient: document.documentElement.clientWidth,
+    }));
+    expect(sizes.regionScroll).toBeGreaterThan(sizes.regionClient);
+    expect(sizes.pageScroll).toBeLessThanOrEqual(sizes.pageClient);
+    await screenshot(page, testInfo, 'training-registrants-long-names');
+    await expectAccessible(page);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+  });
+
+  test('a league organizer assigned to the training program sees the list', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, user, path } = await classesWith(page, null);
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      leagueSlugs: [],
+      trainingSlugs: [SERVING.slug],
+    });
+    const player = await seedUser(newUser('Player'));
+    await seedTrainingRegistration(tenant, SERVING.slug, player, SELF);
+    await page.goto(path);
+    await toggleOf(classRows(page).first()).click();
+    await expect(registrantsOf(classRows(page).first()).locator('tbody tr')).toContainText(
+      player.name,
+    );
+    await screenshot(page, testInfo, 'training-registrants-organizer');
   });
 });

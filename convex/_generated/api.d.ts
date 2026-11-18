@@ -109,6 +109,7 @@ import type * as lib_trainingInput from "../lib/trainingInput.js";
 import type * as lib_trainingLookup from "../lib/trainingLookup.js";
 import type * as lib_trainingPattern from "../lib/trainingPattern.js";
 import type * as lib_trainingPublicList from "../lib/trainingPublicList.js";
+import type * as lib_trainingRegistrants from "../lib/trainingRegistrants.js";
 import type * as lib_trainingRegistration from "../lib/trainingRegistration.js";
 import type * as lib_trainingRegistrationReads from "../lib/trainingRegistrationReads.js";
 import type * as lib_trainingRegistrationRules from "../lib/trainingRegistrationRules.js";
@@ -248,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trainingLookup": typeof lib_trainingLookup;
   "lib/trainingPattern": typeof lib_trainingPattern;
   "lib/trainingPublicList": typeof lib_trainingPublicList;
+  "lib/trainingRegistrants": typeof lib_trainingRegistrants;
   "lib/trainingRegistration": typeof lib_trainingRegistration;
   "lib/trainingRegistrationReads": typeof lib_trainingRegistrationReads;
   "lib/trainingRegistrationRules": typeof lib_trainingRegistrationRules;

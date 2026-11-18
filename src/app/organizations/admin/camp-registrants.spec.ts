@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
-import { NO_REGISTRANTS_YET } from './camp-registrants';
+import { NO_REGISTRANTS_YET } from './registrants-list';
 import { openAdmin, text } from './testing/admin-harness';
 import {
   CAMP,
@@ -120,12 +120,13 @@ describe('CampManagement registrants', () => {
     expect(panel('Week 2')!.querySelector('table')).toBeNull();
   });
 
-  it('loading: a skeleton and a polite status until the list arrives', async () => {
+  it('loading: a skeleton row for each registration the count shows, and a polite status', async () => {
     await open();
     expect(text(panel('Week 1')!.querySelector('[role="status"]'))).toBe(
       'Loading the registrants.',
     );
-    expect(panel('Week 1')!.querySelector('table')).toBeNull();
+    expect(panel('Week 1')!.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(panel('Week 1')!.querySelector('[role="region"]')).toBeNull();
     expectSkeletonBoxes(panel('Week 1')!, { 'rounded-md': 4 });
   });
 

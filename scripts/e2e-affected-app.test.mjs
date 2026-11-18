@@ -513,6 +513,7 @@ describe('the training page specs', () => {
     'training-no-access',
     'training-page',
     'training-path',
+    'training-registrants',
     'training-schedule-form',
     'training-schedule-form-state',
     'training-schedule-landing',
