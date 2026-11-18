@@ -1,9 +1,11 @@
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
+import type { ConsoleGuard } from './support/console-guard';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { hydrated } from './support/hydrated';
 import { seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -21,9 +23,36 @@ const organization = () =>
     leagues: [{ name: LEAGUE, sport: 'soccer', locations: [LOCATION.name], status: 'published' }],
   });
 
-async function signInFrom(page: Page, user: TestUser, from: string, link: 'top-bar' | 'footer') {
+const SCRIPT_URL = /\/(main|chunk-[^/]+)\.js$/;
+const SLOW_SCRIPT_MS = 1500;
+
+// Only the first request of each script is slow, so a full page load of /sign-in is not.
+async function delayFirstScriptLoads(page: Page) {
+  const delayed = new Set<string>();
+  await page.route(SCRIPT_URL, async (route) => {
+    const url = route.request().url();
+    if (!delayed.has(url)) {
+      delayed.add(url);
+      await new Promise((resolve) => setTimeout(resolve, SLOW_SCRIPT_MS));
+    }
+    await route.continue();
+  });
+}
+
+async function signInFrom(
+  page: Page,
+  consoleGuard: ConsoleGuard,
+  user: TestUser,
+  from: string,
+  link: 'top-bar' | 'footer',
+) {
   await page.goto(from);
   const selector = link === 'top-bar' ? 'header a[href^="/sign-in"]' : 'footer a[href^="/sign-in"]';
+  await hydrated(consoleGuard);
+  await expect(page.locator(selector)).toHaveAttribute(
+    'href',
+    `/sign-in?returnTo=${encodeURIComponent(from)}`,
+  );
   await page.locator(selector).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   const tokens = tokensSettled(page);
@@ -38,12 +67,13 @@ test.describe('after sign-in', () => {
     for (const link of ['top-bar', 'footer'] as const) {
       test(`the ${link} Sign in link returns to the public organization page, query and hash included`, async ({
         page,
+        consoleGuard,
       }) => {
         const tenant = await organization();
         const user = await seedUser(newUser('Return'));
         const from = `${tenant.path}?utm=a#leagues`;
 
-        const { tokens } = await signInFrom(page, user, from, link);
+        const { tokens } = await signInFrom(page, consoleGuard, user, from, link);
 
         await expect(page).toHaveURL(`${baseURL}${from}`);
         await expect(
@@ -56,6 +86,21 @@ test.describe('after sign-in', () => {
       });
     }
 
+    test('the top bar Sign in link returns to the page, query and hash included, when its scripts load slowly', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await organization();
+      const user = await seedUser(newUser('Slow'));
+      const from = `${tenant.path}?utm=a#leagues`;
+      await delayFirstScriptLoads(page);
+
+      const { tokens } = await signInFrom(page, consoleGuard, user, from, 'top-bar');
+
+      await expect(page).toHaveURL(`${baseURL}${from}`);
+      await tokens;
+    });
+
     for (const [name, relative] of [
       ['sport view', '/sports/soccer?utm=a#top'],
       ['league', '/leagues/sunday-reverse-coed-4s?utm=a&b=c#seasons'],
@@ -63,6 +108,7 @@ test.describe('after sign-in', () => {
     ] as const) {
       test(`the top bar Sign in link returns to the ${name} page, query and hash included`, async ({
         page,
+        consoleGuard,
       }) => {
         const tenant = await organization();
         await seedSeasons(tenant, 'sunday-reverse-coed-4s', [
@@ -76,7 +122,7 @@ test.describe('after sign-in', () => {
         const user = await seedUser(newUser('Pages'));
         const from = `${tenant.path}${relative}`;
 
-        const { tokens } = await signInFrom(page, user, from, 'top-bar');
+        const { tokens } = await signInFrom(page, consoleGuard, user, from, 'top-bar');
 
         await expect(page).toHaveURL(`${baseURL}${from}`);
         await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
@@ -130,10 +176,11 @@ test.describe('after sign-in', () => {
 
     test('signing in from the home page, which has nothing for a signed-in user, lands on /app', async ({
       page,
+      consoleGuard,
     }) => {
       const user = await seedUser(newUser('Home'));
 
-      const { tokens } = await signInFrom(page, user, '/', 'top-bar');
+      const { tokens } = await signInFrom(page, consoleGuard, user, '/', 'top-bar');
 
       await expect(page).toHaveURL(`${baseURL}/app`);
       await expect(homeHeading(page)).toBeVisible();
@@ -153,11 +200,16 @@ test.describe('after sign-in', () => {
       await tokens;
     });
 
-    test('sign-up from a public page follows the same rule', async ({ page }) => {
+    test('sign-up from a public page follows the same rule', async ({ page, consoleGuard }) => {
       const tenant = await organization();
       const user = newUser('SignUp');
 
       await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expect(page.locator('header a[href^="/sign-in"]')).toHaveAttribute(
+        'href',
+        `/sign-in?returnTo=${encodeURIComponent(tenant.path)}`,
+      );
       await page.locator('header a[href^="/sign-in"]').click();
       await page.getByRole('link', { name: 'Create an account' }).click();
       const tokens = tokensSettled(page);
