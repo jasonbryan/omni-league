@@ -1,14 +1,20 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
   lucideCalendarDays,
+  lucideCircleCheck,
   lucideClock,
   lucideMapPin,
   lucideRepeat,
   lucideUserRound,
   lucideUsers,
 } from '@ng-icons/lucide';
+import {
+  MAX_MINORS_PER_SESSION,
+  participantsOffered,
+} from '../../../../convex/lib/individualRegistration';
 import { trainingAgesLabel } from '../../../../convex/lib/trainingInput';
 import {
   trainingClassDate,
@@ -19,8 +25,11 @@ import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { HlmBadge } from '../../ui/badge';
 import { HlmBreadcrumbImports } from '../../ui/breadcrumb';
+import { OUTLINE_BUTTON } from '../../ui/button/button-classes';
 import { HlmCard } from '../../ui/card';
 import { organizationPath } from '../organization-path';
+import { registerTrainingPath } from '../register-training/register-training-path';
+import { registeredLine } from '../registered-line';
 import {
   CRUMB_LINK,
   CRUMB_LIST,
@@ -29,6 +38,7 @@ import {
 import { trainingSeriesStatus, upcomingClasses } from '../training-status';
 import type { PublicTrainingData } from './public-training-view';
 
+const ACTIONS_ROW = 'mt-3 flex min-h-9 items-center gap-3 pointer-coarse:min-h-11';
 const FACT = 'relative min-h-18 py-4 ps-14';
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
@@ -37,15 +47,17 @@ const CLASS_ICON = 'mt-0.5 shrink-0 text-base';
 
 const ENDED_TEXT = 'This training has ended.';
 const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
+const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
 
 /** The dates are written from the stored text, never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-training-content',
-  imports: [HlmBadge, HlmBreadcrumbImports, HlmCard, NgIcon, SavedCopyNote],
+  imports: [HlmBadge, HlmBreadcrumbImports, HlmCard, NgIcon, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideCalendarClock,
       lucideCalendarDays,
+      lucideCircleCheck,
       lucideClock,
       lucideMapPin,
       lucideRepeat,
@@ -204,7 +216,34 @@ const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
                       closes()
                     }}</time>
                   </dd>
+                  @if (full()) {
+                    <dd data-slot="series-full" class="mt-1 text-sm text-muted-foreground">
+                      {{ fullText }}
+                    </dd>
+                  }
                 }
+                <dd data-slot="series-actions" [class]="actionsRow">
+                  @if (registeredText(); as line) {
+                    <p
+                      data-slot="series-registered"
+                      class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium"
+                    >
+                      <ng-icon
+                        name="lucideCircleCheck"
+                        class="shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span class="truncate">{{ line }}</span>
+                    </p>
+                  }
+                  @if (canRegister()) {
+                    <a
+                      [routerLink]="registerPath()"
+                      data-slot="button"
+                      [class]="registerButton + ' ms-auto shrink-0'"
+                      >Register<span class="sr-only"> for the series</span></a
+                    >
+                  }
+                </dd>
               </div>
             }
           </dl>
@@ -218,9 +257,14 @@ export class PublicTrainingContent {
   readonly savedAt = input<number | undefined>(undefined);
   /** The viewer's clock, so the classes listed and the registration status follow it after hydration. */
   readonly now = input.required<number>();
+  readonly registeredSelf = input(false);
+  readonly registeredMinors = input<readonly string[]>([]);
 
   protected readonly endedText = ENDED_TEXT;
   protected readonly cancelledText = CANCELLED_TEXT;
+  protected readonly fullText = FULL_TEXT;
+  protected readonly registerButton = OUTLINE_BUTTON;
+  protected readonly actionsRow = ACTIONS_ROW;
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
@@ -262,6 +306,23 @@ export class PublicTrainingContent {
           },
           this.now(),
         ),
+  );
+  protected readonly full = computed(() => this.classes().some((row) => row.full));
+  protected readonly registeredText = computed(() =>
+    registeredLine(this.registeredSelf(), this.registeredMinors()),
+  );
+  private readonly canAdd = computed(() => {
+    const offered = participantsOffered(this.training());
+    return (
+      (offered.includes('self') && !this.registeredSelf()) ||
+      (offered.includes('minor') && this.registeredMinors().length < MAX_MINORS_PER_SESSION)
+    );
+  });
+  protected readonly canRegister = computed(
+    () => this.status()?.registrationOpen === true && !this.full() && this.canAdd(),
+  );
+  protected readonly registerPath = computed(() =>
+    registerTrainingPath(this.training().organization.slug, this.training().slug),
   );
   protected readonly locationsLabel = computed(() =>
     this.training().locations.length === 1 ? 'Location' : 'Locations',

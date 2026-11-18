@@ -64,8 +64,8 @@ const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
 // cache-key samples the camp route. The camp page's session rows link to the register route and read "You're registered".
 const CAMP_PAGE = ['camp-page', 'camp-registration', 'cache-key'];
-// cache-key samples the training route. The training page's breadcrumb, the organization page's Training section, and Find a program's Training rows link to it.
-const TRAINING_PAGE = ['training-page', 'cache-key'];
+// cache-key samples the training route. The training page's breadcrumb, the organization page's Training section, and Find a program's Training rows link to it, and its Registration fact links to the register route and reads "You're registered".
+const TRAINING_PAGE = ['training-page', 'training-registration', 'cache-key'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
@@ -150,6 +150,7 @@ export const ROUTE_SPECS = {
     'camp-page',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/training/:trainingSlug/register': ['training-registration'],
   'app/organizations/:orgSlug/training/:trainingSlug': [
     'organization-training',
     'training-page',
@@ -931,6 +932,11 @@ export const AREAS = [
     specs: CAMP_PAGE,
   },
   {
+    name: 'training register page',
+    test: inDir('src/app/organizations/register-training/'),
+    specs: TRAINING_PAGE,
+  },
+  {
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
@@ -1227,12 +1233,17 @@ export const AREAS = [
   {
     name: 'convex training',
     test: (file) =>
-      named('convex/', ['trainings', 'trainingClasses'])(file) ||
+      named('convex/', ['trainings', 'trainingClasses', 'trainingRegistrations'])(file) ||
       named('convex/lib/', [
+        'individualRegistration',
         'trainingInput',
         'trainingLookup',
         'trainingPattern',
         'trainingPublicList',
+        'trainingRegistration',
+        'trainingRegistrationReads',
+        'trainingRegistrationRules',
+        'trainingRegistrationWrites',
       ])(file),
     specs: ['organization-training', ...TRAINING_PAGE],
   },

@@ -401,6 +401,29 @@ export default defineSchema({
     status: trainingClassStatusValidator,
   }).index('by_trainingId_and_date', ['trainingId', 'date']),
 
+  // One row per participant in a training series, written only by `convex/lib/trainingRegistrationWrites.ts`, which keeps `trainingClasses.registeredCount`. A row without `classId` holds a place in every class of the series.
+  // Deleting the account deletes its rows and frees their places.
+  trainingRegistrations: defineTable({
+    trainingId: v.id('trainings'),
+    /** Set for a registration in one class; absent for the series. */
+    classId: v.optional(v.id('trainingClasses')),
+    organizationId: v.id('organizations'),
+    /** The account holder, who is the participant for `self` and the guardian for `minor`. */
+    userId: v.id('users'),
+    participant: participantValidator,
+    /** `self`, or `minor:` and the lower-cased minor's name, so the one-per-participant check is an index read. */
+    participantKey: v.string(),
+    /** Absent when the program has no age range, which asks no age box. */
+    ageConfirmedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_trainingId_and_userId_and_participantKey', [
+      'trainingId',
+      'userId',
+      'participantKey',
+    ])
+    .index('by_userId', ['userId']),
+
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
   // and lower-cased, so names that differ only in case or spacing are one level.

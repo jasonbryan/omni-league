@@ -1143,6 +1143,7 @@ describe('seed:demo', () => {
       'insertDemoTeamPlayer',
       'insertDemoTeams',
       'insertDemoTournamentInvites',
+      'insertDemoTrainingRegistration',
       'setDemoLogo',
     ]);
     for (const [name, fn] of exports) {

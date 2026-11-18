@@ -26,6 +26,7 @@ import { OUTLINE_BUTTON } from '../../ui/button/button-classes';
 import { HlmCard } from '../../ui/card';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
+import { registeredLine } from '../registered-line';
 import { registerCampPath } from '../register-camp/register-camp-path';
 import {
   CRUMB_LINK,
@@ -43,15 +44,6 @@ const SESSION_LINE = 'mt-1.5 flex items-start gap-1.5 text-sm text-muted-foregro
 const SESSION_ICON = 'mt-0.5 shrink-0 text-base';
 
 type PublicCampSession = PublicCampData['sessions'][number];
-
-const NAMES = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' });
-
-/** One line for the viewer's places, so the row keeps the Register button's height however many children they hold. */
-function registeredLine(self: boolean, children: readonly string[]): string | null {
-  if (children.length === 0) return self ? "You're registered" : null;
-  const names = [...(self ? ['You'] : []), ...children];
-  return `${NAMES.format(names)} ${names.length === 1 ? 'is' : 'are'} registered`;
-}
 
 function waitingLine(participant: Participant, position: number): string {
   const who = participant.kind === 'self' ? 'You are' : `${participant.minorName} is`;

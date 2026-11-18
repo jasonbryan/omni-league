@@ -12,6 +12,7 @@ import { serverRoutes } from './app.routes.server';
 import { AppNotFoundPage } from './not-found/app-not-found-page';
 import { JoinTeamPage } from './teams/join-team-page';
 import { RegisterCampPage } from './organizations/register-camp/register-camp-page';
+import { RegisterTrainingPage } from './organizations/register-training/register-training-page';
 import { RegisterFreeAgentPage } from './teams/register-free-agent-page';
 import { RegisterTeamPage } from './teams/register-team-page';
 import { RegisterTournamentTeamPage } from './teams/register-tournament-team-page';
@@ -253,7 +254,7 @@ describe('Route tables', () => {
     }
   });
 
-  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the unguarded camp register route, the guarded training management page, the guarded camp management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the unguarded tournament register route, the guarded tournament management page, the unguarded camp register route, the unguarded training register route, the guarded training management page, the guarded camp management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -269,6 +270,7 @@ describe('Route tables', () => {
       registerTournament,
       tournament,
       registerCamp,
+      registerTraining,
       training,
       camp,
       admin,
@@ -311,6 +313,10 @@ describe('Route tables', () => {
     expect(registerCamp?.title).toBe('Register for a camp session | Omni League');
     expect(registerCamp?.canActivate).toBeUndefined();
     expect(await registerCamp?.loadComponent?.()).toBe(RegisterCampPage);
+    expect(registerTraining?.path).toBe('organizations/:orgSlug/training/:trainingSlug/register');
+    expect(registerTraining?.title).toBe('Register for a training series | Omni League');
+    expect(registerTraining?.canActivate).toBeUndefined();
+    expect(await registerTraining?.loadComponent?.()).toBe(RegisterTrainingPage);
     expect(training?.path).toBe('organizations/:orgSlug/training/:trainingSlug');
     expect(training?.title).toBe('Training program | Omni League');
     expect(training?.canActivate).toEqual([requireSignedIn]);
