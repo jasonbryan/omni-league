@@ -39,7 +39,8 @@ import { trainingSeriesStatus, upcomingClasses } from '../training-status';
 import type { PublicTrainingData } from './public-training-view';
 
 const ACTIONS_ROW = 'mt-3 flex min-h-9 items-center gap-3 pointer-coarse:min-h-11';
-const FACT = 'relative min-h-18 py-4 ps-14';
+// `min-w-0`: a grid item may shrink below its content, or the registered line's width widens the column.
+const FACT = 'relative min-h-18 min-w-0 py-4 ps-14';
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
 const CLASS_LINE = 'mt-1.5 flex items-start gap-1.5 text-sm text-muted-foreground';

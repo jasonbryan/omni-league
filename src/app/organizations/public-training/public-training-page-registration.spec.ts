@@ -174,6 +174,11 @@ describe('PublicTrainingPage registration, signed in', () => {
     expect(registered()?.hasAttribute('role')).toBe(false);
   });
 
+  it('lets the Registration fact shrink below its line, so a long name cannot widen the details column', async () => {
+    await emit(MINE, { self: true, minorNames: ['W'.repeat(60)] });
+    expect(actions()?.parentElement?.classList).toContain('min-w-0');
+  });
+
   it('keeps the line after the deadline', async () => {
     await emit(MINE, { self: true, minorNames: [] });
     vi.setSystemTime(at('2027-02-01'));
