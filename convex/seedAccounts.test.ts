@@ -317,6 +317,7 @@ describe('seed:demo accounts: a new deployment', () => {
         freeAgents: 6,
         campRegistrations: 2,
         campWaitlistEntries: 1,
+        trainingRegistrations: 1,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -1101,6 +1102,52 @@ describe('seed:demo accounts: camp registration', () => {
   );
 });
 
+describe('seed:demo accounts: training registration', () => {
+  const CLINIC = { orgSlug: GULF_COAST, trainingSlug: 'tuesday-serving-clinic' };
+
+  test(
+    'player@ holds a place in every class of the Tuesday Serving Clinic series, which only that account sees, and a rerun adds none',
+    async () => {
+      const t = setup();
+      expect((await run(t)).trainingRegistrations).toBe(1);
+      const { rows, classes, users } = await t.run(async (ctx) => ({
+        rows: await ctx.db.query('trainingRegistrations').collect(),
+        classes: await ctx.db.query('trainingClasses').collect(),
+        users: await ctx.db.query('users').collect(),
+      }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        participant: { kind: 'self' },
+        participantKey: 'self',
+        userId: users.find((user) => user.name === 'Demo Player')!._id,
+      });
+      expect(rows[0]).not.toHaveProperty('classId');
+      expect(classes).toHaveLength(8);
+      expect(classes.map((row) => row.registeredCount)).toEqual(Array(8).fill(1));
+
+      const player = await as(t, EMAILS.player);
+      expect(await player.query(api.trainingRegistrations.listMineForTraining, CLINIC)).toEqual({
+        self: true,
+        minorNames: [],
+      });
+      expect(
+        (await player.query(api.trainingRegistrations.getForRegistration, CLINIC))?.registered,
+      ).toBe(true);
+      const captain = await as(t, EMAILS.captain);
+      expect(await captain.query(api.trainingRegistrations.listMineForTraining, CLINIC)).toEqual({
+        self: false,
+        minorNames: [],
+      });
+      const page = await captain.query(api.trainings.getPublicPage, CLINIC);
+      expect(page?.classes.map((row) => row.placesLeft)).toEqual(Array(8).fill(11));
+
+      expect((await run(t)).trainingRegistrations).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toHaveLength(1);
+    },
+    SLOW,
+  );
+});
+
 describe('seed:demo accounts: a second run', () => {
   test(
     'returns exists for all, duplicates nothing, makes no breach call and no session',
@@ -1135,6 +1182,7 @@ describe('seed:demo accounts: a second run', () => {
         freeAgents: 0,
         campRegistrations: 0,
         campWaitlistEntries: 0,
+        trainingRegistrations: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -1264,6 +1312,7 @@ describe('seed:demo accounts: the password', () => {
         freeAgents: 0,
         campRegistrations: 0,
         campWaitlistEntries: 0,
+        trainingRegistrations: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -1340,6 +1389,7 @@ describe('seed:demo accounts: the password', () => {
         freeAgents: 0,
         campRegistrations: 0,
         campWaitlistEntries: 0,
+        trainingRegistrations: 0,
       });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);

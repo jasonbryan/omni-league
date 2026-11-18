@@ -26,7 +26,7 @@ export async function seedTraining(tenant: Tenant, training: TrainingSeed): Prom
   return slug;
 }
 
-/** Sets the count directly: nothing registers for a training class yet. Local runs only. */
+/** Sets the count directly, so a class can be part-filled or full with no registrant. Local runs only. */
 export async function setTrainingClassRegistered(
   tenant: Tenant,
   trainingSlug: string,

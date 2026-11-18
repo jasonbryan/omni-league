@@ -196,7 +196,7 @@ describe('PublicTrainingPage server render', () => {
       'Ages 16 or older',
       'Location North Beach Sand Courts 3500 Sandcourt Ln, Corpus Christi, TX 78402',
       'Schedule Tuesdays, 6 to 7 pm, 3 weeks First class Feb 2, 2027',
-      'Registration Registration open Closes Feb 1, 2027',
+      'Registration Registration open Closes Feb 1, 2027 A class is full, so no place is left for the whole series.',
     ]);
     const markup = html.slice(html.indexOf('<body'));
     const order = [

@@ -26,6 +26,8 @@ import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import { findTrainingBySlugs } from './lib/trainingLookup';
 import { hasScheduledClass } from './lib/trainingPublicList';
+import { classesToAttend } from './lib/trainingRegistrationReads';
+import { insertTrainingSeriesRegistration } from './lib/trainingRegistrationWrites';
 import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
 import {
@@ -1755,6 +1757,14 @@ const DEMO_CAMP_WAITLIST = {
 
 const demoCampRegistrationValidator = v.union(v.literal('player'), v.literal('guardian'));
 
+/** player@ holds a place in every class of the Tuesday Serving Clinic series. Inserted once: any registration of the account in the series means it was. */
+const DEMO_TRAINING_REGISTRATION = {
+  organizationSlug: 'gulf-coast-sport-social',
+  trainingSlug: 'tuesday-serving-clinic',
+  email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+  participant: SELF_PARTICIPANT,
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -1790,6 +1800,7 @@ const demoResultValidator = v.object({
   freeAgents: v.number(),
   campRegistrations: v.number(),
   campWaitlistEntries: v.number(),
+  trainingRegistrations: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -2644,6 +2655,39 @@ export const insertDemoCampRegistration = internalMutation({
   },
 });
 
+export const insertDemoTrainingRegistration = internalMutation({
+  args: { authUserId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { authUserId }) => {
+    assertPreviewDeployment();
+    const demo = DEMO_TRAINING_REGISTRATION;
+    const organization = await organizationBySlug(ctx, demo.organizationSlug);
+    const found = organization && (await findTrainingBySlugs(ctx, organization, demo.trainingSlug));
+    if (found?.program.status !== 'published') return false;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user) return false;
+    const held = await ctx.db
+      .query('trainingRegistrations')
+      .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
+        q.eq('trainingId', found.training._id).eq('userId', user._id),
+      )
+      .first();
+    if (held) return false;
+    const classes = await classesToAttend(ctx, found.training._id, dateAtUtcMinus12(Date.now()));
+    if (classes.length === 0 || classes.some((row) => row.registeredCount >= row.places)) {
+      return false;
+    }
+    await insertTrainingSeriesRegistration(ctx, found.training, classes, {
+      userId: user._id,
+      participant: demo.participant,
+    });
+    return true;
+  },
+});
+
 export const insertDemoCampWaitlist = internalMutation({
   args: { authUserId: v.string() },
   returns: v.number(),
@@ -2890,6 +2934,7 @@ export const demo = internalAction({
     let freeAgents = 0;
     let campRegistrations = 0;
     let campWaitlistEntries = 0;
+    let trainingRegistrations = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
       const people: { email: string; authUserId: string }[] = [];
@@ -2937,6 +2982,13 @@ export const demo = internalAction({
           });
           if (inserted) campRegistrations++;
         }
+        const trainee = people.find((person) => person.email === DEMO_TRAINING_REGISTRATION.email);
+        if (trainee) {
+          const inserted = await ctx.runMutation(internal.seed.insertDemoTrainingRegistration, {
+            authUserId: trainee.authUserId,
+          });
+          if (inserted) trainingRegistrations++;
+        }
         const waitingGuardian = people.find(
           (person) => person.email === DEMO_CAMP_REGISTRATIONS.guardian.email,
         );
@@ -2957,6 +3009,7 @@ export const demo = internalAction({
       freeAgents,
       campRegistrations,
       campWaitlistEntries,
+      trainingRegistrations,
       accounts,
     };
   },

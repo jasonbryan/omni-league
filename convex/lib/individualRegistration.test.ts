@@ -97,6 +97,24 @@ describe('ageConfirmationLabel', () => {
       'My child is 9 to 14 years old on Jul 5, 2027.',
     );
   });
+
+  test('says "or older" for a program with only a minimum age', () => {
+    expect(ageConfirmationLabel(SELF, 16, undefined, '2027-07-05')).toBe(
+      'I am 16 or older on Jul 5, 2027',
+    );
+    expect(ageConfirmationLabel(MAYA, 16, undefined, '2027-07-05')).toBe(
+      'Maya R. is 16 or older on Jul 5, 2027.',
+    );
+  });
+
+  test('says "or younger" for a program with only a maximum age', () => {
+    expect(ageConfirmationLabel(SELF, undefined, 12, '2027-07-05')).toBe(
+      'I am 12 or younger on Jul 5, 2027',
+    );
+    expect(ageConfirmationLabel(MAYA, undefined, 12, '2027-07-05')).toBe(
+      'Maya R. is 12 or younger on Jul 5, 2027.',
+    );
+  });
 });
 
 describe('ageNotConfirmedMessage', () => {

@@ -40,8 +40,8 @@ export function minorMayRegister(minimumAge: number | undefined): boolean {
 }
 
 export function participantsOffered(ages: {
-  minimumAge: number | undefined;
-  maximumAge: number | undefined;
+  minimumAge?: number | undefined;
+  maximumAge?: number | undefined;
 }): ('self' | 'minor')[] {
   return [
     ...(adultMayRegister(ages.maximumAge) ? (['self'] as const) : []),
@@ -49,16 +49,17 @@ export function participantsOffered(ages: {
   ];
 }
 
-function yearsOld(minimumAge: number, maximumAge: number): string {
-  return minimumAge === maximumAge
-    ? `${minimumAge} years old`
-    : `${minimumAge} to ${maximumAge} years old`;
+function yearsOld(minimumAge: number | undefined, maximumAge: number | undefined): string {
+  if (minimumAge === undefined && maximumAge !== undefined) return `${maximumAge} or younger`;
+  if (minimumAge !== undefined && maximumAge === undefined) return `${minimumAge} or older`;
+  if (minimumAge === maximumAge) return `${minimumAge} years old`;
+  return `${minimumAge} to ${maximumAge} years old`;
 }
 
 export function ageConfirmationLabel(
   participant: Participant,
-  minimumAge: number,
-  maximumAge: number,
+  minimumAge: number | undefined,
+  maximumAge: number | undefined,
   startDate: string,
 ): string {
   const years = `${yearsOld(minimumAge, maximumAge)} on ${formatCalendarDate(startDate)}`;

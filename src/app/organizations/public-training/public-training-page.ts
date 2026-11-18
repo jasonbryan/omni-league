@@ -4,7 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { trainingAgesLabel } from '../../../../convex/lib/trainingInput';
 import { trainingPatternText } from '../../../../convex/lib/trainingPattern';
-import { api, injectOnline, injectQuery } from '../../core/data/convex';
+import { AuthService } from '../../core/auth/auth.service';
+import { api, injectOnline, injectQuery, skipToken } from '../../core/data/convex';
 import { injectNow } from '../../core/now';
 import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
@@ -42,7 +43,13 @@ function description(training: PublicTrainingData): string {
   template: `
     <app-public-layout>
       @if (training(); as training) {
-        <app-public-training-content [training]="training" [savedAt]="savedAt()" [now]="now()" />
+        <app-public-training-content
+          [training]="training"
+          [savedAt]="savedAt()"
+          [now]="now()"
+          [registeredSelf]="registeredSelf()"
+          [registeredMinors]="registeredMinors()"
+        />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
@@ -79,6 +86,14 @@ export class PublicTrainingPage {
     orgSlug: this.orgSlug(),
     trainingSlug: this.trainingSlug(),
   }));
+  private readonly auth = inject(AuthService);
+  private readonly mine = injectQuery(api.trainingRegistrations.listMineForTraining, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), trainingSlug: this.trainingSlug() }
+      : skipToken,
+  );
+  protected readonly registeredSelf = computed(() => this.mine.value()?.self ?? false);
+  protected readonly registeredMinors = computed(() => this.mine.value()?.minorNames ?? []);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

@@ -5,6 +5,7 @@ import { deleteUserCampWaitlistEntries } from './campWaitlistWrites';
 import { deleteUserMemberships } from './memberships';
 import { MAX_SUBSCRIPTIONS_PER_USER } from './pushSubscription';
 import { TEST_SEND_LIMIT } from './pushTestSend';
+import { deleteUserTrainingRegistrations } from './trainingRegistrationWrites';
 
 export async function insertUserRecord(
   ctx: Pick<MutationCtx, 'db'>,
@@ -36,6 +37,7 @@ export async function deleteUserRecord(
   await deleteUserMemberships(ctx, user._id);
   await deleteUserCampRegistrations(ctx, user._id);
   await deleteUserCampWaitlistEntries(ctx, user._id);
+  await deleteUserTrainingRegistrations(ctx, user._id);
   await ctx.db.delete('users', user._id);
 }
 

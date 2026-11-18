@@ -713,7 +713,7 @@ export const publishSeededTraining = internalMutation({
   },
 });
 
-/** Sets the count directly: nothing registers for a training class yet. */
+/** Sets the count directly, so a class can be part-filled or full with no registrant. */
 export const setTrainingClassRegistered = internalMutation({
   args: {
     organizationSlug: v.string(),

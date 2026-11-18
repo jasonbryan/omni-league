@@ -1,0 +1,578 @@
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { ConvexError } from 'convex/values';
+import { AuthService } from '../../core/auth/auth.service';
+import { FakeAuthClient, provideFakeAuthClient } from '../../core/auth/testing/fake-auth-client';
+import { CONVEX_CLIENT } from '../../core/data/convex';
+import { FakeConvexClient } from '../../core/data/convex/testing/fake-convex-client';
+import { appRouteTitle } from '../../shell/testing/app-route-title';
+import { BAR_TITLE_PROVIDER, expectBar } from '../../shell/testing/bar-title';
+import { expectAlertClasses, expectAlertSlots } from '../../ui/testing/alert';
+import { expectPendingSpinner } from '../../ui/testing/spinner';
+import { RegisterTrainingPage } from './register-training-page';
+
+@Component({ template: 'elsewhere' })
+class Elsewhere {}
+
+const SLUGS = { orgSlug: 'gulf-coast-sport-social', trainingSlug: 'tuesday-serving-clinic' };
+const PATH = `/app/organizations/${SLUGS.orgSlug}/training/${SLUGS.trainingSlug}/register`;
+const TRAINING_PATH = `/organizations/${SLUGS.orgSlug}/training/${SLUGS.trainingSlug}`;
+const GET = 'trainingRegistrations:getForRegistration';
+const REGISTER = 'trainingRegistrations:register';
+const TRAINING_ID = 'training_1';
+const NO_AGES = {
+  trainingId: TRAINING_ID,
+  organizationName: 'Gulf Coast Sport & Social',
+  name: 'Tuesday Serving Clinic',
+  pattern: {
+    weekday: 2,
+    startTime: '18:00',
+    endTime: '19:00',
+    firstDate: '2027-02-02',
+    weeks: 8,
+    registrationDeadline: '2027-02-01',
+  },
+  classCount: 8,
+  placesLeft: 12,
+  registered: false,
+};
+const OPEN = { ...NO_AGES, minimumAge: 18, maximumAge: 99 };
+const REGISTERED = { ...OPEN, registered: true };
+const FULL = { ...OPEN, placesLeft: 0, fullClassDate: '2027-02-16' };
+const YOUTH = { ...OPEN, minimumAge: 9, maximumAge: 17 };
+const BOTH = { ...OPEN, minimumAge: 14, maximumAge: 30 };
+const MINIMUM_ONLY = { ...NO_AGES, minimumAge: 16 };
+const MAXIMUM_ONLY = { ...NO_AGES, maximumAge: 12 };
+const BEFORE = '2027-01-30T12:00:00Z';
+const AFTER_DEADLINE = '2027-02-03T12:00:00Z';
+
+const text = (element: Element | null | undefined) =>
+  element?.textContent?.replace(/\s+/g, ' ').trim();
+/** The title and the description are blocks, so a reader hears them apart. */
+const alertText = (element: Element | null | undefined) =>
+  [
+    element?.querySelector('[data-slot="alert-title"]'),
+    element?.querySelector('[data-slot="alert-description"]'),
+  ]
+    .map(text)
+    .join(' ');
+
+describe('RegisterTrainingPage', () => {
+  let convex: FakeConvexClient;
+  let harness: RouterTestingHarness;
+  let page: HTMLElement;
+
+  async function open({ signedIn = true, now = BEFORE } = {}) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.parse(now));
+    convex = new FakeConvexClient();
+    const auth = new FakeAuthClient();
+    if (!signedIn) auth.storedCookie = '';
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeAuthClient(auth),
+        { provide: CONVEX_CLIENT, useValue: convex },
+        BAR_TITLE_PROVIDER,
+        provideRouter([
+          {
+            path: 'app/organizations/:orgSlug/training/:trainingSlug/register',
+            title: appRouteTitle('organizations/:orgSlug/training/:trainingSlug/register'),
+            component: RegisterTrainingPage,
+          },
+          { path: 'sign-in', component: Elsewhere },
+          { path: '**', component: Elsewhere },
+        ]),
+      ],
+    });
+    if (signedIn) auth.emitSession({ id: 's1' });
+    harness = await RouterTestingHarness.create(PATH);
+    page = harness.routeNativeElement!;
+    await flush();
+    if (signedIn) {
+      TestBed.inject(AuthService).onChange(true);
+      TestBed.tick();
+    }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function flush() {
+    await harness.fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await harness.fixture.whenStable();
+  }
+
+  const registration = () => convex.activeSubscriptions.find((s) => s.name === GET);
+  async function answer(value: unknown) {
+    registration()!.emit(value);
+    await flush();
+  }
+  const url = () => TestBed.inject(Router).url;
+  const ageBox = () => page.querySelector<HTMLButtonElement>('#age-confirmed');
+  const registers = () => convex.calls.filter((call) => call.name === REGISTER);
+  const ageLabel = () => text(page.querySelector('label[for="age-confirmed"]'));
+  const backLink = () =>
+    [...page.querySelectorAll('main a')].find((a) => text(a) === 'Back to the training page');
+
+  async function tick() {
+    ageBox()!.click();
+    await harness.fixture.whenStable();
+  }
+
+  async function submit() {
+    page.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    await flush();
+  }
+
+  describe('the state order', () => {
+    it('asks nothing until Convex has accepted the token, then asks with the slugs', async () => {
+      await open();
+      expect(registration()?.args).toEqual(SLUGS);
+      expect(text(page.querySelector('main [role="status"]'))).toBe(
+        'Loading the training program.',
+      );
+    });
+
+    it('not found: shows the not-found view and calls no mutation, signed in or not', async () => {
+      for (const signedIn of [true, false]) {
+        TestBed.resetTestingModule();
+        await open({ signedIn });
+        await answer(null);
+        expect(text(page.querySelector('main h1'))).toBe('Page not found');
+        expect(ageBox()).toBeNull();
+        expect(convex.calls).toEqual([]);
+        expect(url()).toBe(PATH);
+      }
+    });
+
+    it('signed out: goes to sign-in with this address as returnTo, in place of this entry', async () => {
+      await open({ signedIn: false });
+      await answer(OPEN);
+      expect(url()).toBe(`/sign-in?returnTo=${encodeURIComponent(PATH)}`);
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('registered, even after the deadline: says so with a link back, and no form', async () => {
+      await open({ now: AFTER_DEADLINE });
+      await answer({ ...REGISTERED, minimumAge: 18 });
+      const card = page.querySelector('[data-slot="alert"]');
+      expect(card?.getAttribute('role')).toBe('status');
+      expectAlertSlots(card);
+      expectAlertClasses(card, 'default', 'outline-offset-2 focus:outline-2 focus:outline-ring');
+      expect(alertText(card)).toBe(
+        "You're registered for Tuesday Serving Clinic. Your place is held in every class. You’ll find it on the training page.",
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+    });
+
+    it('closed: shows the deadline and no form, with a link back', async () => {
+      await open({ now: AFTER_DEADLINE });
+      await answer(OPEN);
+      const alert = page.querySelector('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('status');
+      expect(alertText(alert)).toBe(
+        'Registration for this training program is closed. It closed on Feb 1, 2027.',
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()).toBeDefined();
+    });
+
+    it('full: names the first full class, with no form and a link back', async () => {
+      await open();
+      await answer(FULL);
+      const alert = page.querySelector('[data-slot="alert"]');
+      expect(alertText(alert)).toBe(
+        'A class is full. Tue, Feb 16, 2027 has no place left, and a series registration holds a place in every class.',
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+    });
+
+    it('open: the series facts, the form, and the title', async () => {
+      await open();
+      await answer(OPEN);
+      expect(text(page.querySelector('main h1'))).toBe('Tuesday Serving Clinic');
+      const facts = [...page.querySelectorAll('main dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+      expect(facts).toEqual([
+        ['Schedule', 'Tuesdays, 6 to 7 pm, 8 weeks'],
+        ['First class', 'Feb 2, 2027'],
+        ['Ages', '18 to 99'],
+        ['Places left', 'At least 12 places left in every class'],
+        ['Registration closes', 'Feb 1, 2027'],
+      ]);
+      expect(document.title).toBe(
+        'Register for a training series | Tuesday Serving Clinic | Omni League',
+      );
+    });
+
+    it('a program with one age labels the fact Age, and one with no ages has no age fact', async () => {
+      await open();
+      await answer({ ...OPEN, minimumAge: 12, maximumAge: 12 });
+      const labels = () =>
+        [...page.querySelectorAll('main dl > div')].map((row) => [
+          text(row.querySelector('dt')),
+          text(row.querySelector('dd')),
+        ]);
+      expect(labels()).toContainEqual(['Age', '12']);
+      await answer(NO_AGES);
+      expect(labels().map(([label]) => label)).toEqual([
+        'Schedule',
+        'First class',
+        'Places left',
+        'Registration closes',
+      ]);
+    });
+  });
+
+  describe('the age box', () => {
+    beforeEach(async () => {
+      await open();
+    });
+
+    it('names both bounds and the first class date', async () => {
+      await answer(OPEN);
+      expect(ageLabel()).toBe('I am 18 to 99 years old on Feb 2, 2027');
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('reads "or older" for a program with only a minimum age', async () => {
+      await answer(MINIMUM_ONLY);
+      expect(ageLabel()).toBe('I am 16 or older on Feb 2, 2027');
+    });
+
+    it('reads "or younger" for a program with only a maximum age, for the child only an adult cannot register', async () => {
+      await answer(MAXIMUM_ONLY);
+      expect(text(page.querySelector('label[for="participant-minor"]'))).toBe('My child');
+      expect(page.querySelector('label[for="participant-self"]')).toBeNull();
+      expect(ageLabel()).toBe('My child is 12 or younger on Feb 2, 2027.');
+    });
+
+    it('is not asked when the program has no age range, and Register sends without it', async () => {
+      await answer(NO_AGES);
+      expect(ageBox()).toBeNull();
+      await submit();
+      expect(registers().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: false },
+      ]);
+    });
+
+    it('an unticked submit shows "Confirm your age to continue." under the box, focuses it, and sends nothing', async () => {
+      await answer(OPEN);
+      await submit();
+      expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+        'Confirm your age to continue.',
+      );
+      expect(ageBox()?.getAttribute('aria-invalid')).toBe('true');
+      expect(ageBox()?.getAttribute('aria-describedby')).toBe('age-confirmed-error');
+      expect(document.activeElement).toBe(ageBox());
+      expect(registers()).toEqual([]);
+    });
+
+    it('ticking the box clears the error', async () => {
+      await answer(OPEN);
+      await submit();
+      await tick();
+      expect(page.querySelector('#age-confirmed-error')).toBeNull();
+    });
+
+    it('leaving a ticked then cleared box shows the error, and leaving an untouched box does not', async () => {
+      await answer(OPEN);
+      ageBox()!.dispatchEvent(new Event('blur'));
+      await flush();
+      expect(page.querySelector('#age-confirmed-error')).toBeNull();
+      await tick();
+      await tick();
+      ageBox()!.dispatchEvent(new Event('blur'));
+      await flush();
+      expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+        'Confirm your age to continue.',
+      );
+    });
+  });
+
+  describe('registering', () => {
+    beforeEach(async () => {
+      await open();
+      await answer(OPEN);
+    });
+
+    it('asks who is attending, with Me chosen as the only option', () => {
+      expect(text(page.querySelector('fieldset legend'))).toBe("Who's attending");
+      const radios = [...page.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+      expect(radios.map((radio) => [radio.value, radio.checked])).toEqual([['self', true]]);
+      expect(text(page.querySelector('label[for="participant-self"]'))).toBe('Me');
+    });
+
+    it('keeps Register in a sticky footer for phones', () => {
+      const footer = page.querySelector('[data-slot="form-footer"]');
+      expect(footer?.classList.contains('sticky')).toBe(true);
+      expect(text(footer?.querySelector('button[type="submit"]'))).toBe('Register');
+    });
+
+    it('sends the training program, the participant, and the age box, shows the pending state, then opens the training page in place of this entry', async () => {
+      await tick();
+      await submit();
+      expect(registers().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      const button = page.querySelector('button[type="submit"]');
+      expect(text(button)).toBe('Registering…');
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expectPendingSpinner(button);
+      expect(text(page.querySelector('form > p[role="status"]'))).toBe(
+        'Registering for Tuesday Serving Clinic.',
+      );
+      registers()[0].resolve({ registrationId: 'reg_1' });
+      await flush();
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
+    it('a second press while pending sends nothing more', async () => {
+      await tick();
+      await submit();
+      await submit();
+      expect(registers()).toHaveLength(1);
+    });
+
+    it('the server’s age refusal shows under the box and keeps the box ticked', async () => {
+      await tick();
+      await submit();
+      registers()[0].reject(
+        new ConvexError({
+          code: 'ageNotConfirmed',
+          field: 'ageConfirmed',
+          message: 'Confirm your age to continue.',
+        }),
+      );
+      await flush();
+      expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+        'Confirm your age to continue.',
+      );
+      expect(document.activeElement).toBe(ageBox());
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it.each([
+      [
+        'closed',
+        { code: 'registrationClosed', message: 'x' },
+        'Registration for this training program is closed.',
+      ],
+      ['a class full', { code: 'classFull', message: 'x' }, 'A class is full.'],
+      [
+        'adults not allowed',
+        { code: 'adultNotAllowed', message: 'x' },
+        'This training program is for ages up to 99.',
+      ],
+      [
+        'children not allowed',
+        { code: 'minorNotAllowed', message: 'x' },
+        'This training program is for ages 18 and over.',
+      ],
+      [
+        'not found',
+        { code: 'trainingNotFound', message: 'x' },
+        'This training program is not open for registration.',
+      ],
+      [
+        'already registered',
+        { code: 'alreadyRegistered', message: 'x' },
+        "You're registered for Tuesday Serving Clinic.",
+      ],
+    ])('a refusal as %s shows its card, whose alert takes focus', async (_label, data, line) => {
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError(data));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toContain(line);
+      expect(page.querySelector('form')).toBeNull();
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('any other failure shows the form alert, focused, keeps the box ticked, and takes no place', async () => {
+      await tick();
+      await submit();
+      registers()[0].reject(new Error('network'));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toBe(
+        'You could not be registered. No place was taken. Check your connection and try again.',
+      );
+      expect(document.activeElement).toBe(alert);
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Register');
+    });
+
+    it('offline: refuses with the offline alert, focused, sends nothing, and keeps the box ticked', async () => {
+      await tick();
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await harness.fixture.whenStable();
+      const button = page.querySelector('button[type="submit"]');
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      expect(button?.classList.contains('opacity-50')).toBe(true);
+      await submit();
+      expect(registers()).toEqual([]);
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"]');
+      expect(text(alert)).toBe(
+        "You're offline. Nothing was sent. Your answers are still here. Try again when you're connected.",
+      );
+      expect(document.activeElement).toBe(alert);
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      vi.restoreAllMocks();
+    });
+  });
+
+  describe('registering a child', () => {
+    const radios = () => [...page.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    const nameInput = () => page.querySelector<HTMLInputElement>('#minor-name');
+    const nameError = () => text(page.querySelector('#minor-name-error'));
+
+    async function typeName(value: string) {
+      const input = nameInput()!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await flush();
+    }
+
+    describe('on a program for ages under 18', () => {
+      beforeEach(async () => {
+        await open();
+        await answer(YOUTH);
+      });
+
+      it('offers only My child, chosen, with the name field and what is stored', () => {
+        expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([['minor', true]]);
+        expect(nameInput()).not.toBeNull();
+        expect(text(page.querySelector('#minor-name-description'))).toBe(
+          'Only the name is stored. It is never shown on public pages.',
+        );
+      });
+
+      it('words the age box for the child, saying My child before a name is typed and the name after', async () => {
+        expect(ageLabel()).toBe('My child is 9 to 17 years old on Feb 2, 2027.');
+        await typeName('  Maya   R. ');
+        expect(ageLabel()).toBe('Maya R. is 9 to 17 years old on Feb 2, 2027.');
+      });
+
+      it('an empty submit shows both errors, focuses the name first, and sends nothing', async () => {
+        await submit();
+        expect(nameError()).toBe("Enter your child's name.");
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm your child's age to continue.",
+        );
+        expect(document.activeElement).toBe(nameInput());
+        expect(registers()).toEqual([]);
+      });
+
+      it('an unticked submit with a name shows "Confirm <name>\'s age to continue." under the box', async () => {
+        await typeName('Maya R.');
+        await submit();
+        expect(text(page.querySelector('#age-confirmed-error'))).toBe(
+          "Confirm Maya R.'s age to continue.",
+        );
+        expect(document.activeElement).toBe(ageBox());
+      });
+
+      it('sends the child under the guardian with the name trimmed and its spaces collapsed, then opens the training page', async () => {
+        await typeName('  Maya   R. ');
+        await tick();
+        await submit();
+        expect(registers().map((call) => call.args)).toEqual([
+          {
+            trainingId: TRAINING_ID,
+            participant: { kind: 'minor', minorName: 'Maya R.' },
+            ageConfirmed: true,
+          },
+        ]);
+        registers()[0].resolve({ registrationId: 'reg_1' });
+        await flush();
+        expect(url()).toBe(TRAINING_PATH);
+      });
+
+      it('the server refusing the name shows under the name, focuses it, and keeps the input', async () => {
+        await typeName('Maya R.');
+        await tick();
+        await submit();
+        registers()[0].reject(
+          new ConvexError({
+            code: 'alreadyRegistered',
+            field: 'minorName',
+            message: 'Maya R. is already registered for this training program.',
+          }),
+        );
+        await flush();
+        expect(nameError()).toBe('Maya R. is already registered for this training program.');
+        expect(document.activeElement).toBe(nameInput());
+        expect(nameInput()?.value).toBe('Maya R.');
+        expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      });
+    });
+
+    describe('on a program that admits an adult and a child', () => {
+      beforeEach(async () => {
+        await open();
+        await answer(BOTH);
+      });
+
+      it('offers Me and My child, with Me chosen and no name field', () => {
+        expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([
+          ['self', true],
+          ['minor', false],
+        ]);
+        expect(nameInput()).toBeNull();
+      });
+
+      it('changing who is attending clears the ticked box, which confirmed another statement', async () => {
+        await tick();
+        page.querySelector<HTMLInputElement>('#participant-minor')!.click();
+        await flush();
+        expect(ageBox()?.getAttribute('aria-checked')).toBe('false');
+        expect(nameInput()).not.toBeNull();
+      });
+    });
+
+    it('offers only My child to a guardian who already holds their own place', async () => {
+      await open();
+      await answer({ ...BOTH, registered: true });
+      expect(radios().map((radio) => [radio.value, radio.checked])).toEqual([['minor', true]]);
+    });
+
+    it('does not offer My child when the minimum age is 18 or more', async () => {
+      await open();
+      await answer(OPEN);
+      expect(radios().map((radio) => radio.value)).toEqual(['self']);
+      expect(page.querySelector('label[for="participant-minor"]')).toBeNull();
+    });
+  });
+
+  describe('slim bar', () => {
+    it('reads "Register for a training series" while the query is held and for the form', async () => {
+      await open();
+      expectBar(page, 'Register for a training series');
+      await answer(OPEN);
+      expectBar(page, 'Register for a training series');
+    });
+
+    it('names the not-found and server-error views', async () => {
+      await open();
+      await answer(null);
+      expectBar(page, 'Page not found');
+      registration()!.fail(new Error('Server Error: secret'));
+      await flush();
+      expectBar(page, 'Temporarily unavailable');
+    });
+  });
+});
