@@ -93,7 +93,11 @@ export const REGISTER_TRAINING_MESSAGES = {
   hasPlaceTitle: 'Every class has a place free.',
   hasPlaceDescription: 'Register for the series instead.',
   registerInstead: 'Register',
-  waitlistNoteTitle: 'A class is full.',
+  waitlistNoteTitle: (waiting: boolean) =>
+    waiting ? 'People are waiting for a place.' : 'A class is full.',
+  waitingTitle: 'People are waiting for a place.',
+  waitingDescription:
+    'A new registration waits behind them, so no place is left for the series. You can join the waitlist instead.',
   waitlistNoteDescription:
     'Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
   joinFailedTitle: 'You could not be added to the waitlist.',
@@ -152,7 +156,7 @@ interface Notice {
   icon: string;
   title: string;
   description: string;
-  action?: string;
+  action?: { label: string; join: boolean };
 }
 
 const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
@@ -250,9 +254,9 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                       type="button"
                       data-slot="refusal-action"
                       [class]="primaryButton + ' mt-4 w-full'"
-                      (click)="showForm()"
+                      (click)="showForm(action.join)"
                     >
-                      {{ action }}
+                      {{ action.label }}
                     </button>
                   }
                   <a
@@ -277,7 +281,9 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                   @if (joining()) {
                     <div hlmAlert role="note" class="mb-5">
                       <ng-icon name="lucideUsers" aria-hidden="true" />
-                      <div hlmAlertTitle>{{ messages.waitlistNoteTitle }}</div>
+                      <div hlmAlertTitle>
+                        {{ messages.waitlistNoteTitle(training.seriesWaitlist === true) }}
+                      </div>
                       <div hlmAlertDescription>{{ messages.waitlistNoteDescription }}</div>
                     </div>
                   }
@@ -505,7 +511,14 @@ export class RegisterTrainingPage {
     const refusal = this.refusal();
     return (state === 'form' || state === 'waitlist') && refusal !== null ? refusal : state;
   });
-  protected readonly joining = computed(() => this.state() === 'waitlist');
+  /** The participant's series can be full while the account's answer reads open, so the join action asks for the waitlist itself. */
+  private readonly joinAsked = linkedSignal<unknown, boolean>({
+    source: this.route,
+    computation: () => false,
+  });
+  protected readonly joining = computed(
+    () => this.state() === 'waitlist' || (this.state() === 'form' && this.joinAsked()),
+  );
 
   protected readonly notice = computed<Notice | null>(() => {
     const state = this.state();
@@ -542,17 +555,23 @@ export class RegisterTrainingPage {
       }),
       full: () => ({
         icon: 'lucideUsers',
-        title: singleClass ? messages.classFullTitle : messages.fullTitle,
+        title: singleClass
+          ? messages.classFullTitle
+          : training.seriesWaitlist
+            ? messages.waitingTitle
+            : messages.fullTitle,
         description: singleClass
           ? messages.classFullDescription(singleClass.date)
-          : messages.fullDescription(training.fullClassDate),
-        ...(!singleClass && { action: messages.joinWaitlist }),
+          : training.seriesWaitlist
+            ? messages.waitingDescription
+            : messages.fullDescription(training.fullClassDate),
+        ...(!singleClass && { action: { label: messages.joinWaitlist, join: true } }),
       }),
       'has-place': () => ({
         icon: 'lucideCircleCheck',
         title: messages.hasPlaceTitle,
         description: messages.hasPlaceDescription,
-        action: messages.registerInstead,
+        action: { label: messages.registerInstead, join: false },
       }),
       waitlisted: () => ({
         icon: 'lucideCircleCheck',
@@ -733,7 +752,8 @@ export class RegisterTrainingPage {
     return this.joining() ? `Joining the waitlist for ${name}.` : `Registering for ${name}.`;
   }
 
-  protected showForm(): void {
+  protected showForm(join: boolean): void {
+    this.joinAsked.set(join);
     this.refusal.set(null);
   }
 

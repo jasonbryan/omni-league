@@ -7,7 +7,8 @@ export type TrainingWaitlistCode =
   | 'notWaiting'
   | 'noFreePlace'
   | 'notNext'
-  | 'noUpcomingClass';
+  | 'noUpcomingClass'
+  | 'accountGone';
 
 export const TRAINING_WAITLIST_MESSAGES = {
   alreadyWaiting: (participant: Participant) =>
@@ -19,4 +20,5 @@ export const TRAINING_WAITLIST_MESSAGES = {
   noFreePlace: 'No place is free in every class. Raise the places first.',
   notNext: 'Give the places to the person who joined first.',
   noUpcomingClass: 'Every class has passed or is cancelled.',
+  accountGone: 'This account was removed, so it cannot be given a place.',
 } as const;

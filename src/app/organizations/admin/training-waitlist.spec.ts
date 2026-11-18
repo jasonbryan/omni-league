@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
 import { TRAINING_WAITLIST_MESSAGES } from '../../../../convex/lib/trainingWaitlist';
 import { expectSkeletonBoxes } from '../../ui/testing/skeleton-boxes';
-import { NO_ONE_WAITING_FOR_SERIES } from './training-waitlist';
+import { NO_ONE_WAITING_FOR_SERIES, PROMOTE_HINT } from './training-waitlist';
 import { openAdmin, text } from './testing/admin-harness';
 import {
   CLASSES,
@@ -228,18 +228,34 @@ describe('TrainingManagement waitlist', () => {
     });
   });
 
+  describe('the reason Promote needs', () => {
+    it('is on screen from the first render, the same words before and after the list answers, and describes the button', async () => {
+      await open();
+      const hint = () => text(panel()!.querySelector('p[aria-hidden="true"]'));
+      expect(hint()).toBe(PROMOTE_HINT);
+      await answer([MAYA, PAT]);
+      const note = panel()!.querySelector('[data-slot="promote-hint"]')!;
+      expect(text(note)).toBe(PROMOTE_HINT);
+      expect(note.classList).not.toContain('sr-only');
+      expect(promoteButton().getAttribute('aria-describedby')).toBe(note.id);
+    });
+
+    it('is not shown when no one waits', async () => {
+      await open();
+      await answer([]);
+      expect(panel()!.querySelector('[data-slot="promote-hint"]')).toBeNull();
+    });
+  });
+
   describe('while no place is free in every class', () => {
     beforeEach(async () => {
       await open();
       await answer([{ ...MAYA, canPromote: false }, PAT]);
     });
 
-    it('dims Promote, describes why for a screen reader, and keeps the row as it was', () => {
-      const button = promoteButton();
-      expect(button.getAttribute('aria-disabled')).toBe('true');
-      expect(button.classList).toContain('opacity-50');
-      const hint = panel()!.querySelector(`#${button.getAttribute('aria-describedby')}`);
-      expect(text(hint)).toBe(TRAINING_WAITLIST_MESSAGES.noFreePlace);
+    it('dims Promote and keeps the row as it was', () => {
+      expect(promoteButton().getAttribute('aria-disabled')).toBe('true');
+      expect(promoteButton().classList).toContain('opacity-50');
     });
 
     it('pressing it sends nothing and says how to make a place, in an alert that takes focus', async () => {

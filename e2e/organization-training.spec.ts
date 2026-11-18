@@ -1407,6 +1407,10 @@ test.describe('Training: the series waitlist', () => {
     await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
     await page.goto(path);
     await expect(promoteButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await expect(panel(page).locator('[data-slot="promote-hint"]')).toBeVisible();
+    await expect(panel(page).locator('[data-slot="promote-hint"]')).toHaveText(
+      'Promote needs a place free in every class. Raise the places first if one is full.',
+    );
     await promoteButton(page).click({ force: true });
     const result = panel(page).getByRole('alert');
     await expect(result).toContainText(`${player.name} could not be given a place.`);

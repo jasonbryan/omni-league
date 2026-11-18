@@ -549,6 +549,18 @@ describe('trainingWaitlist.promote', () => {
       expect(await registeredCounts(s, 'lastPlace')).toEqual([1, 1, 1]);
     });
 
+    test('an entry whose account is gone, which registers no one for a missing user', async () => {
+      const s = await setup();
+      const id = await seedEntry(s, 'open', s.users['alice']);
+      await s.t.run((ctx) => ctx.db.delete('users', s.users['alice']));
+      const data = await refusal(promote(s.admin, id));
+      expect(data).toMatchObject({
+        code: 'accountGone',
+        message: TRAINING_WAITLIST_MESSAGES.accountGone,
+      });
+      expect(await registeredCounts(s, 'open')).toEqual([0, 0, 0]);
+    });
+
     test('an entry that no longer exists, as it does another organization’s', async () => {
       const s = await setup();
       const id = await seedEntry(s, 'open', s.users['alice']);

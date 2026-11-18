@@ -896,6 +896,68 @@ describe('RegisterTrainingPage', () => {
       expect(text(submitButton())).toBe('Join the waitlist');
     });
 
+    it('the join action puts the page into join mode, though the account’s answer still reads open', async () => {
+      const BOTH_OPEN = { ...OPEN, minimumAge: 9, maximumAge: 30 };
+      await answer(BOTH_OPEN);
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain('A class is full.');
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Join the waitlist');
+      expect(page.querySelector('form [role="note"]')).not.toBeNull();
+      expect(document.title).toContain('Join the waitlist for a training series');
+      expect(ageBox()?.getAttribute('aria-checked')).toBe('true');
+      await submit();
+      expect(joins().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      expect(registers()).toHaveLength(1);
+    });
+
+    it('Register after a join refused for a place gives the registration form back, and the join action does not stick', async () => {
+      await answer({ ...OPEN, minimumAge: 9, maximumAge: 30 });
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      await submit();
+      joins()[0].reject(new ConvexError({ code: 'seriesHasPlace', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Register');
+      expect(page.querySelector('form [role="note"]')).toBeNull();
+    });
+
+    it('says people are waiting, not that a class is full, when only the queue makes the series full', async () => {
+      await answer({ ...FULL, seriesWaitlist: true });
+      expect(alertText(page.querySelector('form [role="note"]'))).toBe(
+        'People are waiting for a place. Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
+      );
+      await answer({ ...OPEN, seriesWaitlist: true, placesLeft: 0, fullClassDate: '2027-02-02' });
+      await tick();
+      await submit();
+      joins()[0].reject(new Error('x'));
+      await flush();
+    });
+
+    it('a registration refused while people wait offers the waitlist in the same words', async () => {
+      await answer(OPEN);
+      await tick();
+      await submit();
+      await answer({ ...FULL, seriesWaitlist: true });
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      expect(alertText(page.querySelector('[data-slot="alert"]'))).toBe(
+        'People are waiting for a place. A new registration waits behind them, so no place is left for the series. You can join the waitlist instead.',
+      );
+    });
+
     it('reads the places fact as full with people on the waitlist while the series has a queue', async () => {
       await answer({ ...FULL, seriesWaitlist: true });
       const places = [...page.querySelectorAll('main dl > div')].find(

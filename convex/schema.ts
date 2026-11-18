@@ -444,7 +444,6 @@ export default defineSchema({
     promotedAt: v.optional(v.number()),
     registrationId: v.optional(v.id('trainingRegistrations')),
   })
-    // `classId` absent reads the series entries, in the order they joined.
     .index('by_trainingId_and_classId_and_status_and_requestedAt', [
       'trainingId',
       'classId',

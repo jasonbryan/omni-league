@@ -92,6 +92,12 @@ export const promote = mutation({
         message: TRAINING_WAITLIST_MESSAGES.notWaiting,
       });
     }
+    if (!(await ctx.db.get('users', entry.userId))) {
+      refuseTrainingRegistration({
+        code: 'accountGone',
+        message: TRAINING_WAITLIST_MESSAGES.accountGone,
+      });
+    }
     const classes = await classesToAttend(ctx, training._id, dateAtUtcMinus12(Date.now()));
     if (classes.length === 0) {
       refuseTrainingRegistration({
@@ -125,7 +131,6 @@ export const listForTraining = query({
       name: v.string(),
       guardian: v.optional(v.object({ name: v.string(), email: v.string() })),
       requestedAt: v.number(),
-      /** Only the first entry can be promoted, and only once every class has a place for it. */
       canPromote: v.boolean(),
     }),
   ),

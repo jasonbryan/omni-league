@@ -39,6 +39,8 @@ import { OUTLINE_BUTTON } from './button-classes';
 import { formatDay } from './format-day';
 
 export const NO_ONE_WAITING_FOR_SERIES = 'No one is waiting.';
+export const PROMOTE_HINT =
+  'Promote needs a place free in every class. Raise the places first if one is full.';
 
 type Result =
   | { kind: 'promoted'; text: AlertText }
@@ -52,6 +54,7 @@ const REFUSAL_CODES: readonly TrainingWaitlistCode[] = [
   'notWaiting',
   'notNext',
   'noUpcomingClass',
+  'accountGone',
 ];
 
 /** Only the message of a refusal the server words for the organizer is shown: any other failure's message is server detail. */
@@ -134,6 +137,13 @@ function refusalMessage(error: unknown): string | null {
           </div>
         } @else if (rows(); as rows) {
           @if (rows.length > 0) {
+            <p
+              id="promote-hint"
+              data-slot="promote-hint"
+              class="py-3 text-sm text-muted-foreground"
+            >
+              {{ promoteHint }}
+            </p>
             <div hlmTableContainer [attr.aria-label]="'Waitlist of ' + trainingName()">
               <table hlmTable>
                 <caption hlmCaption class="sr-only">
@@ -183,7 +193,7 @@ function refusalMessage(error: unknown): string | null {
                             [attr.aria-disabled]="
                               !row.canPromote || promoting() !== null || !online() ? 'true' : null
                             "
-                            [attr.aria-describedby]="row.canPromote ? null : 'promote-hint'"
+                            aria-describedby="promote-hint"
                             (click)="promote(row)"
                           >
                             @if (promoting() === row.trainingWaitlistEntryId) {
@@ -207,7 +217,6 @@ function refusalMessage(error: unknown): string | null {
                 </tbody>
               </table>
             </div>
-            <p id="promote-hint" class="sr-only">{{ noFreePlace }}</p>
           } @else {
             <p data-slot="waitlist-empty" class="py-2 text-muted-foreground">
               {{ noOneWaiting }}
@@ -224,6 +233,7 @@ function refusalMessage(error: unknown): string | null {
               <div hlmSkeleton class="h-lh w-56 max-w-full rounded-md"></div>
             </div>
           } @else {
+            <p aria-hidden="true" class="py-3 text-sm text-muted-foreground">{{ promoteHint }}</p>
             <div aria-hidden="true">
               <table hlmTable>
                 <thead hlmTHead>
@@ -286,6 +296,7 @@ export class TrainingWaitlist {
   protected readonly day = formatDay;
   protected readonly noOneWaiting = NO_ONE_WAITING_FOR_SERIES;
   protected readonly noFreePlace = TRAINING_WAITLIST_MESSAGES.noFreePlace;
+  protected readonly promoteHint = PROMOTE_HINT;
   protected readonly rows = this.list.value;
   protected readonly failed = computed(() => this.list.error() !== undefined);
   protected readonly waitingCount = computed(() => this.rows()?.length ?? this.waitlistCount());
