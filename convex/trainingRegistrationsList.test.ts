@@ -273,34 +273,32 @@ describe('trainingRegistrations.listForClass', () => {
     expect(text).not.toContain('participantKey');
   });
 
-  test('reads no more rows than the class has places, series first', async () => {
+  test('lists every registrant of a restored class that holds more than its places, so the list matches the count', async () => {
     const s = await setup();
+    const trainingId = s.trainings['dropIn'].trainingId;
     const trainingClass = classOf(s, 'dropIn', 0);
-    await s.t.run((ctx) => ctx.db.patch('trainingClasses', trainingClass, { places: 3 }));
-    await s.t.run(async (ctx) => {
-      const training = (await ctx.db.get('trainings', s.trainings['dropIn'].trainingId))!;
-      const key = (kind: string, name: string) =>
-        kind === 'series' ? `minor:${name}` : `class:${trainingClass}:minor:${name}`;
-      for (const [kind, name] of [
-        ['series', 'a'],
-        ['series', 'b'],
-        ['series', 'c'],
-        ['class', 'd'],
-        ['class', 'e'],
-      ] as const) {
-        await ctx.db.insert('trainingRegistrations', {
-          trainingId: training._id,
-          ...(kind === 'class' && { classId: trainingClass }),
-          organizationId: training.organizationId,
-          userId: s.guardian.userId,
-          participant: MINOR(name.toUpperCase()),
-          participantKey: key(kind, name),
-          createdAt: NOW,
-        });
-      }
+    await s.admin.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: trainingClass,
+      places: 5,
     });
+    await s.admin.mutation(api.trainingClasses.cancel, { trainingClassId: trainingClass });
+    for (let index = 1; index <= 12; index++) {
+      await s.alice.mutation(api.trainingRegistrations.register, {
+        trainingId,
+        participant: MINOR(`Child ${String(index).padStart(2, '0')}`),
+        ageConfirmed: true,
+      });
+    }
+    await s.admin.mutation(api.trainingClasses.restore, { trainingClassId: trainingClass });
+    await registerClass(s, 'dropIn', 0, s.zed.userId, SELF);
+    const held = await s.t.run((ctx) => ctx.db.get('trainingClasses', trainingClass));
+    expect(held).toMatchObject({ places: 5, registeredCount: 13 });
     const rows = await listFor(s.admin, trainingClass);
-    expect(rows.map((row) => row.name)).toEqual(['A', 'B', 'C']);
+    expect(rows).toHaveLength(13);
+    expect(rows.filter((row) => row.kind === 'series')).toHaveLength(12);
+    expect(rows.filter((row) => row.kind === 'class').map((row) => row.name)).toEqual([
+      'Zed Zimmer',
+    ]);
   });
 
   test('shows the guardian’s name alone when the sign-in account holding the email is gone', async () => {

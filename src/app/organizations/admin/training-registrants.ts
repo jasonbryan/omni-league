@@ -13,15 +13,15 @@ import { RegistrantsList } from './registrants-list';
     [failed]="failed()"
     [subject]="className()"
     [retryHref]="retryHref()"
-    [expected]="registered()"
-    [kinds]="true"
+    [registeredCount]="registeredCount()"
+    [showKind]="true"
   />`,
 })
 export class TrainingRegistrants {
   readonly trainingClassId = input.required<Id<'trainingClasses'>>();
   readonly className = input.required<string>();
   readonly retryHref = input.required<string>();
-  readonly registered = input.required<number>();
+  readonly registeredCount = input.required<number>();
 
   protected readonly result = injectQuery(api.trainingRegistrations.listForClass, () => ({
     trainingClassId: this.trainingClassId(),

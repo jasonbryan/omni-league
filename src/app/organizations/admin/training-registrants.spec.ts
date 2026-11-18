@@ -61,7 +61,7 @@ describe('TrainingManagement registrants', () => {
       row.querySelector('th')!.firstChild!.textContent!.trim(),
       text(row.querySelector('[data-slot="registrant-kind"]')),
       text(row.querySelector('[data-slot="registrant-guardian"]')) ?? null,
-      text(row.querySelector('td')),
+      text(row.querySelector('td:last-child')),
     ]);
   const open = async (date = FIRST) => {
     toggle(date).click();
@@ -109,7 +109,8 @@ describe('TrainingManagement registrants', () => {
       ['Pat Player', 'Series', null, 'Jan 3, 2027'],
     ]);
     const heads = [...panel(SECOND)!.querySelectorAll('thead th')].map(text);
-    expect(heads).toEqual(['Name', 'Registered']);
+    expect(heads).toEqual(['Name', 'Registered for', 'Registered']);
+    expect(panel(SECOND)!.querySelectorAll('tbody tr th')).toHaveLength(2);
     expect(text(panel(SECOND)!.querySelector('caption'))).toBe(`Registrants of ${SECOND}`);
   });
 

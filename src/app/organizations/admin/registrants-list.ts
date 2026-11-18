@@ -8,9 +8,6 @@ import { formatDay } from './format-day';
 
 export const NO_REGISTRANTS_YET = 'No one has registered yet.';
 
-/** A class holds at most 200 places, the most any list has rows. */
-const MAX_SKELETON_ROWS = 200;
-
 export interface RegistrantRow {
   registrationId: string;
   name: string;
@@ -49,6 +46,9 @@ export interface RegistrantRow {
             <thead hlmTHead>
               <tr hlmTr>
                 <th hlmTh scope="col" class="text-start">Name</th>
+                @if (showKind()) {
+                  <th hlmTh scope="col" class="text-start">Registered for</th>
+                }
                 <th hlmTh scope="col" class="text-end whitespace-nowrap">Registered</th>
               </tr>
             </thead>
@@ -57,24 +57,26 @@ export interface RegistrantRow {
                 <tr hlmTr data-slot="registrant">
                   <th hlmTh scope="row" class="text-start">
                     {{ row.name }}
-                    @if (row.kind; as kind) {
-                      <span class="flex">
+                    @if (row.guardian; as guardian) {
+                      <span
+                        data-slot="registrant-guardian"
+                        class="block text-xs font-normal wrap-anywhere text-muted-foreground"
+                        >Guardian: {{ guardianLine(guardian) }}</span
+                      >
+                    }
+                  </th>
+                  @if (showKind()) {
+                    <td hlmTd>
+                      @if (row.kind; as kind) {
                         <span
                           hlmBadge
                           [variant]="kind === 'series' ? 'secondary' : 'outline'"
                           data-slot="registrant-kind"
                           >{{ kind === 'series' ? 'Series' : 'This class' }}</span
                         >
-                      </span>
-                    }
-                    @if (row.guardian; as guardian) {
-                      <span
-                        data-slot="registrant-guardian"
-                        class="block font-normal wrap-anywhere text-muted-foreground"
-                        >Guardian: {{ guardianLine(guardian) }}</span
-                      >
-                    }
-                  </th>
+                      }
+                    </td>
+                  }
                   <td hlmTd class="text-end whitespace-nowrap">{{ day(row.registeredAt) }}</td>
                 </tr>
               }
@@ -102,6 +104,9 @@ export interface RegistrantRow {
             <thead hlmTHead>
               <tr hlmTr>
                 <th hlmTh scope="col" class="text-start">Name</th>
+                @if (showKind()) {
+                  <th hlmTh scope="col" class="text-start">Registered for</th>
+                }
                 <th hlmTh scope="col" class="text-end whitespace-nowrap">Registered</th>
               </tr>
             </thead>
@@ -109,15 +114,13 @@ export interface RegistrantRow {
               @for (row of skeletonRows(); track row) {
                 <tr hlmTr>
                   <th hlmTh scope="row">
-                    <div class="flex h-5 items-center">
-                      <div hlmSkeleton class="h-4 w-40 max-w-full rounded-md"></div>
-                    </div>
-                    @if (kinds()) {
-                      <div class="flex h-5 items-center">
-                        <div hlmSkeleton class="h-3.5 w-16 rounded-md"></div>
-                      </div>
-                    }
+                    <div hlmSkeleton class="h-4 w-full max-w-40 rounded-md"></div>
                   </th>
+                  @if (showKind()) {
+                    <td hlmTd>
+                      <div hlmSkeleton class="h-4 w-16 rounded-md"></div>
+                    </td>
+                  }
                   <td hlmTd class="text-end">
                     <div hlmSkeleton class="ms-auto h-4 w-20 rounded-md"></div>
                   </td>
@@ -136,16 +139,15 @@ export class RegistrantsList {
   readonly failed = input.required<boolean>();
   readonly subject = input.required<string>();
   readonly retryHref = input.required<string>();
-  /** Rows carry a `kind` line, so the skeleton rows have the line too. */
-  readonly kinds = input(false);
-  /** The count the page already shows, so the skeleton takes the room the rows will. */
-  readonly expected = input.required<number>();
+  readonly showKind = input(false);
+  /** So the skeleton takes the room the rows will. */
+  readonly registeredCount = input.required<number>();
 
   private readonly cause = injectOfflineCause();
 
   protected readonly online = injectOnline();
   protected readonly skeletonRows = computed(() =>
-    Array.from({ length: Math.min(this.expected(), MAX_SKELETON_ROWS) }, (_, index) => index),
+    Array.from({ length: this.registeredCount() }, (_, index) => index),
   );
   protected readonly day = formatDay;
   protected readonly noRegistrants = NO_REGISTRANTS_YET;

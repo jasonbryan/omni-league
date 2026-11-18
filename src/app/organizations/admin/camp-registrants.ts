@@ -13,14 +13,14 @@ import { RegistrantsList } from './registrants-list';
     [failed]="failed()"
     [subject]="sessionName()"
     [retryHref]="retryHref()"
-    [expected]="registered()"
+    [registeredCount]="registeredCount()"
   />`,
 })
 export class CampRegistrants {
   readonly sessionId = input.required<Id<'campSessions'>>();
   readonly sessionName = input.required<string>();
   readonly retryHref = input.required<string>();
-  readonly registered = input.required<number>();
+  readonly registeredCount = input.required<number>();
 
   protected readonly result = injectQuery(api.campRegistrations.listForSession, () => ({
     sessionId: this.sessionId(),

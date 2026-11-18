@@ -1,6 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { byName, namedParticipants, type NamedParticipant } from './campRegistrants';
+import { REGISTRATIONS_OF_ONE_KIND_LIMIT } from './trainingRegistrationReads';
 
 export interface TrainingRegistrant extends NamedParticipant {
   registrationId: Id<'trainingRegistrations'>;
@@ -14,19 +15,19 @@ export async function trainingClassRegistrantsOf(
   trainingClass: Doc<'trainingClasses'>,
 ): Promise<TrainingRegistrant[]> {
   if (trainingClass.status === 'cancelled') return [];
-  const { trainingId, places } = trainingClass;
+  const { trainingId } = trainingClass;
   const series = await ctx.db
     .query('trainingRegistrations')
     .withIndex('by_trainingId_and_classId', (q) =>
       q.eq('trainingId', trainingId).eq('classId', undefined),
     )
-    .take(places);
+    .take(REGISTRATIONS_OF_ONE_KIND_LIMIT);
   const singles = await ctx.db
     .query('trainingRegistrations')
     .withIndex('by_trainingId_and_classId', (q) =>
       q.eq('trainingId', trainingId).eq('classId', trainingClass._id),
     )
-    .take(Math.max(0, places - series.length));
+    .take(REGISTRATIONS_OF_ONE_KIND_LIMIT);
   const rows = [...series, ...singles];
   const named = await namedParticipants(ctx, rows);
   return rows

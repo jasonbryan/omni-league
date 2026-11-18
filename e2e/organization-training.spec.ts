@@ -1014,7 +1014,7 @@ test.describe('Training: who registered', () => {
     const series = rows.filter({ hasText: player.name });
     await expect(series.locator('[data-slot="registrant-kind"]')).toHaveText('Series');
     await expect(series).not.toContainText('Guardian');
-    await expect(maya.getByRole('cell')).toHaveText(/[A-Z][a-z]{2} \d{1,2}, \d{4}/);
+    await expect(maya.getByRole('cell').last()).toHaveText(/[A-Z][a-z]{2} \d{1,2}, \d{4}/);
     await expect(toggleOf(first)).toBeFocused();
     await screenshot(page, testInfo, 'training-registrants');
     await expectAccessible(page);
@@ -1047,12 +1047,21 @@ test.describe('Training: who registered', () => {
     await expect(first.getByRole('button', { name: /registered in / })).toHaveCount(0);
   });
 
-  test('the list takes the room of its skeleton: nothing above or beside it moves, and the rows below stay put', async ({
-    page,
-  }, testInfo) => {
+  interface Who {
+    name: string;
+    minor?: string;
+  }
+
+  async function heldList(page: Page, who: Who[]) {
     const { tenant, path } = await classesWith(page);
-    for (const label of ['Player', 'Player', 'Player']) {
-      await seedTrainingRegistration(tenant, SERVING.slug, await seedUser(newUser(label)), SELF);
+    for (const { name, minor } of who) {
+      const person = await seedUser({ ...newUser('Person'), name });
+      await seedTrainingRegistration(
+        tenant,
+        SERVING.slug,
+        person,
+        minor === undefined ? SELF : { kind: 'minor', minorName: minor },
+      );
     }
     const held = await holdQueries(page, [LIST], { watchFromStart: false });
     await page.goto(path);
@@ -1061,7 +1070,7 @@ test.describe('Training: who registered', () => {
     const first = classRows(page).first();
     await toggleOf(first).click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await expect(registrantsOf(first).locator('tbody tr')).toHaveCount(3);
+    await expect(registrantsOf(first).locator('tbody tr')).toHaveCount(who.length);
     const measure = async () => ({
       date: await box(first.locator('[data-slot="class-date"]')),
       toggle: await box(toggleOf(first)),
@@ -1070,18 +1079,57 @@ test.describe('Training: who registered', () => {
       next: await box(classRows(page).nth(1)),
     });
     const loading = await measure();
-    await screenshot(page, testInfo, 'training-registrants-loading');
-    await expectAccessible(page);
-    held.release();
-    await expect(registrantsOf(first).getByRole('region')).toBeVisible();
-    const loaded = await measure();
+    const release = async () => {
+      held.release();
+      await expect(registrantsOf(first).getByRole('region')).toBeVisible();
+      return measure();
+    };
+    return { loading, release, first };
+  }
+
+  const expectAboveAndBesideStill = (
+    loaded: { date: object; toggle: object; places: object; panel: { y: number } },
+    loading: { date: object; toggle: object; places: object; panel: { y: number } },
+  ) => {
     expect(loaded.date).toEqual(loading.date);
     expect(loaded.toggle).toEqual(loading.toggle);
     expect(loaded.places).toEqual(loading.places);
     expect(loaded.panel.y).toBe(loading.panel.y);
+  };
+
+  test('the list takes the room of its skeleton: nothing above or beside it moves, and the rows below stay put', async ({
+    page,
+  }, testInfo) => {
+    const { loading, release } = await heldList(page, [
+      { name: 'Pat Lee' },
+      { name: 'Sam Ito' },
+      { name: 'Ana Roe' },
+    ]);
+    await screenshot(page, testInfo, 'training-registrants-loading');
+    await expectAccessible(page);
+    const loaded = await release();
+    expectAboveAndBesideStill(loaded, loading);
     expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
     await screenshot(page, testInfo, 'training-registrants-loaded');
+  });
+
+  test('a minor’s guardian line fits its row, so the rows below stay put on a wide screen, and nothing above or beside the list moves anywhere', async ({
+    page,
+    isMobile,
+  }, testInfo) => {
+    const { loading, release } = await heldList(page, [
+      { name: 'Pat Lee' },
+      { name: 'Gail Wu', minor: 'Maya R.' },
+      { name: 'Sam Ito' },
+    ]);
+    const loaded = await release();
+    expectAboveAndBesideStill(loaded, loading);
+    await screenshot(page, testInfo, 'training-registrants-minor-loaded');
+    // On a phone the guardian's address wraps in the narrow name column, and each wrapped line adds its own height, which no skeleton can know.
+    test.skip(isMobile, 'the guardian line wraps at 360px');
+    expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
   });
 
   test('a class with no registrations holds the same room while it loads as its message does', async ({

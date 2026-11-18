@@ -505,7 +505,7 @@ type Outcome =
                                   [trainingClassId]="row.trainingClassId"
                                   [className]="dateOf(row)"
                                   [retryHref]="retryHref()"
-                                  [registered]="row.registeredCount"
+                                  [registeredCount]="row.registeredCount"
                                 />
                               </div>
                             }

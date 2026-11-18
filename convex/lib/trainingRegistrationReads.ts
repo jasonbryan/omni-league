@@ -38,7 +38,7 @@ export async function classesToAttend(
 }
 
 // Each registration of one kind holds a place in the class, and a class takes at most as many as it has places.
-const REGISTRATIONS_OF_ONE_KIND_LIMIT = MAX_TRAINING_CLASS_PLACES * 2;
+export const REGISTRATIONS_OF_ONE_KIND_LIMIT = MAX_TRAINING_CLASS_PLACES * 2;
 
 async function seriesRegistrationCount(
   ctx: Pick<QueryCtx, 'db'>,
