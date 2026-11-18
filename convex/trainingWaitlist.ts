@@ -36,6 +36,7 @@ import {
   waitlistHoldsClass,
 } from './lib/trainingWaitlistReads';
 import {
+  deleteWaitingClassEntriesOf,
   insertTrainingWaitlistEntry,
   promoteTrainingClassEntry,
   promoteTrainingWaitlistEntry,
@@ -105,13 +106,14 @@ export const join = mutation({
       const full =
         !everyClassHasPlace(classes, replaced) ||
         (await seriesEntryWaits(ctx, training._id)) ||
-        (await classesWithWaitingEntries(ctx, classes)).size > 0;
+        (await classesWithWaitingEntries(ctx, classes, { userId: user._id, participant })).size > 0;
       if (!full) {
         refuseTrainingRegistration({
           code: 'seriesHasPlace',
           message: TRAINING_WAITLIST_MESSAGES.seriesHasPlace,
         });
       }
+      await deleteWaitingClassEntriesOf(ctx, training._id, user._id, participant);
       entryId = await insertTrainingWaitlistEntry(ctx, training, {
         userId: user._id,
         participant,
@@ -182,6 +184,7 @@ export const promote = mutation({
       };
     }
     const replaced = await replacedBySeries(ctx, training._id, entry.userId, entry.participant);
+    await deleteWaitingClassEntriesOf(ctx, training._id, entry.userId, entry.participant);
     return {
       registrationId: await promoteTrainingWaitlistEntry(ctx, entry, training, classes, replaced),
     };

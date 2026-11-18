@@ -93,21 +93,11 @@ async function refuseIfHeld(
       message: TRAINING_WAITLIST_MESSAGES.alreadyWaiting(waiting.participant),
     });
   }
+  if (scope.kind === 'series') return;
   const key = participantKey(participant);
   const classWaits = (await waitingClassEntriesOfUser(ctx, training._id, userId)).filter(
     (entry) => participantKey(entry.participant) === key,
   );
-  if (scope.kind === 'series') {
-    // The series would take the place the class entry waits for, ahead of the queue.
-    if (classWaits.length > 0) {
-      refuseTrainingRegistration({
-        code: 'waitingForClass',
-        ...field,
-        message: TRAINING_WAITLIST_MESSAGES.waitingForClass(participant),
-      });
-    }
-    return;
-  }
   if (classWaits.some((entry) => entry.classId === scope.trainingClass._id)) {
     refuseTrainingRegistration({
       code: 'alreadyWaitingForClass',

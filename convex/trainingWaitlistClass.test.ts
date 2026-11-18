@@ -365,19 +365,12 @@ describe('a waiting class entry counts as full', () => {
     await expect(registerClass(s.bob, s, LAST, 1)).resolves.toMatchObject({});
   });
 
-  test('refuses a participant who waits for a class to register or wait for the series, and names the wait', async () => {
+  test('refuses a participant who waits for the same class again, and accepts another class', async () => {
     const s = await setup();
     await seedEntry(s, OPEN, s.users['alice'], 1);
-    const series = await refusal(registerSeries(s.alice, s, OPEN));
-    expect(series).toMatchObject({ code: 'waitingForClass' });
-    const join = await refusal(joinSeries(s.alice, s, OPEN));
-    expect(join).toMatchObject({
-      code: 'waitingForClass',
-      message: TRAINING_WAITLIST_MESSAGES.waitingForClass(SELF),
-    });
     const other = await refusal(registerClass(s.alice, s, OPEN, 1));
     expect(other.code).toBe('alreadyWaitingForClass');
-    await expect(joinSeries(s.alice, s, OPEN, MINOR('Maya R.'))).resolves.toMatchObject({});
+    await expect(registerClass(s.alice, s, OPEN, 0)).resolves.toMatchObject({});
   });
 });
 
@@ -707,6 +700,15 @@ describe('what the pages read while a class entry waits', () => {
     expect(read).not.toHaveProperty('seriesWaitlist');
   });
 
+  test('reads the series as open to the account holder whose own entry is the only one, and full to another', async () => {
+    const s = await setup();
+    await seedEntry(s, OPEN, s.users['alice'], 1);
+    const own = await answer(s.alice, OPEN);
+    expect(own).toMatchObject({ placesLeft: 12 });
+    expect(own).not.toHaveProperty('fullClassDate');
+    expect(await answer(s.bob, OPEN)).toMatchObject({ placesLeft: 0, fullClassDate: '2027-02-09' });
+  });
+
   test('reads the places as before once the class entry is promoted', async () => {
     const s = await setup();
     const id = await seedEntry(s, OPEN, s.users['alice'], 1);
@@ -761,5 +763,110 @@ describe('deleting an account that waits for a class', () => {
     await s.t.run((ctx) => deleteUserRecord(ctx, 'bob'));
     expect(await entry(s, bob.trainingWaitlistEntryId)).toBeNull();
     expect(await entry(s, carol.trainingWaitlistEntryId)).not.toBeNull();
+  });
+});
+
+describe('a series replaces the participant’s class waitlist entries', () => {
+  const classEntriesOf = async (s: Setup, key: string, userId: Id<'users'>) =>
+    (await entriesOf(s, key)).filter((row) => row.userId === userId && row.classId !== undefined);
+  const mineClasses = (caller: Caller, key: string) =>
+    caller.query(api.trainingWaitlist.listMineForClasses, {
+      orgSlug: 'org-a',
+      trainingSlug: SLUGS[key],
+    });
+  const mineSeries = (caller: Caller, key: string) =>
+    caller.query(api.trainingWaitlist.listMineForTraining, {
+      orgSlug: 'org-a',
+      trainingSlug: SLUGS[key],
+    });
+
+  test('registering for the series removes the entries for classes, which their own wait does not hold up', async () => {
+    const s = await setup();
+    await seedEntry(s, OPEN, s.users['alice'], 1);
+    later();
+    await seedEntry(s, OPEN, s.users['alice'], 2);
+    await expect(registerSeries(s.alice, s, OPEN)).resolves.toMatchObject({});
+    expect(await registeredCounts(s, OPEN)).toEqual([1, 1, 1]);
+    expect(await entriesOf(s, OPEN)).toEqual([]);
+    expect(await mineClasses(s.alice, OPEN)).toEqual([]);
+    expect(await mineSeries(s.alice, OPEN)).toEqual([]);
+  });
+
+  test('registering for the series leaves another participant’s entries, which still hold their class', async () => {
+    const s = await setup();
+    await seedEntry(s, OPEN, s.users['alice'], 1);
+    later();
+    await seedEntry(s, OPEN, s.users['alice'], 1, MINOR('Maya R.'));
+    const held = await refusal(registerSeries(s.alice, s, OPEN));
+    expect(held.code).toBe('classFull');
+    expect(await registeredCounts(s, OPEN)).toEqual([0, 0, 0]);
+    expect(await classEntriesOf(s, OPEN, s.users['alice'])).toHaveLength(2);
+  });
+
+  test('registering for the series refuses while another account’s entry holds a class, and keeps the entries', async () => {
+    const s = await setup();
+    await seedEntry(s, OPEN, s.users['bob'], 1);
+    later();
+    await seedEntry(s, OPEN, s.users['alice'], 1);
+    const data = await refusal(registerSeries(s.alice, s, OPEN));
+    expect(data.code).toBe('classFull');
+    expect(await entriesOf(s, OPEN)).toHaveLength(2);
+    expect(await registeredCounts(s, OPEN)).toEqual([0, 0, 0]);
+  });
+
+  test('joining the series waitlist removes the participant’s class entries, and numbers the new entry behind the others', async () => {
+    const s = await setup();
+    await fillSeries(s);
+    const carol = await joinSeries(s.carol, s, LAST);
+    later();
+    const zed = s.t.withIdentity(identity(s.zed.authUserId));
+    const zedEntry = await joinClass(zed, s, LAST, 2);
+    later();
+    await joinClass(s.bob, s, LAST, 1);
+    later();
+    const sam = await joinClass(s.bob, s, LAST, 1, MINOR('Sam R.'));
+    later();
+    const joined = await joinSeries(s.bob, s, LAST);
+    expect(joined.position).toBe(4);
+    const rows = await entriesOf(s, LAST);
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) => row._id).sort()).toEqual(
+      [
+        carol.trainingWaitlistEntryId,
+        zedEntry.trainingWaitlistEntryId,
+        sam.trainingWaitlistEntryId,
+        joined.trainingWaitlistEntryId,
+      ].sort(),
+    );
+    expect(await classEntriesOf(s, LAST, s.users['bob'])).toMatchObject([
+      { participant: MINOR('Sam R.') },
+    ]);
+    expect(await mineSeries(s.bob, LAST)).toEqual([{ participant: SELF, position: 4 }]);
+    expect(await mineClasses(s.bob, LAST)).toEqual([
+      { classId: classOf(s, LAST, 1), participant: MINOR('Sam R.'), position: 2 },
+    ]);
+    expect(await registeredCounts(s, LAST)).toEqual([1, 1, 1]);
+  });
+
+  test('joining the series waitlist with no class entry changes nothing else', async () => {
+    const s = await setup();
+    await fillSeries(s);
+    await joinClass(s.carol, s, LAST, 1);
+    later();
+    expect((await joinSeries(s.bob, s, LAST)).position).toBe(2);
+    expect(await entriesOf(s, LAST)).toHaveLength(2);
+  });
+
+  test('promoting a series entry removes the participant’s class entries too, so no second place is given', async () => {
+    const s = await setup();
+    await fillSeries(s);
+    const series = await seedEntry(s, LAST, s.users['bob'], undefined);
+    later();
+    const classEntry = await seedEntry(s, LAST, s.users['bob'], 1);
+    await raiseAll(s, LAST, 1);
+    await expect(promote(s.admin, series)).resolves.toMatchObject({});
+    expect(await registeredCounts(s, LAST)).toEqual([2, 2, 2]);
+    expect(await entry(s, classEntry)).toBeNull();
+    expect(await mineClasses(s.bob, LAST)).toEqual([]);
   });
 });

@@ -12,8 +12,7 @@ export type TrainingWaitlistCode =
   | 'noUpcomingClass'
   | 'accountGone'
   | 'classHasPlace'
-  | 'classGone'
-  | 'waitingForClass';
+  | 'classGone';
 
 export const TRAINING_WAITLIST_MESSAGES = {
   alreadyWaiting: (participant: Participant) =>
@@ -33,8 +32,4 @@ export const TRAINING_WAITLIST_MESSAGES = {
     participant.kind === 'self'
       ? `You are already on the waitlist for ${trainingClassDate(classDate)}.`
       : `${participant.minorName} is already on the waitlist for ${trainingClassDate(classDate)}.`,
-  waitingForClass: (participant: Participant) =>
-    participant.kind === 'self'
-      ? 'You are on the waitlist for a class of this training program, so you cannot register for the series until you have that place.'
-      : `${participant.minorName} is on the waitlist for a class of this training program, so cannot be registered for the series until they have that place.`,
 } as const;

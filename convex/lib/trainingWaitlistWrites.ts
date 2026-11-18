@@ -6,6 +6,7 @@ import {
   insertTrainingSeriesRegistration,
 } from './trainingRegistrationWrites';
 import { classParticipantKey } from './trainingRegistration';
+import { waitingClassEntriesOfUser } from './trainingWaitlistReads';
 
 /** The caller has checked access, the rules, and that the series, or the class `classId` names, counts as full. */
 export async function insertTrainingWaitlistEntry(
@@ -62,6 +63,20 @@ export async function promoteTrainingWaitlistEntry(
     registrationId,
   });
   return registrationId;
+}
+
+/** The series takes the place of the participant's class entries, as it takes the place of their single-class registrations. */
+export async function deleteWaitingClassEntriesOf(
+  ctx: MutationCtx,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  participant: Participant,
+): Promise<void> {
+  const key = participantKey(participant);
+  for (const entry of await waitingClassEntriesOfUser(ctx, trainingId, userId)) {
+    if (participantKey(entry.participant) === key)
+      await ctx.db.delete('trainingWaitlistEntries', entry._id);
+  }
 }
 
 /** The caller has checked access, that the entry is the first one a place can go to, and that its class has a place. */

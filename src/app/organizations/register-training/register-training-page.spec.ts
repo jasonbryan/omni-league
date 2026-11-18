@@ -1162,20 +1162,28 @@ describe('RegisterTrainingPage', () => {
       TestBed.resetTestingModule();
     });
 
-    it('a registration refused for it says so, with a link back and no action', async () => {
+    it('registers for the series as any account does, with nothing said of the class wait, and opens the training page', async () => {
       await open();
       await answer(OPEN);
+      expect(page.querySelector('form [role="note"]')).toBeNull();
       await tick();
       await submit();
-      registers()[0].reject(new ConvexError({ code: 'waitingForClass', message: 'x' }));
+      expect(registers().map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
+      registers()[0].resolve({ registrationId: 'reg_1' });
       await flush();
-      const card = page.querySelector<HTMLElement>('[data-slot="alert"]');
-      expect(alertText(card)).toBe(
-        "You're on the waitlist for a class. A series registration waits until you have that place. Your position is on the training page.",
-      );
-      expect(document.activeElement).toBe(card);
-      expect(page.querySelector('[data-slot="refusal-action"]')).toBeNull();
-      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
+    it('joins the series waitlist as any account does, sending no class', async () => {
+      await open();
+      await answer(FULL);
+      await tick();
+      await submit();
+      expect(convex.calls.filter((call) => call.name === JOIN).map((call) => call.args)).toEqual([
+        { trainingId: TRAINING_ID, participant: { kind: 'self' }, ageConfirmed: true },
+      ]);
     });
   });
 

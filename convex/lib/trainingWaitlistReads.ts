@@ -56,10 +56,25 @@ async function classEntryWaits(
 export async function classesWithWaitingEntries(
   ctx: Pick<QueryCtx, 'db'>,
   classes: readonly Doc<'trainingClasses'>[],
+  /** The participant's own entries do not hold a class up for the series they are about to take. */
+  except?: { userId: Id<'users'>; participant: Participant },
 ): Promise<Set<Id<'trainingClasses'>>> {
   const held = new Set<Id<'trainingClasses'>>();
+  const exceptKey = except && participantKey(except.participant);
   for (const row of classes) {
-    if (await classEntryWaits(ctx, row.trainingId, row._id)) held.add(row._id);
+    if (except === undefined) {
+      if (await classEntryWaits(ctx, row.trainingId, row._id)) held.add(row._id);
+      continue;
+    }
+    const waiting = await waitingClassEntriesOf(ctx, row.trainingId, row._id);
+    if (
+      waiting.some(
+        (entry) =>
+          entry.userId !== except.userId || participantKey(entry.participant) !== exceptKey,
+      )
+    ) {
+      held.add(row._id);
+    }
   }
   return held;
 }

@@ -115,9 +115,6 @@ export const REGISTER_TRAINING_MESSAGES = {
   classWaitlistedTitle: (date: string) => `You're on the waitlist for ${trainingClassDate(date)}.`,
   classWaitlistedDescription:
     'The organizer offers a place to the first person waiting. Your position is on the training page.',
-  waitingForClassTitle: "You're on the waitlist for a class.",
-  waitingForClassDescription:
-    'A series registration waits until you have that place. Your position is on the training page.',
   adultNotAllowedTitle: (maximumAge: number | undefined) =>
     maximumAge === undefined
       ? 'This training program is not for adults.'
@@ -155,7 +152,6 @@ type Refusal =
   | 'registered'
   | 'waitlisted'
   | 'class-waitlisted'
-  | 'waiting-for-class'
   | 'adult-not-allowed'
   | 'minor-not-allowed'
   | 'no-training'
@@ -183,7 +179,6 @@ const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   alreadyRegistered: 'registered',
   alreadyWaiting: 'waitlisted',
   alreadyWaitingForClass: 'class-waitlisted',
-  waitingForClass: 'waiting-for-class',
   adultNotAllowed: 'adult-not-allowed',
   minorNotAllowed: 'minor-not-allowed',
   trainingNotFound: 'no-training',
@@ -608,11 +603,6 @@ export class RegisterTrainingPage {
       'class-waitlisted': () => ({
         icon: 'lucideCircleCheck',
         ...this.classWaitlistedNotice(singleClass?.date ?? ''),
-      }),
-      'waiting-for-class': () => ({
-        icon: 'lucideCircleCheck',
-        title: messages.waitingForClassTitle,
-        description: messages.waitingForClassDescription,
       }),
       'class-not-open': () => ({
         icon: 'lucideCalendarX',

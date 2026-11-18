@@ -37,6 +37,7 @@ import {
   waitingSeriesEntryOf,
   waitlistHoldsClass,
 } from './lib/trainingWaitlistReads';
+import { deleteWaitingClassEntriesOf } from './lib/trainingWaitlistWrites';
 import { getCurrentUser } from './lib/users';
 
 export const register = mutation({
@@ -95,7 +96,10 @@ export const register = mutation({
       ageConfirmed,
     });
     // The series takes the place of the participant's single-class rows, so a class they fill alone is not full to them.
-    const withWaiting = await classesWithWaitingEntries(ctx, classes);
+    const withWaiting = await classesWithWaitingEntries(ctx, classes, {
+      userId: user._id,
+      participant,
+    });
     const full =
       classes.find((row) => placesHeldExcluding(row, replaced) >= row.places) ??
       ((await seriesEntryWaits(ctx, training._id)) ? classes[0] : undefined) ??
@@ -106,6 +110,7 @@ export const register = mutation({
         message: TRAINING_REGISTRATION_MESSAGES.classFull(full.date),
       });
     }
+    await deleteWaitingClassEntriesOf(ctx, training._id, user._id, participant);
     const registrationId = await insertTrainingSeriesRegistration(
       ctx,
       training,
@@ -219,7 +224,11 @@ export const getForRegistration = query({
     // The server's `classFull` answers for a participant who does not hold the place.
     const singles = user ? await singleClassRegistrationsOf(ctx, training._id, user._id) : [];
     const seriesWaits = await seriesEntryWaits(ctx, training._id);
-    const withWaiting = await classesWithWaitingEntries(ctx, classes);
+    const withWaiting = await classesWithWaitingEntries(
+      ctx,
+      classes,
+      user ? { userId: user._id, participant: SELF_PARTICIPANT } : undefined,
+    );
     const left = classes.map((row) =>
       seriesWaits || withWaiting.has(row._id)
         ? 0
