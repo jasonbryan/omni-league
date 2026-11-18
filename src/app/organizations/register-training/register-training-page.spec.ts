@@ -967,11 +967,6 @@ describe('RegisterTrainingPage', () => {
       expect(alertText(page.querySelector('form [role="note"]'))).toBe(
         'People are waiting for a place. Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
       );
-      await answer({ ...OPEN, seriesWaitlist: true, placesLeft: 0, fullClassDate: '2027-02-02' });
-      await tick();
-      await submit();
-      joins()[0].reject(new Error('x'));
-      await flush();
     });
 
     it('a registration refused while people wait offers the waitlist in the same words', async () => {
