@@ -27,7 +27,7 @@ const ICON_TILE =
           Find a league, then register a team or register as a free agent. Got an invite link from a
           captain? Open it to join their team.
         </p>
-        <a routerLink="/leagues" data-slot="button" [class]="findButton">Find a league</a>
+        <a routerLink="/programs" data-slot="button" [class]="findButton">Find a program</a>
       </div>
     </section>
     @if (canRunLeague()) {

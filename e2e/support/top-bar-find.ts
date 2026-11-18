@@ -6,5 +6,5 @@ export function topBarFind(page: Page): string {
   const width = page.viewportSize()?.width ?? 0;
   return width >= FIELD_FROM_WIDTH
     ? 'header form[role="search"] input'
-    : 'header a[href="/leagues"]';
+    : 'header a[href="/programs"]';
 }

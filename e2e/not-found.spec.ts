@@ -12,7 +12,7 @@ const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidat
 const NOT_FOUND_H1 = /<h1\b[^>]*>\s*Page not found\s*<\/h1>/g;
 const HOME_H1 = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
 const FIND_LINK_BEFORE_HOME =
-  /<main\b[\s\S]*<a\b[^>]*\bhref="\/leagues"[^>]*>(?:(?!<\/a>)[\s\S])*Find a league\s*<\/a>[\s\S]*Go to the home page/;
+  /<main\b[\s\S]*<a\b[^>]*\bhref="\/programs"[^>]*>(?:(?!<\/a>)[\s\S])*Find a program\s*<\/a>[\s\S]*Go to the home page/;
 // The home link's text is "Go to the home page"; Angular may leave comment nodes beside it.
 const HOME_LINK = /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*Go to the home page\s*<\/a>/;
 
@@ -365,7 +365,7 @@ test.describe('not-found page', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
     const home = page.getByRole('main').getByRole('link', { name: 'Go to the home page' });
     await expect(home).toBeVisible();
-    const find = page.getByRole('main').getByRole('link', { name: 'Find a league' });
+    const find = page.getByRole('main').getByRole('link', { name: 'Find a program' });
     await expect(find).toBeVisible();
     await expect(page).toHaveTitle(/Page not found/);
     if (!remoteBaseUrl) {
@@ -410,10 +410,10 @@ test.describe('not-found page', () => {
         'header a[href="/"]',
         topBarFind(page),
         'header a[href^="/sign-in"]',
-        'main a[href="/leagues"]',
+        'main a[href="/programs"]',
         'main a[href="/"]',
         'footer a[href="/"]',
-        'footer a[href="/leagues"]',
+        'footer a[href="/programs"]',
         'footer a[href="/app"]',
         'footer a[href="/app/organizations/new"]',
         'footer a[href^="/sign-in"]',

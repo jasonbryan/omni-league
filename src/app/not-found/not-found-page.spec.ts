@@ -23,7 +23,7 @@ describe('NotFoundPage', () => {
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect([...host.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
       'Omni League',
-      'Find a league',
+      'Find a program',
       'Sign in',
     ]);
     expect(
@@ -32,7 +32,7 @@ describe('NotFoundPage', () => {
         a.getAttribute('href'),
       ]),
     ).toEqual([
-      ['Find a league', '/leagues'],
+      ['Find a program', '/programs'],
       ['Go to the home page', '/'],
     ]);
   });

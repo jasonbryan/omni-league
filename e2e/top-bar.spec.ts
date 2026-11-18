@@ -222,7 +222,7 @@ test.describe('top bar', () => {
         const sample = () => {
           const control = [
             ...document.querySelectorAll(
-              'header form[role="search"] input, header a[href="/leagues"]',
+              'header form[role="search"] input, header a[href="/programs"]',
             ),
           ].find((el) => el.getBoundingClientRect().width > 0);
           if (control) {
@@ -285,7 +285,7 @@ test.describe('top bar', () => {
       await hydrated(consoleGuard);
 
       await expect(accountLink(page)).toBeVisible();
-      const find = page.getByRole('banner').getByRole('link', { name: 'Find a league' });
+      const find = page.getByRole('banner').getByRole('link', { name: 'Find a program' });
       const [findBox, accountBox] = [
         await find.boundingBox(),
         await accountLink(page).boundingBox(),

@@ -235,7 +235,7 @@ test.describe('after sign-in', () => {
       await expectAccessible(page);
     });
 
-    test('a player with no team or organization is told how to find a league and can create an organization', async ({
+    test('a player with no team or organization is told how to find a program and can create an organization', async ({
       page,
     }) => {
       const user = await seedUser(newUser('Player'));
@@ -244,9 +244,9 @@ test.describe('after sign-in', () => {
 
       const main = page.getByRole('main');
       await expect(main).toContainText("You're not on a team yet");
-      await expect(main.getByRole('link', { name: 'Find a league' })).toHaveAttribute(
+      await expect(main.getByRole('link', { name: 'Find a program' })).toHaveAttribute(
         'href',
-        '/leagues',
+        '/programs',
       );
       await expect(main.getByRole('link', { name: 'Create an organization' })).toBeVisible();
       await expectAccessible(page);

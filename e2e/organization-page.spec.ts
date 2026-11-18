@@ -166,7 +166,7 @@ test.describe('organization page: raw server HTML', () => {
   );
 
   test(
-    'an organization with no published league links "Find another league" to /leagues',
+    'an organization with no published league links "Find another program" to /programs',
     RAW_HTTP,
     async ({ request }) => {
       const tenant = await seedTenant();
@@ -174,7 +174,7 @@ test.describe('organization page: raw server HTML', () => {
       expect(status).toBe(200);
       const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
       expect(main).toMatch(
-        /<a\b[^>]*\bhref="\/leagues"[^>]*>(?:(?!<\/a>)[\s\S])*Find another league\s*<\/a>/,
+        /<a\b[^>]*\bhref="\/programs"[^>]*>(?:(?!<\/a>)[\s\S])*Find another program\s*<\/a>/,
       );
     },
   );
@@ -325,7 +325,7 @@ test.describe('organization page in the browser', () => {
             `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
         ),
         'footer a[href="/"]',
-        'footer a[href="/leagues"]',
+        'footer a[href="/programs"]',
         'footer a[href="/app"]',
         'footer a[href="/app/organizations/new"]',
         'footer a[href^="/sign-in"]',

@@ -76,9 +76,6 @@ async function seed(): Promise<Seeded> {
 
 const url = (q: string) => `/programs?q=${encodeURIComponent(q)}`;
 
-/** The top bar's search opens `/leagues`, which redirects here. */
-const leaguesUrl = (q: string) => `/programs?type=league&q=${encodeURIComponent(q)}`;
-
 function resultsSection(html: string): string {
   return (
     /<section\b[^>]*aria-labelledby="results-heading"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ??
@@ -672,8 +669,8 @@ test.describe('find a program: in the browser', () => {
     const { tenant } = await seed();
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
-    await page.getByRole('contentinfo').getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Find a program' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
     await expect(page.locator('main#main')).toBeFocused();
   });
@@ -1155,28 +1152,28 @@ test.describe('find a program: sport chips and division filters, in the browser'
 });
 
 test.describe('find a program: top bar', () => {
-  const searchForm = (page: Page) => page.getByRole('search', { name: 'Find a league' });
+  const searchForm = (page: Page) => page.getByRole('search', { name: 'Find a program' });
   const phoneLink = (page: Page) =>
-    page.getByRole('banner').getByRole('link', { name: 'Find a league' });
+    page.getByRole('banner').getByRole('link', { name: 'Find a program' });
 
   test(
-    'the raw HTML of a public page holds a GET search form to /leagues and the link to it',
+    'the raw HTML of a public page holds a GET search form to /programs and the link to it',
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
       const { html } = await raw(request, `${tenant.path}?ott=SECRET-TOKEN`);
       const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
       expect(header).toMatch(/<form\b[^>]*role="search"[^>]*>/);
-      expect(header).toMatch(/<form\b[^>]*action="\/leagues"[^>]*>/);
+      expect(header).toMatch(/<form\b[^>]*action="\/programs"[^>]*>/);
       expect(header).toMatch(/<form\b[^>]*method="get"[^>]*>/);
-      expect(header).toMatch(/<form\b[^>]*aria-label="Find a league"[^>]*>/);
+      expect(header).toMatch(/<form\b[^>]*aria-label="Find a program"[^>]*>/);
       expect(header).toMatch(/<input\b[^>]*name="q"[^>]*>/);
-      expect(header).toMatch(/<a\b[^>]*href="\/leagues"[^>]*>[\s\S]*Find a league[\s\S]*<\/a>/);
+      expect(header).toMatch(/<a\b[^>]*href="\/programs"[^>]*>[\s\S]*Find a program[\s\S]*<\/a>/);
       expect(html).not.toContain('SECRET-TOKEN');
     },
   );
 
-  test('on a wide screen the field submits the words to /leagues and shows the results', async ({
+  test('on a wide screen the field submits the words to /programs and shows the results', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -1185,15 +1182,15 @@ test.describe('find a program: top bar', () => {
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
     await expect(phoneLink(page)).toBeHidden();
-    const input = searchForm(page).getByRole('searchbox', { name: 'Find a league' });
+    const input = searchForm(page).getByRole('searchbox', { name: 'Find a program' });
     await input.fill(id);
     await input.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}${leaguesUrl(id)}`);
+    await expect(page).toHaveURL(`${baseURL}${url(id)}`);
     await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
     await expect(searchForm(page)).toHaveCount(0);
   });
 
-  test('with JavaScript disabled the field loads /leagues?q=', async ({ browser }, testInfo) => {
+  test('with JavaScript disabled the field loads /programs?q=', async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'the field shows from 768px');
     const { tenant, id } = await seed();
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
@@ -1203,14 +1200,14 @@ test.describe('find a program: top bar', () => {
       const input = searchForm(plain).getByRole('searchbox');
       await input.fill(id);
       await input.press('Enter');
-      await expect(plain).toHaveURL(`${baseURL}${leaguesUrl(id)}`);
+      await expect(plain).toHaveURL(`${baseURL}${url(id)}`);
       await expect(rowNames(plain)).toHaveText([SUNDAY, THURSDAY]);
     } finally {
       await context.close();
     }
   });
 
-  test('on a phone the bar holds a 44px square link to /leagues and no field', async ({
+  test('on a phone the bar holds a 44px square link to /programs and no field', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -1220,26 +1217,24 @@ test.describe('find a program: top bar', () => {
     await hydrated(consoleGuard);
     await expect(searchForm(page)).toBeHidden();
     const link = phoneLink(page);
-    await expect(link).toHaveAttribute('href', '/leagues');
+    await expect(link).toHaveAttribute('href', '/programs');
     const box = await link.boundingBox();
     expect(box?.width).toBeGreaterThanOrEqual(44);
     expect(box?.height).toBeGreaterThanOrEqual(44);
     await link.click();
-    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
   });
 
-  for (const path of ['/leagues', '/programs']) {
-    test(`on ${path} the bar has neither the field nor the link`, async ({ page }) => {
-      await page.goto(path);
-      await expect(page.getByRole('banner')).toBeVisible();
-      await expect(
-        page.getByRole('banner').getByRole('link', { name: 'Find a league' }),
-      ).toHaveCount(0);
-      await expect(page.getByRole('banner').getByRole('searchbox')).toHaveCount(0);
-      await expect(page.getByRole('main').getByRole('searchbox')).toHaveCount(1);
-    });
-  }
+  test('on /programs the bar has neither the field nor the link', async ({ page }) => {
+    await page.goto('/programs');
+    await expect(page.getByRole('banner')).toBeVisible();
+    await expect(
+      page.getByRole('banner').getByRole('link', { name: 'Find a program' }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('banner').getByRole('searchbox')).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('searchbox')).toHaveCount(1);
+  });
 
   for (const width of [768, 1280]) {
     test(`at ${width}px the page with the field passes axe and does not scroll at 320px`, async ({
@@ -1748,13 +1743,16 @@ test.describe('find a program: /leagues redirects', () => {
     },
   );
 
-  test('an in-app link to /leagues lands on /programs?type=league', async ({
+  test('a client-side visit to /leagues lands on /programs?type=league', async ({
     page,
     consoleGuard,
   }) => {
     await page.goto('/programs');
     await hydrated(consoleGuard);
-    await page.getByRole('contentinfo').getByRole('link', { name: 'Find a league' }).click();
+    await page.evaluate(() => {
+      history.pushState(null, '', '/leagues');
+      dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    });
     await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
     await expect(

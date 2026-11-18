@@ -64,7 +64,7 @@ const HOME_PATH = '/app';
           <a [routerLink]="findPath" [class]="row"
             ><ng-icon name="lucideSearch" [class]="icon" aria-hidden="true" /><span
               class="min-w-0 flex-1 truncate"
-              >Find a league</span
+              >Find a program</span
             ></a
           >
         </li>
@@ -132,7 +132,7 @@ export class HomeSidebar {
   );
 
   protected readonly homePath = HOME_PATH;
-  protected readonly findPath = '/leagues';
+  protected readonly findPath = '/programs';
   protected readonly row = SIDEBAR_ROW;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;
   protected readonly icon = SIDEBAR_ICON;

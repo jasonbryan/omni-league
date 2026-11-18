@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mockup: public site navigation and Find a league (proposal)</title>
+    <title>Mockup: public site navigation and Find a program (proposal)</title>
     <style id="outside-kit">
       /* Styles the app gets from outside the kit, copied here so the mockup matches it: ng-icon's
          own component style (@ng-icons/core), which the kit cannot see. The tokens and the base
@@ -33,11 +33,11 @@
           &middot; revision 2
         </p>
         <h1 class="mt-1 text-2xl font-semibold tracking-tight">
-          Public site navigation: top bar, footer, and Find a league
+          Public site navigation: top bar, footer, and Find a program
         </h1>
         <p class="mt-3 max-w-3xl text-sm/relaxed text-muted-foreground">
-          The light top bar and footer that every public page shares, and <code>/leagues</code>, the
-          page "Find a league" opens. Each state at 360px and 1280px. Reasons and decisions:
+          The light top bar and footer that every public page shares, and <code>/programs</code>,
+          the page "Find a program" opens. Each state at 360px and 1280px. Reasons and decisions:
           <a class="text-primary underline underline-offset-4" href="300-public-site-index.html"
             >300-public-site-index.html</a
           >.
@@ -46,7 +46,7 @@
           <ul role="list" class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
             <li>
               <a class="text-primary underline underline-offset-4" href="#find-start"
-                >1. Find a league, before a search, signed out</a
+                >1. Find a program, before a search, signed out</a
               >
             </li>
             <li>
@@ -69,28 +69,28 @@
       </header>
       <section id="find-start" aria-labelledby="find-start-label" class="mt-12">
         <h2 id="find-start-label" class="text-lg font-semibold">
-          1. Find a league, before a search, signed out
+          1. Find a program, before a search, signed out
         </h2>
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
-            The top bar on every public page: logo, then "Find a league" (a search field from 768px,
-            a search button on phones), then Sign in or the account link. No menu button, because
-            there is nothing else to navigate to. On <code>/leagues</code> itself the bar drops its
-            search field, since the page has a larger one. Before a search the page lists
+            The top bar on every public page: logo, then "Find a program" (a search field from
+            768px, a search button on phones), then Sign in or the account link. No menu button,
+            because there is nothing else to navigate to. On <code>/programs</code> itself the bar
+            drops its search field, since the page has a larger one. Before a search the page lists
             organizations to browse.
           </p>
         </div>
         <div
           tabindex="0"
           role="region"
-          aria-label="1. Find a league, before a search, signed out: frames"
+          aria-label="1. Find a program, before a search, signed out: frames"
           class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
         >
           <figure>
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
             <iframe
               src="?state=find-start"
-              title="1. Find a league, before a search, signed out at 360px"
+              title="1. Find a program, before a search, signed out at 360px"
               width="360"
               height="800"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -100,7 +100,7 @@
             <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
             <iframe
               src="?state=find-start"
-              title="1. Find a league, before a search, signed out at 1280px"
+              title="1. Find a program, before a search, signed out at 1280px"
               width="1280"
               height="720"
               class="block rounded-lg bg-background ring-1 ring-foreground/10"
@@ -112,9 +112,9 @@
         <h2 id="find-results-label" class="text-lg font-semibold">2. Results, signed in</h2>
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
-            <code>/leagues?q=coed&amp;sport=beach-volleyball</code>: a GET form, so every search has
-            a URL and works before hydration. Results are leagues with their organization, location,
-            and next season's status. The account link replaces Sign in. The count is a
+            <code>/programs?q=coed&amp;sport=beach-volleyball</code>: a GET form, so every search
+            has a URL and works before hydration. Results are leagues with their organization,
+            location, and next season's status. The account link replaces Sign in. The count is a
             <code>role="status"</code> line.
           </p>
         </div>
@@ -213,7 +213,7 @@
         </div>
       </section>
     </div>
-    <template id="state-find-start" data-title="Find a league | Omni League"
+    <template id="state-find-start" data-title="Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -245,7 +245,7 @@
             >
             <div class="ms-auto flex shrink-0 items-center">
               <a
-                href="/sign-in?returnTo=%2Fleagues"
+                href="/sign-in?returnTo=%2Fprograms"
                 data-slot="button"
                 class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-11 gap-1.5 px-4 md:h-9 md:px-3"
                 >Sign in</a
@@ -255,11 +255,11 @@
         </header>
         <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-6 md:pt-14 md:pb-8">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
             <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
               Beach volleyball, soccer, and softball leagues on Omni League.
             </p>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -302,7 +302,7 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues"
+                    href="/programs"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >All sports</a
@@ -310,21 +310,21 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=beach-volleyball"
+                    href="/programs?sport=beach-volleyball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Beach volleyball</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=soccer"
+                    href="/programs?sport=soccer"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Soccer</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?sport=softball"
+                    href="/programs?sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -511,9 +511,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -571,7 +571,7 @@
         </footer>
       </div></template
     >
-    <template id="state-find-results" data-title="coed | Find a league | Omni League"
+    <template id="state-find-results" data-title="coed | Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -619,11 +619,11 @@
         </header>
         <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-6 md:pt-14 md:pb-8">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
             <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
               Beach volleyball, soccer, and softball leagues on Omni League.
             </p>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -666,14 +666,14 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues?q=coed"
+                    href="/programs?q=coed"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >All sports</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=beach-volleyball"
+                    href="/programs?q=coed&sport=beach-volleyball"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >Beach volleyball</a
@@ -681,14 +681,14 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=soccer"
+                    href="/programs?q=coed&sport=soccer"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Soccer</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=softball"
+                    href="/programs?q=coed&sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -863,9 +863,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -923,7 +923,7 @@
         </footer>
       </div></template
     >
-    <template id="state-find-none" data-title="pickleball | Find a league | Omni League"
+    <template id="state-find-none" data-title="pickleball | Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -955,7 +955,7 @@
             >
             <div class="ms-auto flex shrink-0 items-center">
               <a
-                href="/sign-in?returnTo=%2Fleagues%3Fq%3Dpickleball"
+                href="/sign-in?returnTo=%2Fprograms%3Fq%3Dpickleball"
                 data-slot="button"
                 class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-11 gap-1.5 px-4 md:h-9 md:px-3"
                 >Sign in</a
@@ -965,11 +965,11 @@
         </header>
         <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-6 md:pt-14 md:pb-8">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
             <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
               Beach volleyball, soccer, and softball leagues on Omni League.
             </p>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -1012,7 +1012,7 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues?q=pickleball"
+                    href="/programs?q=pickleball"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >All sports</a
@@ -1020,21 +1020,21 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=pickleball&sport=beach-volleyball"
+                    href="/programs?q=pickleball&sport=beach-volleyball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Beach volleyball</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=pickleball&sport=soccer"
+                    href="/programs?q=pickleball&sport=soccer"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Soccer</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=pickleball&sport=softball"
+                    href="/programs?q=pickleball&sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -1055,7 +1055,7 @@
                   an organization, or a location such as &ldquo;North Beach&rdquo;.
                 </p>
                 <a
-                  href="/leagues"
+                  href="/programs"
                   class="mt-4 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 md:min-h-0"
                   >Clear the search</a
                 >
@@ -1100,9 +1100,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>
@@ -1160,7 +1160,7 @@
         </footer>
       </div></template
     >
-    <template id="state-find-loading" data-title="coed | Find a league | Omni League"
+    <template id="state-find-loading" data-title="coed | Find a program | Omni League"
       ><a
         href="#main"
         class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -1192,7 +1192,7 @@
             >
             <div class="ms-auto flex shrink-0 items-center">
               <a
-                href="/sign-in?returnTo=%2Fleagues%3Fq%3Dcoed%26sport%3Dbeach-volleyball"
+                href="/sign-in?returnTo=%2Fprograms%3Fq%3Dcoed%26sport%3Dbeach-volleyball"
                 data-slot="button"
                 class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-11 gap-1.5 px-4 md:h-9 md:px-3"
                 >Sign in</a
@@ -1202,11 +1202,11 @@
         </header>
         <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
           <div class="mx-auto w-full max-w-6xl px-4 md:px-8 pt-8 pb-6 md:pt-14 md:pb-8">
-            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a league</h1>
+            <h1 class="text-3xl font-semibold tracking-tight md:text-5xl">Find a program</h1>
             <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">
               Beach volleyball, soccer, and softball leagues on Omni League.
             </p>
-            <form role="search" action="/leagues" class="mt-6 max-w-2xl">
+            <form role="search" action="/programs" class="mt-6 max-w-2xl">
               <label for="find-q" class="text-sm font-medium"
                 >League, organization, or location</label
               >
@@ -1249,14 +1249,14 @@
               <ul role="list" class="flex flex-wrap gap-2">
                 <li>
                   <a
-                    href="/leagues?q=coed"
+                    href="/programs?q=coed"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >All sports</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=beach-volleyball"
+                    href="/programs?q=coed&sport=beach-volleyball"
                     aria-current="page"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-foreground bg-foreground text-background"
                     >Beach volleyball</a
@@ -1264,14 +1264,14 @@
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=soccer"
+                    href="/programs?q=coed&sport=soccer"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Soccer</a
                   >
                 </li>
                 <li>
                   <a
-                    href="/leagues?q=coed&sport=softball"
+                    href="/programs?q=coed&sport=softball"
                     class="inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 border-input hover:bg-muted"
                     >Softball</a
                   >
@@ -1392,9 +1392,9 @@
                   <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                     <li>
                       <a
-                        href="/leagues"
+                        href="/programs"
                         class="inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0"
-                        >Find a league</a
+                        >Find a program</a
                       >
                     </li>
                     <li>

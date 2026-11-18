@@ -110,7 +110,7 @@ function canonicals(html: string): string[] {
 const rows = (page: Page) =>
   page.locator('section[aria-labelledby="organizations-heading"] ul > li h3');
 
-test.describe('find a league: the organizations list', () => {
+test.describe('find a program: the organizations list', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
@@ -217,7 +217,7 @@ test.describe('find a league: the organizations list', () => {
   });
 });
 
-test.describe('find a league: the organizations list screens', () => {
+test.describe('find a program: the organizations list screens', () => {
   test('the list passes the accessibility checks', async ({ page, consoleGuard }, testInfo) => {
     await seedTenant({
       locations: [COURTS],
@@ -263,7 +263,7 @@ test.describe('find a league: the organizations list screens', () => {
     // subscription is dropped while online, so the client holds no result for it.
     await page.locator('main').getByRole('link', { name: saved[0] }).click();
     await expect(page).toHaveURL(/\/organizations\/e2e-[0-9a-f]+$/);
-    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Find a league');
+    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Find a program');
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await page.goBack();
@@ -284,7 +284,7 @@ test.describe('find a league: the organizations list screens', () => {
   });
 });
 
-test.describe('find a league: the top bar search beside the organizations list', () => {
+test.describe('find a program: the top bar search beside the organizations list', () => {
   const bar = (page: Page) => page.getByRole('banner');
 
   async function seedFindable() {
@@ -305,21 +305,21 @@ test.describe('find a league: the top bar search beside the organizations list',
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await expect(rows(page).first()).toBeVisible();
     await expect(bar(page).getByRole('searchbox')).toHaveCount(0);
-    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+    await expect(bar(page).getByRole('link', { name: 'Find a program' })).toHaveCount(0);
     await expect(page.getByRole('search')).toHaveCount(1);
 
     await page.goto(tenant.path);
-    const field = bar(page).getByRole('searchbox', { name: 'Find a league' });
+    const field = bar(page).getByRole('searchbox', { name: 'Find a program' });
     await expect(field).toBeVisible();
     await field.fill(id);
     await field.press('Enter');
-    await expect(page).toHaveURL(`${baseURL}/programs?type=league&q=${id}`);
+    await expect(page).toHaveURL(`${baseURL}/programs?q=${id}`);
     await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
     await expect(page.getByRole('search')).toHaveCount(2);
   });
 
-  test('on a phone the bar link from an organization page opens the leagues of Find a program', async ({
+  test('on a phone the bar link from an organization page opens Find a program', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -327,10 +327,10 @@ test.describe('find a league: the top bar search beside the organizations list',
     const { tenant } = await seedFindable();
     await page.goto(tenant.path);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await bar(page).getByRole('link', { name: 'Find a league' }).click();
-    await expect(page).toHaveURL(`${baseURL}/programs?type=league`);
+    await bar(page).getByRole('link', { name: 'Find a program' }).click();
+    await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
-    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toBeVisible();
+    await expect(bar(page).getByRole('link', { name: 'Find a program' })).toHaveCount(0);
   });
 });

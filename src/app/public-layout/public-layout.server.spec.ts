@@ -53,15 +53,15 @@ describe('PublicLayout server render', () => {
     expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test#main');
     expect([...body.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
       'Omni League',
-      'Find a league',
+      'Find a program',
       'Sign in',
     ]);
     const search = body.querySelector('header form[role="search"]');
-    expect(search?.getAttribute('action')).toBe('/leagues');
+    expect(search?.getAttribute('action')).toBe('/programs');
     expect(search?.getAttribute('method')).toBe('get');
     expect(search?.querySelector('input[name="q"][type="search"]')).not.toBeNull();
-    expect(search?.querySelector('label')?.textContent.trim()).toBe('Find a league');
-    expect(body.querySelector('header a[routerlink="/leagues"]')).not.toBeNull();
+    expect(search?.querySelector('label')?.textContent.trim()).toBe('Find a program');
+    expect(body.querySelector('header a[routerlink="/programs"]')).not.toBeNull();
     const signIn = body.querySelector('header a[routerlink="/sign-in"]');
     const href = new URL(signIn?.getAttribute('href') ?? '', 'http://localhost');
     expect(`${href.pathname}${href.search}`).toBe('/sign-in?returnTo=%2Forganizations%2Ftest');
@@ -75,7 +75,7 @@ describe('PublicLayout server render', () => {
       [...body.querySelectorAll('footer nav[aria-label="Footer"] a')].map((a) =>
         a.textContent.trim(),
       ),
-    ).toEqual(['Find a league', 'Your account', 'Create an organization', 'Sign in to manage']);
+    ).toEqual(['Find a program', 'Your account', 'Create an organization', 'Sign in to manage']);
 
     expect(html).not.toContain('Open navigation');
     expect(body.querySelector('aside, button, [role="dialog"]')).toBeNull();
