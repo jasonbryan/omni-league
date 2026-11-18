@@ -171,3 +171,45 @@ describe('deleting an account that waits', () => {
     expect(await publicPlaces(s)).toEqual([1, 1, 1]);
   });
 });
+
+describe('a guardian whose child holds a single-class place', () => {
+  const MINOR = (minorName: string): Participant => ({ kind: 'minor', minorName });
+  const DROP_IN = 'dropInLastPlace';
+
+  test('reads open for the account, refuses the sibling’s series registration, and lets the sibling join the waitlist', async () => {
+    const s = await setup();
+    const { trainingId: dropInId, classIds } = s.trainings[DROP_IN];
+    await s.asPlayer.mutation(api.trainingRegistrations.register, {
+      trainingId: dropInId,
+      classId: classIds[0],
+      participant: MINOR('Child A'),
+      ageConfirmed: true,
+    });
+    const read = await s.asPlayer.query(api.trainingRegistrations.getForRegistration, {
+      orgSlug: 'org-a',
+      trainingSlug: 'drop-in-last-place-clinic',
+    });
+    expect(read).toMatchObject({ placesLeft: 1 });
+    expect(read).not.toHaveProperty('fullClassDate');
+    const refused = await refusal(
+      s.asPlayer.mutation(api.trainingRegistrations.register, {
+        trainingId: dropInId,
+        participant: MINOR('Child B'),
+        ageConfirmed: true,
+      }),
+    );
+    expect(refused.code).toBe('classFull');
+    const joined = await s.asPlayer.mutation(api.trainingWaitlist.join, {
+      trainingId: dropInId,
+      participant: MINOR('Child B'),
+      ageConfirmed: true,
+    });
+    expect(joined.position).toBe(1);
+    expect(
+      await s.asPlayer.query(api.trainingWaitlist.listMineForTraining, {
+        orgSlug: 'org-a',
+        trainingSlug: 'drop-in-last-place-clinic',
+      }),
+    ).toEqual([{ participant: MINOR('Child B'), position: 1 }]);
+  });
+});

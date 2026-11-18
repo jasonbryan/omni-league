@@ -917,6 +917,34 @@ describe('RegisterTrainingPage', () => {
       expect(registers()).toHaveLength(1);
     });
 
+    it('a sibling refused for a place that another child holds keeps the name, and joins the waitlist as that child', async () => {
+      await answer(YOUTH);
+      await tick();
+      const input = page.querySelector<HTMLInputElement>('#minor-name')!;
+      input.value = 'Child B';
+      input.dispatchEvent(new Event('input'));
+      await flush();
+      await submit();
+      registers()[0].reject(new ConvexError({ code: 'classFull', message: 'x' }));
+      await flush();
+      page.querySelector<HTMLButtonElement>('[data-slot="refusal-action"]')!.click();
+      await flush();
+      expect(text(submitButton())).toBe('Join the waitlist');
+      expect(page.querySelector<HTMLInputElement>('#minor-name')!.value).toBe('Child B');
+      await submit();
+      expect(joins().map((call) => call.args)).toEqual([
+        {
+          trainingId: TRAINING_ID,
+          participant: { kind: 'minor', minorName: 'Child B' },
+          ageConfirmed: true,
+        },
+      ]);
+      expect(registers()).toHaveLength(1);
+      joins()[0].resolve({ trainingWaitlistEntryId: 'entry_1', position: 1 });
+      await flush();
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
     it('Register after a join refused for a place gives the registration form back, and the join action does not stick', async () => {
       await answer({ ...OPEN, minimumAge: 9, maximumAge: 30 });
       await tick();
