@@ -52,7 +52,7 @@ export async function entryHasPlace(
   return everyClassHasPlace(classes, replaced);
 }
 
-/** A rolled-back release let a participant register while an entry of theirs waited, and a second place would double it. */
+/** A participant can hold a place and still have a waiting entry for it, so promoting it would give a second place. */
 export async function participantHoldsPlace(
   ctx: Pick<QueryCtx, 'db'>,
   entry: Entry,
