@@ -419,7 +419,7 @@ describe('AccountPage', () => {
       expect(heading(2, 'Your teams')).toBeUndefined();
       expect(heading(2, "You're not on a team yet")).toBeTruthy();
       expect(main().textContent).toContain(
-        'Find a program, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
+        'Find a league, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
       );
       const find = [...main().querySelectorAll('a')].find((a) => text(a) === 'Find a program')!;
       expect(find.getAttribute('href')).toBe('/programs');
@@ -571,7 +571,7 @@ describe('AccountPage', () => {
     it('is the home of a user whose only registration is a waiting free agent: no new-user state, no team cards', async () => {
       await show([], [], undefined, [WAITING]);
       expect(heading(2, "You're not on a team yet")).toBeUndefined();
-      expect(main().textContent).not.toContain('Find a program, then register');
+      expect(main().textContent).not.toContain('Find a league, then register');
       expect(text(page.querySelector('main > div > p'))).toBe('Your teams and registrations.');
       expect(heading(2, 'Your teams')).toBeUndefined();
       expect(nextStepRegion()).toBeNull();

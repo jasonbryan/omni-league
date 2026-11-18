@@ -281,7 +281,7 @@ test.describe('/app: a user on no team', () => {
       main(page).getByRole('heading', { level: 2, name: "You're not on a team yet" }),
     ).toBeVisible();
     await expect(main(page)).toContainText(
-      'Find a program, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
+      'Find a league, then register a team or register as a free agent. Got an invite link from a captain? Open it to join their team.',
     );
     await expect(main(page).getByRole('link', { name: 'Find a program' })).toHaveAttribute(
       'href',

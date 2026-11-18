@@ -11,6 +11,9 @@ const LEAGUE_FORMS = [
   'src/app/organizations/admin/league-create-form.ts',
   'src/app/organizations/league/league-details-form.ts',
 ];
+const NEW_USER_FILE = 'src/app/account/home-new-user.ts';
+const OLD_NAME = /Find (a|another) league/;
+const NEW_USER_SENTENCE = /Find a league, then register a team or register as a free agent\./;
 
 function* sourceFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -23,18 +26,26 @@ function* sourceFiles(dir) {
   }
 }
 
-function filesMatching(pattern, exempt) {
+const read = (file) => readFileSync(join(root, file), 'utf8').replace(/\s+/g, ' ');
+
+function filesMatching(pattern, exempt, text = read) {
   return [...sourceFiles(appDir)]
     .filter((file) => !exempt.includes(file))
-    .filter((file) => pattern.test(readFileSync(join(root, file), 'utf8')));
+    .filter((file) => pattern.test(text(file)));
 }
 
 describe('the entry points to the search', () => {
-  it('no template reads "Find a league" or "Find another league"', () => {
-    assert.deepEqual(filesMatching(/Find (a|another) league/, LEAGUE_FORMS), []);
+  it('no template reads "Find a league" or "Find another league", apart from the league forms and the new-user sentence', () => {
+    const withoutSentence = (file) => read(file).replace(NEW_USER_SENTENCE, '');
+    assert.deepEqual(filesMatching(OLD_NAME, LEAGUE_FORMS, withoutSentence), []);
   });
 
   it('no template or component links to /leagues, which redirects: they go straight to /programs', () => {
     assert.deepEqual(filesMatching(/(["'`])\/leagues(?:[?#]|\1)/, [LEAGUES_REDIRECT]), []);
+  });
+
+  it('each exemption is still needed', () => {
+    for (const file of LEAGUE_FORMS) assert.match(read(file), OLD_NAME, file);
+    assert.match(read(NEW_USER_FILE), NEW_USER_SENTENCE);
   });
 });
