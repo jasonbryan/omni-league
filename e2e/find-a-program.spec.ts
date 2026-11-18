@@ -1797,7 +1797,7 @@ test.describe('find a program: ended tournaments', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { id, upcomingName } = await seedWithEndedTournament();
+    const { id, upcomingName } = await seedWithEndedTournament('Aab ');
     await page.goto(url(id));
     await hydrated(consoleGuard);
     await expect(rowNames(page)).toHaveCount(3);
