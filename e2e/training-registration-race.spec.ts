@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant } from './support/tenant';
 import { seedPublishedTraining, setTrainingClassRegistered } from './support/training';
@@ -9,6 +10,7 @@ import { newUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
+const REGISTRATION = 'trainingRegistrations:getForRegistration';
 const PLACE = 'North Beach Sand Courts';
 const FIRST_IN_DAYS = 14;
 const WEEK_DAYS = 7;
@@ -19,6 +21,8 @@ const placesLeft = (page: Page, index: number) =>
   classRows(page).nth(index).locator('[data-slot="class-places"]');
 
 test.describe('two accounts register for the last place at once', () => {
+  test.use({ expectedConvexErrors: ['trainingRegistrations:register'] });
+
   test('exactly one takes it, and the other leaves no place taken in any class', async ({
     page,
     browser,
@@ -53,16 +57,18 @@ test.describe('two accounts register for the last place at once', () => {
     try {
       const registerPath = `/app${publicPath}/register`;
       const racers = [page, second];
+      const held = [];
       for (const racer of racers) {
+        held.push(await holdQueries(racer, [REGISTRATION], { holdFromStart: false }));
         await racer.goto(registerPath);
         await expect(racer.getByRole('button', { name: 'Register', exact: true })).toBeVisible();
       }
-      // The page of the account that presses second swaps its form for the full view once the first place is taken, so that press may find no button.
-      await Promise.allSettled(
-        racers.map((racer) =>
-          racer.getByRole('button', { name: 'Register', exact: true }).click({ timeout: 5_000 }),
-        ),
+      // Each page keeps its form until both presses are sent, so the second press always reaches the server and is refused there.
+      for (const hold of held) hold.holdNextAnswer();
+      await Promise.all(
+        racers.map((racer) => racer.getByRole('button', { name: 'Register', exact: true }).click()),
       );
+      for (const hold of held) hold.release();
 
       const outcome = (racer: Page) =>
         expect
