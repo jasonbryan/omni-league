@@ -1,4 +1,3 @@
-import { convexRun } from './convex';
 import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { slugify } from '../../convex/lib/slugs';
 import { sportName } from '../../convex/lib/sports';
@@ -79,15 +78,20 @@ export function campSessionKey(campSlug: string, sessionName: string): string {
   return `${campSlug}/${sessionName}`;
 }
 
+export type PublicQuery = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+
 /**
  * The demo camp sessions that have no place left on the backend under test: with the demo accounts, guardian@'s child takes the one
- * place of Week 4, which Registration open then leaves out. Local runs only, like every `convexRun`.
+ * place of Week 4, which Registration open then leaves out. `query` reaches that backend.
  */
-export async function filledDemoCampSessions(orgSlug: string): Promise<Set<string>> {
+export async function filledDemoCampSessions(
+  orgSlug: string,
+  query: PublicQuery,
+): Promise<Set<string>> {
   const filled = new Set<string>();
   for (const camp of DEMO_CAMPS) {
     if (camp.organizationSlug !== orgSlug || camp.published !== true) continue;
-    const page = (await convexRun('camps:getPublicPage', { orgSlug, campSlug: camp.slug })) as {
+    const page = (await query('camps:getPublicPage', { orgSlug, campSlug: camp.slug })) as {
       sessions: { name: string; placesLeft: number }[];
     } | null;
     for (const session of page?.sessions ?? []) {
