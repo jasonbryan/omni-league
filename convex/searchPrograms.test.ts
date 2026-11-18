@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
@@ -944,6 +944,41 @@ describe('search and tournaments that have ended', () => {
     const result = await browseWithCamps(t, { type: 'tournament', sport: 'softball' });
     expect(result.rows).toHaveLength(5);
     expect(result).toMatchObject({ total: 5, pageCount: 1 });
+  });
+
+  describe('at the UTC-12 day boundary', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const endingMarch9 = {
+      ...BEACH_OPEN,
+      name: 'Boundary Zebra Open',
+      slug: 'boundary-zebra-open',
+      startDate: '2027-03-08',
+      endDate: '2027-03-09',
+      registrationDeadline: '2027-03-01',
+    };
+
+    test('both queries still list a tournament while it is its last day in UTC-12, although the UTC date has moved on', async () => {
+      const { t, gulf } = await setup();
+      await publishedTournament(t, gulf, endingMarch9);
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-03-10T11:59:00Z') });
+      expect(names(await search(t, 'boundary'))).toEqual(['Boundary Zebra Open']);
+      expect(names(await browseWithCamps(t, { type: 'tournament' }))).toContain(
+        'Boundary Zebra Open',
+      );
+    });
+
+    test('both queries drop the tournament from the first minute of the next day in UTC-12', async () => {
+      const { t, gulf } = await setup();
+      await publishedTournament(t, gulf, endingMarch9);
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-03-10T12:00:00Z') });
+      expect(names(await search(t, 'boundary'))).toEqual([]);
+      expect(names(await browseWithCamps(t, { type: 'tournament' }))).not.toContain(
+        'Boundary Zebra Open',
+      );
+    });
   });
 
   test('a call with the previous release’s arguments still drops an ended tournament and keeps the return shape', async () => {
