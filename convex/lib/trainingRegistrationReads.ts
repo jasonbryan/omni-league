@@ -30,18 +30,50 @@ export async function classesToAttend(
   return classes.filter((row) => row.status === 'scheduled');
 }
 
-// Each series registration holds a place in every class, and a program takes at most as many as its largest class has places.
-const SERIES_REGISTRATIONS_LIMIT = MAX_TRAINING_CLASS_PLACES * 2;
+// Each registration of one kind holds a place in the class, and a class takes at most as many as it has places.
+const REGISTRATIONS_OF_ONE_KIND_LIMIT = MAX_TRAINING_CLASS_PLACES * 2;
 
-export async function seriesRegistrationCount(
+async function seriesRegistrationCount(
   ctx: Pick<QueryCtx, 'db'>,
   trainingId: Id<'trainings'>,
 ): Promise<number> {
   const registrations = await ctx.db
     .query('trainingRegistrations')
-    .withIndex('by_trainingId_and_userId_and_participantKey', (q) => q.eq('trainingId', trainingId))
-    .take(SERIES_REGISTRATIONS_LIMIT);
-  return registrations.filter((row) => row.classId === undefined).length;
+    .withIndex('by_trainingId_and_classId', (q) =>
+      q.eq('trainingId', trainingId).eq('classId', undefined),
+    )
+    .take(REGISTRATIONS_OF_ONE_KIND_LIMIT);
+  return registrations.length;
+}
+
+export async function heldPlacesIn(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingClass: Doc<'trainingClasses'>,
+): Promise<number> {
+  const own = await ctx.db
+    .query('trainingRegistrations')
+    .withIndex('by_trainingId_and_classId', (q) =>
+      q.eq('trainingId', trainingClass.trainingId).eq('classId', trainingClass._id),
+    )
+    .take(REGISTRATIONS_OF_ONE_KIND_LIMIT);
+  return (await seriesRegistrationCount(ctx, trainingClass.trainingId)) + own.length;
+}
+
+// A participant holds at most the series and one registration of each class.
+const PARTICIPANT_REGISTRATIONS_LIMIT = MAX_TRAINING_WEEKS + 1;
+
+export function participantRegistrationsOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  key: string,
+): Promise<Doc<'trainingRegistrations'>[]> {
+  return ctx.db
+    .query('trainingRegistrations')
+    .withIndex('by_trainingId_and_userId_and_participantKey', (q) =>
+      q.eq('trainingId', trainingId).eq('userId', userId).eq('participantKey', key),
+    )
+    .take(PARTICIPANT_REGISTRATIONS_LIMIT);
 }
 
 export async function minorRegistrationsOf(
@@ -58,5 +90,23 @@ export async function minorRegistrationsOf(
         .gte('participantKey', MINOR_KEY_PREFIX)
         .lt('participantKey', MINOR_KEY_END),
     )
-    .take(MAX_MINORS_PER_SESSION);
+    .take(MAX_MINORS_PER_SESSION * PARTICIPANT_REGISTRATIONS_LIMIT);
+}
+
+export function singleClassRegistrations(
+  registrations: readonly Doc<'trainingRegistrations'>[],
+): Doc<'trainingRegistrations'>[] {
+  return registrations.filter((row) => row.classId !== undefined);
+}
+
+export function hasSeriesRegistration(registrations: readonly Doc<'trainingRegistrations'>[]) {
+  return registrations.some((row) => row.classId === undefined);
+}
+
+export function placesHeldExcluding(
+  trainingClass: Doc<'trainingClasses'>,
+  replaced: readonly Doc<'trainingRegistrations'>[],
+): number {
+  const own = replaced.filter((row) => row.classId === trainingClass._id).length;
+  return Math.max(0, trainingClass.registeredCount - own);
 }

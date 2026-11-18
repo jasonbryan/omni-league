@@ -45,7 +45,19 @@ const YOUTH = { ...OPEN, minimumAge: 9, maximumAge: 17 };
 const BOTH = { ...OPEN, minimumAge: 14, maximumAge: 30 };
 const MINIMUM_ONLY = { ...NO_AGES, minimumAge: 16 };
 const MAXIMUM_ONLY = { ...NO_AGES, maximumAge: 12 };
+const CLASS_ID = 'class_2';
+const CLASS_PATH = `${PATH}?class=${CLASS_ID}`;
+const SINGLE = {
+  classId: CLASS_ID,
+  date: '2027-02-09',
+  startTime: '18:00',
+  endTime: '19:00',
+  placesLeft: 12,
+  allowed: true,
+};
+const OPEN_CLASS = { ...OPEN, singleClass: SINGLE };
 const BEFORE = '2027-01-30T12:00:00Z';
+const AFTER_CLASS = '2027-02-10T12:00:00Z';
 const AFTER_DEADLINE = '2027-02-03T12:00:00Z';
 
 const text = (element: Element | null | undefined) =>
@@ -64,7 +76,7 @@ describe('RegisterTrainingPage', () => {
   let harness: RouterTestingHarness;
   let page: HTMLElement;
 
-  async function open({ signedIn = true, now = BEFORE } = {}) {
+  async function open({ signedIn = true, now = BEFORE, query = '' } = {}) {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.parse(now));
     convex = new FakeConvexClient();
@@ -87,7 +99,7 @@ describe('RegisterTrainingPage', () => {
       ],
     });
     if (signedIn) auth.emitSession({ id: 's1' });
-    harness = await RouterTestingHarness.create(PATH);
+    harness = await RouterTestingHarness.create(`${PATH}${query}`);
     page = harness.routeNativeElement!;
     await flush();
     if (signedIn) {
@@ -555,6 +567,191 @@ describe('RegisterTrainingPage', () => {
       await answer(OPEN);
       expect(radios().map((radio) => radio.value)).toEqual(['self']);
       expect(page.querySelector('label[for="participant-minor"]')).toBeNull();
+    });
+  });
+
+  describe('for one class', () => {
+    const facts = () =>
+      [...page.querySelectorAll('main dl > div')].map((row) => [
+        text(row.querySelector('dt')),
+        text(row.querySelector('dd')),
+      ]);
+    const card = () => page.querySelector('[data-slot="alert"]');
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+    });
+
+    it('asks with the slugs and the class named in the address', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      expect(registration()?.args).toEqual({ ...SLUGS, classId: CLASS_ID });
+    });
+
+    it('shows the class, its hours and places, and the date registration closes, with the title for a class', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...OPEN_CLASS, singleClass: { ...SINGLE, placesLeft: 7 } });
+      expect(text(page.querySelector('main h1'))).toBe('Tuesday Serving Clinic');
+      expect(text(page.querySelector('main h1')?.previousElementSibling)).toBe(
+        'Register for a class',
+      );
+      expect(facts()).toEqual([
+        ['Class', 'Tue, Feb 9, 2027'],
+        ['Time', '6 to 7 pm'],
+        ['Ages', '18 to 99'],
+        ['Places left', '7 places left'],
+        ['Registration closes', 'Feb 9, 2027'],
+      ]);
+      expect(document.title).toBe('Register for a class | Tuesday Serving Clinic | Omni League');
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+
+    it('reads one place in the singular', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...OPEN_CLASS, singleClass: { ...SINGLE, placesLeft: 1 } });
+      expect(facts()).toContainEqual(['Places left', '1 place left']);
+    });
+
+    it('sends the class with the registration and opens the training page in place of this entry', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer(OPEN_CLASS);
+      await tick();
+      await submit();
+      expect(registers().map((call) => call.args)).toEqual([
+        {
+          trainingId: TRAINING_ID,
+          classId: CLASS_ID,
+          participant: { kind: 'self' },
+          ageConfirmed: true,
+        },
+      ]);
+      registers()[0].resolve({ registrationId: 'reg_1' });
+      await flush();
+      expect(url()).toBe(TRAINING_PATH);
+    });
+
+    it('open on the class date and through the series deadline having passed', async () => {
+      await open({ query: `?class=${CLASS_ID}`, now: '2027-02-09T23:00:00Z' });
+      await answer(OPEN_CLASS);
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+
+    it('signed out: goes to sign-in with the class kept in returnTo', async () => {
+      await open({ signedIn: false, query: `?class=${CLASS_ID}` });
+      await answer(OPEN_CLASS);
+      expect(url()).toBe(`/sign-in?returnTo=${encodeURIComponent(CLASS_PATH)}`);
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('a class that is not open: says so with a link back, and no form', async () => {
+      await open({ query: '?class=elsewhere' });
+      await answer(OPEN);
+      expect(alertText(card())).toBe(
+        'This class is not open for registration. It may have passed or been cancelled. Go back to the training page.',
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+      expect(facts().map(([label]) => label)).toEqual(['Schedule', 'Ages']);
+    });
+
+    it('a program that does not take a single class: says so and points to the series', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...OPEN_CLASS, singleClass: { ...SINGLE, allowed: false } });
+      expect(alertText(card())).toBe(
+        'This training program does not take registrations for a single class. Register for the whole series from the training page.',
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(backLink()?.getAttribute('href')).toBe(TRAINING_PATH);
+    });
+
+    it('closed the day after the class, with no form', async () => {
+      await open({ query: `?class=${CLASS_ID}`, now: AFTER_CLASS });
+      await answer(OPEN_CLASS);
+      expect(alertText(card())).toBe(
+        'Registration for this class is closed. It closed after Tue, Feb 9, 2027.',
+      );
+      expect(page.querySelector('form')).toBeNull();
+    });
+
+    it('full: names the class, with no form', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...OPEN_CLASS, singleClass: { ...SINGLE, placesLeft: 0 } });
+      expect(alertText(card())).toBe('This class is full. Tue, Feb 9, 2027 has no place left.');
+      expect(page.querySelector('form')).toBeNull();
+    });
+
+    it('registered for the class: says so, whatever the date or places', async () => {
+      await open({ query: `?class=${CLASS_ID}`, now: AFTER_CLASS });
+      await answer({
+        ...OPEN_CLASS,
+        minimumAge: 18,
+        singleClass: { ...SINGLE, held: 'class' },
+      });
+      expect(alertText(card())).toBe(
+        "You're registered for Tue, Feb 9, 2027. You’ll find your place on the training page.",
+      );
+    });
+
+    it('registered for the series: says the series holds a place in this class', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({
+        ...OPEN_CLASS,
+        minimumAge: 18,
+        registered: true,
+        singleClass: { ...SINGLE, held: 'series' },
+      });
+      expect(alertText(card())).toBe(
+        "You're registered for Tuesday Serving Clinic. Your series registration holds a place in every class, this one included.",
+      );
+    });
+
+    it('offers only My child to an account holder who already holds a place in the class', async () => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer({ ...BOTH, singleClass: { ...SINGLE, held: 'class' } });
+      const radios = [...page.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+      expect(radios.map((radio) => radio.value)).toEqual(['minor']);
+    });
+
+    it.each([
+      [
+        'the class not open',
+        { code: 'classNotFound', message: 'x' },
+        'This class is not open for registration.',
+      ],
+      [
+        'single-class registration not allowed',
+        { code: 'singleClassNotAllowed', message: 'x' },
+        'This training program does not take registrations for a single class.',
+      ],
+      [
+        'registration closed',
+        { code: 'registrationClosed', message: 'x' },
+        'Registration for this class is closed.',
+      ],
+      ['the class full', { code: 'classFull', message: 'x' }, 'This class is full.'],
+      [
+        'already registered',
+        { code: 'alreadyRegistered', message: 'x' },
+        "You're registered for Tue, Feb 9, 2027.",
+      ],
+    ])('a refusal as %s shows its card, whose alert takes focus', async (_label, data, line) => {
+      await open({ query: `?class=${CLASS_ID}` });
+      await answer(OPEN_CLASS);
+      await tick();
+      await submit();
+      registers()[0].reject(new ConvexError(data));
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toContain(line);
+      expect(page.querySelector('form')).toBeNull();
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('the series page is unchanged without the class', async () => {
+      await open();
+      await answer(OPEN);
+      expect(registration()?.args).toEqual(SLUGS);
+      expect(facts()[0]).toEqual(['Schedule', 'Tuesdays, 6 to 7 pm, 8 weeks']);
     });
   });
 

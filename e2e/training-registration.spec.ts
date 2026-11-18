@@ -540,3 +540,270 @@ test.describe('a child with a long name is refused as a repeat', () => {
     await expectAccessible(page);
   });
 });
+
+const singleClasses = { ...classes(FIRST_IN_DAYS), allowSingleRegistration: true };
+
+async function seedSingle() {
+  const tenant = await seedTenant({
+    name: 'E2E Training Single Class',
+    locations: [{ name: PLACE, address: ADDRESS }],
+  });
+  const programs = {
+    adult: clinic('Drop-in Adult Clinic', {
+      minimumAge: 18,
+      maximumAge: 99,
+      classes: singleClasses,
+    }),
+    youth: clinic('Drop-in Youth Clinic', {
+      minimumAge: 9,
+      maximumAge: 17,
+      classes: singleClasses,
+    }),
+    series: clinic('Series Only Clinic', { minimumAge: 18, maximumAge: 99 }),
+  };
+  const paths: Record<keyof typeof programs, string> = {} as never;
+  for (const [key, program] of Object.entries(programs)) {
+    paths[key as keyof typeof programs] = await seedPublishedTraining(tenant, program);
+  }
+  return { tenant, programs, paths };
+}
+
+const classRow = (page: Page, index: number) => page.locator('#classes li').nth(index);
+const classLink = (page: Page, index: number) =>
+  classRow(page, index).locator('a[data-slot="button"]');
+const classRegisteredLine = (page: Page, index: number) =>
+  classRow(page, index).locator('[data-slot="class-registered"]');
+const classPlaces = (page: Page, index: number) =>
+  classRow(page, index).locator('[data-slot="class-places"]');
+
+async function classPathOf(page: Page, index: number): Promise<string> {
+  const href = await classLink(page, index).getAttribute('href');
+  expect(href).toMatch(/\/register\?class=/);
+  return href!;
+}
+
+test.describe('register for one class', () => {
+  test('a signed-in adult registers for one class, which takes a place in that class only and reads "You\'re registered" on its row', async ({
+    page,
+  }, testInfo) => {
+    const { paths } = await seedSingle();
+    await signUp(page, newUser('Dropin'));
+    await page.goto(paths.adult);
+    await expect(page.locator('#classes li')).toHaveCount(3);
+    for (const index of [0, 1, 2]) {
+      await expect(classLink(page, index)).toHaveText(/^Register for \w{3}, /);
+    }
+    await expect(registerLink(page)).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '363-training-classes-open');
+
+    const href = await classPathOf(page, 1);
+    await classLink(page, 1).click();
+    await expect(page).toHaveURL(`${baseURL}${href}`);
+    await expect(page).toHaveTitle(/^Register for a class \| Drop-in Adult Clinic/);
+    await expect(page.getByText('Register for a class', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('main dl > div').filter({ hasText: 'Places left' }).locator('dd'),
+    ).toHaveText('12 places left');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '363-register-class-form');
+
+    await registerButton(page).click();
+    await expect(page.locator('#age-confirmed-error')).toHaveText('Confirm your age to continue.');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+
+    await expect(classRegisteredLine(page, 1)).toHaveText("You're registered");
+    await expect(classPlaces(page, 1)).toHaveText('11 places left');
+    await expect(classPlaces(page, 0)).toHaveText('12 places left');
+    await expect(classPlaces(page, 2)).toHaveText('12 places left');
+    await expect(classLink(page, 1)).toHaveCount(0);
+    await expect(classLink(page, 0)).toBeVisible();
+    await expect(classLink(page, 2)).toBeVisible();
+    await expect(registeredLine(page)).toHaveCount(0);
+    await expect(registerLink(page)).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '363-training-class-registered');
+
+    // The register page was replaced in history, so Back does not return to it.
+    await page.goBack();
+    expect(page.url()).not.toContain('/register');
+
+    await page.goto(href);
+    await expect(alert(page)).toContainText("You're registered for");
+    await expect(ageBox(page)).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
+  test('registering for the series replaces the single-class registrations, so each class counts the person once', async ({
+    page,
+  }) => {
+    const { paths } = await seedSingle();
+    await signUp(page, newUser('Upgrade'));
+    for (const index of [0, 2]) {
+      await page.goto(paths.adult);
+      await classLink(page, index).click();
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+      await expect(classRegisteredLine(page, index)).toHaveText("You're registered");
+    }
+    await expect(classPlaces(page, 1)).toHaveText('12 places left');
+
+    await registerLink(page).click();
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+    await expect(registeredLine(page)).toHaveText("You're registered");
+    await expectEveryClassPlacesLeft(page, 11);
+    await expect(page.locator('[data-slot="class-registered"]')).toHaveCount(0);
+    await expect(page.locator('#classes a[data-slot="button"]')).toHaveCount(0);
+  });
+
+  test('a program that does not take a single class lists its classes with no Register link', async ({
+    page,
+  }) => {
+    const { paths } = await seedSingle();
+    await signUp(page, newUser('Series'));
+    await page.goto(paths.series);
+    await expect(page.locator('#classes li')).toHaveCount(3);
+    await expect(page.locator('#classes a[data-slot="button"]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="class-actions"]')).toHaveCount(0);
+    await expect(registerLink(page)).toBeVisible();
+  });
+
+  test('a signed-out visitor who presses a class returns to that class after signing in', async ({
+    page,
+  }) => {
+    const { paths } = await seedSingle();
+    await page.goto(paths.adult);
+    const href = await classPathOf(page, 2);
+    await classLink(page, 2).click();
+    await expect(page).toHaveURL(/\/sign-in\?/);
+    expect(new URL(page.url()).searchParams.get('returnTo')).toBe(href);
+
+    await page.getByRole('main').getByRole('link', { name: 'Create an account' }).click();
+    const user = newUser('Adult');
+    await page.locator('#name').fill(user.name);
+    await page.locator('#email').fill(user.email);
+    await page.locator('#password').fill(user.password);
+    await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
+    await page.getByRole('button', { name: /Create account/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${href}`, { timeout: 20_000 });
+    await expect(ageBox(page)).toBeVisible();
+  });
+
+  test('an address that names no class of the program says the class is not open, with a link back', async ({
+    page,
+  }, testInfo) => {
+    const { paths } = await seedSingle();
+    await signUp(page, newUser('Stale'));
+    await page.goto(`${registerPathOf(paths.adult)}?class=nonsense`);
+    await expect(alert(page)).toContainText('This class is not open for registration.');
+    await expect(ageBox(page)).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Back to the training page' })).toHaveAttribute(
+      'href',
+      paths.adult,
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '363-register-class-not-open');
+  });
+});
+
+test.describe('the classes when the viewer’s places arrive', () => {
+  const WIDTHS = [320, 360, 1280] as const;
+  const TOLERANCE = 0.5;
+
+  const layout = (page: Page) =>
+    page.evaluate(() => ({
+      page: document.documentElement.scrollHeight,
+      boxes: [
+        '#classes',
+        '#classes li:nth-child(1) [data-slot="class-actions"]',
+        '#classes li:nth-child(2)',
+        '#classes li:nth-child(3)',
+        '#details-heading + dl > div:last-child',
+      ]
+        .map((selector) => document.querySelector(selector)?.getBoundingClientRect())
+        .map((box) => (box ? { top: box.top + window.scrollY, height: box.height } : null)),
+    }));
+
+  for (const width of WIDTHS) {
+    test(`keeps the content where it was when a class a child with a 60-character name holds arrives at ${width}px`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { paths } = await seedSingle();
+      await signUp(page, newUser('Steady'));
+      await page.goto(paths.youth);
+      await classLink(page, 0).click();
+      await childName(page).fill(LONG);
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+
+      const held = await holdQueries(page, [MINE]);
+      await page.goto(paths.youth);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(classLink(page, 0)).toBeVisible();
+      const before = await layout(page);
+      expect(before.boxes[1]).not.toBeNull();
+
+      held.release();
+      await expect(classRegisteredLine(page, 0)).toHaveText(`${LONG} is registered`);
+      const after = await layout(page);
+      expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
+      after.boxes.forEach((box, index) => {
+        expect(box, `box ${index}`).not.toBeNull();
+        expect(
+          Math.abs(box!.top - before.boxes[index]!.top),
+          `box ${index} top`,
+        ).toBeLessThanOrEqual(TOLERANCE);
+        expect(
+          Math.abs(box!.height - before.boxes[index]!.height),
+          `box ${index} height`,
+        ).toBeLessThanOrEqual(TOLERANCE);
+      });
+      const [lineBox, linkBox, rowBox] = [
+        (await classRegisteredLine(page, 0).boundingBox())!,
+        (await classLink(page, 0).boundingBox())!,
+        (await page.locator('[data-slot="class-actions"]').first().boundingBox())!,
+      ];
+      expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(linkBox.x + TOLERANCE);
+      expect(linkBox.x + linkBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + TOLERANCE);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectAccessible(page);
+      await screenshot(page, testInfo, `363-training-class-arrived-${width}`);
+    });
+  }
+
+  test('the register page for a class stays inside the card at 320px with a long program name', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    const tenant = await seedTenant({
+      name: 'E2E Training Single Long Name',
+      locations: [{ name: PLACE, address: ADDRESS }],
+    });
+    const name = 'X'.repeat(90);
+    const path = await seedPublishedTraining(tenant, {
+      ...clinic('Long Name Drop-in', { minimumAge: 18, maximumAge: 99, classes: singleClasses }),
+      name,
+    });
+    await signUp(page, newUser('Narrow'));
+    await page.goto(path);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await classLink(page, 0).click();
+    await expect(ageBox(page)).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '363-register-class-long-name-320');
+    await ageBox(page).click();
+    await registerButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
+    await expect(classRegisteredLine(page, 0)).toHaveText("You're registered");
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+  });
+});

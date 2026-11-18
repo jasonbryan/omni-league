@@ -401,7 +401,7 @@ export default defineSchema({
     status: trainingClassStatusValidator,
   }).index('by_trainingId_and_date', ['trainingId', 'date']),
 
-  // One row per participant in a training series, written only by `convex/lib/trainingRegistrationWrites.ts`, which keeps `trainingClasses.registeredCount`. A row without `classId` holds a place in every class of the series.
+  // One row per participant in a training series or in one class, written only by `convex/lib/trainingRegistrationWrites.ts`, which keeps `trainingClasses.registeredCount`. A row without `classId` holds a place in every class of the series.
   // Deleting the account deletes its rows and frees their places.
   trainingRegistrations: defineTable({
     trainingId: v.id('trainings'),
@@ -422,7 +422,9 @@ export default defineSchema({
       'userId',
       'participantKey',
     ])
-    .index('by_userId', ['userId']),
+    .index('by_userId', ['userId'])
+    // `classId` absent reads the series rows and `classId` set reads one class's, so neither count is cut short by rows of the other kind.
+    .index('by_trainingId_and_classId', ['trainingId', 'classId']),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

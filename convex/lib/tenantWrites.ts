@@ -689,6 +689,20 @@ export async function insertTrainingClasses(
   return dates.length;
 }
 
+// The seed's way to change a scheduled demo program; no organizer function edits the pattern once the classes exist.
+export async function setTrainingSingleRegistration(
+  ctx: MutationCtx,
+  training: Doc<'trainings'>,
+  allowed: boolean,
+): Promise<boolean> {
+  const { pattern } = training;
+  if (pattern === undefined || pattern.allowSingleRegistration === allowed) return false;
+  await ctx.db.patch('trainings', training._id, {
+    pattern: { ...pattern, allowSingleRegistration: allowed },
+  });
+  return true;
+}
+
 // Read again: a caller that schedules classes holds a training row whose fields are already out of date.
 async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): Promise<boolean> {
   const training = await ctx.db.get('trainings', trainingId);

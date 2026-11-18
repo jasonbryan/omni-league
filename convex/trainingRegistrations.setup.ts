@@ -73,6 +73,31 @@ export const TRAININGS: Record<string, TrainingSpec> = {
     slug: 'passed-clinic',
     pattern: { firstDate: '2027-01-05', registrationDeadline: '2027-01-04' },
   },
+  dropIn: {
+    name: 'Drop-in Clinic',
+    slug: 'drop-in-clinic',
+    pattern: { allowSingleRegistration: true },
+  },
+  dropInYouth: {
+    name: 'Drop-in Youth Clinic',
+    slug: 'drop-in-youth-clinic',
+    ages: { minimumAge: 9, maximumAge: 17 },
+    pattern: { allowSingleRegistration: true },
+  },
+  dropInLastPlace: {
+    name: 'Drop-in Last Place Clinic',
+    slug: 'drop-in-last-place-clinic',
+    pattern: { allowSingleRegistration: true, placesPerClass: 1 },
+  },
+  dropInMidRun: {
+    name: 'Drop-in Mid-run Clinic',
+    slug: 'drop-in-mid-run-clinic',
+    pattern: {
+      allowSingleRegistration: true,
+      firstDate: '2027-01-26',
+      registrationDeadline: '2027-01-25',
+    },
+  },
   draft: { name: 'Secret Draft Clinic', slug: 'secret-draft-clinic', status: 'draft' },
   unscheduled: { name: 'Unscheduled Clinic', slug: 'unscheduled-clinic', scheduled: false },
 };

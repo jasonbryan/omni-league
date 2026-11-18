@@ -1129,6 +1129,7 @@ describe('seed:demo accounts: training registration', () => {
       expect(await player.query(api.trainingRegistrations.listMineForTraining, CLINIC)).toEqual({
         self: true,
         minorNames: [],
+        classes: [],
       });
       expect(
         (await player.query(api.trainingRegistrations.getForRegistration, CLINIC))?.registered,
@@ -1137,6 +1138,7 @@ describe('seed:demo accounts: training registration', () => {
       expect(await captain.query(api.trainingRegistrations.listMineForTraining, CLINIC)).toEqual({
         self: false,
         minorNames: [],
+        classes: [],
       });
       const page = await captain.query(api.trainings.getPublicPage, CLINIC);
       expect(page?.classes.map((row) => row.placesLeft)).toEqual(Array(8).fill(11));

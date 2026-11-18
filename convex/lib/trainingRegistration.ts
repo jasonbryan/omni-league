@@ -4,6 +4,7 @@ import {
   ageNotConfirmedMessage,
   type Participant,
 } from './individualRegistration';
+import { addCalendarDays, registrationIsOpen } from './registration';
 import { trainingClassDate } from './trainingPattern';
 
 export type TrainingRegistrationCode =
@@ -14,7 +15,9 @@ export type TrainingRegistrationCode =
   | 'minorNotAllowed'
   | 'minorLimit'
   | 'ageNotConfirmed'
-  | 'classFull';
+  | 'classFull'
+  | 'classNotFound'
+  | 'singleClassNotAllowed';
 
 export const TRAINING_NOT_FOUND_CODE = 'trainingNotFound';
 
@@ -38,7 +41,23 @@ export const TRAINING_REGISTRATION_MESSAGES = {
   minorLimit: `You've registered ${MAX_MINORS_PER_SESSION} children for this training program, which is the most one guardian can register.`,
   ageNotConfirmed: ageNotConfirmedMessage,
   classFull: (date: string) => `${trainingClassDate(date)} is full.`,
+  classNotFound: 'This class is not open for registration.',
+  singleClassNotAllowed: 'This training program does not take registrations for a single class.',
+  classRegistrationClosed: (date: string) =>
+    `Registration for ${trainingClassDate(date)} is closed.`,
+  alreadyRegisteredForClass: (participant: Participant, date: string) =>
+    participant.kind === 'self'
+      ? `You are already registered for ${trainingClassDate(date)}.`
+      : `${participant.minorName} is already registered for ${trainingClassDate(date)}.`,
 } as const;
+
+/** Open through the class date, by the season rule with the class date as the deadline; the series deadline does not apply. */
+export function singleClassIsOpen(classDate: string, nowMs: number): boolean {
+  return registrationIsOpen(
+    { registrationDeadline: classDate, startDate: addCalendarDays(classDate, 1) },
+    nowMs,
+  );
+}
 
 export function trainingHasAgeRange(ages: {
   minimumAge?: number | undefined;

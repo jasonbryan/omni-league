@@ -50,6 +50,7 @@ export async function upcomingClassesOf(ctx: Pick<QueryCtx, 'db'>, trainingId: I
   return classes
     .filter((row) => row.status === 'scheduled')
     .map((row) => ({
+      classId: row._id,
       date: row.date,
       startTime: row.startTime,
       endTime: row.endTime,

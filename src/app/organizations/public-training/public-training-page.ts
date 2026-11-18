@@ -49,6 +49,7 @@ function description(training: PublicTrainingData): string {
           [now]="now()"
           [registeredSelf]="registeredSelf()"
           [registeredMinors]="registeredMinors()"
+          [registeredClasses]="registeredClasses()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -94,6 +95,7 @@ export class PublicTrainingPage {
   );
   protected readonly registeredSelf = computed(() => this.mine.value()?.self ?? false);
   protected readonly registeredMinors = computed(() => this.mine.value()?.minorNames ?? []);
+  protected readonly registeredClasses = computed(() => this.mine.value()?.classes ?? []);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

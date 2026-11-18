@@ -94,6 +94,7 @@ import {
   insertDraftTournament,
   publishCamp,
   publishTraining,
+  setTrainingSingleRegistration,
   publishTournament,
   insertSeason,
   insertTenant,
@@ -891,6 +892,7 @@ interface DemoTraining {
     endTime: string;
     weeks: number;
     placesPerClass: number;
+    allowSingleRegistration: boolean;
   };
 }
 
@@ -911,6 +913,7 @@ const DEMO_TRAININGS: readonly DemoTraining[] = [
       endTime: '19:00',
       weeks: 8,
       placesPerClass: 12,
+      allowSingleRegistration: true,
     },
   },
 ];
@@ -939,7 +942,11 @@ async function ensureTrainingClasses(
   const organization = await organizationBySlug(ctx, demo.organizationSlug);
   if (!organization) return 0;
   const found = await findTrainingBySlugs(ctx, organization, demo.slug);
-  if (!found || found.training.pattern !== undefined) return 0;
+  if (!found) return 0;
+  if (found.training.pattern !== undefined) {
+    await setTrainingSingleRegistration(ctx, found.training, demo.classes.allowSingleRegistration);
+    return 0;
+  }
   const earliest = addCalendarDays(today, demo.classes.firstDaysFromRun);
   const firstDate = addCalendarDays(earliest, (demo.classes.weekday - weekdayOf(earliest) + 7) % 7);
   return insertTrainingClasses(ctx, found.training, {
@@ -950,7 +957,7 @@ async function ensureTrainingClasses(
     weeks: demo.classes.weeks,
     placesPerClass: demo.classes.placesPerClass,
     registrationDeadline: addCalendarDays(today, demo.classes.deadlineDaysFromRun),
-    allowSingleRegistration: false,
+    allowSingleRegistration: demo.classes.allowSingleRegistration,
   });
 }
 

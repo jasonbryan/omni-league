@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import type { Id } from '../../../../convex/_generated/dataModel';
 import { MAX_MINORS_PER_SESSION } from '../../../../convex/lib/individualRegistration';
 import { AuthService } from '../../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../../core/auth/testing/fake-auth-client';
@@ -21,12 +22,25 @@ import type { PublicTrainingData } from './public-training-view';
 const TRAINING = 'trainings:getPublicPage';
 const MINE = 'trainingRegistrations:listMineForTraining';
 const REGISTER_PATH = `/app/organizations/${ORG_SLUG}/training/${TRAINING_SLUG}/register`;
-const NONE = { self: false, minorNames: [] as string[] };
+const NONE = { self: false, minorNames: [] as string[], classes: [] as MineClass[] };
+
+interface MineClass {
+  classId: string;
+  self: boolean;
+  minorNames: string[];
+}
 
 /** The sample program with a place in every class, so nothing keeps the series from opening. */
 const OPEN_SERIES: PublicTrainingData = {
   ...TUESDAY_CLINIC,
   classes: TUESDAY_CLINIC.classes.map((row) => ({ ...row, placesLeft: 5 })),
+};
+const CLASS_IDS = ['class_0', 'class_1', 'class_2'] as Id<'trainingClasses'>[];
+/** The sample program that takes a single class, each class named by its id. */
+const SINGLE_CLASS: PublicTrainingData = {
+  ...OPEN_SERIES,
+  allowSingleRegistration: true,
+  classes: OPEN_SERIES.classes.map((row, index) => ({ ...row, classId: CLASS_IDS[index] })),
 };
 const WITH_CHILDREN: PublicTrainingData = { ...OPEN_SERIES, minimumAge: 9, maximumAge: 30 };
 const ADULTS_ONLY: PublicTrainingData = { ...OPEN_SERIES, minimumAge: 18 };
@@ -80,7 +94,14 @@ async function emit(name: string, value: unknown): Promise<void> {
 const host = () => harness.fixture.nativeElement as HTMLElement;
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
-const registerLink = () => host().querySelector<HTMLAnchorElement>('main a[href*="/register"]');
+const registerLink = () =>
+  host().querySelector<HTMLAnchorElement>('main a[href*="/register"]:not([href*="?class="])');
+const classLinks = () => [
+  ...host().querySelectorAll<HTMLAnchorElement>('main #classes a[href*="?class="]'),
+];
+const classRows = () => [...host().querySelectorAll('#classes li')];
+const classActions = () => [...host().querySelectorAll('[data-slot="class-actions"]')];
+const classRegistered = () => [...host().querySelectorAll('[data-slot="class-registered"]')];
 const registered = () => host().querySelector('[data-slot="series-registered"]');
 const actions = () => host().querySelector('[data-slot="series-actions"]');
 const fullNote = () => host().querySelector('[data-slot="series-full"]');
@@ -262,3 +283,189 @@ describe('PublicTrainingPage registration, a guardian’s children', () => {
 function children20(): string[] {
   return Array.from({ length: MAX_MINORS_PER_SESSION }, (_v, i) => `Child ${i + 1}`);
 }
+
+describe('PublicTrainingPage registration of one class, signed out', () => {
+  beforeEach(async () => {
+    await open();
+    await emit(TRAINING, SINGLE_CLASS);
+  });
+
+  it('links each class to the register page with its id, named for the class', () => {
+    expect(classLinks().map((link) => link.getAttribute('href'))).toEqual(
+      CLASS_IDS.map((id) => `${REGISTER_PATH}?class=${id}`),
+    );
+    expect(classLinks().map((link) => text(link))).toEqual([
+      'Register for Tue, Feb 2, 2027',
+      'Register for Tue, Feb 9, 2027',
+      'Register for Tue, Feb 16, 2027',
+    ]);
+    expect(classLinks()[0].getAttribute('data-slot')).toBe('button');
+    expect(classLinks()[0].querySelector('.sr-only')?.textContent).toBe(' for Tue, Feb 2, 2027');
+  });
+
+  it('keeps the series link beside the class links', () => {
+    expect(registerLink()?.getAttribute('href')).toBe(REGISTER_PATH);
+  });
+
+  it('keeps a row for each class, with the Register link last in it', () => {
+    expect(classActions()).toHaveLength(3);
+    expect(classActions().map((row) => row.parentElement)).toEqual(classRows());
+    expect(classLinks().map((link) => link.parentElement)).toEqual(classActions());
+  });
+
+  it('keeps the link after the series deadline, which does not apply to a class', async () => {
+    vi.setSystemTime(at('2027-02-01'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle();
+    expect(registerLink()).toBeNull();
+    expect(classLinks()).toHaveLength(3);
+  });
+
+  it('drops the link of a class once its date has passed, and keeps one on the class date', async () => {
+    vi.setSystemTime(at('2027-02-01'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle();
+    expect(classLinks()).toHaveLength(3);
+    vi.setSystemTime(at('2027-02-02'));
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    await settle();
+    expect(classLinks().map((link) => link.getAttribute('href'))).toEqual([
+      `${REGISTER_PATH}?class=${CLASS_IDS[1]}`,
+      `${REGISTER_PATH}?class=${CLASS_IDS[2]}`,
+    ]);
+  });
+
+  it('leaves the link off a full class and keeps its row', async () => {
+    await emit(TRAINING, {
+      ...SINGLE_CLASS,
+      classes: SINGLE_CLASS.classes.map((row, index) => ({
+        ...row,
+        placesLeft: index === 1 ? 0 : 5,
+      })),
+    });
+    expect(classLinks()).toHaveLength(2);
+    expect(classActions()).toHaveLength(3);
+  });
+
+  it('shows no link on a program that does not take a single class', async () => {
+    await emit(TRAINING, { ...SINGLE_CLASS, allowSingleRegistration: undefined });
+    expect(classLinks()).toEqual([]);
+    expect(classActions()).toEqual([]);
+    await emit(TRAINING, { ...SINGLE_CLASS, allowSingleRegistration: false });
+    expect(classLinks()).toEqual([]);
+  });
+
+  it('shows no link on a class a copy saved by an earlier release does not name', async () => {
+    await emit(TRAINING, {
+      ...SINGLE_CLASS,
+      classes: SINGLE_CLASS.classes.map((row) => ({ ...row, classId: undefined })),
+    });
+    expect(classLinks()).toEqual([]);
+    expect(classActions()).toEqual([]);
+  });
+
+  it('shows a link on a class while the series has begun', async () => {
+    TestBed.resetTestingModule();
+    await open({ now: '2027-02-03' });
+    await emit(TRAINING, SINGLE_CLASS);
+    expect(registerLink()).toBeNull();
+    expect(classLinks()).toHaveLength(2);
+  });
+});
+
+describe('PublicTrainingPage registration of one class, signed in', () => {
+  beforeEach(async () => {
+    await open({ signedIn: true });
+    await emit(TRAINING, { ...SINGLE_CLASS, minimumAge: 18 });
+  });
+
+  it('asks for the registrations once, which name the classes too', () => {
+    expect(client.activeSubscriptions.filter(({ name }) => name === MINE)).toHaveLength(1);
+  });
+
+  it('reads "You\'re registered" on the class the caller holds, and keeps the link on the others', async () => {
+    await emit(MINE, { ...NONE, classes: [{ classId: CLASS_IDS[1], self: true, minorNames: [] }] });
+    expect(classRegistered().map((line) => text(line))).toEqual(["You're registered"]);
+    expect(classRegistered()[0].closest('li')).toBe(classRows()[1]);
+    expect(classLinks().map((link) => link.getAttribute('href'))).toEqual([
+      `${REGISTER_PATH}?class=${CLASS_IDS[0]}`,
+      `${REGISTER_PATH}?class=${CLASS_IDS[2]}`,
+    ]);
+  });
+
+  it('is a plain line that truncates, in the one row with the Register link', async () => {
+    await emit(MINE, { ...NONE, classes: [{ classId: CLASS_IDS[0], self: true, minorNames: [] }] });
+    expect(classRegistered()[0].tagName).toBe('P');
+    expect(classRegistered()[0].hasAttribute('role')).toBe(false);
+    expect(classRegistered()[0].querySelector('.truncate')).not.toBeNull();
+    expect(classRegistered()[0].parentElement).toBe(classActions()[0]);
+  });
+
+  it('takes every class link away from a series holder on a program for adults', async () => {
+    await emit(MINE, { ...NONE, self: true });
+    expect(classLinks()).toEqual([]);
+    expect(classActions()).toHaveLength(3);
+  });
+
+  it('keeps the rows as they were when the registrations answer, so the content below does not move', async () => {
+    const before = classActions().map((row) => row.className);
+    expect(before[0].split(' ')).toEqual(
+      expect.arrayContaining([
+        'mt-3',
+        'min-h-9',
+        'flex',
+        'items-center',
+        'pointer-coarse:min-h-11',
+      ]),
+    );
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[0], self: true, minorNames: [] }],
+    });
+    expect(classActions().map((row) => row.className)).toEqual(before);
+    expect(classRows()).toHaveLength(3);
+  });
+});
+
+describe('PublicTrainingPage registration of one class, a guardian’s children', () => {
+  beforeEach(async () => {
+    await open({ signedIn: true });
+    await emit(TRAINING, { ...SINGLE_CLASS, minimumAge: 9, maximumAge: 30 });
+  });
+
+  it('reads the names held in a class as one line and keeps the link for another child', async () => {
+    await emit(MINE, {
+      ...NONE,
+      classes: [{ classId: CLASS_IDS[0], self: true, minorNames: ['Maya R.', 'Leo R.'] }],
+    });
+    expect(text(classRegistered()[0])).toBe('You, Maya R., and Leo R. are registered');
+    expect(classLinks()).toHaveLength(3);
+  });
+
+  it('keeps the link for a child on a class where the account holder holds a place', async () => {
+    await emit(MINE, { ...NONE, self: true });
+    expect(classLinks()).toHaveLength(3);
+  });
+
+  it('counts a child once however many classes, and takes the links away at the most one guardian can register', async () => {
+    const names = Array.from({ length: MAX_MINORS_PER_SESSION }, (_v, i) => `Child ${i + 1}`);
+    await emit(MINE, {
+      ...NONE,
+      self: true,
+      classes: [
+        { classId: CLASS_IDS[0], self: false, minorNames: names.slice(0, 12) },
+        { classId: CLASS_IDS[1], self: false, minorNames: names.slice(0, 12) },
+      ],
+    });
+    expect(classLinks()).toHaveLength(3);
+    await emit(MINE, {
+      ...NONE,
+      self: true,
+      classes: [
+        { classId: CLASS_IDS[0], self: false, minorNames: names.slice(0, 12) },
+        { classId: CLASS_IDS[1], self: false, minorNames: names.slice(8) },
+      ],
+    });
+    expect(classLinks()).toEqual([]);
+  });
+});
