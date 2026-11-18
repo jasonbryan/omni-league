@@ -13,6 +13,7 @@ import { slugify, slugTakenMessage } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { AnswerAtPress } from '../../core/forms/answer-at-press';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
 
@@ -89,6 +90,7 @@ export class CampForm {
   private readonly clientErrors: Signal<Partial<Record<CampField, CampInputError>>>;
   private readonly shown: Record<CampField, ShownUntilValid>;
   private readonly locationsChanged = signal(false);
+  private readonly slugAnswer: AnswerAtPress;
   private readonly serverErrors: Record<CampField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<CampField, Signal<string | null>>;
@@ -105,6 +107,7 @@ export class CampForm {
     available: () => readonly Id<'locations'>[],
     private readonly webAddress: WebAddressCheck = NOT_CHECKED,
   ) {
+    this.slugAnswer = new AnswerAtPress(webAddress, () => this.model().slug);
     // `required` puts the attribute on the inputs; the messages are ours (`campInput.ts`), so the
     // form and `camps.create` agree.
     this.fields = form(this.model, (path) => {
@@ -178,10 +181,7 @@ export class CampForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () =>
-        !this.submitting() &&
-        this.webAddress.answer() === 'available' &&
-        this.errors.slug() === null,
+      () => this.slugAnswer.answer() === 'available' && this.errors.slug() === null,
     );
     this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
@@ -219,6 +219,7 @@ export class CampForm {
     this.selected.set(this.defaultSelected());
     this.fields().reset();
     this.locationsChanged.set(false);
+    this.slugAnswer.release();
   }
 
   left(field: CampField): void {
@@ -257,10 +258,12 @@ export class CampForm {
       minimumAge: limitFromText(m.minimumAge)!,
       maximumAge: limitFromText(m.maximumAge)!,
     };
+    this.slugAnswer.hold();
     this.submitting.set(true);
     try {
       await send(values);
     } catch (failure) {
+      this.slugAnswer.release();
       return this.failed(failure, m.slug);
     } finally {
       this.submitting.set(false);
@@ -287,7 +290,7 @@ export class CampForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return this.slugAnswer.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {

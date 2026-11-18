@@ -16,6 +16,7 @@ import {
 } from '../../../../convex/lib/tournamentInput';
 import { ConvexOfflineError, type api } from '../../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { AnswerAtPress } from '../../core/forms/answer-at-press';
 import { NOT_CHECKED, type WebAddressCheck } from '../../core/forms/slug-availability';
 import type { AlertTexts } from './alert-text';
 import { LeagueDivision } from './league-division';
@@ -122,6 +123,7 @@ export class TournamentForm {
   private copiedName: string | null = null;
   private copiedStructure: Structure | null = null;
   private copiedBracket: { bracketType: BracketType; grandFinal?: GrandFinal } | null = null;
+  private readonly slugAnswer: AnswerAtPress;
   private readonly serverErrors: Record<TournamentField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<TournamentField, Signal<string | null>>;
@@ -138,6 +140,7 @@ export class TournamentForm {
     available: () => readonly Id<'locations'>[],
     private readonly webAddress: WebAddressCheck = NOT_CHECKED,
   ) {
+    this.slugAnswer = new AnswerAtPress(webAddress, () => this.model().slug);
     // `required` puts the attribute on the inputs; the messages are ours (`tournamentInput.ts`), so
     // the form and `tournaments.create` agree.
     this.fields = form(this.model, (path) => {
@@ -225,10 +228,7 @@ export class TournamentForm {
         : (this.serverErrors.slug()?.taken ?? this.takenBeforeSubmit()),
     );
     this.slugAvailable = computed(
-      () =>
-        !this.submitting() &&
-        this.webAddress.answer() === 'available' &&
-        this.errors.slug() === null,
+      () => this.slugAnswer.answer() === 'available' && this.errors.slug() === null,
     );
     this.slugStatusReservesRoom = computed(() => this.errors.slug() === null);
     this.reservedParts = computed(() => {
@@ -298,6 +298,7 @@ export class TournamentForm {
     this.selected.set(this.defaultSelected());
     this.fields().reset();
     this.locationsChanged.set(false);
+    this.slugAnswer.release();
   }
 
   left(field: TournamentField): void {
@@ -347,10 +348,12 @@ export class TournamentForm {
       ...(this.copiedStructure === 'pools' && { structure: this.copiedStructure }),
       ...this.copiedBracket,
     };
+    this.slugAnswer.hold();
     this.submitting.set(true);
     try {
       await send(values);
     } catch (failure) {
+      this.slugAnswer.release();
       return this.failed(failure, m.slug);
     } finally {
       this.submitting.set(false);
@@ -382,7 +385,7 @@ export class TournamentForm {
   }
 
   private takenBeforeSubmit(): string | null {
-    return !this.submitting() && this.webAddress.answer() === 'taken' ? this.model().slug : null;
+    return this.slugAnswer.answer() === 'taken' ? this.model().slug : null;
   }
 
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
