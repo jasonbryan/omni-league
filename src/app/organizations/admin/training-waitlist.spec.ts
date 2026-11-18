@@ -110,7 +110,7 @@ describe('TrainingManagement waitlist', () => {
         'Series',
         'This class',
       ]);
-      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe('Tue, Feb 9, 2027');
+      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe('Feb 9');
       expect(rows()[0].querySelector('[data-slot="waiting-class"]')).toBeNull();
       expect(
         rows()[1].querySelector('[data-slot="waiting-kind"]')!.parentElement!.classList,

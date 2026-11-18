@@ -134,7 +134,6 @@ async function seedEntry(
   });
 }
 
-/** Alice holds the one place in every class of the one-place drop-in program. */
 async function fillSeries(s: Setup) {
   await registerSeries(s.alice, s, LAST);
   expect(await registeredCounts(s, LAST)).toEqual([1, 1, 1]);

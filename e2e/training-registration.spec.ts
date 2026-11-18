@@ -1345,7 +1345,6 @@ test.describe('the waitlist of one class', () => {
     await screenshot(page, testInfo, '368-training-class-queue');
 
     await classLink(page, 1).click();
-    await ageBox(page).click();
     await joinButton(page).click();
     await expect(page).toHaveURL(`${baseURL}${path}`, { timeout: 20_000 });
     await expect(classWaitLines(page, 1)).toHaveText("You're on the waitlist, position 2");

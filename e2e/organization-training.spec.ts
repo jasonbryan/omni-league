@@ -1593,7 +1593,7 @@ test.describe('Training: the series waitlist', () => {
     ]);
     await expect(waitingRows(page).nth(0).locator('[data-slot="waiting-class"]')).toHaveCount(0);
     await expect(waitingRows(page).nth(1).locator('[data-slot="waiting-class"]')).toHaveText(
-      /^\w{3}, \w{3} \d{1,2}, \d{4}$/,
+      /^\w{3} \d{1,2}$/,
     );
     await expect(promoteButton(page)).toHaveCount(2);
     await expect(promoteButton(page).nth(0)).toHaveAttribute('aria-disabled', 'true');

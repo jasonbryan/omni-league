@@ -39,6 +39,17 @@ import type { AlertText } from './alert-text';
 import { OUTLINE_BUTTON } from './button-classes';
 import { formatDay } from './format-day';
 
+const SHORT_DAY = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+
+/** The class date as stored, so the day reads the same in any time zone. */
+function shortDay(date: string): string {
+  return SHORT_DAY.format(new Date(`${date}T00:00:00Z`));
+}
+
 export const NO_ONE_WAITING_FOR_SERIES = 'No one is waiting.';
 export const PROMOTE_HINT =
   'Promote needs a free place: in every class for the series, in its class for one class. Raise the places first if one is full.';
@@ -308,7 +319,7 @@ export class TrainingWaitlist {
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;
-  protected readonly classDay = trainingClassDate;
+  protected readonly classDay = shortDay;
   protected readonly noOneWaiting = NO_ONE_WAITING_FOR_SERIES;
   protected readonly promoteHint = PROMOTE_HINT;
   protected readonly rows = this.list.value;

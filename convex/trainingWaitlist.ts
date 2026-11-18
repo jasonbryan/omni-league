@@ -217,7 +217,6 @@ export const listForTraining = query({
         accountThere: (await ctx.db.get('users', entry.userId)) !== null,
       });
     }
-    // Promote takes only the first entry that a place can go to: the places go in the order the entries joined.
     const first =
       waiting[places.findIndex(({ hasPlace, accountThere }) => hasPlace && accountThere)];
     return waiting.map((entry, index) => {
