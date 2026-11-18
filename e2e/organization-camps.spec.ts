@@ -994,6 +994,12 @@ const DAY_TEXT = /[A-Z][a-z]{2} \d{1,2}, \d{4}/;
 
 test.describe('Camp sessions: who registered', () => {
   const registrantsOf = (page: Page) => sessionRows(page).first().locator('app-camp-registrants');
+  // Against the page, not the viewport, which the scrolling that a check does moves.
+  const boxOf = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const { y, height } = element.getBoundingClientRect();
+      return { y: y + window.scrollY, height };
+    });
 
   async function sessionWith(page: Page, places = 20) {
     const admin = await adminWithCamp(page);
@@ -1142,6 +1148,92 @@ test.describe('Camp sessions: who registered', () => {
     await expectAccessible(page);
     held.release();
     await expect(registrantsOf(page)).toHaveText('No one has registered yet.');
+  });
+
+  test('the list takes the room of its skeleton for adults: the panel and the waitlist below it stay put', async ({
+    page,
+  }) => {
+    const admin = await memberOf(page, 'orgAdmin');
+    await seedCamp(admin.tenant, {
+      ...ADULT_CAMP,
+      locations: [PELICAN],
+      minimumAge: 14,
+      maximumAge: 99,
+    });
+    await seedCampSession(admin.tenant, ADULT_CAMP.slug, {
+      name: 'Week 1',
+      startDate: WEEK_1.start,
+      endDate: WEEK_1.end,
+    });
+    for (const label of ['Player', 'Player']) {
+      await seedCampRegistration(
+        admin.tenant,
+        ADULT_CAMP.slug,
+        'Week 1',
+        await seedUser(newUser(label)),
+        { kind: 'self' },
+      );
+    }
+    const held = await holdQueries(page, ['campRegistrations:listForSession'], {
+      watchFromStart: false,
+    });
+    await page.goto(campPage(admin.tenant, ADULT_CAMP.slug));
+    await expect(sessionRows(page)).toHaveCount(1);
+    held.watchNewSubscriptions();
+    await openList(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(registrantsOf(page).locator('tbody tr')).toHaveCount(2);
+    const waitlist = sessionRows(page).first().locator('app-camp-waitlist');
+    const loading = { panel: await boxOf(registrantsOf(page)), waitlist: await boxOf(waitlist) };
+    held.release();
+    await expect(registrantsOf(page).getByRole('region')).toBeVisible();
+    const loaded = { panel: await boxOf(registrantsOf(page)), waitlist: await boxOf(waitlist) };
+    expect(loaded.panel.y).toBe(loading.panel.y);
+    expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loaded.waitlist.y - loading.waitlist.y)).toBeLessThanOrEqual(1);
+  });
+
+  const MANY = 201;
+
+  test(`a session with ${MANY} registered shows a skeleton row for each, and the list takes their room`, async ({
+    page,
+  }) => {
+    test.setTimeout(600_000);
+    const { tenant, camp } = await sessionWith(page, 500);
+    const guardian = await seedUser(newUser('Guardian'));
+    const names = Array.from(
+      { length: MANY },
+      (_, index) => `Child ${String(index).padStart(3, '0')}`,
+    );
+    const BATCH = 8;
+    for (let from = 0; from < names.length; from += BATCH) {
+      await Promise.all(
+        names.slice(from, from + BATCH).map((minorName) =>
+          seedCampRegistration(tenant, JUNIOR.slug, 'Week 1', guardian, {
+            kind: 'minor',
+            minorName,
+          }),
+        ),
+      );
+    }
+    const held = await holdQueries(page, ['campRegistrations:listForSession'], {
+      watchFromStart: false,
+    });
+    await page.goto(camp);
+    await expect(sessionRows(page)).toHaveCount(1);
+    held.watchNewSubscriptions();
+    await openList(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(registrantsOf(page).locator('tbody tr')).toHaveCount(MANY);
+    const waitlist = sessionRows(page).first().locator('app-camp-waitlist');
+    const loading = { panel: await boxOf(registrantsOf(page)), waitlist: await boxOf(waitlist) };
+    held.release();
+    await expect(registrantsOf(page).getByRole('region')).toBeVisible();
+    await expect(registrantsOf(page).locator('tbody tr')).toHaveCount(MANY);
+    const loaded = { panel: await boxOf(registrantsOf(page)), waitlist: await boxOf(waitlist) };
+    expect(loaded.panel.y).toBe(loading.panel.y);
+    expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loaded.waitlist.y - loading.waitlist.y)).toBeLessThanOrEqual(1);
   });
 
   test('a list the server fails shows the alert with Try again and the rest of the page stays', async ({

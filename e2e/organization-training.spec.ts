@@ -973,7 +973,7 @@ test.describe('Training: who registered', () => {
       return { x: x + window.scrollX, y: y + window.scrollY, width, height };
     });
 
-  async function classesWith(page: Page, role: Role | null = 'orgAdmin') {
+  async function classesWith(page: Page, role: Role | null = 'orgAdmin', placesPerClass?: number) {
     const admin = await memberOf(page, role);
     await seedTraining(admin.tenant, { ...SERVING, locations: [PELICAN], coachName: 'Dana Ruiz' });
     await seedTrainingClasses(admin.tenant, SERVING.slug, {
@@ -984,6 +984,7 @@ test.describe('Training: who registered', () => {
       weeks: 3,
       registrationDeadline: dateFromToday(7),
       allowSingleRegistration: true,
+      ...(placesPerClass !== undefined && { placesPerClass }),
     });
     return { ...admin, path: `${admin.base}/training/${SERVING.slug}` };
   }
@@ -1127,6 +1128,73 @@ test.describe('Training: who registered', () => {
     await screenshot(page, testInfo, 'training-registrants-minor-loaded');
     expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('a class that holds more registrations than its places lists every one, and the count matches the list', async ({
+    page,
+  }) => {
+    const { tenant, path } = await classesWith(page, 'orgAdmin', 5);
+    const guardian = await seedUser(newUser('Guardian'));
+    const names = Array.from(
+      { length: 12 },
+      (_, index) => `Child ${String(index + 1).padStart(2, '0')}`,
+    );
+    for (const minorName of names) {
+      await seedTrainingRegistration(tenant, SERVING.slug, guardian, { kind: 'minor', minorName });
+    }
+    await page.goto(path);
+    const first = classRows(page).first();
+    await expect(toggleOf(first)).toHaveText(/^12 of 5 registered in /);
+    await toggleOf(first).click();
+    await expect(registrantsOf(first).locator('tbody tr')).toHaveCount(12);
+    await expect(registrantsOf(first).locator('tbody tr').first()).toContainText('Child 01');
+    await expect(registrantsOf(first).locator('tbody tr').last()).toContainText('Child 12');
+  });
+
+  const WITH_MINORS: Who[] = [
+    { name: 'Pat Lee' },
+    { name: 'Gail Wu', minor: 'Maya R.' },
+    {
+      name: 'Gwendolyn'.repeat(6),
+      minor: 'Wolfeschlegelsteinhausenbergerdorff'.repeat(2).slice(0, 60),
+    },
+  ];
+
+  for (const width of [320, 360, 1280]) {
+    test(`minors’ rows at ${width}px: nothing above, beside, or below the list moves when it answers`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { loading, release } = await heldList(page, WITH_MINORS);
+      const loaded = await release();
+      expectAboveAndBesideStill(loaded, loading);
+      expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  test('at 320px a wide list scrolls inside its own region by keyboard, and the page does not scroll sideways', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    const { release, first } = await heldList(page, WITH_MINORS);
+    await release();
+    const region = registrantsOf(first).getByRole('region', { name: /^Registrants of / });
+    const widths = () =>
+      region.evaluate((element) => ({
+        regionScroll: element.scrollWidth,
+        regionClient: element.clientWidth,
+        pageScroll: document.documentElement.scrollWidth,
+        pageClient: document.documentElement.clientWidth,
+      }));
+    const before = await widths();
+    expect(before.regionScroll).toBeGreaterThan(before.regionClient);
+    expect(before.pageScroll).toBeLessThanOrEqual(before.pageClient);
+    await region.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => region.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    const after = await widths();
+    expect(after.pageScroll).toBeLessThanOrEqual(after.pageClient);
   });
 
   test('a class with no registrations holds the same room while it loads as its message does', async ({

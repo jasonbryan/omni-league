@@ -301,6 +301,29 @@ describe('trainingRegistrations.listForClass', () => {
     ]);
   });
 
+  test('lists all 12 registrants of a restored class that has 5 places, whatever mix of series and single-class they are', async () => {
+    const s = await setup();
+    const trainingClass = classOf(s, 'dropIn', 0);
+    await s.admin.mutation(api.trainingClasses.updatePlaces, {
+      trainingClassId: trainingClass,
+      places: 5,
+    });
+    await s.admin.mutation(api.trainingClasses.cancel, { trainingClassId: trainingClass });
+    for (let index = 1; index <= 7; index++) {
+      await registerSeries(s, 'dropIn', s.guardian.userId, MINOR(`Series ${index}`));
+    }
+    for (let index = 1; index <= 5; index++) {
+      await registerClass(s, 'dropIn', 0, s.guardian.userId, MINOR(`Single ${index}`));
+    }
+    await s.admin.mutation(api.trainingClasses.restore, { trainingClassId: trainingClass });
+    const held = await s.t.run((ctx) => ctx.db.get('trainingClasses', trainingClass));
+    expect(held).toMatchObject({ places: 5, status: 'scheduled' });
+    const rows = await listFor(s.admin, trainingClass);
+    expect(rows).toHaveLength(12);
+    expect(rows.filter((row) => row.kind === 'series')).toHaveLength(7);
+    expect(rows.filter((row) => row.kind === 'class')).toHaveLength(5);
+  });
+
   test('shows the guardian’s name alone when the sign-in account holding the email is gone', async () => {
     const s = await setup();
     await registerClass(s, 'dropIn', 0, s.guardian.userId, MINOR('Maya R.'));
