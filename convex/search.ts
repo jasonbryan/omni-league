@@ -31,6 +31,7 @@ import {
   campIsUpcoming,
   searchProgramRows,
   searchRows,
+  tournamentIsUpcoming,
   trainingIsUpcoming,
 } from './lib/searchRows';
 import {
@@ -148,6 +149,7 @@ function narrowedByDivision(program: Doc<'programs'>, filters: DivisionFilters):
 async function isUpcoming(ctx: QueryCtx, program: Doc<'programs'>): Promise<boolean> {
   if (program.type === 'camp') return campIsUpcoming(ctx, program);
   if (program.type === 'training') return trainingIsUpcoming(ctx, program);
+  if (program.type === 'tournament') return tournamentIsUpcoming(ctx, program);
   return true;
 }
 

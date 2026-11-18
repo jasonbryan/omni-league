@@ -1720,6 +1720,94 @@ test.describe('find a program: camps', () => {
   });
 });
 
+interface EndedTournamentSeeded extends Seeded {
+  upcomingName: string;
+  endedName: string;
+}
+
+/** `prefix` puts the tournaments first by name in a browse, which lists every organization's tournaments of the sport. */
+async function seedWithEndedTournament(prefix = ''): Promise<EndedTournamentSeeded> {
+  const seeded = await seed();
+  const upcomingName = `${prefix}Upcoming Beach Open ${seeded.id}`;
+  const endedName = `${prefix}Ended Beach Open ${seeded.id}`;
+  const tournament = (name: string, slug: string, dates: [number, number, number]) => ({
+    name,
+    slug,
+    locations: [NORTH_BEACH],
+    division: BEACH_OPEN_DIVISION,
+    startDate: dateFromToday(dates[0]),
+    endDate: dateFromToday(dates[1]),
+    registrationDeadline: dateFromToday(dates[2]),
+  });
+  await seedTournament(seeded.tenant, tournament(upcomingName, 'upcoming-open', [40, 41, 30]));
+  await seedTournament(seeded.tenant, tournament(endedName, 'ended-open', [-5, -3, -10]));
+  return { ...seeded, upcomingName, endedName };
+}
+
+test.describe('find a program: ended tournaments', () => {
+  test(
+    'a search lists the upcoming tournament and not the one that ended 3 days ago',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id, upcomingName, endedName } = await seedWithEndedTournament();
+      const { html } = await raw(request, url(id));
+      expect(resultNames(html).sort()).toEqual([upcomingName, SUNDAY, THURSDAY].sort());
+      expect(resultNames(html)).not.toContain(endedName);
+      expect(plainText(resultsSection(html))).toContain(`3 programs match “${id}”`);
+      expect(rowOf(html, upcomingName)).toContain('Registration open');
+      const tournaments = await raw(request, `/programs?type=tournament&q=${id}`);
+      expect(resultNames(tournaments.html)).toEqual([upcomingName]);
+    },
+  );
+
+  test(
+    'a search only the ended tournament matches lists nothing and offers no Tournaments chip',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seedWithEndedTournament();
+      const { html } = await raw(request, url(`ended ${id}`));
+      expect(resultNames(html)).toEqual([]);
+      expect(chipNames(html)).toEqual([]);
+    },
+  );
+
+  test(
+    'a type and a sport without a search list the upcoming tournament and not the ended one',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { upcomingName, endedName } = await seedWithEndedTournament('Aaa ');
+      const { html } = await raw(request, '/programs?type=tournament&sport=beach-volleyball');
+      expect(resultNames(html)).toContain(upcomingName);
+      expect(resultNames(html)).not.toContain(endedName);
+    },
+  );
+
+  test('the results pass the axe helper and do not scroll sideways at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { id, upcomingName } = await seedWithEndedTournament('Aaa ');
+    await page.goto(url(id));
+    await hydrated(consoleGuard);
+    await expect(rowNames(page)).toHaveCount(3);
+    await expect(results(page)).toContainText(upcomingName);
+    await expect(results(page)).not.toContainText('Ended Beach Open');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '782-programs-ended-tournament-left-out');
+
+    await page.goto('/programs?type=tournament&sport=beach-volleyball');
+    await hydrated(consoleGuard);
+    await expect(results(page)).toContainText(upcomingName);
+    await expect(results(page)).not.toContainText('Ended Beach Open');
+    await expectAccessible(page);
+
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  });
+});
+
 test.describe('find a program: /leagues redirects', () => {
   test(
     '/leagues answers a 301 to /programs?type=league with the known parameters only, no-store, and no other parameter anywhere in the response',
