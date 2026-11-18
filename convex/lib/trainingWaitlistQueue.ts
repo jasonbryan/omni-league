@@ -65,11 +65,17 @@ export async function participantHoldsPlace(
   );
 }
 
+async function skipReasonOf(ctx: Pick<QueryCtx, 'db'>, entry: Entry): Promise<QueueRow['skipped']> {
+  if ((await ctx.db.get('users', entry.userId)) === null) return 'accountGone';
+  return (await participantHoldsPlace(ctx, entry)) ? 'alreadyRegistered' : undefined;
+}
+
 export interface QueueRow {
   entry: Entry;
   hasPlace: boolean;
   /** No earlier entry that needs a place this one needs can be served, so a free place goes to this one. */
   next: boolean;
+  skipped?: 'accountGone' | 'alreadyRegistered';
 }
 
 /** An entry whose account is gone, or whose participant already holds the place, cannot be given one, and must not hold up the entries behind it. */
@@ -82,14 +88,13 @@ export async function queueRowsOf(
   const served: Entry[] = [];
   for (const entry of queue) {
     const hasPlace = await entryHasPlace(ctx, classes, entry);
-    const servable =
-      hasPlace &&
-      (await ctx.db.get('users', entry.userId)) !== null &&
-      !(await participantHoldsPlace(ctx, entry));
+    const skipped = await skipReasonOf(ctx, entry);
+    const servable = hasPlace && skipped === undefined;
     rows.push({
       entry,
       hasPlace,
       next: servable && !served.some((other) => competes(entry, other)),
+      ...(skipped && { skipped }),
     });
     if (servable) served.push(entry);
   }

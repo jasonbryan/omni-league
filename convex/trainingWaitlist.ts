@@ -209,6 +209,8 @@ export const listForTraining = query({
       /** Set for an entry that waits for one class; absent for the series. */
       classId: v.optional(v.id('trainingClasses')),
       classDate: v.optional(v.string()),
+      /** Why Promote skips the entry whatever its places: no account, or the place is already held. */
+      skipped: v.optional(v.union(v.literal('accountGone'), v.literal('alreadyRegistered'))),
     }),
   ),
   handler: async (ctx, { trainingId }) => {
@@ -224,6 +226,7 @@ export const listForTraining = query({
         requestedAt: entry.requestedAt,
         canPromote: rows[index].next,
         hasPlace: rows[index].hasPlace,
+        ...(rows[index].skipped && { skipped: rows[index].skipped }),
         ...(trainingClass && { classId: trainingClass._id, classDate: trainingClass.date }),
         ...named[index],
       };

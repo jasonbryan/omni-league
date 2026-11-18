@@ -495,6 +495,7 @@ describe('trainingWaitlist.promote with class entries', () => {
       [ghost, false],
       [next, true],
     ]);
+    expect(rows.map((row) => row.skipped)).toEqual(['accountGone', undefined]);
     await expect(promote(s.admin, next)).resolves.toMatchObject({});
   });
 
@@ -610,7 +611,9 @@ describe('trainingWaitlist.listForTraining with class entries', () => {
     later();
     const next = await joinClass(s.bob, s, LAST, 1);
     await setPlaces(s, LAST, 1, 3);
-    expect((await listFor(s.admin, s, LAST)).map((row) => row.canPromote)).toEqual([false, true]);
+    const rows = await listFor(s.admin, s, LAST);
+    expect(rows.map((row) => row.canPromote)).toEqual([false, true]);
+    expect(rows.map((row) => row.skipped)).toEqual(['alreadyRegistered', undefined]);
     const data = await refusal(promote(s.admin, held));
     expect(data.code).toBe('alreadyRegistered');
     expect(await registeredCounts(s, LAST)).toEqual([0, 1, 0]);

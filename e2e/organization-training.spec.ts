@@ -1340,6 +1340,29 @@ test.describe('Training: the series waitlist', () => {
       return { x: x + window.scrollX, y: y + window.scrollY, width, height };
     });
 
+  /** The class a "This class" row waits for reads in full inside the list's own region, and nothing, the pinned Promote included, covers it. */
+  async function expectClassDaysVisible(page: Page, count: number) {
+    const days = panel(page).locator('[data-slot="waiting-class"]');
+    await expect(days).toHaveCount(count);
+    for (const day of await days.all()) {
+      await day.scrollIntoViewIfNeeded();
+      const seen = await day.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const region = element.closest('[role="region"]')!.getBoundingClientRect();
+        const row = element.closest('th');
+        const covered = [rect.left + 2, rect.right - 2].some((x) => {
+          const hit = document.elementFromPoint(x, rect.top + rect.height / 2);
+          return !hit || (!element.contains(hit) && hit.closest('th') !== row);
+        });
+        return { inside: rect.left >= region.left && rect.right <= region.right, covered };
+      });
+      expect(seen, 'the class day is in the region and not covered').toEqual({
+        inside: true,
+        covered: false,
+      });
+    }
+  }
+
   /** A published program whose every class holds `held` of `places`, so a series with `held` equal to `places` is full. */
   async function waitingProgram(page: Page, places: number) {
     const admin = await memberOf(page, 'orgAdmin');
@@ -1555,6 +1578,7 @@ test.describe('Training: the series waitlist', () => {
       held.release();
       await expect(listRegion(page)).toBeVisible();
       await expect(panel(page)).toContainText(guardian.email);
+      await expectClassDaysVisible(page, 3);
       const loaded = await measure();
       expect(loaded.classes).toEqual(loading.classes);
       expect(loaded.heading.y).toBe(loading.heading.y);
@@ -1593,8 +1617,9 @@ test.describe('Training: the series waitlist', () => {
     ]);
     await expect(waitingRows(page).nth(0).locator('[data-slot="waiting-class"]')).toHaveCount(0);
     await expect(waitingRows(page).nth(1).locator('[data-slot="waiting-class"]')).toHaveText(
-      /^\w{3} \d{1,2}$/,
+      /^This class · \w{3} \d{1,2}$/,
     );
+    await expectClassDaysVisible(page, 1);
     await expect(promoteButton(page)).toHaveCount(2);
     await expect(promoteButton(page).nth(0)).toHaveAttribute('aria-disabled', 'true');
     await expect(promoteButton(page).nth(1)).not.toHaveAttribute('aria-disabled', 'true');

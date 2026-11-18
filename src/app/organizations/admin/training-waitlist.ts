@@ -61,7 +61,8 @@ type Result =
 
 type EntryId = Id<'trainingWaitlistEntries'>;
 
-const REFUSAL_CODES: readonly TrainingWaitlistCode[] = [
+const REFUSAL_CODES: readonly (TrainingWaitlistCode | 'alreadyRegistered')[] = [
+  'alreadyRegistered',
   'noFreePlace',
   'notWaiting',
   'notNext',
@@ -77,6 +78,7 @@ interface WaitingRow {
   hasPlace: boolean;
   classId?: Id<'trainingClasses'>;
   classDate?: string;
+  skipped?: 'accountGone' | 'alreadyRegistered';
 }
 
 /** Only the message of a refusal the server words for the organizer is shown: any other failure's message is server detail. */
@@ -85,7 +87,8 @@ function refusalMessage(error: unknown): string | null {
   const data: unknown = error.data;
   if (typeof data !== 'object' || data === null) return null;
   const { code, message } = data as { code?: unknown; message?: unknown };
-  return REFUSAL_CODES.includes(code as TrainingWaitlistCode) && typeof message === 'string'
+  return REFUSAL_CODES.includes(code as (typeof REFUSAL_CODES)[number]) &&
+    typeof message === 'string'
     ? message
     : null;
 }
@@ -191,25 +194,31 @@ function refusalMessage(error: unknown): string | null {
                       <td hlmTd class="tabular-nums">{{ index + 1 }}</td>
                       <th hlmTh scope="row" class="text-start whitespace-nowrap">
                         {{ row.name }}
-                        @if (row.guardian; as guardian) {
+                        @if (row.classDate || row.guardian) {
                           <span
-                            data-slot="waiting-guardian"
+                            data-slot="waiting-detail"
                             class="block text-xs font-normal text-muted-foreground"
-                            >Guardian: {{ guardianLine(guardian) }}</span
                           >
+                            @if (row.classDate; as classDate) {
+                              <span data-slot="waiting-class"
+                                >This class · {{ classDay(classDate) }}</span
+                              >
+                            }
+                            @if (row.classDate && row.guardian) {
+                              ·
+                            }
+                            @if (row.guardian; as guardian) {
+                              <span data-slot="waiting-guardian"
+                                >Guardian: {{ guardianLine(guardian) }}</span
+                              >
+                            }
+                          </span>
                         }
                       </th>
                       <td hlmTd class="whitespace-nowrap">
                         <span hlmBadge variant="secondary" data-slot="waiting-kind">{{
                           row.classDate === undefined ? 'Series' : 'This class'
                         }}</span>
-                        @if (row.classDate; as classDate) {
-                          <span
-                            data-slot="waiting-class"
-                            class="ms-1.5 text-xs text-muted-foreground"
-                            >{{ classDay(classDate) }}</span
-                          >
-                        }
                       </td>
                       <td hlmTd class="text-end whitespace-nowrap">{{ day(row.requestedAt) }}</td>
                       <td hlmTd class="sticky end-0 bg-card text-end">
@@ -382,6 +391,8 @@ export class TrainingWaitlist {
   }
 
   private blockedReason(row: WaitingRow): string {
+    if (row.skipped === 'accountGone') return TRAINING_WAITLIST_MESSAGES.accountGone;
+    if (row.skipped === 'alreadyRegistered') return TRAINING_WAITLIST_MESSAGES.alreadyHolds;
     if (row.hasPlace) return TRAINING_WAITLIST_MESSAGES.notNext;
     return row.classDate === undefined
       ? TRAINING_WAITLIST_MESSAGES.noFreePlace

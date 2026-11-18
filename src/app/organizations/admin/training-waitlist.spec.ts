@@ -104,17 +104,28 @@ describe('TrainingManagement waitlist', () => {
       );
     });
 
-    it('marks a class entry "This class" with the class day beside it, and a series entry "Series"', async () => {
+    it('marks a class entry "This class", and a series entry "Series"', async () => {
       await answer([MAYA, SAM]);
       expect(rows().map((row) => text(row.querySelector('[data-slot="waiting-kind"]')))).toEqual([
         'Series',
         'This class',
       ]);
-      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe('Feb 9');
+    });
+
+    it('names the class and its day in the name cell, which stays in view beside the pinned Promote, before any guardian line', async () => {
+      await answer([MAYA, SAM, { ...PAT, classId: 'tc_2', classDate: '2027-02-09' }]);
+      const detail = (index: number) =>
+        rows()[index].querySelector('th[scope="row"] [data-slot="waiting-detail"]');
+      expect(text(detail(0))).toBe('Guardian: Demo Guardian, guardian@example.test');
+      expect(text(detail(1))).toBe(
+        'This class · Feb 9 · Guardian: Demo Guardian, guardian@example.test',
+      );
+      expect(text(detail(2))).toBe('This class · Feb 9');
+      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe(
+        'This class · Feb 9',
+      );
       expect(rows()[0].querySelector('[data-slot="waiting-class"]')).toBeNull();
-      expect(
-        rows()[1].querySelector('[data-slot="waiting-kind"]')!.parentElement!.classList,
-      ).toContain('whitespace-nowrap');
+      expect(detail(2)!.classList).toContain('block');
     });
 
     it('keeps each name and guardian line on one line, so a row keeps its height', async () => {
@@ -317,6 +328,38 @@ describe('TrainingManagement waitlist', () => {
       expect(promoteCalls()).toEqual([]);
       expect(alertText()).toBe(
         `Sam R. could not be given a place. ${TRAINING_WAITLIST_MESSAGES.noFreePlaceInClass}`,
+      );
+    });
+
+    it('says an account that is gone cannot be given a place, and a place already held is held', async () => {
+      await answer([
+        { ...MAYA, canPromote: false, skipped: 'accountGone' },
+        { ...PAT, canPromote: false, skipped: 'alreadyRegistered' },
+      ]);
+      await press(0);
+      expect(alertText()).toBe(
+        `Maya R. could not be given a place. ${TRAINING_WAITLIST_MESSAGES.accountGone}`,
+      );
+      await press(1);
+      expect(alertText()).toBe(
+        `Pat Player could not be given a place. ${TRAINING_WAITLIST_MESSAGES.alreadyHolds}`,
+      );
+      expect(promoteCalls()).toEqual([]);
+    });
+
+    it('shows the server’s message when a stale list lets a place already held through', async () => {
+      await answer([MAYA]);
+      promoteButton().click();
+      await o.flush();
+      promoteCalls()[0].reject(
+        new ConvexError({
+          code: 'alreadyRegistered',
+          message: 'Maya R. is already registered for this training program.',
+        }),
+      );
+      await o.flush();
+      expect(alertText()).toBe(
+        'Maya R. could not be given a place. Maya R. is already registered for this training program.',
       );
     });
 
