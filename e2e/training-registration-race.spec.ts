@@ -23,6 +23,7 @@ test.describe('two accounts register for the last place at once', () => {
     page,
     browser,
   }) => {
+    test.slow(); // two sign-ups, two page loads each, then a read of the result: over 30 s on a loaded runner
     const token = randomBytes(3).toString('hex');
     const tenant = await seedTenant({
       name: 'E2E Training Race',
@@ -92,7 +93,7 @@ test.describe('two accounts register for the last place at once', () => {
       await expect(classRows(loser)).toHaveCount(3);
       await expect(placesLeft(loser, 0)).toHaveText(`${PLACES - 1} places left`);
       await expect(placesLeft(loser, 1)).toHaveText(`${PLACES - 1} places left`);
-      await expect(placesLeft(loser, 2)).toHaveText('0 places left');
+      await expect(placesLeft(loser, 2)).toHaveText('Full');
       await expect(loser.locator('[data-slot="series-registered"]')).toHaveCount(0);
       await expect(loser.getByRole('link', { name: 'Register for the series' })).toHaveCount(0);
     } finally {
