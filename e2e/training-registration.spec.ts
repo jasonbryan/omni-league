@@ -601,7 +601,9 @@ test.describe('register for one class', () => {
     await classLink(page, 1).click();
     await expect(page).toHaveURL(`${baseURL}${href}`);
     await expect(page).toHaveTitle(/^Register for a class \| Drop-in Adult Clinic/);
-    await expect(page.getByText('Register for a class', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('#main').getByText('Register for a class', { exact: true }),
+    ).toBeVisible();
     await expect(
       page.locator('main dl > div').filter({ hasText: 'Places left' }).locator('dd'),
     ).toHaveText('12 places left');
