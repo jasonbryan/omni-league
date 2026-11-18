@@ -663,9 +663,10 @@ export const seedTrainingClasses = internalMutation({
     weeks: v.number(),
     placesPerClass: v.number(),
     registrationDeadline: v.string(),
+    allowSingleRegistration: v.optional(v.boolean()),
   },
   returns: v.object({ classCount: v.number() }),
-  handler: async (ctx, { organizationSlug, trainingSlug, ...pattern }) => {
+  handler: async (ctx, { organizationSlug, trainingSlug, allowSingleRegistration, ...pattern }) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
     const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
@@ -673,7 +674,7 @@ export const seedTrainingClasses = internalMutation({
       throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
     const classCount = await insertTrainingClasses(ctx, found.training, {
       ...pattern,
-      allowSingleRegistration: false,
+      allowSingleRegistration: allowSingleRegistration ?? false,
     });
     return { classCount };
   },

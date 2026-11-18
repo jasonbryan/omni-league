@@ -145,3 +145,68 @@ describe('deleting an account removes its training registrations', () => {
     },
   );
 });
+
+describe('deleting an account removes its single-class registrations', () => {
+  const registerClass = (
+    s: Setup,
+    caller: 'alice' | 'bob',
+    index: number,
+    who: Participant = SELF,
+  ) =>
+    s[caller].mutation(api.trainingRegistrations.register, {
+      trainingId: s.trainings['dropIn'].trainingId,
+      classId: s.trainings['dropIn'].classIds[index],
+      participant: who,
+      ageConfirmed: true,
+    });
+
+  test('lowers each class by one per row and never below 0, whatever the count already is', async () => {
+    const s = await setup();
+    await registerClass(s, 'alice', 0);
+    await registerClass(s, 'alice', 1);
+    await registerClass(s, 'alice', 1, MINOR('Maya R.'));
+    await registerClass(s, 'bob', 1);
+    expect(await registeredCounts(s, 'dropIn')).toEqual([1, 3, 0]);
+    await s.t.run((ctx) =>
+      ctx.db.patch('trainingClasses', s.trainings['dropIn'].classIds[0], { registeredCount: 0 }),
+    );
+    await deleteAccount(s, 'alice');
+    expect(await registrationsOf(s, s.users['alice'])).toEqual([]);
+    expect(await registeredCounts(s, 'dropIn')).toEqual([0, 1, 0]);
+    expect(await registrationsOf(s, s.users['bob'])).toHaveLength(1);
+  });
+
+  test('frees the last place of a class for another account', async () => {
+    const s = await setup();
+    const single = (caller: 'alice' | 'bob') =>
+      s[caller].mutation(api.trainingRegistrations.register, {
+        trainingId: s.trainings['dropInLastPlace'].trainingId,
+        classId: s.trainings['dropInLastPlace'].classIds[1],
+        participant: SELF,
+        ageConfirmed: true,
+      });
+    await single('alice');
+    await expect(single('bob')).rejects.toMatchObject({ data: { code: 'classFull' } });
+    await deleteAccount(s, 'alice');
+    await single('bob');
+    expect(await registeredCounts(s, 'dropInLastPlace')).toEqual([0, 1, 0]);
+  });
+
+  test('completes when the class of a single-class registration is gone', async () => {
+    const s = await setup();
+    await registerClass(s, 'alice', 0);
+    await s.t.run((ctx) => ctx.db.delete('trainingClasses', s.trainings['dropIn'].classIds[0]));
+    await deleteAccount(s, 'alice');
+    expect(await registrationsOf(s, s.users['alice'])).toEqual([]);
+    expect(await s.t.run((ctx) => ctx.db.get('users', s.users['alice']))).toBeNull();
+  });
+
+  test('lowers a series and a single-class registration of one account together', async () => {
+    const s = await setup();
+    await register(s, 'alice', 'dropIn', MINOR('Maya R.'));
+    await registerClass(s, 'alice', 1);
+    expect(await registeredCounts(s, 'dropIn')).toEqual([1, 2, 1]);
+    await deleteAccount(s, 'alice');
+    expect(await registeredCounts(s, 'dropIn')).toEqual([0, 0, 0]);
+  });
+});

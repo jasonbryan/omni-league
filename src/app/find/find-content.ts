@@ -46,7 +46,7 @@ import { publicTrainingNames } from '../organizations/public-training/public-tra
 import { publicTrainingPath } from '../organizations/public-training/public-training-path';
 import { trainingPatternText } from '../../../convex/lib/trainingPattern';
 import { leagueSeasonStatus } from '../organizations/season-status';
-import { tournamentStatus } from '../organizations/tournament-status';
+import { tournamentStatus, upcomingTournaments } from '../organizations/tournament-status';
 import { HlmAlertImports } from '../ui/alert';
 import { HlmBadge } from '../ui/badge';
 import { OUTLINE_BUTTON, SEARCH_BUTTON } from '../ui/button/button-classes';
@@ -539,21 +539,25 @@ export class FindContent {
           status: trainingStatusLine(training, this.now()),
         };
       }
-      return row.type === 'league'
-        ? {
-            ...shared,
-            detail: row.divisionLabel,
-            href: publicLeaguePath(row.organization.slug, row.slug),
-            names: publicPageNames({ organization: row.organization, league: row }),
-            status: leagueSeasonStatus(row.seasons, this.now()),
-          }
-        : {
-            ...shared,
-            detail: row.divisionLabel,
-            href: publicTournamentPath(row.organization.slug, row.slug),
-            names: publicTournamentNames({ organization: row.organization, tournament: row }),
-            status: tournamentStatus(row, this.now()),
-          };
+      if (row.type === 'league') {
+        return {
+          ...shared,
+          detail: row.divisionLabel,
+          href: publicLeaguePath(row.organization.slug, row.slug),
+          names: publicPageNames({ organization: row.organization, league: row }),
+          status: leagueSeasonStatus(row.seasons, this.now()),
+        };
+      }
+      // The query keeps the tournaments that had not ended when it ran; the clock here drops one that has ended since.
+      const [tournament] = upcomingTournaments([row], this.now());
+      if (!tournament) return [];
+      return {
+        ...shared,
+        detail: tournament.divisionLabel,
+        href: publicTournamentPath(tournament.organization.slug, tournament.slug),
+        names: publicTournamentNames({ organization: tournament.organization, tournament }),
+        status: tournamentStatus(tournament, this.now()),
+      };
     }),
   );
 

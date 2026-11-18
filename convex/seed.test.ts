@@ -1660,9 +1660,28 @@ describe('seed:demo training classes', () => {
       weeks: 8,
       placesPerClass: 12,
       registrationDeadline: addCalendarDays(today, 7),
-      allowSingleRegistration: false,
+      allowSingleRegistration: true,
     });
     expect(checkTrainingPattern(training.pattern!, today)).toEqual({});
+  });
+
+  test('lets the Tuesday Serving Clinic take a single class, also when an earlier run scheduled it without that', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const pattern = () =>
+      t.run(
+        async (ctx) => (await ctx.db.query('trainings').first())!.pattern!.allowSingleRegistration,
+      );
+    expect(await pattern()).toBe(true);
+    await t.run(async (ctx) => {
+      const training = (await ctx.db.query('trainings').first())!;
+      await ctx.db.patch('trainings', training._id, {
+        pattern: { ...training.pattern!, allowSingleRegistration: false },
+      });
+    });
+    expect(await pattern()).toBe(false);
+    expect((await t.mutation(internal.seed.insertDemoData, {})).trainingClasses).toBe(0);
+    expect(await pattern()).toBe(true);
   });
 
   test('gives classes to a training program an earlier run made without them', async () => {

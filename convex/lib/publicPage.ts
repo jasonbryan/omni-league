@@ -459,8 +459,12 @@ export const publicTrainingPageValidator = v.object({
   pattern: v.object({ ...publicTrainingPatternFields, weeks: v.number() }),
   // Set only when no class of the program is scheduled, so a page saved before it existed reads as before.
   everyClassCancelled: v.optional(v.boolean()),
+  // Set only when the program takes registrations for a single class, so a page saved before it existed reads as one that does not.
+  allowSingleRegistration: v.optional(v.boolean()),
   classes: v.array(
     v.object({
+      // Optional so a page saved before it existed stays valid; the registration link needs it.
+      classId: v.optional(v.id('trainingClasses')),
       date: v.string(),
       startTime: v.string(),
       endTime: v.string(),

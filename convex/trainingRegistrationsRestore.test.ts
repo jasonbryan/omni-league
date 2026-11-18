@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { Participant } from './lib/individualRegistration';
+import { classParticipantKey } from './lib/trainingRegistration';
 import { deleteUserRecord } from './lib/users';
 import {
   NOW,
@@ -82,7 +83,7 @@ describe('trainingClasses.restore with series registrations', () => {
         organizationId: s.organization,
         userId: s.users['alice'],
         participant: SELF,
-        participantKey: 'self',
+        participantKey: classParticipantKey(s.trainings['open'].classIds[0], SELF),
         createdAt: NOW,
       }),
     );

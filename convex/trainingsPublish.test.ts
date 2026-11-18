@@ -447,14 +447,32 @@ describe('trainings.getPublicPage', () => {
         registrationDeadline: '2027-02-01',
       },
       classes: [
-        { date: '2027-02-02', startTime: '18:00', endTime: '19:00', placesLeft: 12 },
-        { date: '2027-02-09', startTime: '18:00', endTime: '19:00', placesLeft: 7 },
-        { date: '2027-02-16', startTime: '18:00', endTime: '19:00', placesLeft: 0 },
+        {
+          classId: expect.any(String) as string,
+          date: '2027-02-02',
+          startTime: '18:00',
+          endTime: '19:00',
+          placesLeft: 12,
+        },
+        {
+          classId: expect.any(String) as string,
+          date: '2027-02-09',
+          startTime: '18:00',
+          endTime: '19:00',
+          placesLeft: 7,
+        },
+        {
+          classId: expect.any(String) as string,
+          date: '2027-02-16',
+          startTime: '18:00',
+          endTime: '19:00',
+          placesLeft: 0,
+        },
       ],
     });
   });
 
-  test('holds no id and no registrant data', async () => {
+  test('holds no document field and no registrant data', async () => {
     const s = await setup();
     await published(s);
     const page = await s.t.query(api.trainings.getPublicPage, slugs);

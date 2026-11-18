@@ -23,7 +23,7 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
-import { map } from 'rxjs';
+import { combineLatest, map } from 'rxjs';
 import {
   SELF_PARTICIPANT,
   ageConfirmationLabel,
@@ -65,12 +65,14 @@ import { StickyFooter, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { publicTrainingPath } from '../public-training/public-training-path';
 import { RegisterTrainingCard } from './register-training-card';
-import { registerTrainingPath } from './register-training-path';
+import { CLASS_QUERY, registerTrainingPath } from './register-training-path';
 import {
+  classClosedLine,
   registerTrainingState,
   registrationOptions,
   trainingClosedLine,
   type RegisterTrainingState,
+  type TrainingRegistrationAnswer,
 } from './register-training-state';
 
 export const REGISTER_TRAINING_MESSAGES = {
@@ -98,6 +100,17 @@ export const REGISTER_TRAINING_MESSAGES = {
       : `This training program is for ages ${minimumAge} and over.`,
   minorNotAllowedDescription: 'A child cannot be registered for it.',
   childNameDescription: 'Only the name is stored. It is never shown on public pages.',
+  classNotOpenTitle: 'This class is not open for registration.',
+  classNotOpenDescription: 'It may have passed or been cancelled. Go back to the training page.',
+  singleNotAllowedTitle: 'This training program does not take registrations for a single class.',
+  singleNotAllowedDescription: 'Register for the whole series from the training page.',
+  classClosedTitle: 'Registration for this class is closed.',
+  classFullTitle: 'This class is full.',
+  classFullDescription: (date: string) => `${trainingClassDate(date)} has no place left.`,
+  classRegisteredTitle: (date: string) => `You're registered for ${trainingClassDate(date)}.`,
+  classRegisteredDescription: 'You’ll find your place on the training page.',
+  seriesHoldsClassDescription:
+    'Your series registration holds a place in every class, this one included.',
 } as const;
 
 type Attending = 'self' | 'minor';
@@ -106,7 +119,14 @@ const ATTENDING_LABELS: Readonly<Record<Attending, string>> = { self: 'Me', mino
 
 /** What the page shows after a refused submit, before the query catches up. */
 type Refusal =
-  'closed' | 'full' | 'registered' | 'adult-not-allowed' | 'minor-not-allowed' | 'no-training';
+  | 'closed'
+  | 'full'
+  | 'registered'
+  | 'adult-not-allowed'
+  | 'minor-not-allowed'
+  | 'no-training'
+  | 'class-not-open'
+  | 'single-not-allowed';
 
 type FormAlert = 'offline' | 'failed';
 
@@ -125,6 +145,8 @@ const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   adultNotAllowed: 'adult-not-allowed',
   minorNotAllowed: 'minor-not-allowed',
   trainingNotFound: 'no-training',
+  classNotFound: 'class-not-open',
+  singleClassNotAllowed: 'single-not-allowed',
 };
 
 function refusalData(failure: unknown): Record<string, unknown> | null {
@@ -181,7 +203,11 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
         }
         @default {
           @if (training(); as training) {
-            <app-register-training-card [training]="training" [trainingHref]="trainingHref()">
+            <app-register-training-card
+              [training]="training"
+              [trainingHref]="trainingHref()"
+              [classAsked]="classAsked()"
+            >
               @if (notice(); as notice) {
                 <div class="px-4 pt-5 pb-6 md:px-8 md:pb-8">
                   <div
@@ -376,18 +402,21 @@ export class RegisterTrainingPage {
   private readonly now = injectNow();
 
   private readonly route = toSignal(
-    inject(ActivatedRoute).paramMap.pipe(
-      map((params) => ({
+    combineLatest([inject(ActivatedRoute).paramMap, inject(ActivatedRoute).queryParamMap]).pipe(
+      map(([params, query]) => ({
         orgSlug: params.get('orgSlug') ?? '',
         trainingSlug: params.get('trainingSlug') ?? '',
+        classId: query.get(CLASS_QUERY) ?? undefined,
       })),
     ),
     { requireSync: true },
   );
 
+  protected readonly classAsked = computed(() => this.route().classId !== undefined);
+
   protected readonly path = computed(() => {
-    const { orgSlug, trainingSlug } = this.route();
-    return registerTrainingPath(orgSlug, trainingSlug);
+    const { orgSlug, trainingSlug, classId } = this.route();
+    return registerTrainingPath(orgSlug, trainingSlug, classId);
   });
   protected readonly trainingHref = computed(() => {
     const { orgSlug, trainingSlug } = this.route();
@@ -401,7 +430,8 @@ export class RegisterTrainingPage {
   private readonly registration = injectQuery(api.trainingRegistrations.getForRegistration, () => {
     if (!this.tokenKnown()) return skipToken;
     if (this.auth.signedIn() && !this.auth.convexAuthenticated()) return skipToken;
-    return this.route();
+    const { orgSlug, trainingSlug, classId } = this.route();
+    return { orgSlug, trainingSlug, ...(classId !== undefined && { classId }) };
   });
 
   protected readonly training = computed(() => this.registration.value() ?? null);
@@ -421,6 +451,7 @@ export class RegisterTrainingPage {
       answer: this.tokenKnown() ? this.registration.value() : undefined,
       signedIn: this.auth.signedIn(),
       nowMs: this.now(),
+      classAsked: this.classAsked(),
     }),
   );
 
@@ -438,6 +469,7 @@ export class RegisterTrainingPage {
     const training = this.training();
     if (!training) return null;
     const messages = REGISTER_TRAINING_MESSAGES;
+    const singleClass = this.classAsked() ? training.singleClass : undefined;
     const byState: Record<NoticeState | Refusal, () => Notice> = {
       'no-training': () => ({
         icon: 'lucideCircleAlert',
@@ -446,8 +478,7 @@ export class RegisterTrainingPage {
       }),
       registered: () => ({
         icon: 'lucideCircleCheck',
-        title: messages.registeredTitle(training.name),
-        description: messages.registeredDescription,
+        ...this.registeredNotice(training),
       }),
       'adult-not-allowed': () => ({
         icon: 'lucideUsers',
@@ -461,17 +492,54 @@ export class RegisterTrainingPage {
       }),
       closed: () => ({
         icon: 'lucideCalendarX',
-        title: messages.closedTitle,
-        description: trainingClosedLine(training, this.now()),
+        title: singleClass ? messages.classClosedTitle : messages.closedTitle,
+        description: singleClass
+          ? classClosedLine(singleClass.date)
+          : trainingClosedLine(training, this.now()),
       }),
       full: () => ({
         icon: 'lucideUsers',
-        title: messages.fullTitle,
-        description: messages.fullDescription(training.fullClassDate),
+        title: singleClass ? messages.classFullTitle : messages.fullTitle,
+        description: singleClass
+          ? messages.classFullDescription(singleClass.date)
+          : messages.fullDescription(training.fullClassDate),
+      }),
+      'class-not-open': () => ({
+        icon: 'lucideCalendarX',
+        title: messages.classNotOpenTitle,
+        description: messages.classNotOpenDescription,
+      }),
+      'single-not-allowed': () => ({
+        icon: 'lucideCircleAlert',
+        title: messages.singleNotAllowedTitle,
+        description: messages.singleNotAllowedDescription,
       }),
     };
     return state in byState ? byState[state as NoticeState | Refusal]() : null;
   });
+
+  private registeredNotice(
+    training: NonNullable<TrainingRegistrationAnswer>,
+  ): Pick<Notice, 'title' | 'description'> {
+    const messages = REGISTER_TRAINING_MESSAGES;
+    const singleClass = this.classAsked() ? training.singleClass : undefined;
+    if (singleClass?.held === 'series') {
+      return {
+        title: messages.registeredTitle(training.name),
+        description: messages.seriesHoldsClassDescription,
+      };
+    }
+    if (singleClass) {
+      return {
+        title: messages.classRegisteredTitle(singleClass.date),
+        description: messages.classRegisteredDescription,
+      };
+    }
+    return {
+      title: messages.registeredTitle(training.name),
+      description: messages.registeredDescription,
+    };
+  }
 
   protected readonly options = computed<Attending[]>(() => {
     const training = this.training();
@@ -498,7 +566,7 @@ export class RegisterTrainingPage {
           this.participant(),
           training.minimumAge,
           training.maximumAge,
-          training.pattern.firstDate,
+          training.singleClass?.date ?? training.pattern.firstDate,
         )
       : '';
   });
@@ -545,7 +613,12 @@ export class RegisterTrainingPage {
     // The not-found and server-error views set their own title.
     effect(() => {
       const training = this.training();
-      if (training) this.pageTitle.set(['Register for a training series', training.name]);
+      if (training) {
+        this.pageTitle.set([
+          this.classAsked() ? 'Register for a class' : 'Register for a training series',
+          training.name,
+        ]);
+      }
     });
     effect(() => {
       const alert = this.cardAlert();
@@ -579,6 +652,7 @@ export class RegisterTrainingPage {
     this.submitting.set(true);
     const request = {
       trainingId: training.trainingId,
+      ...(this.classAsked() && training.singleClass && { classId: training.singleClass.classId }),
       participant: minorName === null ? participant : ({ kind: 'minor', minorName } as const),
       ageConfirmed: this.model().ageConfirmed,
     };

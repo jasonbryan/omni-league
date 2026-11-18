@@ -236,6 +236,7 @@ export const getPublicPage = query({
       locations: details.locations,
       pattern: publicPattern(found.training.pattern),
       ...(everyClassCancelled && { everyClassCancelled }),
+      ...(found.training.pattern.allowSingleRegistration && { allowSingleRegistration: true }),
       classes,
     };
   },

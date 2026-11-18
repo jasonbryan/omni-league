@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
@@ -32,15 +32,22 @@ const OPEN_SEASON: NewSeason = {
   minimumRosterSize: 4,
 };
 
+const FROM_TODAY = () => dateAtUtcMinus12(Date.now());
+const inDays = (days: number) => addCalendarDays(FROM_TODAY(), days);
+
+const tournamentDates = (startInDays: number, endInDays: number) => ({
+  startDate: inDays(startInDays),
+  endDate: inDays(endInDays),
+  registrationDeadline: inDays(startInDays - 9),
+});
+
 const BEACH_OPEN: NewTournament = {
   name: 'Gulf Coast Beach Open',
   slug: 'gulf-coast-beach-open',
   sport: 'beachVolleyball',
   locationIds: [],
   division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
-  startDate: '2027-07-10',
-  endDate: '2027-07-11',
-  registrationDeadline: '2027-07-01',
+  ...tournamentDates(9, 10),
   maximumTeams: 2,
 };
 
@@ -138,9 +145,7 @@ describe('search.programs', () => {
       sportName: 'Beach volleyball',
       locationNames: [],
       divisionLabel: 'Coed · 4v4 · BB',
-      startDate: '2027-07-10',
-      endDate: '2027-07-11',
-      registrationDeadline: '2027-07-01',
+      ...tournamentDates(9, 10),
       isFull: false,
     });
   });
@@ -301,9 +306,7 @@ async function insertManyTournaments(
         organizationId,
         status: 'published',
         sport: 'softball',
-        startDate: '2027-07-10',
-        endDate: '2027-07-11',
-        registrationDeadline: '2027-07-01',
+        ...tournamentDates(9, 10),
         maximumTeams: 8,
         minimumRosterSize: 9,
         structure: 'bracket',
@@ -478,9 +481,6 @@ interface CampSessionDates {
   endInDays: number;
   places?: number;
 }
-
-const FROM_TODAY = () => dateAtUtcMinus12(Date.now());
-const inDays = (days: number) => addCalendarDays(FROM_TODAY(), days);
 
 const JUNIOR_CAMP = {
   name: 'Junior Beach Volleyball Camp',
@@ -856,5 +856,146 @@ describe('search.programsBrowse and camps', () => {
     expect(camps.typeCounts).toEqual(previous.typeCounts);
     expect((await browseWithCamps(t)).total).toBe(9);
     expect((await browseWithCamps(t)).pageCount).toBe(2);
+  });
+});
+
+describe('search and tournaments that have ended', () => {
+  const ENDED = { name: 'Ended Zebra Open', slug: 'ended-zebra-open', ...tournamentDates(-10, -1) };
+  const ENDS_TODAY = {
+    name: 'Today Zebra Open',
+    slug: 'today-zebra-open',
+    ...tournamentDates(-1, 0),
+  };
+  const IN_PROGRESS = {
+    name: 'Midweek Zebra Open',
+    slug: 'midweek-zebra-open',
+    ...tournamentDates(-2, 3),
+  };
+
+  test('search.programs drops a tournament that ended yesterday from the rows, the counts, and the suggestions', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDED });
+    expect(await search(t, 'zebra')).toEqual({ rows: [], more: false, facets: [], typeCounts: [] });
+    const beach = await search(t, 'beach', { type: 'tournament' });
+    expect(names(beach)).toEqual(['Gulf Coast Beach Open']);
+    expect(beach.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+    ]);
+  });
+
+  test('search.programs offers no fewer-words suggestion built from an ended tournament', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDED });
+    expect((await search(t, 'ended zebra austin')).suggestions).toBeUndefined();
+  });
+
+  test('search.programs lists and counts a tournament that ends today and one in progress', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDS_TODAY });
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...IN_PROGRESS });
+    const result = await search(t, 'zebra');
+    expect(names(result).sort()).toEqual(['Midweek Zebra Open', 'Today Zebra Open']);
+    expect(result.typeCounts).toEqual([{ type: 'tournament', count: 2 }]);
+  });
+
+  test('search.programsBrowse drops a tournament that ended yesterday from the rows, the total, the page count, and the counts', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDED });
+    const result = await browseWithCamps(t, { type: 'tournament' });
+    expect(names(result)).toEqual(['Gulf Coast Beach Open']);
+    expect(result).toMatchObject({ total: 1, pageCount: 1 });
+    expect(result.typeCounts).toEqual([
+      { type: 'league', count: 2 },
+      { type: 'tournament', count: 1 },
+    ]);
+    expect((await browseWithCamps(t)).total).toBe(3);
+  });
+
+  test('search.programsBrowse lists and counts a tournament that ends today and one in progress', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDS_TODAY });
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...IN_PROGRESS });
+    const result = await browseWithCamps(t, { type: 'tournament' });
+    expect(names(result)).toEqual([
+      'Gulf Coast Beach Open',
+      'Midweek Zebra Open',
+      'Today Zebra Open',
+    ]);
+    expect(result.total).toBe(3);
+    expect(result.typeCounts).toContainEqual({ type: 'tournament', count: 3 });
+  });
+
+  test('5 upcoming and 1 ended tournaments of a sport make 1 page of 5, not 2 pages of 6', async () => {
+    const { t, gulf } = await setup();
+    const softball = {
+      ...BEACH_OPEN,
+      sport: 'softball',
+      division: defaultDivision('softball'),
+    } as const;
+    for (let i = 0; i < 5; i++) {
+      await publishedTournament(t, gulf, {
+        ...softball,
+        name: `Softball Slam ${i}`,
+        slug: `softball-slam-${i}`,
+      });
+    }
+    await publishedTournament(t, gulf, { ...softball, ...ENDED });
+    const result = await browseWithCamps(t, { type: 'tournament', sport: 'softball' });
+    expect(result.rows).toHaveLength(5);
+    expect(result).toMatchObject({ total: 5, pageCount: 1 });
+  });
+
+  describe('at the UTC-12 day boundary', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const endingMarch9 = {
+      ...BEACH_OPEN,
+      name: 'Boundary Zebra Open',
+      slug: 'boundary-zebra-open',
+      startDate: '2027-03-08',
+      endDate: '2027-03-09',
+      registrationDeadline: '2027-03-01',
+    };
+
+    test('both queries still list a tournament while it is its last day in UTC-12, although the UTC date has moved on', async () => {
+      const { t, gulf } = await setup();
+      await publishedTournament(t, gulf, endingMarch9);
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-03-10T11:59:00Z') });
+      expect(names(await search(t, 'boundary'))).toEqual(['Boundary Zebra Open']);
+      expect(names(await browseWithCamps(t, { type: 'tournament' }))).toContain(
+        'Boundary Zebra Open',
+      );
+    });
+
+    test('both queries drop the tournament from the first minute of the next day in UTC-12', async () => {
+      const { t, gulf } = await setup();
+      await publishedTournament(t, gulf, endingMarch9);
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-03-10T12:00:00Z') });
+      expect(names(await search(t, 'boundary'))).toEqual([]);
+      expect(names(await browseWithCamps(t, { type: 'tournament' }))).not.toContain(
+        'Boundary Zebra Open',
+      );
+    });
+  });
+
+  test('a call with the previous release’s arguments still drops an ended tournament and keeps the return shape', async () => {
+    const { t, gulf } = await setup();
+    await publishedTournament(t, gulf, { ...BEACH_OPEN, ...ENDED });
+    const found = await search(t, 'zebra');
+    expect(found).toEqual({ rows: [], more: false, facets: [], typeCounts: [] });
+    const browse = await t.query(api.search.programsBrowse, { page: 1, type: 'tournament' });
+    expect(Object.keys(browse).sort()).toEqual([
+      'facets',
+      'page',
+      'pageCount',
+      'rows',
+      'total',
+      'typeCounts',
+    ]);
+    expect(names(browse)).toEqual(['Gulf Coast Beach Open']);
+    expect(browse.total).toBe(1);
   });
 });

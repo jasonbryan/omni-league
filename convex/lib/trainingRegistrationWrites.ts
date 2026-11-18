@@ -2,30 +2,78 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { participantKey, type Participant } from './individualRegistration';
 import { MAX_TRAINING_WEEKS } from './trainingPattern';
+import { classParticipantKey } from './trainingRegistration';
 
-/** The caller has checked access, the rules, and that every class has a place; each class's counter moves with the row. */
+interface NewRegistration {
+  userId: Id<'users'>;
+  participant: Participant;
+  ageConfirmedAt?: number;
+}
+
+async function insertRegistration(
+  ctx: MutationCtx,
+  training: Doc<'trainings'>,
+  classId: Id<'trainingClasses'> | undefined,
+  { ageConfirmedAt, ...fixed }: NewRegistration,
+): Promise<Id<'trainingRegistrations'>> {
+  return ctx.db.insert('trainingRegistrations', {
+    ...fixed,
+    ...(ageConfirmedAt !== undefined && { ageConfirmedAt }),
+    ...(classId !== undefined && { classId }),
+    trainingId: training._id,
+    organizationId: training.organizationId,
+    participantKey:
+      classId === undefined
+        ? participantKey(fixed.participant)
+        : classParticipantKey(classId, fixed.participant),
+    createdAt: Date.now(),
+  });
+}
+
+/**
+ * The caller has checked access, the rules, and that every class has a place less those in `replaced`, the participant's own
+ * single-class rows, which the series takes the place of: each class's counter moves with the rows.
+ */
 export async function insertTrainingSeriesRegistration(
   ctx: MutationCtx,
   training: Doc<'trainings'>,
   classes: readonly Doc<'trainingClasses'>[],
-  registration: {
-    userId: Id<'users'>;
-    participant: Participant;
-    ageConfirmedAt?: number;
-  },
+  registration: NewRegistration,
+  replaced: readonly Doc<'trainingRegistrations'>[] = [],
 ): Promise<Id<'trainingRegistrations'>> {
-  const { ageConfirmedAt, ...fixed } = registration;
-  const id = await ctx.db.insert('trainingRegistrations', {
-    ...fixed,
-    ...(ageConfirmedAt !== undefined && { ageConfirmedAt }),
-    trainingId: training._id,
-    organizationId: training.organizationId,
-    participantKey: participantKey(registration.participant),
-    createdAt: Date.now(),
-  });
-  for (const row of classes) {
-    await ctx.db.patch('trainingClasses', row._id, { registeredCount: row.registeredCount + 1 });
+  const id = await insertRegistration(ctx, training, undefined, registration);
+  const freedByClass = new Map<Id<'trainingClasses'>, number>();
+  for (const row of replaced) {
+    await ctx.db.delete('trainingRegistrations', row._id);
+    if (row.classId !== undefined) {
+      freedByClass.set(row.classId, (freedByClass.get(row.classId) ?? 0) + 1);
+    }
   }
+  for (const row of classes) {
+    const freed = freedByClass.get(row._id) ?? 0;
+    freedByClass.delete(row._id);
+    await ctx.db.patch('trainingClasses', row._id, {
+      registeredCount: row.registeredCount + 1 - freed,
+    });
+  }
+  for (const [classId, freed] of freedByClass) {
+    const row = await ctx.db.get('trainingClasses', classId);
+    if (row) await lowerRegisteredCount(ctx, row, freed);
+  }
+  return id;
+}
+
+/** The caller has checked access, the rules, and that the class has a place. */
+export async function insertTrainingClassRegistration(
+  ctx: MutationCtx,
+  training: Doc<'trainings'>,
+  trainingClass: Doc<'trainingClasses'>,
+  registration: NewRegistration,
+): Promise<Id<'trainingRegistrations'>> {
+  const id = await insertRegistration(ctx, training, trainingClass._id, registration);
+  await ctx.db.patch('trainingClasses', trainingClass._id, {
+    registeredCount: trainingClass.registeredCount + 1,
+  });
   return id;
 }
 

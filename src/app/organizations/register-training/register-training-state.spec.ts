@@ -1,4 +1,5 @@
 import {
+  classClosedLine,
   registerTrainingState,
   registrationOptions,
   trainingClosedLine,
@@ -94,6 +95,13 @@ describe('registerTrainingState', () => {
     ).toBe('registered');
   });
 
+  it('is the form for a guardian who can register only a child, once no class reads full', () => {
+    expect(state({ ...OPEN, maximumAge: 17, placesLeft: 1 })).toBe('form');
+    expect(state({ ...OPEN, maximumAge: 17, placesLeft: 0, fullClassDate: '2027-02-09' })).toBe(
+      'full',
+    );
+  });
+
   it('keeps the form for a registered account holder who can still register a child', () => {
     expect(state({ ...OPEN, registered: true })).toBe('form');
   });
@@ -110,5 +118,84 @@ describe('trainingClosedLine', () => {
     expect(trainingClosedLine({ ...OPEN, classCount: 0 }, NOON)).toBe(
       'Every class has passed or is cancelled.',
     );
+  });
+});
+
+describe('for one class', () => {
+  const CLASS = {
+    classId: 'class_2' as NonNullable<Answer['singleClass']>['classId'],
+    date: '2027-02-09',
+    startTime: '18:00',
+    endTime: '19:00',
+    placesLeft: 12,
+    allowed: true,
+  };
+  const withClass = (
+    over: Partial<typeof CLASS & { held: 'series' | 'class' }> = {},
+    answer = {},
+  ) => ({ ...OPEN, ...answer, singleClass: { ...CLASS, ...over } }) as Answer;
+  const stateOfClass = (answer: Parameters<typeof registerTrainingState>[0]['answer'], over = {}) =>
+    state(answer, { classAsked: true, nowMs: Date.parse('2027-02-05T12:00:00Z'), ...over });
+
+  it('is loading, not found, and signed out as for the series', () => {
+    expect(stateOfClass(undefined)).toBe('loading');
+    expect(stateOfClass(null)).toBe('not-found');
+    expect(stateOfClass(withClass(), { signedIn: false })).toBe('signed-out');
+  });
+
+  it('is a class that is not open when the address names none the program holds', () => {
+    expect(stateOfClass(OPEN)).toBe('class-not-open');
+  });
+
+  it('is not allowed for a program that does not take a single class', () => {
+    expect(stateOfClass(withClass({ allowed: false }))).toBe('single-not-allowed');
+  });
+
+  it('is the form while the class is to come, and also on the class date', () => {
+    expect(stateOfClass(withClass())).toBe('form');
+    expect(stateOfClass(withClass(), { nowMs: Date.parse('2027-02-09T23:00:00Z') })).toBe('form');
+  });
+
+  it('is closed the day after the class date, whatever the series deadline says', () => {
+    expect(stateOfClass(withClass(), { nowMs: Date.parse('2027-02-10T12:00:00Z') })).toBe('closed');
+    expect(stateOfClass(withClass(), { nowMs: Date.parse('2027-02-03T12:00:00Z') })).toBe('form');
+  });
+
+  it('is full when the class has no place left', () => {
+    expect(stateOfClass(withClass({ placesLeft: 0 }))).toBe('full');
+  });
+
+  it('ignores a full class elsewhere in the series', () => {
+    expect(stateOfClass(withClass({}, { placesLeft: 0, fullClassDate: '2027-02-16' }))).toBe(
+      'form',
+    );
+  });
+
+  it('is registered once the account holder holds a place in the class and nothing else can be asked for', () => {
+    const held = { minimumAge: 18 };
+    expect(stateOfClass(withClass({ held: 'class' }, held))).toBe('registered');
+    expect(stateOfClass(withClass({ held: 'series' }, { ...held, registered: true }))).toBe(
+      'registered',
+    );
+    expect(
+      stateOfClass(withClass({ held: 'class', placesLeft: 0 }, held), {
+        nowMs: Date.parse('2027-02-10T12:00:00Z'),
+      }),
+    ).toBe('registered');
+  });
+
+  it('keeps the form for a holder who can still register a child', () => {
+    expect(stateOfClass(withClass({ held: 'class' }))).toBe('form');
+  });
+
+  it('leaves out the account holder from the options once they hold a place in the class', () => {
+    expect(registrationOptions(withClass({ held: 'class' }))).toEqual(['minor']);
+    expect(registrationOptions(withClass())).toEqual(['self', 'minor']);
+  });
+});
+
+describe('classClosedLine', () => {
+  it('names the class date, the last day it was open', () => {
+    expect(classClosedLine('2027-02-09')).toBe('It closed after Tue, Feb 9, 2027.');
   });
 });

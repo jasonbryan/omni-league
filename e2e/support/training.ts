@@ -50,6 +50,7 @@ export interface TrainingClassesSeed {
   weeks: number;
   placesPerClass?: number;
   registrationDeadline?: string;
+  allowSingleRegistration?: boolean;
 }
 
 /** Skips the rules of `trainingClasses.schedule`, so the classes may have passed. Local runs only. */

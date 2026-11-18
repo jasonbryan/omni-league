@@ -604,15 +604,19 @@ describe('trainingRegistrations.listMineForTraining', () => {
     await s.alice.mutation(api.trainingRegistrations.register, childArgs(s, 'mixed', 'Zoe R.'));
     await s.alice.mutation(api.trainingRegistrations.register, childArgs(s, 'mixed', 'Amy R.'));
     await s.bob.mutation(api.trainingRegistrations.register, childArgs(s, 'mixed', 'Sam T.'));
-    expect(await list(s.alice)).toEqual({ self: true, minorNames: ['Zoe R.', 'Amy R.'] });
-    expect(await list(s.bob)).toEqual({ self: false, minorNames: ['Sam T.'] });
-    expect(await list(s.carol)).toEqual({ self: false, minorNames: [] });
+    expect(await list(s.alice)).toEqual({
+      self: true,
+      minorNames: ['Zoe R.', 'Amy R.'],
+      classes: [],
+    });
+    expect(await list(s.bob)).toEqual({ self: false, minorNames: ['Sam T.'], classes: [] });
+    expect(await list(s.carol)).toEqual({ self: false, minorNames: [], classes: [] });
   });
 
   test('is empty for a signed-out caller, an unknown program, and a draft program', async () => {
     const s = await setup();
     await s.alice.mutation(api.trainingRegistrations.register, args(s, 'mixed'));
-    const none = { self: false, minorNames: [] };
+    const none = { self: false, minorNames: [], classes: [] };
     expect(await list(s.t)).toEqual(none);
     expect(await list(s.alice, 'no-such-clinic')).toEqual(none);
     expect(await list(s.alice, 'secret-draft-clinic')).toEqual(none);
