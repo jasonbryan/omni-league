@@ -447,6 +447,34 @@ describe('testing:seedTrainingWaitlistEntry', () => {
     expect(rows[0]).not.toHaveProperty('classId');
   });
 
+  test('puts the participant on the waitlist of one class when given its date, whether or not it is full', async () => {
+    const t = await withAccount();
+    await t.mutation(internal.testing.seedTrainingClasses, {
+      organizationSlug: ENTRY.organizationSlug,
+      trainingSlug: ENTRY.trainingSlug,
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '19:00',
+      firstDate: '2020-01-07',
+      weeks: 3,
+      placesPerClass: 12,
+      registrationDeadline: '2020-01-01',
+    });
+    await t.mutation(internal.testing.seedTrainingWaitlistEntry, { ...ENTRY, date: '2020-01-14' });
+    const [row] = await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect());
+    const trainingClass = await t.run(async (ctx) =>
+      (await ctx.db.query('trainingClasses').collect()).find((c) => c.date === '2020-01-14'),
+    );
+    expect(row).toMatchObject({
+      classId: trainingClass?._id,
+      participantKey: `class:${trainingClass?._id}:minor:maya r.`,
+      status: 'waiting',
+    });
+    await expect(
+      t.mutation(internal.testing.seedTrainingWaitlistEntry, { ...ENTRY, date: '2020-02-02' }),
+    ).rejects.toThrow(/No class is on 2020-02-02/);
+  });
+
   test('refuses an unknown account and a training program it does not have', async () => {
     const t = await withAccount();
     await expect(

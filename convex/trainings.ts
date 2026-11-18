@@ -21,11 +21,14 @@ import {
   upcomingClassesOf,
   upcomingTrainings,
 } from './lib/trainingPublicList';
+import { dateAtUtcMinus12 } from './lib/registration';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs, trainingDetails } from './lib/trainingLookup';
 import { trainingPatternValidator } from './lib/trainingPattern';
-import { seriesEntryWaits, waitingSeriesEntriesOf } from './lib/trainingWaitlistReads';
+import { classesToAttend } from './lib/trainingRegistrationReads';
+import { waitingQueueOf } from './lib/trainingWaitlistQueue';
+import { seriesEntryWaits } from './lib/trainingWaitlistReads';
 import { programStatusValidator } from './lib/programs';
 import { isChoosableSlug } from './lib/slugs';
 import { sportValidator } from './lib/sports';
@@ -186,7 +189,8 @@ export const getForManagement = query({
       return null;
     }
     const { membership } = await requireProgramOrganizerOrForbidden(ctx, found.program);
-    const waiting = await waitingSeriesEntriesOf(ctx, found.training._id);
+    const classes = await classesToAttend(ctx, found.training._id, dateAtUtcMinus12(Date.now()));
+    const waiting = await waitingQueueOf(ctx, found.training._id, classes);
     return {
       trainingId: found.training._id,
       organizationId: organization._id,

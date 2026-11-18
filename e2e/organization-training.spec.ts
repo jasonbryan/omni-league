@@ -465,6 +465,12 @@ function firstTuesdayTwoWeeksOut(): string {
   }
 }
 
+function classDate(week: number): string {
+  const date = new Date(`${firstTuesdayTwoWeeksOut()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + week * 7);
+  return date.toISOString().slice(0, 10);
+}
+
 function aDayThatIsNotTuesday(): string {
   for (let days = 15; ; days++) {
     const date = dateFromToday(days);
@@ -1409,7 +1415,7 @@ test.describe('Training: the series waitlist', () => {
     await expect(promoteButton(page)).toHaveAttribute('aria-disabled', 'true');
     await expect(panel(page).locator('[data-slot="promote-hint"]')).toBeVisible();
     await expect(panel(page).locator('[data-slot="promote-hint"]')).toHaveText(
-      'Promote needs a place free in every class. Raise the places first if one is full.',
+      'Promote needs a free place: in every class for the series, in its class for one class. Raise the places first if one is full.',
     );
     await promoteButton(page).click({ force: true });
     const result = panel(page).getByRole('alert');
@@ -1435,10 +1441,11 @@ test.describe('Training: the series waitlist', () => {
         .first()
         .getByRole('button', { name: /registered in / }),
     ).toHaveText(/^1 of 2 registered in /);
-    await expect(promoteButton(page)).toHaveCount(1);
-    await expect(promoteButton(page)).not.toHaveAttribute('aria-disabled', 'true');
-    await expect(promoteButton(page)).toHaveAccessibleName(`Promote ${player.name}`);
-    await promoteButton(page).click();
+    await expect(promoteButton(page)).toHaveCount(2);
+    await expect(promoteButton(page).first()).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(promoteButton(page).first()).toHaveAccessibleName(`Promote ${player.name}`);
+    await expect(promoteButton(page).nth(1)).toHaveAttribute('aria-disabled', 'true');
+    await promoteButton(page).first().click();
     const result = panel(page).getByRole('status').filter({ hasText: 'has a place' });
     await expect(result).toContainText(
       `${player.name} has a place. Registered for every class of ${SERVING.name}.`,
@@ -1499,10 +1506,14 @@ test.describe('Training: the series waitlist', () => {
     await expectAccessible(page);
   });
 
+  const UNBROKEN_CHILD = { kind: 'minor', minorName: UNBROKEN } as const;
   const WAITING_PEOPLE = [
     { owner: 'player', participant: SELF },
     { owner: 'guardian', participant: MAYA },
-    { owner: 'guardian', participant: { kind: 'minor', minorName: UNBROKEN } as const },
+    { owner: 'guardian', participant: UNBROKEN_CHILD },
+    { owner: 'player', participant: SELF, week: 1 },
+    { owner: 'guardian', participant: MAYA, week: 1 },
+    { owner: 'guardian', participant: UNBROKEN_CHILD, week: 2 },
   ] as const;
 
   for (const width of [320, 360, 1280]) {
@@ -1518,19 +1529,20 @@ test.describe('Training: the series waitlist', () => {
         email: `e2e-a-very-long-guardian-address-${base.email}`,
       });
       const player = await seedUser(newUser('Player'));
-      for (const { owner, participant } of WAITING_PEOPLE) {
+      for (const person of WAITING_PEOPLE) {
         await seedTrainingWaitlistEntry(
           tenant,
           SERVING.slug,
-          owner === 'player' ? player : guardian,
-          participant,
+          person.owner === 'player' ? player : guardian,
+          person.participant,
+          'week' in person ? classDate(person.week) : undefined,
         );
       }
       const held = await holdQueries(page, [LIST]);
       await page.goto(path);
       await expect.poll(() => held.isHolding()).toBe(true);
       await expect(classRows(page)).toHaveCount(3);
-      await expect(waitingRows(page)).toHaveCount(3);
+      await expect(waitingRows(page)).toHaveCount(WAITING_PEOPLE.length);
       const measure = async () => ({
         classes: await box(page.locator('#classes')),
         section: await box(panel(page).locator('section')),
@@ -1563,6 +1575,94 @@ test.describe('Training: the series waitlist', () => {
       if (width === 320) expect(await checkReflow(page)).toMatchObject({ passed: true });
     });
   }
+
+  test('a class entry and a series entry wait in one list, each marked, and Promote goes to the one a place can serve', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await waitingProgram(page, 1);
+    const player = await seedUser(newUser('Player'));
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, player, SELF);
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, guardian, MAYA, classDate(1));
+    await setTrainingClassRegistered(tenant, SERVING.slug, classDate(1), 0);
+    await page.goto(path);
+    await expect(waitingRows(page)).toHaveCount(2);
+    await expect(waitingRows(page).locator('[data-slot="waiting-kind"]')).toHaveText([
+      'Series',
+      'This class',
+    ]);
+    await expect(waitingRows(page).nth(0).locator('[data-slot="waiting-class"]')).toHaveCount(0);
+    await expect(waitingRows(page).nth(1).locator('[data-slot="waiting-class"]')).toHaveText(
+      /^\w{3}, \w{3} \d{1,2}, \d{4}$/,
+    );
+    await expect(promoteButton(page)).toHaveCount(2);
+    await expect(promoteButton(page).nth(0)).toHaveAttribute('aria-disabled', 'true');
+    await expect(promoteButton(page).nth(1)).not.toHaveAttribute('aria-disabled', 'true');
+    await screenshot(page, testInfo, '368-waitlist-mixed');
+    await expectAccessible(page);
+
+    await promoteButton(page).nth(0).click({ force: true });
+    await expect(panel(page).getByRole('alert')).toContainText(
+      `${player.name} could not be given a place. No place is free in every class. Raise the places first.`,
+    );
+
+    await promoteButton(page).nth(1).click();
+    const result = panel(page).getByRole('status').filter({ hasText: 'has a place' });
+    await expect(result).toContainText(`Maya R. has a place. Registered for `);
+    await expect(result).toContainText(`of ${SERVING.name}.`);
+    await expect(result).toBeFocused();
+    await expect(waitingRows(page)).toHaveCount(1);
+    await expect(waitingRows(page).first()).toContainText(player.name);
+    await expect(
+      classRows(page)
+        .nth(1)
+        .getByRole('button', { name: /registered in / }),
+    ).toHaveText(/^1 of 1 registered in /);
+    await screenshot(page, testInfo, '368-waitlist-mixed-promoted');
+    await expectAccessible(page);
+  });
+
+  test('a row that has its place but is not the next says to give the places to the one who joined first', async ({
+    page,
+  }) => {
+    const { tenant, path } = await waitingProgram(page, 1);
+    const first = await seedUser(newUser('First'));
+    const second = await seedUser(newUser('Second'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, first, SELF, classDate(0));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, second, SELF, classDate(0));
+    await setTrainingClassRegistered(tenant, SERVING.slug, classDate(0), 0);
+    await page.goto(path);
+    await expect(promoteButton(page)).toHaveCount(2);
+    await expect(promoteButton(page).nth(0)).not.toHaveAttribute('aria-disabled', 'true');
+    await promoteButton(page).nth(1).click({ force: true });
+    await expect(panel(page).getByRole('alert')).toContainText(
+      `${second.name} could not be given a place. Give the places to the person who joined first.`,
+    );
+  });
+
+  test('a class that people wait for offers no Cancel and says it has a waitlist', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, path } = await waitingProgram(page, 1);
+    const guardian = await seedUser(newUser('Guardian'));
+    await seedTrainingWaitlistEntry(tenant, SERVING.slug, guardian, MAYA, classDate(1));
+    await page.goto(path);
+    await expect(classRows(page)).toHaveCount(3);
+    await expect(classRows(page).nth(1).locator('[data-slot="class-required"]')).toHaveText(
+      'Has registrations',
+    );
+    await setTrainingClassRegistered(tenant, SERVING.slug, classDate(1), 0);
+    await expect(classRows(page).nth(1).locator('[data-slot="class-required"]')).toHaveText(
+      'Has a waitlist',
+    );
+    await expect(
+      classRows(page)
+        .nth(1)
+        .getByRole('button', { name: /^Cancel/ }),
+    ).toHaveCount(0);
+    await screenshot(page, testInfo, '368-class-has-waitlist');
+    await expectAccessible(page);
+  });
 
   test('a section with no one waiting holds the same room while it loads as its message does', async ({
     page,

@@ -318,7 +318,7 @@ describe('seed:demo accounts: a new deployment', () => {
         campRegistrations: 2,
         campWaitlistEntries: 1,
         trainingRegistrations: 2,
-        trainingWaitlistEntries: 1,
+        trainingWaitlistEntries: 2,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -1165,10 +1165,10 @@ describe('seed:demo accounts: training waitlist', () => {
   const DROP_IN = { orgSlug: GULF_COAST, trainingSlug: 'thursday-drop-in-clinic' };
 
   test(
-    'player@ holds the one place in every class of the Thursday Drop-in Clinic, so each class reads Full and guardian@ waits there with Maya R. at position 1, and a rerun adds none',
+    'player@ holds the one place in every class of the Thursday Drop-in Clinic, so each class reads Full, guardian@ waits there with Maya R. for the series at position 1 and with Sam R. for the third class, and a rerun adds none',
     async () => {
       const t = setup();
-      expect((await run(t)).trainingWaitlistEntries).toBe(1);
+      expect((await run(t)).trainingWaitlistEntries).toBe(2);
       const { training, classes, entries, registrations, users } = await t.run(async (ctx) => {
         const found = (await ctx.db.query('trainings').collect()).find(
           (row) => row.coachName === 'Marcus Webb',
@@ -1195,19 +1195,37 @@ describe('seed:demo accounts: training waitlist', () => {
         userId: users.find((user) => user.name === 'Demo Player')!._id,
       });
       expect(registrations[0]).not.toHaveProperty('classId');
-      expect(entries).toHaveLength(1);
-      expect(entries[0]).toMatchObject({
+      expect(entries).toHaveLength(2);
+      const guardianId = users.find((user) => user.name === 'Demo Guardian')!._id;
+      const seriesEntry = entries.find((row) => row.classId === undefined)!;
+      expect(seriesEntry).toMatchObject({
         trainingId: training._id,
         status: 'waiting',
         participant: { kind: 'minor', minorName: 'Maya R.' },
         participantKey: 'minor:maya r.',
-        userId: users.find((user) => user.name === 'Demo Guardian')!._id,
+        userId: guardianId,
       });
-      expect(entries[0]).not.toHaveProperty('classId');
+      const classEntry = entries.find((row) => row.classId !== undefined)!;
+      expect(classEntry).toMatchObject({
+        trainingId: training._id,
+        classId: classes[2]._id,
+        status: 'waiting',
+        participant: { kind: 'minor', minorName: 'Sam R.' },
+        participantKey: `class:${classes[2]._id}:minor:sam r.`,
+        userId: guardianId,
+      });
+      expect(classEntry.requestedAt).toBeGreaterThanOrEqual(seriesEntry.requestedAt);
 
       const guardian = await as(t, EMAILS.guardian);
       expect(await guardian.query(api.trainingWaitlist.listMineForTraining, DROP_IN)).toEqual([
         { participant: { kind: 'minor', minorName: 'Maya R.' }, position: 1 },
+      ]);
+      expect(await guardian.query(api.trainingWaitlist.listMineForClasses, DROP_IN)).toEqual([
+        {
+          classId: classes[2]._id,
+          participant: { kind: 'minor', minorName: 'Sam R.' },
+          position: 2,
+        },
       ]);
       const page = await guardian.query(api.trainings.getPublicPage, DROP_IN);
       expect(page?.classes.map((row) => row.placesLeft)).toEqual(Array(4).fill(0));
@@ -1221,11 +1239,40 @@ describe('seed:demo accounts: training waitlist', () => {
         (await admin.query(api.trainingWaitlist.listForTraining, { trainingId: training._id })).map(
           ({ name, guardian: holder, canPromote }) => [name, holder?.name, canPromote],
         ),
-      ).toEqual([['Maya R.', 'Demo Guardian', false]]);
+      ).toEqual([
+        ['Maya R.', 'Demo Guardian', false],
+        ['Sam R.', 'Demo Guardian', false],
+      ]);
 
       expect((await run(t)).trainingWaitlistEntries).toBe(0);
       expect(await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect())).toHaveLength(
-        1,
+        2,
+      );
+    },
+    SLOW,
+  );
+});
+
+describe('seed:demo accounts: the class waitlist on a deployment seeded before it', () => {
+  test(
+    'adds Sam R. to the third class once, beside Maya R., and changes nothing else',
+    async () => {
+      const t = setup();
+      await run(t);
+      const classEntries = () =>
+        t.run(async (ctx) =>
+          (await ctx.db.query('trainingWaitlistEntries').collect()).filter(
+            (row) => row.classId !== undefined,
+          ),
+        );
+      const [added] = await classEntries();
+      await t.run((ctx) => ctx.db.delete('trainingWaitlistEntries', added._id));
+      expect(await classEntries()).toHaveLength(0);
+      expect((await run(t)).trainingWaitlistEntries).toBe(1);
+      expect(await classEntries()).toHaveLength(1);
+      expect((await run(t)).trainingWaitlistEntries).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('trainingWaitlistEntries').collect())).toHaveLength(
+        2,
       );
     },
     SLOW,

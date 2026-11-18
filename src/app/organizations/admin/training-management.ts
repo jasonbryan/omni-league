@@ -463,9 +463,13 @@ type Outcome =
                                   />Restore<span class="sr-only"> {{ dateOf(row) }}</span>
                                 }
                               </button>
-                            } @else if (row.registeredCount > 0) {
-                              <span data-slot="class-required" class="text-sm text-muted-foreground"
-                                >Has registrations</span
+                            } @else if (row.registeredCount > 0 || row.waitlistCount) {
+                              <span
+                                data-slot="class-required"
+                                class="text-sm text-muted-foreground"
+                                >{{
+                                  row.registeredCount > 0 ? 'Has registrations' : 'Has a waitlist'
+                                }}</span
                               >
                             } @else {
                               <button

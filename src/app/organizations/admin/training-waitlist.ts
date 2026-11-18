@@ -14,6 +14,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleArrowUp } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
+import { trainingClassDate } from '../../../../convex/lib/trainingPattern';
 import {
   TRAINING_WAITLIST_MESSAGES,
   type TrainingWaitlistCode,
@@ -40,7 +41,7 @@ import { formatDay } from './format-day';
 
 export const NO_ONE_WAITING_FOR_SERIES = 'No one is waiting.';
 export const PROMOTE_HINT =
-  'Promote needs a place free in every class. Raise the places first if one is full.';
+  'Promote needs a free place: in every class for the series, in its class for one class. Raise the places first if one is full.';
 
 type Result =
   | { kind: 'promoted'; text: AlertText }
@@ -55,7 +56,17 @@ const REFUSAL_CODES: readonly TrainingWaitlistCode[] = [
   'notNext',
   'noUpcomingClass',
   'accountGone',
+  'classGone',
 ];
+
+interface WaitingRow {
+  trainingWaitlistEntryId: EntryId;
+  name: string;
+  canPromote: boolean;
+  hasPlace: boolean;
+  classId?: Id<'trainingClasses'>;
+  classDate?: string;
+}
 
 /** Only the message of a refusal the server words for the organizer is shown: any other failure's message is server detail. */
 function refusalMessage(error: unknown): string | null {
@@ -70,7 +81,7 @@ function refusalMessage(error: unknown): string | null {
 
 /**
  * Promote acts at once, with no confirmation: it only gives the person the places they waited for, and the result says what happened.
- * The first row always carries Promote, dimmed while no place is free, so every row keeps its height as the list answers.
+ * Every row carries Promote, dimmed unless it is the next to be given a place, so every row keeps its height as the list answers.
  */
 @Component({
   selector: 'app-training-waitlist',
@@ -177,40 +188,45 @@ function refusalMessage(error: unknown): string | null {
                           >
                         }
                       </th>
-                      <td hlmTd>
-                        <span hlmBadge variant="secondary" data-slot="waiting-kind">Series</span>
+                      <td hlmTd class="whitespace-nowrap">
+                        <span hlmBadge variant="secondary" data-slot="waiting-kind">{{
+                          row.classDate === undefined ? 'Series' : 'This class'
+                        }}</span>
+                        @if (row.classDate; as classDate) {
+                          <span
+                            data-slot="waiting-class"
+                            class="ms-1.5 text-xs text-muted-foreground"
+                            >{{ classDay(classDate) }}</span
+                          >
+                        }
                       </td>
                       <td hlmTd class="text-end whitespace-nowrap">{{ day(row.requestedAt) }}</td>
                       <td hlmTd class="sticky end-0 bg-card text-end">
-                        @if (index === 0) {
-                          <button
-                            type="button"
-                            data-slot="button"
-                            [class]="outlineButton"
-                            [class.opacity-50]="
-                              !row.canPromote || (!online() && promoting() === null)
-                            "
-                            [attr.aria-disabled]="
-                              !row.canPromote || promoting() !== null || !online() ? 'true' : null
-                            "
-                            aria-describedby="promote-hint"
-                            (click)="promote(row)"
-                          >
-                            @if (promoting() === row.trainingWaitlistEntryId) {
-                              <hlm-spinner data-icon="inline-start" />Promoting…<span
-                                class="sr-only"
-                              >
-                                {{ row.name }}</span
-                              >
-                            } @else {
-                              <ng-icon
-                                name="lucideCircleArrowUp"
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                              />Promote<span class="sr-only"> {{ row.name }}</span>
-                            }
-                          </button>
-                        }
+                        <button
+                          type="button"
+                          data-slot="button"
+                          [class]="outlineButton"
+                          [class.opacity-50]="
+                            !row.canPromote || (!online() && promoting() === null)
+                          "
+                          [attr.aria-disabled]="
+                            !row.canPromote || promoting() !== null || !online() ? 'true' : null
+                          "
+                          aria-describedby="promote-hint"
+                          (click)="promote(row)"
+                        >
+                          @if (promoting() === row.trainingWaitlistEntryId) {
+                            <hlm-spinner data-icon="inline-start" />Promoting…<span class="sr-only">
+                              {{ row.name }}</span
+                            >
+                          } @else {
+                            <ng-icon
+                              name="lucideCircleArrowUp"
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />Promote<span class="sr-only"> {{ row.name }}</span>
+                          }
+                        </button>
                       </td>
                     </tr>
                   }
@@ -257,12 +273,10 @@ function refusalMessage(error: unknown): string | null {
                         <div hlmSkeleton class="ms-auto h-4 w-20 rounded-md"></div>
                       </td>
                       <td hlmTd class="text-end">
-                        @if (row === 0) {
-                          <div
-                            hlmSkeleton
-                            class="ms-auto h-9 w-24 rounded-lg pointer-coarse:h-11"
-                          ></div>
-                        }
+                        <div
+                          hlmSkeleton
+                          class="ms-auto h-9 w-24 rounded-lg pointer-coarse:h-11"
+                        ></div>
                       </td>
                     </tr>
                   }
@@ -294,8 +308,8 @@ export class TrainingWaitlist {
   protected readonly online = injectOnline();
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;
+  protected readonly classDay = trainingClassDate;
   protected readonly noOneWaiting = NO_ONE_WAITING_FOR_SERIES;
-  protected readonly noFreePlace = TRAINING_WAITLIST_MESSAGES.noFreePlace;
   protected readonly promoteHint = PROMOTE_HINT;
   protected readonly rows = this.list.value;
   protected readonly failed = computed(() => this.list.error() !== undefined);
@@ -315,11 +329,7 @@ export class TrainingWaitlist {
     return guardian.email === '' ? guardian.name : `${guardian.name}, ${guardian.email}`;
   }
 
-  protected async promote(row: {
-    trainingWaitlistEntryId: EntryId;
-    name: string;
-    canPromote: boolean;
-  }): Promise<void> {
+  protected async promote(row: WaitingRow): Promise<void> {
     if (this.promoting() !== null) return;
     if (!this.online()) {
       this.show({
@@ -329,7 +339,7 @@ export class TrainingWaitlist {
       return;
     }
     if (!row.canPromote) {
-      this.show(this.refused(row.name, this.noFreePlace));
+      this.show(this.refused(row.name, this.blockedReason(row)));
       return;
     }
     this.result.set(null);
@@ -340,7 +350,10 @@ export class TrainingWaitlist {
         kind: 'promoted',
         text: {
           title: `${row.name} has a place.`,
-          description: `Registered for every class of ${this.trainingName()}.`,
+          description:
+            row.classDate === undefined
+              ? `Registered for every class of ${this.trainingName()}.`
+              : `Registered for ${trainingClassDate(row.classDate)} of ${this.trainingName()}.`,
         },
       });
     } catch (error) {
@@ -355,6 +368,13 @@ export class TrainingWaitlist {
     } finally {
       this.promoting.set(null);
     }
+  }
+
+  private blockedReason(row: WaitingRow): string {
+    if (row.hasPlace) return TRAINING_WAITLIST_MESSAGES.notNext;
+    return row.classDate === undefined
+      ? TRAINING_WAITLIST_MESSAGES.noFreePlace
+      : TRAINING_WAITLIST_MESSAGES.noFreePlaceInClass;
   }
 
   private refused(name: string, description: string): Result {

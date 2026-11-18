@@ -4,7 +4,7 @@ import { today } from './campPublicList';
 import { leagueLocations } from './publicLeague';
 import { sportName, type Sport } from './sports';
 import { MAX_TRAINING_WEEKS } from './trainingPattern';
-import { seriesEntryWaits } from './trainingWaitlistReads';
+import { classesWithWaitingEntries, seriesEntryWaits } from './trainingWaitlistReads';
 
 export function upcomingTrainings(
   ctx: Pick<QueryCtx, 'db'>,
@@ -48,17 +48,18 @@ export async function upcomingClassesOf(ctx: Pick<QueryCtx, 'db'>, trainingId: I
     .query('trainingClasses')
     .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId).gte('date', from))
     .take(MAX_TRAINING_WEEKS);
-  // A waiting series entry holds the next place in every class, so each reads as full.
+  const scheduled = classes.filter((row) => row.status === 'scheduled');
+  // A waiting series entry holds the next place in every class, and a class entry the next place of its class, so each reads as full.
   const seriesWaits = await seriesEntryWaits(ctx, trainingId);
-  return classes
-    .filter((row) => row.status === 'scheduled')
-    .map((row) => ({
-      classId: row._id,
-      date: row.date,
-      startTime: row.startTime,
-      endTime: row.endTime,
-      placesLeft: seriesWaits ? 0 : Math.max(0, row.places - row.registeredCount),
-    }));
+  const withWaiting = await classesWithWaitingEntries(ctx, scheduled);
+  return scheduled.map((row) => ({
+    classId: row._id,
+    date: row.date,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    placesLeft:
+      seriesWaits || withWaiting.has(row._id) ? 0 : Math.max(0, row.places - row.registeredCount),
+  }));
 }
 
 /** Read from the classes, not `lastClassDate`, which a training row written before it existed lacks. */

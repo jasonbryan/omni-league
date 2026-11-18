@@ -17,7 +17,11 @@ import {
   type TrainingRegistrationRefusal,
 } from './trainingRegistration';
 import { TRAINING_WAITLIST_MESSAGES, type TrainingWaitlistCode } from './trainingWaitlist';
-import { waitingMinorEntriesOf, waitingSeriesEntryOf } from './trainingWaitlistReads';
+import {
+  waitingClassEntriesOfUser,
+  waitingMinorEntriesOf,
+  waitingSeriesEntryOf,
+} from './trainingWaitlistReads';
 import {
   classRegistrationOf,
   minorSeriesRegistrationsOf,
@@ -89,7 +93,31 @@ async function refuseIfHeld(
       message: TRAINING_WAITLIST_MESSAGES.alreadyWaiting(waiting.participant),
     });
   }
-  if (scope.kind !== 'class') return;
+  const key = participantKey(participant);
+  const classWaits = (await waitingClassEntriesOfUser(ctx, training._id, userId)).filter(
+    (entry) => participantKey(entry.participant) === key,
+  );
+  if (scope.kind === 'series') {
+    // The series would take the place the class entry waits for, ahead of the queue.
+    if (classWaits.length > 0) {
+      refuseTrainingRegistration({
+        code: 'waitingForClass',
+        ...field,
+        message: TRAINING_WAITLIST_MESSAGES.waitingForClass(participant),
+      });
+    }
+    return;
+  }
+  if (classWaits.some((entry) => entry.classId === scope.trainingClass._id)) {
+    refuseTrainingRegistration({
+      code: 'alreadyWaitingForClass',
+      ...field,
+      message: TRAINING_WAITLIST_MESSAGES.alreadyWaitingForClass(
+        participant,
+        scope.trainingClass.date,
+      ),
+    });
+  }
   const single = await classRegistrationOf(
     ctx,
     training._id,
@@ -137,8 +165,9 @@ async function distinctMinorKeysOf(
   const series = await minorSeriesRegistrationsOf(ctx, trainingId, userId);
   const singles = await singleClassRegistrationsOf(ctx, trainingId, userId);
   const waiting = await waitingMinorEntriesOf(ctx, trainingId, userId);
+  const classWaits = await waitingClassEntriesOfUser(ctx, trainingId, userId);
   return new Set(
-    [...series, ...singles, ...waiting].flatMap(({ participant }) =>
+    [...series, ...singles, ...waiting, ...classWaits].flatMap(({ participant }) =>
       participant.kind === 'minor' ? [participantKey(participant)] : [],
     ),
   );

@@ -787,23 +787,38 @@ export const seedTrainingRegistration = internalMutation({
   },
 });
 
-/** Skips every rule of `trainingWaitlist.join`, the places included, so a series can wait with a place free. */
+/** Skips every rule of `trainingWaitlist.join`, the places included, so a series, or the class `date` names, can wait with a place free. */
 export const seedTrainingWaitlistEntry = internalMutation({
   args: {
     organizationSlug: v.string(),
     trainingSlug: v.string(),
     email: v.string(),
     participant: participantValidator,
+    date: v.optional(v.string()),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, trainingSlug, email, participant }) => {
+  handler: async (ctx, { organizationSlug, trainingSlug, email, participant, date }) => {
     assertTestDeployment();
     const organization = await organizationBySlug(ctx, organizationSlug);
     const found = await findTrainingBySlugs(ctx, organization, trainingSlug);
     if (!found)
       throw new Error(`No training program has the web address ${JSON.stringify(trainingSlug)}`);
     const user = await userByEmail(ctx, email);
-    await insertTrainingWaitlistEntry(ctx, found.training, { userId: user._id, participant });
+    const trainingClass =
+      date === undefined
+        ? undefined
+        : await ctx.db
+            .query('trainingClasses')
+            .withIndex('by_trainingId_and_date', (q) =>
+              q.eq('trainingId', found.training._id).eq('date', date),
+            )
+            .unique();
+    if (date !== undefined && !trainingClass) throw new Error(`No class is on ${date}`);
+    await insertTrainingWaitlistEntry(ctx, found.training, {
+      userId: user._id,
+      participant,
+      ...(trainingClass && { classId: trainingClass._id }),
+    });
     return null;
   },
 });

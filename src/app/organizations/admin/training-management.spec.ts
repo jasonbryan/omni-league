@@ -430,6 +430,16 @@ describe('TrainingManagement', () => {
       expect(rowButton('Tue, Jan 5, 2027', 'Cancel').getAttribute('data-slot')).toBe('button');
     });
 
+    it('offers no Cancel on a class that people wait for, and says so', async () => {
+      await open(TRAINING, [trainingClass({ waitlistCount: 2 }), CLASSES[1]]);
+      const [first] = items();
+      expect(text(first.querySelector('[data-slot="class-required"]'))).toBe('Has a waitlist');
+      expect([...first.querySelectorAll('button')].map((button) => text(button))).toEqual([
+        '0 of 12 registered in Tue, Jan 5, 2027',
+        'Save places for Tue, Jan 5, 2027',
+      ]);
+    });
+
     describe('Cancel and Undo', () => {
       async function cancel(date = 'Tue, Jan 5, 2027') {
         rowButton(date, 'Cancel').click();

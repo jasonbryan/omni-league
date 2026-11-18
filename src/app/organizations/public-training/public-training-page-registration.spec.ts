@@ -22,6 +22,7 @@ import type { PublicTrainingData } from './public-training-view';
 const TRAINING = 'trainings:getPublicPage';
 const MINE = 'trainingRegistrations:listMineForTraining';
 const WAITING = 'trainingWaitlist:listMineForTraining';
+const WAITING_CLASSES = 'trainingWaitlist:listMineForClasses';
 const REGISTER_PATH = `/app/organizations/${ORG_SLUG}/training/${TRAINING_SLUG}/register`;
 const NONE = { self: false, minorNames: [] as string[], classes: [] as MineClass[] };
 
@@ -87,10 +88,13 @@ async function settle(): Promise<void> {
   }
 }
 
-/** The caller's registrations apply with their waitlist spots, so an answer to the first also answers the second with none, unless `alone`. */
+/** The caller's registrations apply with their waitlist spots, so an answer to the first also answers the others with none, unless `alone`. */
 async function emit(name: string, value: unknown, { alone = false } = {}): Promise<void> {
-  const waitlist = client.activeSubscriptions.find((s) => s.name === WAITING);
-  if (name === MINE && waitlist && !alone) waitlist.emit([]);
+  if (name === MINE && !alone) {
+    for (const waitlist of [WAITING, WAITING_CLASSES]) {
+      client.activeSubscriptions.find((s) => s.name === waitlist)?.emit([]);
+    }
+  }
   client.activeSubscriptions.find((s) => s.name === name)!.emit(value);
   await settle();
 }
@@ -366,7 +370,7 @@ describe('PublicTrainingPage registration of one class, signed out', () => {
     ]);
   });
 
-  it('leaves the link off a full class and keeps its row', async () => {
+  it('offers the waitlist of a full class in place of Register, and keeps its row', async () => {
     await emit(TRAINING, {
       ...SINGLE_CLASS,
       classes: SINGLE_CLASS.classes.map((row, index) => ({
@@ -374,7 +378,13 @@ describe('PublicTrainingPage registration of one class, signed out', () => {
         placesLeft: index === 1 ? 0 : 5,
       })),
     });
-    expect(classLinks()).toHaveLength(2);
+    expect(classLinks().map((link) => text(link))).toEqual([
+      'Register for Tue, Feb 2, 2027',
+      'Join the waitlist for Tue, Feb 9, 2027',
+      'Register for Tue, Feb 16, 2027',
+    ]);
+    expect(classLinks()[1].getAttribute('href')).toBe(`${REGISTER_PATH}?class=${CLASS_IDS[1]}`);
+    expect(classLinks()[1].getAttribute('data-slot')).toBe('button');
     expect(classActions()).toHaveLength(3);
   });
 
@@ -603,6 +613,7 @@ describe('PublicTrainingPage registration, the waitlist, signed in', () => {
   it('applies the answers together, so the row changes once and not for each answer', async () => {
     await emit(TRAINING, FULL_SERIES);
     await emit(MINE, { self: false, minorNames: ['Sam R.'], classes: [] }, { alone: true });
+    await emit(WAITING_CLASSES, [], { alone: true });
     expect(registered()).toBeNull();
     expect(waiting()).toEqual([]);
     await emit(WAITING, [{ participant: MINOR('Maya R.'), position: 1 }]);
@@ -613,6 +624,7 @@ describe('PublicTrainingPage registration, the waitlist, signed in', () => {
   it('shows what did answer when the other answer fails', async () => {
     await emit(TRAINING, FULL_SERIES);
     await emit(MINE, { self: false, minorNames: ['Sam R.'], classes: [] }, { alone: true });
+    await emit(WAITING_CLASSES, [], { alone: true });
     client.activeSubscriptions.find((s) => s.name === WAITING)!.fail(new Error('Server Error'));
     await settle();
     expect(text(registered())).toBe('Sam R. is registered');
@@ -694,5 +706,152 @@ describe('PublicTrainingPage registration, the waitlist, signed in', () => {
     });
     expect(joinLink()).toBeUndefined();
     expect(text(registerLink())).toBe('Register for the series');
+  });
+});
+
+describe('PublicTrainingPage the waitlist of one class, signed in', () => {
+  const FULL_CLASS: PublicTrainingData = {
+    ...SINGLE_CLASS,
+    minimumAge: 9,
+    maximumAge: 30,
+    classes: SINGLE_CLASS.classes.map((row, index) => ({
+      ...row,
+      placesLeft: index === 1 ? 0 : 5,
+    })),
+  };
+  const ADULTS: PublicTrainingData = { ...FULL_CLASS, minimumAge: 18, maximumAge: undefined };
+  const SELF = { kind: 'self' } as const;
+  const MINOR = (minorName: string) => ({ kind: 'minor', minorName }) as const;
+  const spot = (index: number, participant: unknown, position: number) => ({
+    classId: CLASS_IDS[index],
+    participant,
+    position,
+  });
+  const lines = (index: number) =>
+    [...classRows()[index].querySelectorAll('[data-slot="class-waitlist"]')].map(text);
+  const joinLinkOf = (index: number) =>
+    [...classRows()[index].querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
+      text(link).startsWith('Join the waitlist'),
+    );
+
+  beforeEach(async () => {
+    await open({ signedIn: true });
+  });
+
+  it('asks for the caller’s class waitlist spots in this program with the route’s slugs, once signed in', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    expect(
+      client.activeSubscriptions.filter(({ name }) => name === WAITING_CLASSES).map((s) => s.args),
+    ).toEqual([TRAINING_ARGS]);
+  });
+
+  it('reads "You\'re on the waitlist, position N" on the class row, in place of its link, for the account holder on a program for adults', async () => {
+    await emit(TRAINING, ADULTS);
+    await emit(MINE, NONE);
+    await emit(WAITING_CLASSES, [spot(1, SELF, 2)]);
+    expect(lines(1)).toEqual(["You're on the waitlist, position 2"]);
+    expect(lines(0)).toEqual([]);
+    expect(joinLinkOf(1)).toBeUndefined();
+    expect(classLinks()).toHaveLength(2);
+  });
+
+  it('reads a child’s spot by name, and keeps the join link for another child', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, NONE);
+    await emit(WAITING_CLASSES, [spot(1, MINOR('Sam R.'), 1)]);
+    expect(lines(1)).toEqual(['Sam R. is on the waitlist, position 1']);
+    expect(joinLinkOf(1)).toBeDefined();
+  });
+
+  it('reads each class’s spots on its own row, in the order the server gives them', async () => {
+    await emit(TRAINING, {
+      ...FULL_CLASS,
+      classes: FULL_CLASS.classes.map((row) => ({ ...row, placesLeft: 0 })),
+    });
+    await emit(MINE, NONE);
+    await emit(WAITING_CLASSES, [
+      spot(0, MINOR('Maya R.'), 1),
+      spot(2, SELF, 3),
+      spot(2, MINOR('Sam R.'), 4),
+    ]);
+    expect(lines(0)).toEqual(['Maya R. is on the waitlist, position 1']);
+    expect(lines(1)).toEqual([]);
+    expect(lines(2)).toEqual([
+      "You're on the waitlist, position 3",
+      'Sam R. is on the waitlist, position 4',
+    ]);
+  });
+
+  it('applies the answers together, so the rows change once and not for each answer', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, NONE, { alone: true });
+    await emit(WAITING, [], { alone: true });
+    expect(lines(1)).toEqual([]);
+    await emit(WAITING_CLASSES, [spot(1, MINOR('Sam R.'), 1)]);
+    expect(lines(1)).toHaveLength(1);
+  });
+
+  it('shows what did answer when the class spots fail', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, { self: false, minorNames: ['Sam R.'], classes: [] }, { alone: true });
+    await emit(WAITING, [], { alone: true });
+    client.activeSubscriptions
+      .find((s) => s.name === WAITING_CLASSES)!
+      .fail(new Error('Server Error'));
+    await settle();
+    expect(text(registered())).toBe('Sam R. is registered');
+  });
+
+  it('is plain lines that announce nothing on load, and wrap a long name rather than cut it', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, NONE);
+    await emit(WAITING_CLASSES, [spot(1, MINOR('W'.repeat(60)), 1)]);
+    const [line] = classRows()[1].querySelectorAll('[data-slot="class-waitlist"]');
+    expect(line.tagName).toBe('P');
+    expect(line.hasAttribute('role')).toBe(false);
+    expect(line.querySelector('.wrap-anywhere')).not.toBeNull();
+    expect(line.querySelector('.truncate')).toBeNull();
+  });
+
+  it('keeps the lines in the one row of the class actions, which wraps only while lines wait', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, NONE);
+    expect(classActions()[1].classList).not.toContain('flex-wrap');
+    await emit(WAITING_CLASSES, [spot(1, MINOR('Sam R.'), 1)]);
+    expect(classActions()[1].classList).toContain('flex-wrap');
+    expect(
+      classRows()[1]
+        .querySelector('[data-slot="class-waitlist"]')
+        ?.closest('[data-slot="class-actions"]'),
+    ).toBe(classActions()[1]);
+    expect(classActions()).toHaveLength(3);
+  });
+
+  it('offers no class waitlist to an account holder who waits for the series, and keeps it for a child', async () => {
+    await emit(TRAINING, { ...FULL_CLASS, seriesWaitlist: true });
+    await emit(MINE, NONE);
+    await emit(WAITING, [{ participant: SELF, position: 1 }]);
+    expect(joinLinkOf(1)).toBeDefined();
+    await emit(TRAINING, { ...ADULTS, seriesWaitlist: true });
+    expect(joinLinkOf(1)).toBeUndefined();
+  });
+
+  it('offers no class waitlist to an account holder who holds the series, and keeps it for a child', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, { self: true, minorNames: [], classes: [] });
+    expect(joinLinkOf(1)).toBeDefined();
+    await emit(TRAINING, ADULTS);
+    expect(joinLinkOf(1)).toBeUndefined();
+  });
+
+  it('keeps the class lines apart from the series lines', async () => {
+    await emit(TRAINING, FULL_CLASS);
+    await emit(MINE, NONE);
+    await emit(WAITING, [{ participant: MINOR('Maya R.'), position: 1 }]);
+    await emit(WAITING_CLASSES, [spot(1, MINOR('Sam R.'), 2)]);
+    expect([...host().querySelectorAll('[data-slot="series-waitlist"]')].map(text)).toEqual([
+      'Maya R. is on the waitlist, position 1',
+    ]);
+    expect(lines(1)).toEqual(['Sam R. is on the waitlist, position 2']);
   });
 });

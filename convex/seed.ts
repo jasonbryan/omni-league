@@ -28,6 +28,7 @@ import { findTrainingBySlugs } from './lib/trainingLookup';
 import { hasScheduledClass } from './lib/trainingPublicList';
 import { classesToAttend } from './lib/trainingRegistrationReads';
 import { insertTrainingSeriesRegistration } from './lib/trainingRegistrationWrites';
+import { waitingClassEntriesOfUser } from './lib/trainingWaitlistReads';
 import { insertTrainingWaitlistEntry } from './lib/trainingWaitlistWrites';
 import { WEEKDAY_NAMES, weekdayOf } from './lib/trainingPattern';
 import type { Role } from './lib/roles';
@@ -1805,6 +1806,18 @@ const DEMO_TRAINING_WAITLIST = {
   waiting: { kind: 'minor', minorName: 'Maya R.' },
 } as const;
 
+/**
+ * guardian@'s child "Sam R." waits for the third class of the Thursday Drop-in Clinic, which player@'s series registration fills.
+ * Inserted once: any class entry of guardian@ in the program means it was.
+ */
+const DEMO_TRAINING_CLASS_WAITLIST = {
+  organizationSlug: 'gulf-coast-sport-social',
+  trainingSlug: 'thursday-drop-in-clinic',
+  waitingEmail: `guardian@${DEMO_ACCOUNT_DOMAIN}`,
+  waiting: { kind: 'minor', minorName: 'Sam R.' },
+  classIndex: 2,
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -2776,6 +2789,37 @@ export const insertDemoTrainingWaitlist = internalMutation({
   },
 });
 
+export const insertDemoTrainingClassWaitlist = internalMutation({
+  args: { waitingAuthUserId: v.string() },
+  returns: v.number(),
+  handler: async (ctx, { waitingAuthUserId }) => {
+    assertPreviewDeployment();
+    const demo = DEMO_TRAINING_CLASS_WAITLIST;
+    const organization = await organizationBySlug(ctx, demo.organizationSlug);
+    const found = organization && (await findTrainingBySlugs(ctx, organization, demo.trainingSlug));
+    if (found?.program.status !== 'published') return 0;
+    const waiting = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', waitingAuthUserId))
+      .unique();
+    if (!waiting) return 0;
+    if ((await waitingClassEntriesOfUser(ctx, found.training._id, waiting._id)).length > 0) {
+      return 0;
+    }
+    const classes = await classesToAttend(ctx, found.training._id, dateAtUtcMinus12(Date.now()));
+    const trainingClass = classes[demo.classIndex];
+    if (trainingClass === undefined || trainingClass.registeredCount < trainingClass.places) {
+      return 0;
+    }
+    await insertTrainingWaitlistEntry(ctx, found.training, {
+      userId: waiting._id,
+      participant: demo.waiting,
+      classId: trainingClass._id,
+    });
+    return 1;
+  },
+});
+
 export const insertDemoCampWaitlist = internalMutation({
   args: { authUserId: v.string() },
   returns: v.number(),
@@ -3097,6 +3141,15 @@ export const demo = internalAction({
           });
           trainingRegistrations += waitlist.registrations;
           trainingWaitlistEntries = waitlist.entries;
+        }
+        const classWaiter = people.find(
+          (person) => person.email === DEMO_TRAINING_CLASS_WAITLIST.waitingEmail,
+        );
+        if (classWaiter) {
+          trainingWaitlistEntries += await ctx.runMutation(
+            internal.seed.insertDemoTrainingClassWaitlist,
+            { waitingAuthUserId: classWaiter.authUserId },
+          );
         }
       }
     }
