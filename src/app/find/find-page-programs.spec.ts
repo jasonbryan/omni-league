@@ -393,6 +393,95 @@ describe('Find a program type', () => {
   });
 });
 
+describe('Find a program ended tournaments', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  it('offers no Tournaments chip, and does not count a tournament on the other-types line, when the server leaves an ended one out', async () => {
+    const harness = await open('/programs?q=beach');
+    subscription(SEARCH).emit({
+      more: false,
+      rows: [SUNDAY_4S_ROW],
+      facets: [{ gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' }],
+      typeCounts: [{ type: 'league', count: 1 }],
+    });
+    await settle(harness);
+    expect(typeChips(harness).map((chip) => chip.name)).toEqual(['All', 'Leagues']);
+
+    TestBed.resetTestingModule();
+    const tournaments = await open('/programs?type=tournament&q=beach');
+    subscription(SEARCH).emit({
+      more: false,
+      rows: [],
+      facets: [],
+      typeCounts: [{ type: 'league', count: 1 }],
+    });
+    await settle(tournaments);
+    expect(text(results(tournaments)!.querySelector('[role="status"]'))).toBe(
+      'No tournaments match “beach”',
+    );
+    expect(text(results(tournaments))).toContain('1 program of another type matches.');
+  });
+
+  it('shows the no-tournaments state for a browse of the tournament type when the server leaves only ended ones out', async () => {
+    const harness = await open('/programs?type=tournament');
+    subscription(BROWSE).emit({ ...browseResults([]), typeCounts: [] });
+    await settle(harness);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No tournaments are published yet',
+    );
+  });
+
+  it('lists a tournament in progress at the page’s time with the In progress badge and its dates', async () => {
+    vi.setSystemTime(at('2027-07-10'));
+    const harness = await open('/programs?q=beach');
+    subscription(SEARCH).emit(MIXED);
+    await settle(harness);
+    const tournament = rows(harness)[1];
+    expect(text(tournament.querySelector('p:last-of-type [data-slot="badge"]'))).toBe(
+      'In progress',
+    );
+    expect(text(tournament)).toContain('Jul 10');
+  });
+
+  it('drops a tournament in progress as the page’s clock passes its end date, with no new answer', async () => {
+    vi.setSystemTime(at('2027-07-11'));
+    const harness = await open('/programs?type=tournament');
+    subscription(BROWSE).emit({
+      ...browseResults([GULF_OPEN_ROW]),
+      typeCounts: [{ type: 'tournament', count: 1 }],
+    });
+    await settle(harness);
+    expect(text(rows(harness)[0].querySelector('p:last-of-type [data-slot="badge"]'))).toBe(
+      'In progress',
+    );
+    vi.setSystemTime(at('2027-07-12'));
+    await vi.advanceTimersByTimeAsync(DAY_MS);
+    await settle(harness);
+    expect(rows(harness)).toEqual([]);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No tournaments are published yet',
+    );
+  });
+
+  it('says no tournaments match, and does not count tournaments on the other-types line, once the clock drops the only one', async () => {
+    vi.setSystemTime(at('2027-07-12'));
+    const harness = await open('/programs?type=tournament&q=beach');
+    subscription(SEARCH).emit({
+      more: false,
+      rows: [GULF_OPEN_ROW],
+      facets: [],
+      typeCounts: [{ type: 'tournament', count: 1 }],
+    });
+    await settle(harness);
+    expect(rows(harness)).toEqual([]);
+    expect(text(results(harness)!.querySelector('[role="status"]'))).toBe(
+      'No tournaments match “beach”',
+    );
+    expect(text(results(harness))).not.toContain('of another type');
+    expect(text(results(harness))).not.toContain('of other types');
+  });
+});
+
 describe('Find a program page meta', () => {
   it('has the title Find a program', async () => {
     await open('/programs');
