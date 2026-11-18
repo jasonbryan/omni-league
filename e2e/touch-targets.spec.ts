@@ -307,7 +307,7 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     ]);
     await measureRoute(page, ['/app', HOME_HEADING], async () => {
       await expect(
-        page.getByRole('main').getByRole('link', { name: 'Find a league' }),
+        page.getByRole('main').getByRole('link', { name: 'Find a program' }),
       ).toBeVisible();
     });
     await measureRoute(page, [`/app/organizations/${empty.slug}`, 'Overview']);

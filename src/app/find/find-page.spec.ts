@@ -517,13 +517,13 @@ describe('FindPage when the search fails', () => {
 });
 
 describe('FindPage layout', () => {
-  it('sits in the public layout, whose footer still links to /leagues, which redirects here', async () => {
+  it('sits in the public layout, whose footer links to the page itself', async () => {
     const harness = await open();
     const footerLinks = [...host(harness).querySelectorAll('footer nav a')].map((a) => [
       text(a),
       a.getAttribute('href'),
     ]);
-    expect(footerLinks[0]).toEqual(['Find a league', '/leagues']);
+    expect(footerLinks[0]).toEqual(['Find a program', '/programs']);
     expect(host(harness).querySelector('main#main[tabindex="-1"]')).not.toBeNull();
   });
 });

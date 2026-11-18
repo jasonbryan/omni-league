@@ -23,7 +23,7 @@ const tabOrderBeforeMain = (): string[] =>
     : [
         'a[href="/"]',
         'nav[aria-label="Your account"] a[href="/app"]',
-        'nav[aria-label="Your account"] a[href="/leagues"]',
+        'nav[aria-label="Your account"] a[href="/programs"]',
         'a[href="/app/account"]',
       ];
 
@@ -74,7 +74,7 @@ test.describe('create an organization', () => {
       expectedOrder: [
         'a[href$="#main"]',
         ...tabOrderBeforeMain(),
-        'main a[href="/leagues"]',
+        'main a[href="/programs"]',
         'main a[href="/app/organizations/new"]',
         'main a[href="/app/notifications"]',
       ],

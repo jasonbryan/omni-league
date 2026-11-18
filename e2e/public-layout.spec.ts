@@ -44,7 +44,7 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
 
 const footerLinks = (path: string) =>
   [
-    ['Find a league', '/leagues'],
+    ['Find a program', '/programs'],
     ['Your account', '/app'],
     ['Create an organization', '/app/organizations/new'],
     ['Sign in to manage', `/sign-in?returnTo=${encodeURIComponent(path)}`],

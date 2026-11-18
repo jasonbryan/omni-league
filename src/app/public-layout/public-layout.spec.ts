@@ -102,7 +102,7 @@ describe('PublicLayout', () => {
       const header = page.querySelector('header')!;
       expect(labels(header.querySelectorAll('a'))).toEqual([
         'Omni League',
-        'Find a league',
+        'Find a program',
         'Sign in',
       ]);
       expect(header.querySelector('a')?.getAttribute('href')).toBe('/');
@@ -111,26 +111,26 @@ describe('PublicLayout', () => {
       );
     });
 
-    describe('Find a league', () => {
+    describe('Find a program', () => {
       const search = (page: HTMLElement) =>
         page.querySelector<HTMLFormElement>('header form[role="search"]');
       const phoneLink = (page: HTMLElement) =>
-        page.querySelector<HTMLAnchorElement>('header a[href="/leagues"]');
+        page.querySelector<HTMLAnchorElement>('header a[href="/programs"]');
 
-      it('puts a search form named "Find a league" after the brand link, submitting q to /leagues by GET', async () => {
+      it('puts a search form named "Find a program" after the brand link, submitting q to /programs by GET', async () => {
         const page = await open();
 
         const form = search(page);
-        expect(form?.getAttribute('aria-label')).toBe('Find a league');
+        expect(form?.getAttribute('aria-label')).toBe('Find a program');
         expect(form?.getAttribute('method')).toBe('get');
-        expect(form?.getAttribute('action')).toBe('/leagues');
+        expect(form?.getAttribute('action')).toBe('/programs');
         const label = form?.querySelector('label');
         const field = form?.querySelector('input');
-        expect(label?.textContent.trim()).toBe('Find a league');
+        expect(label?.textContent.trim()).toBe('Find a program');
         expect(label?.htmlFor).toBe(field?.id);
         expect(field?.getAttribute('name')).toBe('q');
         expect(field?.getAttribute('type')).toBe('search');
-        expect(field?.getAttribute('placeholder')).toBe('Find a league');
+        expect(field?.getAttribute('placeholder')).toBe('Find a program');
         expect(form?.querySelector('button')).toBeNull();
         expect(
           page.querySelector('header a')!.compareDocumentPosition(form!) &
@@ -146,16 +146,16 @@ describe('PublicLayout', () => {
         expect(phoneLink(page)?.classList.contains('md:hidden')).toBe(true);
       });
 
-      it('links to /leagues with the name "Find a league" in a target 44px square', async () => {
+      it('links to /programs with the name "Find a program" in a target 44px square', async () => {
         const page = await open();
 
         const link = phoneLink(page);
-        expect(link?.textContent.trim()).toBe('Find a league');
+        expect(link?.textContent.trim()).toBe('Find a program');
         expect(link?.classList.contains('size-11')).toBe(true);
         expect(link?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
       });
 
-      it.each(['/leagues', '/leagues?q=coed', '/programs', '/programs?type=tournament&q=open'])(
+      it.each(['/programs', '/programs?q=coed', '/programs?type=tournament&q=open'])(
         'shows neither on %s, and the account side moves to the right edge',
         async (url) => {
           const page = await open(url);
@@ -190,7 +190,7 @@ describe('PublicLayout', () => {
         },
       );
 
-      it('goes to /leagues?q= with the typed words through the router, not a page load', async () => {
+      it('goes to /programs?q= with the typed words through the router, not a page load', async () => {
         const page = await open();
         const field = search(page)!.querySelector('input')!;
         field.value = '  coed ';
@@ -200,15 +200,15 @@ describe('PublicLayout', () => {
         await harness.fixture.whenStable();
 
         expect(submit.defaultPrevented).toBe(true);
-        expect(TestBed.inject(Router).url).toBe('/leagues?q=coed');
+        expect(TestBed.inject(Router).url).toBe('/programs?q=coed');
       });
 
-      it('goes to /leagues without a query when the field is empty', async () => {
+      it('goes to /programs without a query when the field is empty', async () => {
         const page = await open();
         search(page)!.dispatchEvent(new Event('submit', { cancelable: true }));
         await harness.fixture.whenStable();
 
-        expect(TestBed.inject(Router).url).toBe('/leagues');
+        expect(TestBed.inject(Router).url).toBe('/programs');
       });
     });
 
@@ -280,12 +280,12 @@ describe('PublicLayout', () => {
       expect(labels(footer.querySelectorAll('nav h2'))).toEqual(['Players', 'Organizers']);
     });
 
-    it('links Find a league, Your account, Create an organization, and Sign in to manage', async () => {
+    it('links Find a program, Your account, Create an organization, and Sign in to manage', async () => {
       const page = await open();
 
       const links = [...page.querySelectorAll('footer nav a')];
       expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
-        ['Find a league', '/leagues'],
+        ['Find a program', '/programs'],
         ['Your account', '/app'],
         ['Create an organization', '/app/organizations/new'],
         ['Sign in to manage', '/sign-in?returnTo=%2Forganizations%2Fgulf-coast'],

@@ -27,7 +27,7 @@ const signInOrder = (page: Page) => [
   'button[type="submit"]',
   'main p a[href^="/sign-up"]',
   'footer a[href="/"]',
-  'footer a[href="/leagues"]',
+  'footer a[href="/programs"]',
   'footer a[href="/app"]',
   'footer a[href="/app/organizations/new"]',
   'footer a[href^="/sign-in"]',

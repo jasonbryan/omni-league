@@ -226,9 +226,9 @@ function rowId(
               Leagues this organization runs will be listed here, with their seasons and how to
               register.
             </p>
-            <a routerLink="/leagues" data-slot="button" [class]="findButton" class="mt-6">
+            <a routerLink="/programs" data-slot="button" [class]="findButton" class="mt-6">
               <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
-              Find another league
+              Find another program
             </a>
           </div>
         </div>

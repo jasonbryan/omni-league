@@ -50,6 +50,7 @@ const PUBLIC_PAGE = [
   'top-bar',
   'auth-session',
   'public-layout',
+  'find-a-program-entry-points',
   'public-page-layout-shift',
   'navigation-focus',
 ];

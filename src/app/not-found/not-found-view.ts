@@ -33,9 +33,9 @@ import { bindViewTitle } from '../core/page-title';
           Check the address for typos, or find the league you are looking for.
         </p>
         <div class="mt-8 flex flex-wrap justify-center gap-3">
-          <a routerLink="/leagues" data-slot="button" [class]="findClasses">
+          <a routerLink="/programs" data-slot="button" [class]="findClasses">
             <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
-            Find a league
+            Find a program
           </a>
           <a routerLink="/" data-slot="button" [class]="homeClasses">Go to the home page</a>
         </div>

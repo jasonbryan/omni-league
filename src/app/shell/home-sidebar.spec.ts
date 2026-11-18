@@ -104,7 +104,7 @@ describe('HomeSidebar', () => {
     expect(links(page)).toEqual([
       ['Omni League', '/'],
       ['Home', '/app'],
-      ['Find a league', '/leagues'],
+      ['Find a program', '/programs'],
     ]);
   });
 
@@ -117,7 +117,7 @@ describe('HomeSidebar', () => {
     expect(links(page)).toEqual([
       ['Omni League', '/'],
       ['Home', '/app'],
-      ['Find a league', '/leagues'],
+      ['Find a program', '/programs'],
       ['Gulf Coast Sport & Social', '/app/organizations/gulf-coast'],
     ]);
   });
@@ -182,21 +182,21 @@ describe('HomeSidebar', () => {
     expect(page.textContent).not.toContain('Your teams');
   });
 
-  describe('Find a league and Your teams', () => {
+  describe('Find a program and Your teams', () => {
     const TEAMS = [
       { teamId: 'k57a2rbq9x1hz3m4c8tn0pwd2s6v1f9e', teamName: 'Sand Sharks' },
       { teamId: 'k1aces', teamName: 'Pair of Aces' },
     ];
 
-    it('lists Find a league under Home, with aria-current on Home only', async () => {
+    it('lists Find a program under Home, with aria-current on Home only', async () => {
       const page = await open('/app', [], []);
       expect(links(page).slice(1, 3)).toEqual([
         ['Home', '/app'],
-        ['Find a league', '/leagues'],
+        ['Find a program', '/programs'],
       ]);
       expect(page.querySelectorAll('[aria-current]')).toHaveLength(1);
       expect(page.querySelector('a[href="/app"]')?.getAttribute('aria-current')).toBe('page');
-      expect(page.querySelector('a[href="/leagues"]')?.getAttribute('aria-current')).toBeNull();
+      expect(page.querySelector('a[href="/programs"]')?.getAttribute('aria-current')).toBeNull();
     });
 
     it('lists each team under a "Your teams" group, linking to its page', async () => {
@@ -224,7 +224,7 @@ describe('HomeSidebar', () => {
       expect(links(page).map(([name]) => name)).toEqual([
         'Omni League',
         'Home',
-        'Find a league',
+        'Find a program',
         'Sand Sharks',
         'Pair of Aces',
         'Gulf Coast',

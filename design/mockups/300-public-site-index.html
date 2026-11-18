@@ -89,7 +89,7 @@
               <a
                 class="font-medium text-primary underline underline-offset-4"
                 href="300-public-site-navigation.html"
-                >Public top bar, footer, and Find a league</a
+                >Public top bar, footer, and Find a program</a
               >
             </p>
             <p class="mt-0.5 text-sm text-muted-foreground">
@@ -132,7 +132,7 @@
             </p>
             <p class="mt-0.5 text-sm text-muted-foreground">
               Organization page filtered, the phone filter sheet, the desktop filter panel, no
-              matches; Find a league filtered and its sheet.
+              matches; Find a program filtered and its sheet.
             </p>
           </li>
           <li class="py-3">
@@ -326,7 +326,7 @@
           A league&apos;s <span class="font-medium">division</span> is four platform-defined
           dimensions, shown together as "Coed &middot; 4v4 &middot; BB". Standard values live in
           code beside <code>convex/lib/sports.ts</code>, so the same words filter leagues on every
-          organization&apos;s page and in Find a league. An organization can add its own level
+          organization&apos;s page and in Find a program. An organization can add its own level
           labels (Gold, Social), each mapped to a standard level. The league form offers exactly the
           values the filters use.
         </p>
@@ -585,9 +585,9 @@
             <h3 class="font-semibold">Public pages leave the dashboard shell.</h3>
             <p class="mt-1 text-sm/relaxed">
               Organization, location, league, season, and sport pages get a light top bar (logo,
-              Find a league, Sign in or the account link), no sidebar, and a footer. Visitors browse
-              and register; they do not manage, and the sidebar costs 256px on desktop and a menu
-              tap on phones.
+              Find a program, Sign in or the account link), no sidebar, and a footer. Visitors
+              browse and register; they do not manage, and the sidebar costs 256px on desktop and a
+              menu tap on phones.
             </p>
             <p class="mt-1 text-sm text-muted-foreground">
               <span class="font-medium text-foreground">Inspiration:</span> Eventbrite, Luma, and
@@ -670,11 +670,12 @@
             </p>
           </li>
           <li class="py-4">
-            <h3 class="font-semibold">Find a league.</h3>
+            <h3 class="font-semibold">Find a program.</h3>
             <p class="mt-1 text-sm/relaxed">
-              <code>/leagues</code> searches published leagues by league, organization, or location,
-              with sport chips. It is a GET form, so every search has a URL and works before
-              hydration. The top bar holds the field from 768px and a search button on phones.
+              <code>/programs</code> searches published leagues by league, organization, or
+              location, with sport chips. It is a GET form, so every search has a URL and works
+              before hydration. The top bar holds the field from 768px and a search button on
+              phones.
             </p>
             <p class="mt-1 text-sm text-muted-foreground">
               <span class="font-medium text-foreground">Inspiration:</span> Eventbrite&apos;s search
@@ -684,7 +685,7 @@
           <li class="py-4">
             <h3 class="font-semibold">A footer on public pages.</h3>
             <p class="mt-1 text-sm/relaxed">
-              Omni League, a one-line description, Players links (Find a league, Your account),
+              Omni League, a one-line description, Players links (Find a program, Your account),
               Organizers links (Create an organization, Sign in to manage), Privacy, and Terms.
             </p>
             <p class="mt-1 text-sm text-muted-foreground">
