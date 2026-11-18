@@ -1066,7 +1066,7 @@ test.describe('Camp sessions: who registered', () => {
     await expectAccessible(page);
   });
 
-  test('a long guardian email wraps inside the list and the page does not scroll sideways', async ({
+  test('a long guardian email scrolls inside the list, not the page', async ({
     page,
   }, testInfo) => {
     const { tenant, camp } = await sessionWith(page);
@@ -1079,6 +1079,12 @@ test.describe('Camp sessions: who registered', () => {
     await page.goto(camp);
     await openList(page);
     await expect(registrantsOf(page)).toContainText(guardian.email);
+    await page.setViewportSize({ width: 320, height: 800 });
+    const page320 = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(page320.scroll).toBeLessThanOrEqual(page320.client);
     await screenshot(page, testInfo, 'camp-registrants-long-email');
     await expectAccessible(page);
   });

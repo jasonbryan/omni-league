@@ -55,12 +55,12 @@ export interface RegistrantRow {
             <tbody hlmTBody>
               @for (row of rows; track row.registrationId) {
                 <tr hlmTr data-slot="registrant">
-                  <th hlmTh scope="row" class="text-start">
+                  <th hlmTh scope="row" class="text-start whitespace-nowrap">
                     {{ row.name }}
                     @if (row.guardian; as guardian) {
                       <span
                         data-slot="registrant-guardian"
-                        class="block text-xs font-normal wrap-anywhere text-muted-foreground"
+                        class="block text-xs font-normal text-muted-foreground"
                         >Guardian: {{ guardianLine(guardian) }}</span
                       >
                     }

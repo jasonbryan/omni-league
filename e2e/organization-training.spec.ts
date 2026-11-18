@@ -1114,9 +1114,8 @@ test.describe('Training: who registered', () => {
     await screenshot(page, testInfo, 'training-registrants-loaded');
   });
 
-  test('a minor’s guardian line fits its row, so the rows below stay put on a wide screen, and nothing above or beside the list moves anywhere', async ({
+  test('a minor’s guardian line fits its row, so nothing above, beside, or below the list moves when it answers', async ({
     page,
-    isMobile,
   }, testInfo) => {
     const { loading, release } = await heldList(page, [
       { name: 'Pat Lee' },
@@ -1126,8 +1125,6 @@ test.describe('Training: who registered', () => {
     const loaded = await release();
     expectAboveAndBesideStill(loaded, loading);
     await screenshot(page, testInfo, 'training-registrants-minor-loaded');
-    // On a phone the guardian's address wraps in the narrow name column, and each wrapped line adds its own height, which no skeleton can know.
-    test.skip(isMobile, 'the guardian line wraps at 360px');
     expect(Math.abs(loaded.panel.height - loading.panel.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(loaded.next.y - loading.next.y)).toBeLessThanOrEqual(1);
   });
