@@ -34,6 +34,7 @@ import {
 } from '../organizations/division-filters';
 import { draftLeagueCount } from '../organizations/filter-draft';
 import { LeagueFilters } from '../organizations/league-filters';
+import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { FindContent, type FindPaging, type FindStatus } from './find-content';
@@ -344,11 +345,23 @@ export class FindPage {
     });
   });
 
+  private readonly failed = computed(
+    () => (this.mode() === 'browse' ? this.browseResults : this.results).error() !== undefined,
+  );
+  private readonly searching = computed(
+    () => this.mode() !== 'organizations' && !this.failed() && this.shownResults() === undefined,
+  );
+  // Offline, the not-saved view replaces the skeleton, so no timer runs.
+  private readonly waitedOut = injectPageLoadWait(
+    () => this.searching() && this.online(),
+    () => this.retryHref(),
+  );
+
   protected readonly status = computed((): FindStatus => {
     if (this.mode() === 'organizations') return 'start';
-    const failed = (this.mode() === 'browse' ? this.browseResults : this.results).error();
-    if (failed !== undefined) return 'error';
-    return this.shownResults() === undefined ? 'searching' : 'results';
+    if (this.failed()) return 'error';
+    if (!this.searching()) return 'results';
+    return this.waitedOut() ? 'error' : 'searching';
   });
 
   // The server renders the whole page as the error view so its status is 503; the browser keeps the form and shows an alert in place of the results.
