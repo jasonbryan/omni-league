@@ -16,8 +16,10 @@ import { greeting } from './greeting';
 import { HomeShape, type HomeShapeKind } from './home-shape';
 import { HomeFreeAgents } from './home-free-agents';
 import { HomeNewUser } from './home-new-user';
+import { homeProgramCards } from './home-program-cards';
 import { HomeNextStep } from './home-next-step';
 import { HomeNotifications } from './home-notifications';
+import { HomePrograms } from './home-programs';
 import { HomeRunALeague } from './home-run-a-league';
 import { HomeSkeleton } from './home-skeleton';
 import { HomeTeamCards } from './home-team-cards';
@@ -33,6 +35,7 @@ const HOME_PATH = '/app';
     HomeNewUser,
     HomeNextStep,
     HomeNotifications,
+    HomePrograms,
     HomeRunALeague,
     HomeSkeleton,
     HomeTeamCards,
@@ -74,6 +77,9 @@ const HOME_PATH = '/app';
             @if (freeAgents().length > 0) {
               <app-home-free-agents [registrations]="freeAgents()" [now]="now()" />
             }
+            @if (programs().length > 0) {
+              <app-home-programs [cards]="programs()" />
+            }
             <app-home-notifications />
             @if (canRunLeague()) {
               <app-home-run-a-league />
@@ -98,6 +104,12 @@ export class AccountPage {
   private readonly waiting = injectQuery(api.freeAgents.listMine, () =>
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
+  private readonly camps = injectQuery(api.campRegistrations.listMine, () =>
+    this.auth.convexAuthenticated() ? {} : skipToken,
+  );
+  private readonly trainings = injectQuery(api.trainingRegistrations.listMine, () =>
+    this.auth.convexAuthenticated() ? {} : skipToken,
+  );
   private readonly organizations = injectQuery(api.organizations.listMine, () =>
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
@@ -118,22 +130,36 @@ export class AccountPage {
         ) !== 'ended',
     ),
   );
+  protected readonly programs = computed(() =>
+    homeProgramCards(this.camps.value() ?? [], this.trainings.value() ?? [], this.now()),
+  );
   protected readonly step = computed(() => nextStep(this.teams(), this.now()));
   /** Unknown while the list loads or fails, so "Run a league?" is never offered to someone who may already run one. */
   protected readonly canRunLeague = computed(() => this.organizations.value()?.length === 0);
 
   protected readonly state = computed<'loading' | 'failed' | 'new' | 'ready'>(() => {
-    if (this.mine.error() !== undefined || this.waiting.error() !== undefined) return 'failed';
+    if (
+      this.mine.error() !== undefined ||
+      this.waiting.error() !== undefined ||
+      this.camps.error() !== undefined ||
+      this.trainings.error() !== undefined
+    ) {
+      return 'failed';
+    }
     const organizationsPending =
       this.organizations.value() === undefined && this.organizations.error() === undefined;
     if (
       this.mine.value() === undefined ||
       this.waiting.value() === undefined ||
+      this.camps.value() === undefined ||
+      this.trainings.value() === undefined ||
       organizationsPending
     ) {
       return 'loading';
     }
-    return this.teams().length === 0 && this.freeAgents().length === 0 ? 'new' : 'ready';
+    const empty =
+      this.teams().length === 0 && this.freeAgents().length === 0 && this.programs().length === 0;
+    return empty ? 'new' : 'ready';
   });
   // Read once: a change that settles while the skeleton shows would otherwise redraw it and move the page.
   protected readonly skeletonShape = untracked(this.homeShape.current) ?? 'list';

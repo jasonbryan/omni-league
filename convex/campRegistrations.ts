@@ -4,6 +4,7 @@ import { requireCampSessionOrganizer, requireUser } from './lib/access';
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs, publishedCampOfSession } from './lib/campLookup';
 import { CAMP_NOT_FOUND_CODE, CAMP_REGISTRATION_MESSAGES } from './lib/campRegistration';
 import { minorRegistrationsOf } from './lib/campRegistrationReads';
+import { campMineRowValidator, campRowsOf } from './lib/campRegistrationsMine';
 import { checkedRegistrant, refuseRegistration } from './lib/campRegistrationRules';
 import { campRegistrantsOf } from './lib/campRegistrants';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
@@ -131,6 +132,16 @@ export const getForRegistration = query({
       registered: held !== null,
       waitlisted: waiting?.status === 'waiting',
     };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- reads only the caller's own rows, found from ctx.auth (getCurrentUser); no argument names a user, and a signed-out caller gets an empty list.
+export const listMine = query({
+  args: {},
+  returns: v.array(campMineRowValidator),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    return user ? campRowsOf(ctx, user._id) : [];
   },
 });
 

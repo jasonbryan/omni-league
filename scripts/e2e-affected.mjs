@@ -1012,7 +1012,7 @@ export const AREAS = [
   {
     name: 'account page',
     test: inDir('src/app/account/'),
-    specs: [SESSION, 'app-home'],
+    specs: [SESSION, 'app-home', 'user-home'],
   },
   {
     // The account link shows on every public page for a signed-in visitor, and the specs that sign a user in read it.

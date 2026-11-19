@@ -8,6 +8,7 @@ import { findOrganizationBySlug } from './lib/seasonLookup';
 import { findTrainingBySlugs } from './lib/trainingLookup';
 import { publicPattern } from './lib/trainingPublicList';
 import { trainingClassRegistrantsOf } from './lib/trainingRegistrants';
+import { trainingMineRowValidator, trainingRowsOf } from './lib/trainingRegistrationsMine';
 import {
   TRAINING_NOT_FOUND_CODE,
   TRAINING_REGISTRATION_MESSAGES,
@@ -272,6 +273,16 @@ export const getForRegistration = query({
       ...(seriesWaits && { seriesWaitlist: true }),
       ...(singleClass && { singleClass }),
     };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- reads only the caller's own rows, found from ctx.auth (getCurrentUser); no argument names a user, and a signed-out caller gets an empty list.
+export const listMine = query({
+  args: {},
+  returns: v.array(trainingMineRowValidator),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    return user ? trainingRowsOf(ctx, user._id) : [];
   },
 });
 

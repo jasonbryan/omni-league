@@ -119,9 +119,18 @@ describe('AccountPage', () => {
     page = harness.routeNativeElement!;
   }
 
+  // The camp and training rows are no concern of these tests, so they answer with none; account-page-programs.spec.ts covers them.
   function accept() {
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
+    for (const subscription of convex.activeSubscriptions) {
+      if (
+        subscription.name === 'campRegistrations:listMine' ||
+        subscription.name === 'trainingRegistrations:listMine'
+      ) {
+        subscription.emit([]);
+      }
+    }
   }
 
   async function show(
