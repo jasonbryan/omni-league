@@ -1235,7 +1235,7 @@ const USER_ROWS_BATCH = 100;
 
 type DeletionCtx = Pick<MutationCtx, 'db'>;
 
-/** The next adult by `by_teamId_and_status` order, which is the order the entries were written; a minor, the leaving account, and a gone user are skipped. */
+/** `by_teamId_and_status` returns entries in the order they were written, so the first adult is the one rostered longest. */
 async function longestRosteredAdult(
   ctx: DeletionCtx,
   teamId: Id<'teams'>,
