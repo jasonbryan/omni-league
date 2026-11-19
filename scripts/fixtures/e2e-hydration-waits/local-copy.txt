@@ -1,0 +1,3 @@
+async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
+  await expect.poll(() => consoleGuard.hydrated).toBe(true);
+}

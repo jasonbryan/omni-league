@@ -1,0 +1,9 @@
+import { gotoHydrated, hydrated } from './support/hydrated';
+
+test('opens the page twice', async ({ page, consoleGuard }) => {
+  await gotoHydrated(page, consoleGuard, '/programs');
+  const after = consoleGuard.hydrationCount(page);
+  await page.reload();
+  await hydrated(consoleGuard, { page, after });
+  expect(consoleGuard.hydrated).toBe(true);
+});

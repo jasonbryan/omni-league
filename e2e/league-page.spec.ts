@@ -2,9 +2,11 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { formatCalendarDate } from '../convex/lib/seasonInput';
 import { slugify } from '../convex/lib/slugs';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import type { ConsoleGuard } from './support/console-guard';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import {
   breadcrumbLinksAndText,
   expectLinkHeights,
@@ -161,14 +163,6 @@ function rangeText(html: string): string | undefined {
     ?.replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 test.describe('public league page: raw server HTML', () => {
@@ -513,8 +507,7 @@ test.describe('public league page in the browser', () => {
   }, testInfo) => {
     const { tenant, path } = await seed();
     const pointer = pointerOf(testInfo);
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     await expectLinkHeights(page, breadcrumbLinksAndText(page), pointer);
     await expectLinkHeights(page, footerAnchors(page), pointer);
 
@@ -536,8 +529,7 @@ test.describe('public league page in the browser', () => {
     }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
       const { tenant, path } = await seed();
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await expectLinkHeights(page, breadcrumbLinksAndText(page), 'touch');
       await expectLinkHeights(page, footerAnchors(page), 'touch');
 
@@ -557,8 +549,7 @@ test.describe('public league page in the browser', () => {
   }) => {
     const { tenant } = await seed();
     const path = `${tenant.path}/leagues/zeta-open`;
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     await page.getByRole('link', { name: 'Register for Open Season' }).click();
     await expect(page).toHaveURL(`${baseURL}${path}/seasons/open-season#registration`);
     await page.goBack();
@@ -644,8 +635,7 @@ test.describe('public league page in the browser', () => {
           }
           const { tenant, path } = await seed();
           const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
-          await page.goto(tenant.path);
-          await hydrated(consoleGuard);
+          await gotoHydrated(page, consoleGuard, tenant.path);
 
           await arrival.open(page, path);
           await expect.poll(() => held.isHolding()).toBe(true);
@@ -697,12 +687,11 @@ test.describe('public league page in the browser', () => {
 
     async function openHeld(
       page: Page,
-      consoleGuard: { hydrated: boolean },
+      consoleGuard: ConsoleGuard,
       { tenant, path }: SeededLeague,
     ) {
       const held = await holdQueries(page, ['leagues:getPublicPage', 'seasons:listPublic']);
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await page.locator(`main a[href="${path}"]`).click();
       await expect.poll(() => held.isHolding()).toBe(true);
       const skeleton = page.getByTestId('league-skeleton');
@@ -792,8 +781,7 @@ test.describe('public league page in the browser', () => {
       consoleGuard,
     }) => {
       const { tenant, path } = await seed();
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       const link = page.getByRole('main').getByRole('link', { name: LEAGUE, exact: true });
       await expect(link).toHaveAttribute('href', `${path}`);
       await link.focus();
@@ -809,8 +797,7 @@ test.describe('public league page in the browser', () => {
       consoleGuard,
     }) => {
       const { path } = await seed();
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await page.evaluate(() => {
         (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
       });
@@ -853,8 +840,7 @@ test.describe('public league page in the browser', () => {
       consoleGuard,
     }) => {
       const { path } = await seed();
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await page.keyboard.press(tabKey(page));
       await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
     });
@@ -865,8 +851,7 @@ test.describe('public league page in the browser', () => {
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const { tenant } = await seed();
-      await page.goto(`${tenant.path}/leagues/six-league`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}/leagues/six-league`);
       const range = page.getByRole('navigation', { name: 'Seasons pages' });
       await expect(range).toContainText('1–5 of 6 seasons');
       await seedSeasons(tenant, 'six-league', [
@@ -913,8 +898,7 @@ test.describe('public league page: a full season with registration open', () => 
   }, testInfo) => {
     const { tenant } = await seedFullSeasonTenant();
     const path = `${tenant.path}/leagues/${FULL_LEAGUE_SLUG}`;
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     const card = page.locator('#registration-open');
     await expect(card.locator('h3')).toHaveText('Full Season');
     const clockLine = card.locator('ul li').nth(2);
@@ -1109,8 +1093,7 @@ test.describe('public league page: the names a link carried in the skeleton, lon
       const { tenant, path } = await seedNamed();
       await page.setViewportSize({ width, height: 800 });
       await followAndMeasure(page, tenant, async () => {
-        await page.goto(tenant.path);
-        await hydrated(consoleGuard);
+        await gotoHydrated(page, consoleGuard, tenant.path);
         await page.locator(`main a[href="${path}"]`).click();
       });
     });
@@ -1123,8 +1106,7 @@ test.describe('public league page: the names a link carried in the skeleton, lon
     test.skip(!NAMED_PROJECTS.includes(testInfo.project.name), 'one Chromium project per pointer');
     const { tenant, path, id } = await seedNamed();
     await followAndMeasure(page, tenant, async () => {
-      await page.goto(`/programs?q=${id}`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `/programs?q=${id}`);
       await page.locator(`main a[href="${path}"]`).click();
     });
   });
@@ -1136,8 +1118,7 @@ test.describe('public league page: the names a link carried in the skeleton, lon
     test.skip(!NAMED_PROJECTS.includes(testInfo.project.name), 'one Chromium project per pointer');
     const { tenant, path } = await seedNamed();
     await followAndMeasure(page, tenant, async () => {
-      await page.goto(`${path}/seasons/${NAMED_SEASON.slug}`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `${path}/seasons/${NAMED_SEASON.slug}`);
       await page
         .getByRole('navigation', { name: 'Breadcrumb' })
         .getByRole('link', { name: NAMED_LEAGUE })

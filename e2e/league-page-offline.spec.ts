@@ -1,6 +1,7 @@
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { hydrated } from './support/hydrated';
 import { screenshot } from './support/screenshot';
 import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
 
@@ -55,7 +56,7 @@ test.describe('public league page offline', () => {
       'Season 09',
       'Season 08',
     ]);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await hydrated(consoleGuard);
     await pages.getByRole('link', { name: 'Page 2' }).click();
     await expect(rows).toHaveText([
       'Season 07',

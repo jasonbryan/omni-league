@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gotoHydrated } from './support/hydrated';
 import { seedPublishedTraining } from './support/training';
 import { seedPublishedCamp } from './support/camp';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
@@ -202,8 +203,7 @@ test.describe('public organization pages: hydration and in-app navigation', () =
     }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'one browser project only');
       const target = path(await seedPublicPages());
-      await page.goto(target);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, target);
       const heading = page.getByRole('main').getByRole('heading', { level: 1 });
       await expect(heading).toBeVisible();
       const title = await page.title();
@@ -227,8 +227,7 @@ test.describe('public organization pages: hydration and in-app navigation', () =
     const organization = await seedPublicPages();
     const league = `${organization}/leagues/${LEAGUE_SLUG}`;
     const season = `${league}/seasons/${SEASON_SLUG}`;
-    await page.goto(organization);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, organization);
     await page.evaluate(() => (window.sameDocument = true));
 
     await page.locator(`main a[href="${league}"]`).first().click();

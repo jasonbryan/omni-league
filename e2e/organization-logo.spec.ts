@@ -7,6 +7,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
 import { holdMutations } from './support/hold-mutations';
+import { gotoHydrated } from './support/hydrated';
 import { expectLogoLoaded } from './support/organization-mark';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
@@ -84,10 +85,6 @@ async function markHtml(request: Parameters<typeof fetchRawHtml>[0], path: strin
   const mark = /<app-organization-mark\b[^>]*>[\s\S]*?<\/app-organization-mark>/.exec(html)?.[0];
   expect(mark, 'the organization mark in the raw HTML').toBeDefined();
   return mark ?? '';
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect.poll(() => consoleGuard.hydrated).toBe(true);
 }
 
 test.describe('the Details page: Logo', () => {
@@ -240,8 +237,7 @@ test.describe('the public organization page: the logo mark', () => {
     consoleGuard,
   }) => {
     const tenant = await organizationWithLogo(page);
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const mark = page.locator('app-organization-mark');
     const size = isDesktop(page) ? 48 : 32;
     const markBox = await mark.boundingBox();
@@ -264,8 +260,7 @@ test.describe('the public organization page: the logo mark', () => {
     await page.route(/\/api\/storage\//, (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: 'not an image' }),
     );
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const mark = page.locator('app-organization-mark');
     await expect(mark.locator('img')).toHaveCount(0);
     await expect(mark).toHaveText(initials(tenant.name));
@@ -280,8 +275,7 @@ test.describe('the public organization page: the logo mark', () => {
     const tenant = await organizationWithLogo(page);
     const chips = page.getByRole('navigation', { name: 'Sports' });
     const mark = page.locator('app-organization-mark');
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     // The route below does not answer a logo request already in flight, which then fails offline with a console error.
     await expectLogoLoaded(mark);
     // The sport view is viewed online too, so it has a saved copy to open offline.

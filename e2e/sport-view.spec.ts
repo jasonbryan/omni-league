@@ -5,6 +5,7 @@ import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { hydrated } from './support/hydrated';
 import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
 import { seedTenantWithCamps } from './support/camp';
@@ -118,14 +119,6 @@ function sectionOf(html: string, id: string): string {
 
 function namesIn(section: string): string[] {
   return [...section.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)].map(([, inner]) => textOf(inner));
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 const THREE_SPORT_CHIPS = [

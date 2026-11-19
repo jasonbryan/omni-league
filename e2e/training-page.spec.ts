@@ -6,6 +6,7 @@ import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -221,7 +222,7 @@ test.describe('public training page: in the browser', () => {
     const response = await page.goto(published);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { level: 1, name: program.name })).toBeVisible();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${program.name} | ${tenant.name} | Omni League`);
     await expect(page.getByText(PATTERN_TEXT).first()).toBeVisible();
     await expect(page.getByText('Dana Ruiz')).toBeVisible();
@@ -247,8 +248,7 @@ test.describe('public training page: in the browser', () => {
     const tenant = await seedTenantWithPlace('E2E Training Ended Page');
     const program = clinic({ classes: classes(-30, 2) });
     const published = await seedPublishedTraining(tenant, program);
-    await page.goto(published);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, published);
     await expect(page.getByText('This training has ended.')).toBeVisible();
     await expect(page.locator('#classes li')).toHaveCount(0);
     await expect(page.locator('[data-slot="series-status"]')).toHaveCount(0);
@@ -265,8 +265,7 @@ test.describe('public training page: in the browser', () => {
     const program = clinic();
     const published = await seedPublishedTraining(tenant, program);
     await cancelSeededTrainingClasses(tenant, program.slug);
-    await page.goto(published);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, published);
     await expect(
       page.getByText('Every class of this training program is cancelled.'),
     ).toBeVisible();
@@ -296,8 +295,7 @@ test.describe('public training page: in the browser', () => {
       locations: [`${longWord} Courts`],
     });
     const published = await seedPublishedTraining(tenant, program);
-    await page.goto(published);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, published);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(longWord);
     await screenshot(page, testInfo, 'training-public-long');
     expect(await checkReflow(page)).toMatchObject({ passed: true });
@@ -305,18 +303,17 @@ test.describe('public training page: in the browser', () => {
   });
 
   test('the breadcrumb leads to the organization page, and its Training crumb opens the Training section', async ({
+    context,
     page,
     consoleGuard,
   }) => {
     const { tenant, program, published } = await seed();
-    await page.goto(published);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, published);
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
     await crumbs.getByRole('link', { name: 'E2E Training Page' }).click();
     await expect(page).toHaveURL(tenant.path);
 
     await page.goBack();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
     const trainingCrumb = crumbs.getByRole('link', { name: 'Training', exact: true });
     const trainingHref = await trainingCrumb.getAttribute('href');
     await trainingCrumb.click();
@@ -325,9 +322,11 @@ test.describe('public training page: in the browser', () => {
     await expect(section.getByRole('link', { name: program.name, exact: true })).toBeVisible();
 
     // Opened as a link, in a new tab or from a shared URL, the browser scrolls to the section.
-    await page.goto(trainingHref!);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await expect(section.getByRole('heading', { level: 2, name: 'Training' })).toBeInViewport();
+    const opened = await context.newPage();
+    await gotoHydrated(opened, consoleGuard, trainingHref!);
+    await expect(
+      opened.locator('#training').getByRole('heading', { level: 2, name: 'Training' }),
+    ).toBeInViewport();
   });
 
   test('the loaded page starts where its skeleton did when its lines do not wrap, with no jump when the answer arrives', async ({
@@ -373,7 +372,7 @@ test.describe('public training page: in the browser', () => {
         const response = await page.goto(draft);
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await hydrated(consoleGuard);
       },
     );
   });
@@ -385,8 +384,7 @@ test.describe('a published program is listed', () => {
     consoleGuard,
   }) => {
     const { tenant, program, published } = await seed();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const section = page.locator('#training');
     await expect(section.getByRole('heading', { level: 2, name: 'Training' })).toBeVisible();
     const row = section.locator('li').filter({ hasText: program.name });
@@ -400,8 +398,7 @@ test.describe('a published program is listed', () => {
     await expect(page.getByRole('heading', { level: 1, name: program.name })).toBeVisible();
 
     const token = program.slug.replace('serving-clinic-', '');
-    await page.goto(`/programs?type=training&q=${token}`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `/programs?type=training&q=${token}`);
     const found = page.getByRole('main').locator('ul > li').filter({ hasText: program.name });
     await expect(found).toHaveCount(1);
     await expect(found.locator('[data-slot="badge"]').first()).toHaveText('Training');
@@ -429,11 +426,9 @@ test.describe('a published program is listed', () => {
       tenant,
       clinic({ name: `Ended ${token}`, slug: `ended-${token}`, classes: classes(-30, 2) }),
     );
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(page.locator('#training')).toHaveCount(0);
-    await page.goto(`/programs?type=training&q=${token}`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `/programs?type=training&q=${token}`);
     await expect(page.getByRole('main').getByRole('link', { name: token })).toHaveCount(0);
     await expect(page.getByText('No training programs match')).toBeVisible();
   });

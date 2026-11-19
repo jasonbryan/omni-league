@@ -1,10 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible } from './support/a11y';
 import { expectBadges, PUBLIC_BADGE_HEIGHT } from './support/badges';
+import type { ConsoleGuard } from './support/console-guard';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import {
   breadcrumbLinksAndText,
   expectLinkHeights,
@@ -220,14 +222,6 @@ function registrationCard(html: string): string | undefined {
 function definition(html: string, term: string): string | undefined {
   const rows = [...html.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>\s*<dd\b[^>]*>([\s\S]*?)<\/dd>/g)];
   return rows.find(([, dt]) => textOf(dt) === term)?.[2];
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 test.describe('public season page: raw server HTML', () => {
@@ -521,8 +515,7 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { path } = await seed();
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     await expectLinkHeights(page, breadcrumbLinksAndText(page), pointerOf(testInfo));
   });
 
@@ -532,8 +525,7 @@ test.describe('public season page in the browser', () => {
     test('the breadcrumb links are 44px tall', async ({ page, consoleGuard }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
       const { path } = await seed();
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await expectLinkHeights(page, breadcrumbLinksAndText(page), 'touch');
     });
   });
@@ -555,8 +547,11 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { tenant } = await seed();
-    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`,
+    );
     const card = page.locator('#registration > div');
     const details = page.locator('section[aria-labelledby="details-heading"]');
     const cardBox = (await card.boundingBox())!;
@@ -586,8 +581,7 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { path } = await seed();
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     const card = page.locator('#registration');
     await expect(card).toContainText('Registration closed');
     await expect(card.getByRole('link', { name: 'See Fall Open' })).toBeVisible();
@@ -629,8 +623,7 @@ test.describe('public season page in the browser', () => {
         expect(raw.status).toBe(200);
         expect(textOf(definition(raw.html, 'Dates'))).toBe('Jan 1 – Mar 1, 2027');
 
-        await page.goto(path);
-        await hydrated(consoleGuard);
+        await gotoHydrated(page, consoleGuard, path);
         const dates = page.locator('main dl > div').filter({ hasText: 'Dates' }).locator('dd');
         await expect(dates).toHaveText('Jan 1 – Mar 1, 2027');
         await expect(dates.locator('time')).toHaveText(['Jan 1', 'Mar 1, 2027']);
@@ -647,8 +640,7 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { path } = await seed();
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     const panel = page.locator('main section#teams');
     await expect(panel.getByRole('heading', { level: 2, name: 'Teams' })).toBeVisible();
     await expect(panel).toContainText('No teams yet');
@@ -663,8 +655,7 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { path } = await seed(teams(SUMMER.slug, SEVEN_TEAMS).batch);
-    await page.goto(path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, path);
     const panel = page.locator('main section#teams');
     const names = panel.locator(':scope > ul > li');
     await expect(names).toHaveText(TEAMS_BY_NAME.slice(0, 5));
@@ -694,8 +685,11 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { tenant } = await seed(teams(OPEN_SEASON.slug, ['Two Tall', 'Pair of Aces']).batch);
-    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN_SEASON.slug}`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN_SEASON.slug}`,
+    );
     const panel = page.locator('main section#teams');
     await expect(panel.locator(':scope > ul > li')).toHaveText(['Pair of Aces', 'Two Tall']);
     await expect(panel.locator(':scope > p')).toHaveText('2 teams');
@@ -708,8 +702,7 @@ test.describe('public season page in the browser', () => {
     consoleGuard,
   }) => {
     const { tenant, path } = await seed();
-    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}/leagues/${LEAGUE_SLUG}`);
     const link = page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true });
     await expect(link).toHaveAttribute('href', path);
     await link.click();
@@ -757,8 +750,7 @@ test.describe('public season page offline', () => {
     const dates = page.locator('main dl > div').filter({ hasText: 'Dates' }).locator('dd');
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
 
-    await page.goto(leaguePath);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, leaguePath);
     await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
     await expect(h1).toHaveText('Offline League · Winter 2027-28');
     await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
@@ -1087,7 +1079,7 @@ interface Start {
 
 async function followSeasonRow(
   page: Page,
-  consoleGuard: { hydrated: boolean },
+  consoleGuard: ConsoleGuard,
   tenant: Tenant,
   named: NamedSeason,
   measure: (page: Page) => Promise<void> = () => Promise.resolve(),
@@ -1342,7 +1334,7 @@ test.describe('public season page: the names a link carried in the skeleton', ()
 
     async function followNext(
       page: Page,
-      consoleGuard: { hydrated: boolean },
+      consoleGuard: ConsoleGuard,
       next: { name: string; slug: string },
       extra: SeedBatch[],
       measure: (page: Page) => Promise<void>,
@@ -1472,8 +1464,7 @@ test.describe('public season page: signed in and on a team', () => {
       teamIds: [teamId],
     } = await seed(await captainOfSandSharks(page));
     const held = await holdQueries(page, [REGISTRATION]);
-    await page.goto(OPEN_PATH(tenant));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, OPEN_PATH(tenant));
     await expect.poll(() => held.isHolding()).toBe(true);
     const card = page.locator('#registration');
     await expect(card.getByRole('link', { name: 'Register a team' })).toBeVisible();
@@ -1568,8 +1559,11 @@ test.describe('public season page: signed in and on a team', () => {
       for (const width of NO_SHIFT_WIDTHS) {
         await page.setViewportSize({ width, height: 800 });
         const held = await holdQueries(page, [REGISTRATION]);
-        await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${season}`);
-        await hydrated(consoleGuard);
+        await gotoHydrated(
+          page,
+          consoleGuard,
+          `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${season}`,
+        );
         await expect.poll(() => held.isHolding()).toBe(true);
         const before = await detailsTop(page);
 
@@ -1597,8 +1591,7 @@ test.describe('public season page: signed in and on a team', () => {
     consoleGuard,
   }) => {
     const { tenant } = await seed(await captainOfSandSharks(page));
-    await page.goto(OPEN_PATH(tenant));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, OPEN_PATH(tenant));
     const card = page.locator('#registration');
     await expect(card).toContainText("You're registered");
     const behind = card.locator('[inert]');
@@ -1618,8 +1611,7 @@ test.describe('public season page: signed in and on a team', () => {
     const { tenant } = await seed();
     await signUp(page, newUser('Visitor'));
     const held = await holdQueries(page, [REGISTRATION]);
-    await page.goto(OPEN_PATH(tenant));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, OPEN_PATH(tenant));
     await expect.poll(() => held.isHolding()).toBe(true);
     held.release();
     await expect(page.getByRole('link', { name: /^Account:/ })).toBeVisible();
@@ -1639,8 +1631,7 @@ test.describe('public season page: signed in and on a team', () => {
         if (String(payload).includes(REGISTRATION)) asked.push(String(payload));
       }),
     );
-    await page.goto(OPEN_PATH(tenant));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, OPEN_PATH(tenant));
     await expect(
       page.locator('#registration').getByRole('link', { name: 'Register a team' }),
     ).toBeVisible();

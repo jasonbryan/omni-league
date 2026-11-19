@@ -1,6 +1,7 @@
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { hydrated } from './support/hydrated';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -164,7 +165,7 @@ test.describe('not-found page', () => {
       const response = await page.goto('/x?q=%');
       expect(response?.status()).toBe(404);
       if (remoteBaseUrl) await page.waitForLoadState('networkidle');
-      else await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      else await hydrated(consoleGuard);
       await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
       await expect(page).toHaveTitle('Page not found | Omni League');
       expect(new URL(page.url()).pathname).toBe('/x');
@@ -369,11 +370,7 @@ test.describe('not-found page', () => {
     await expect(find).toBeVisible();
     await expect(page).toHaveTitle(/Page not found/);
     if (!remoteBaseUrl) {
-      await expect
-        .poll(() => consoleGuard.hydrated, {
-          message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-        })
-        .toBe(true);
+      await hydrated(consoleGuard);
     }
 
     const tab = tabKey(page);

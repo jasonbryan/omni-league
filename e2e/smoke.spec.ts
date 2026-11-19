@@ -1,6 +1,7 @@
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { fetchRawHtml } from './support/raw-html';
 import { RAW_HTTP } from './support/raw-http';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -66,7 +67,7 @@ test.describe('smoke: placeholder home', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     // On the local development build, scan the hydrated page, not the server HTML alone.
-    if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    if (!remoteBaseUrl) await hydrated(consoleGuard);
 
     const skipLink = page.getByRole('link', { name: 'Skip to main content' });
     const tab = tabKey(page);
@@ -160,11 +161,7 @@ test.describe('smoke: placeholder home', () => {
     async ({ page, consoleGuard }) => {
       test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
       await page.goto('/');
-      await expect
-        .poll(() => consoleGuard.hydrated, {
-          message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-        })
-        .toBe(true);
+      await hydrated(consoleGuard);
     },
   );
 
@@ -180,8 +177,7 @@ test.describe('smoke: placeholder home', () => {
         if (/\/ngsw(?:-worker)?\.js(?:on)?(?:\?|$)/.test(request.url()))
           workerRequests.push(request.url());
       });
-      await page.goto('/');
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, '/');
       await page.waitForTimeout(2_000);
       expect(
         await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),

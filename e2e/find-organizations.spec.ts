@@ -3,6 +3,7 @@ import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
+import { gotoHydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -175,8 +176,7 @@ test.describe('find a program: the organizations list', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
-    await page.goto('/programs');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
 
     const next = page.getByRole('navigation', { name: 'Organizations pages' }).getByRole('link', {
@@ -199,8 +199,7 @@ test.describe('find a program: the organizations list', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
-    await page.goto('/programs');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
     await page.evaluate(() => {
       (window as unknown as { sameDocument: boolean }).sameDocument = true;
@@ -224,8 +223,7 @@ test.describe('find a program: the organizations list screens', () => {
       leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
     });
     await freezeOrganizations(page);
-    await page.goto('/programs');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await expect(rows(page).first()).toBeVisible();
     await screenshot(page, testInfo, '300-find-organizations');
     await expectAccessible(page);
@@ -245,8 +243,7 @@ test.describe('find a program: the organizations list screens', () => {
       });
     }
     await freezeOrganizations(page);
-    await page.goto('/programs?page=2');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs?page=2');
     // The saved copy is written only from the live result, which is the one answer the frozen list lets through.
     await expect.poll(() => savedPageNames(page, 2)).not.toBeNull();
     const saved = (await savedPageNames(page, 2)) ?? [];
@@ -301,8 +298,7 @@ test.describe('find a program: the top bar search beside the organizations list'
   }, testInfo) => {
     test.skip(testInfo.project.name !== LIST_PROJECT, 'the bar field shows from 768px');
     const { tenant, id } = await seedFindable();
-    await page.goto('/programs');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await expect(rows(page).first()).toBeVisible();
     await expect(bar(page).getByRole('searchbox')).toHaveCount(0);
     await expect(bar(page).getByRole('link', { name: 'Find a program' })).toHaveCount(0);
@@ -325,8 +321,7 @@ test.describe('find a program: the top bar search beside the organizations list'
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'the link shows below 768px');
     const { tenant } = await seedFindable();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await bar(page).getByRole('link', { name: 'Find a program' }).click();
     await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();

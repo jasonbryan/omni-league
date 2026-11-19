@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated } from './support/hydrated';
 import {
   expectSavedCopies,
   organizationCampSavedKeys,
@@ -182,8 +183,7 @@ test.describe('open seasons offline', () => {
     await page.clock.install();
 
     // The sport view is viewed online too, so it has a saved copy to open offline.
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await chips.getByRole('link', { name: /^Soccer/ }).click();
     await expect(cards).toHaveText(['Soon Season', 'Later Season']);
     await chips.getByRole('link', { name: /^All sports/ }).click();
@@ -252,8 +252,7 @@ test.describe('tournaments offline', () => {
     const note = page.locator('app-saved-copy-note');
     await page.clock.install();
 
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(rows.locator('h3')).toHaveText([
       'Ends Tomorrow Open',
       'Closing Open',
@@ -339,8 +338,7 @@ test.describe('camps offline', () => {
     const note = page.locator('app-saved-copy-note');
     await page.clock.install();
 
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(rows.locator('h3')).toHaveText(['Ends Tomorrow Camp', 'Closing Camp']);
     await expectSavedCopies(page, [
       ...organizationPageSavedKeys(tenant.slug),
@@ -404,8 +402,7 @@ test.describe('find a program offline', () => {
       await field.press('Enter');
     };
 
-    await page.goto(`/programs?q=${word}`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `/programs?q=${word}`);
     await expect(rows).toHaveCount(2);
     await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
     await search(`cup ${word}`);
@@ -449,8 +446,7 @@ test.describe('find a program by sport offline', () => {
 
     const chips = page.getByRole('navigation', { name: 'Sport' });
 
-    await page.goto('/programs?sport=soccer&age=u10');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, '/programs?sport=soccer&age=u10');
     await expect(rows.first()).toBeVisible();
     await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
     await chips.getByRole('link', { name: 'Softball' }).click();
@@ -504,8 +500,7 @@ test.describe('a tournament page offline', () => {
     const never = await seed('Never Viewed Open', 'never-viewed-open');
     const note = page.locator('app-saved-copy-note');
 
-    await page.goto(viewed);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, viewed);
     await expect(page.getByRole('heading', { level: 1, name: 'Viewed Open' })).toBeVisible();
     await expect(note).toHaveCount(0);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
@@ -554,8 +549,7 @@ test.describe('a tournament page offline', () => {
     await seedBracket(tenant, 'labor-day-sand-slam', ['Alpha', 'Bravo', 'Charlie']);
     const games = page.getByTestId('bracket-game');
 
-    await page.goto(path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, path);
     await expect(games).toHaveCount(3);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
     await expect(page).toHaveURL(tenant.path);
@@ -583,8 +577,7 @@ test.describe('a tournament page offline', () => {
     const path = await seedDoubleTournament({ progress: 'waiting' });
     const games = page.getByTestId('bracket-game');
 
-    await page.goto(path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, path);
     await expect(games).toHaveCount(12);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
     await expect(page).toHaveURL(/\/organizations\/[^/]+$/);
@@ -642,8 +635,7 @@ test.describe('a pool tournament page offline', () => {
     });
     const pools = page.locator('section#pools');
 
-    await page.goto(path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, path);
     await expect(pools.locator('h3')).toHaveText(['Pool A', 'Pool B']);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
     await expect(page).toHaveURL(tenant.path);
@@ -698,8 +690,7 @@ test.describe('a camp page offline', () => {
     const never = await seed('Never Viewed Camp', 'never-viewed-camp');
     const note = page.locator('app-saved-copy-note');
 
-    await page.goto(viewed);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, viewed);
     await expect(page.getByRole('heading', { level: 1, name: 'Viewed Camp' })).toBeVisible();
     await expect(note).toHaveCount(0);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();
@@ -763,8 +754,7 @@ test.describe('a training page offline', () => {
     const never = await seed('Never Viewed Clinic', 'never-viewed-clinic');
     const note = page.locator('app-saved-copy-note');
 
-    await page.goto(viewed);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, viewed);
     await expect(page.getByRole('heading', { level: 1, name: 'Viewed Clinic' })).toBeVisible();
     await expect(note).toHaveCount(0);
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link').first().click();

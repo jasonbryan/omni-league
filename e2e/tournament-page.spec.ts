@@ -5,6 +5,7 @@ import { answerWithClientShell } from './support/client-shell';
 import { seedDoubleTournament, type DoubleProgress } from './support/double-bracket';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -320,7 +321,7 @@ test.describe('public tournament page: in the browser', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Gulf Coast Beach Open' }),
     ).toBeVisible();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await hydrated(consoleGuard);
     await expect(page.locator('#registration')).toContainText('Registration open · closes');
     await expect(page.locator('#registration').getByRole('link')).toHaveText(['Register a team']);
     await expect(page.getByText(ADDRESS)).toBeVisible();
@@ -336,8 +337,7 @@ test.describe('public tournament page: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { closed } = await seed();
-    await page.goto(closed);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, closed);
     await expect(page.locator('#registration')).toContainText('Registration closed');
     await expect(page.locator('#registration')).not.toContainText('Registration open');
     await expect(page.locator('#registration').getByRole('link')).toHaveCount(0);
@@ -350,8 +350,7 @@ test.describe('public tournament page: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { open } = await seed();
-    await page.goto(open);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, open);
     const section = page.locator('section#bracket');
     await expect(section.getByRole('heading', { level: 2, name: 'Bracket' })).toBeVisible();
     await expect(section).toContainText('The bracket appears here once the organizer creates it.');
@@ -364,8 +363,7 @@ test.describe('public tournament page: in the browser', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    await page.goto(await seedBracketTournament(BRACKET_TEAMS));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(BRACKET_TEAMS));
     await expect(page.locator('section#bracket h3')).toHaveText([
       'Quarterfinals',
       'Semifinals',
@@ -385,12 +383,13 @@ test.describe('public tournament page: in the browser', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    await page.goto(
+    await gotoHydrated(
+      page,
+      consoleGuard,
       await seedBracketTournament(BRACKET_TEAMS, [
         { game: DELTA_V_ECHO, result: { score: { kind: 'sets', sets: THREE_SETS } } },
       ]),
     );
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
     const line = page.getByTestId('bracket-score');
     await expect(line).toHaveCount(1);
     await expect(line).toBeVisible();
@@ -409,8 +408,7 @@ test.describe('public tournament page: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'a 1280px layout');
-    await page.goto(await seedBracketTournament(SEVENTEEN_TEAMS));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(SEVENTEEN_TEAMS));
     const scroller = page.getByRole('region', { name: 'Bracket rounds' });
     const rounds = scroller.locator('section');
     await expect(rounds).toHaveCount(5);
@@ -449,8 +447,7 @@ test.describe('public tournament page: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'a 360px layout');
-    await page.goto(await seedBracketTournament(SEVENTEEN_TEAMS));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(SEVENTEEN_TEAMS));
     const rounds = page.getByRole('region', { name: 'Bracket rounds' }).locator('section');
     await expect(rounds).toHaveCount(5);
     await expect(page.getByTestId('bracket-scroll-hint')).toBeHidden();
@@ -471,8 +468,7 @@ test.describe('public tournament page: in the browser', () => {
     page,
     consoleGuard,
   }) => {
-    await page.goto(await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(BRACKET_TEAMS.slice(0, 2)));
     await expect(page.locator('section#bracket h3')).toHaveText(['Final']);
     const games = page.getByTestId('bracket-game');
     await expect(games).toHaveCount(1);
@@ -485,8 +481,7 @@ test.describe('public tournament page: in the browser', () => {
     page,
     consoleGuard,
   }) => {
-    await page.goto(await seedBracketTournament(BRACKET_TEAMS));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(BRACKET_TEAMS));
     const scroller = page.getByRole('region', { name: 'Bracket rounds' });
     const tab = tabKey(page);
     for (let press = 0; press < 80; press += 1) {
@@ -510,8 +505,7 @@ test.describe('public tournament page: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'a 1280px layout');
-    await page.goto(await seedBracketTournament(BRACKET_TEAMS.slice(0, 3)));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedBracketTournament(BRACKET_TEAMS.slice(0, 3)));
     const hint = page.getByTestId('bracket-scroll-hint');
     await expect(hint).toHaveCSS('visibility', 'hidden');
     expect((await hint.boundingBox())?.height).toBeGreaterThan(0);
@@ -528,7 +522,7 @@ test.describe('public tournament page: in the browser', () => {
         const response = await page.goto(draft);
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await hydrated(consoleGuard);
       },
     );
   });
@@ -653,8 +647,7 @@ test.describe('public tournament page: double elimination, in the browser', () =
       page,
       consoleGuard,
     }, testInfo) => {
-      await page.goto(await seedDoubleTournament({ progress }));
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, await seedDoubleTournament({ progress }));
       await expect(page.locator('section#bracket h3')).toHaveText([
         'Winners’ bracket',
         'Losers’ bracket',
@@ -674,8 +667,7 @@ test.describe('public tournament page: double elimination, in the browser', () =
     page,
     consoleGuard,
   }, testInfo) => {
-    await page.goto(await seedDoubleTournament({ progress: 'waiting' }));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, await seedDoubleTournament({ progress: 'waiting' }));
     const headings = await cornersOf(page.locator('section#bracket h3'));
     expect(new Set(headings.map(({ x }) => x)).size).toBe(1);
     expect(headings.map(({ y }) => y)).toEqual(
@@ -713,8 +705,11 @@ test.describe('public tournament page: double elimination, in the browser', () =
       'Delta',
       'Echo',
     ];
-    await page.goto(await seedDoubleTournament({ progress: 'deciding', teamNames: long }));
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      await seedDoubleTournament({ progress: 'deciding', teamNames: long }),
+    );
     await page.setViewportSize({ width: 320, height: 800 });
     const boxes = await page.getByTestId('bracket-game').evaluateAll((items) =>
       items.map((item) => {
@@ -763,8 +758,7 @@ test.describe('public tournament page: double elimination, layout', () => {
   }) => {
     const path = await seedDoubleTournament({ progress: 'deciding' });
     const server = await serverRenderedBoxes(browser, path, page.viewportSize()!);
-    await page.goto(path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, path);
     expect(server.length).toBeGreaterThan(20);
     expect(await bracketBoxes(page)).toEqual(server);
   });

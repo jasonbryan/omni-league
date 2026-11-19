@@ -1,0 +1,8 @@
+test('opens the page', async ({ page, consoleGuard }) => {
+  await page.goto('/');
+  await expect
+    .poll(() => consoleGuard.hydrated, {
+      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
+    })
+    .toBe(true);
+});

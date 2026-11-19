@@ -1,0 +1,4 @@
+test('opens the page', async ({ page, consoleGuard }) => {
+  await page.goto('/programs');
+  await expect.poll(() => consoleGuard.hydrated).toBe(true);
+});
