@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { Participant } from './lib/individualRegistration';
-import { MINE_ROWS_LIMIT } from './lib/myRegistrations';
+import { UPCOMING_ROWS_LIMIT } from './lib/myRegistrations';
 import {
   insertTrainingClassRegistration,
   insertTrainingSeriesRegistration,
@@ -207,10 +207,10 @@ describe('trainingRegistrations.listMine', () => {
   test('stops at the limit, and rows of programs that are over do not use it up', async () => {
     const s = await setup();
     await registerSeries(s, 'passed', 'alice', SELF);
-    for (let index = 0; index < MINE_ROWS_LIMIT + 5; index++) {
+    for (let index = 0; index < UPCOMING_ROWS_LIMIT + 5; index++) {
       await registerSeries(s, 'open', 'alice', MINOR(`Child ${String(index).padStart(2, '0')}`));
     }
     await registerSeries(s, 'passed', 'alice', MINOR('Late R.'));
-    expect(await mine(s.alice)).toHaveLength(MINE_ROWS_LIMIT);
+    expect(await mine(s.alice)).toHaveLength(UPCOMING_ROWS_LIMIT);
   });
 });

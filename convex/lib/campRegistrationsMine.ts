@@ -5,7 +5,7 @@ import { today } from './campPublicList';
 import { positionIn, waitingEntriesOf } from './campWaitlistWrites';
 import { participantValidator } from './individualRegistration';
 import {
-  MINE_ROWS_LIMIT,
+  UPCOMING_ROWS_LIMIT,
   MINE_SCAN_LIMIT,
   lookupOnce,
   publishedProgramSummary,
@@ -37,7 +37,6 @@ type Held = Pick<
   '_id' | '_creationTime' | 'sessionId' | 'participant'
 >;
 
-/** The caller's own upcoming camp rows, the soonest first: places they hold, and places they wait for. */
 export async function campRowsOf(
   ctx: Pick<QueryCtx, 'db'>,
   userId: Id<'users'>,
@@ -105,6 +104,6 @@ export async function campRowsOf(
 
   return rows
     .sort((a, b) => a.row.startDate.localeCompare(b.row.startDate) || a.creation - b.creation)
-    .slice(0, MINE_ROWS_LIMIT)
+    .slice(0, UPCOMING_ROWS_LIMIT)
     .map(({ row }) => row);
 }

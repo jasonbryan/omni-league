@@ -21,7 +21,6 @@ export interface HomeProgramCard {
   where: string | null;
   who: string;
   waitlist: string | null;
-  /** The day it starts or, for training, its class, the order of the list. */
   date: string;
 }
 
@@ -72,7 +71,7 @@ function trainingCard(row: HomeTrainingRow): HomeProgramCard {
   };
 }
 
-/** The soonest first. The server leaves out what has passed, and the page runs on, so a camp session or a class that passes while it is open leaves here. A series stays: its next class moves on only when the server answers again. */
+// A series stays once its next class has passed: that date moves on only when the server answers again.
 export function homeProgramCards(
   camps: readonly HomeCampRow[],
   trainings: readonly HomeTrainingRow[],

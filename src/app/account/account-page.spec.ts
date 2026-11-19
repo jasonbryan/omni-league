@@ -119,7 +119,7 @@ describe('AccountPage', () => {
     page = harness.routeNativeElement!;
   }
 
-  // The camp and training rows are no concern of these tests, so they answer with none; account-page-programs.spec.ts covers them.
+  // The camp and training rows answer with none: account-page-programs.spec.ts covers them.
   function accept() {
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();

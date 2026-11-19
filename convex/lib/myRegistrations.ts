@@ -2,8 +2,7 @@ import type { Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { leagueLocations } from './publicLeague';
 
-/** The most upcoming rows the user home gets from camps, and from training. */
-export const MINE_ROWS_LIMIT = 50;
+export const UPCOMING_ROWS_LIMIT = 50;
 
 /** The newest rows read from each table, so a user with years of past registrations is not read whole. */
 export const MINE_SCAN_LIMIT = 200;
@@ -36,7 +35,6 @@ export async function publishedProgramSummary(
   };
 }
 
-/** Looks each key up once per query, including a key that finds nothing. */
 export function lookupOnce<Key extends string, Value>(
   find: (key: Key) => Promise<Value | null>,
 ): (key: Key) => Promise<Value | null> {

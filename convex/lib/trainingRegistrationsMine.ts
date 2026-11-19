@@ -4,7 +4,7 @@ import type { QueryCtx } from '../_generated/server';
 import { today } from './campPublicList';
 import { participantValidator } from './individualRegistration';
 import {
-  MINE_ROWS_LIMIT,
+  UPCOMING_ROWS_LIMIT,
   MINE_SCAN_LIMIT,
   lookupOnce,
   publishedProgramSummary,
@@ -39,7 +39,6 @@ type Held = Pick<
   '_id' | '_creationTime' | 'trainingId' | 'classId' | 'participant'
 >;
 
-/** The caller's own upcoming training rows, the soonest first: places they hold, and places they wait for. */
 export async function trainingRowsOf(
   ctx: Pick<QueryCtx, 'db'>,
   userId: Id<'users'>,
@@ -111,6 +110,6 @@ export async function trainingRowsOf(
 
   return rows
     .sort((a, b) => a.row.classDate.localeCompare(b.row.classDate) || a.creation - b.creation)
-    .slice(0, MINE_ROWS_LIMIT)
+    .slice(0, UPCOMING_ROWS_LIMIT)
     .map(({ row }) => row);
 }

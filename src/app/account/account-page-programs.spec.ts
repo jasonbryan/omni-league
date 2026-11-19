@@ -367,8 +367,7 @@ describe('AccountPage camps and training', () => {
       const [card] = cards();
       expect(card?.querySelector('h3 a')?.className).toContain('wrap-anywhere');
       expect(card?.querySelector('p')?.className).toContain('wrap-anywhere');
-      for (const dd of card.querySelectorAll('dd'))
-        expect(dd.className).toContain('wrap-anywhere');
+      for (const dd of card.querySelectorAll('dd')) expect(dd.className).toContain('wrap-anywhere');
     });
   });
 });

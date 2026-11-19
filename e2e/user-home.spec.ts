@@ -59,7 +59,6 @@ const cardOf = (page: Page, program: string) =>
     .getByRole('listitem')
     .filter({ has: page.getByRole('heading', { level: 3, name: program }) });
 
-/** The `dd` under the `dt` named `label`. */
 const factOf = (card: Locator, label: string) =>
   card
     .locator('dl > div')
@@ -68,7 +67,6 @@ const factOf = (card: Locator, label: string) =>
 
 const guardian = (): TestUser => ({ ...newUser('Guardian'), name: 'Gail Guardian' });
 
-/** `names` are the program names, so a long name checks the wrapping. */
 async function seedPrograms(names: { camp?: string; organization?: string } = {}) {
   const tenant = await seedTenant({
     name: names.organization ?? 'E2E Home Programs',

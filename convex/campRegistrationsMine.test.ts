@@ -6,7 +6,7 @@ import type { Id } from './_generated/dataModel';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { insertCampWaitlistEntry, promoteCampWaitlistEntry } from './lib/campWaitlistWrites';
 import type { Participant } from './lib/individualRegistration';
-import { MINE_ROWS_LIMIT } from './lib/myRegistrations';
+import { UPCOMING_ROWS_LIMIT } from './lib/myRegistrations';
 import { insertCampSession, insertDraftCamp, insertTenant, publishCamp } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -259,7 +259,7 @@ describe('campRegistrations.listMine', () => {
     await s.t.run(async (ctx) => {
       const session = (await ctx.db.get('campSessions', s.junior['Week 2']))!;
       const past = (await ctx.db.get('campSessions', s.junior['Last week']))!;
-      for (let index = 0; index < MINE_ROWS_LIMIT + 5; index++) {
+      for (let index = 0; index < UPCOMING_ROWS_LIMIT + 5; index++) {
         await insertCampRegistration(ctx, session, {
           userId: s.users['guardian'],
           participant: MINOR(`Child ${String(index).padStart(2, '0')}`),
@@ -269,7 +269,7 @@ describe('campRegistrations.listMine', () => {
     });
     await register(s, s.junior['Week 1'], 'guardian', SELF);
     const rows = await mine(s.guardian);
-    expect(rows).toHaveLength(MINE_ROWS_LIMIT);
+    expect(rows).toHaveLength(UPCOMING_ROWS_LIMIT);
     expect(rows[0]?.sessionName).toBe('Week 1');
   });
 });
