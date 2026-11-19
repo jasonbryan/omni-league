@@ -1230,3 +1230,110 @@ export async function backfillTeamPendingInviteCounts(ctx: MutationCtx): Promise
   }
   return backfilled;
 }
+
+const USER_ROWS_BATCH = 100;
+
+type DeletionCtx = Pick<MutationCtx, 'db'>;
+
+/** The next adult by `by_teamId_and_status` order, which is the order the entries were written; a minor, the leaving account, and a gone user are skipped. */
+async function longestRosteredAdult(
+  ctx: DeletionCtx,
+  teamId: Id<'teams'>,
+  leavingUserId: Id<'users'>,
+): Promise<Id<'users'> | null> {
+  const rostered = ctx.db
+    .query('rosterEntries')
+    .withIndex('by_teamId_and_status', (q) => q.eq('teamId', teamId).eq('status', 'rostered'));
+  for await (const entry of rostered) {
+    if (isMinorEntry(entry) || entry.userId === leavingUserId) continue;
+    if (await ctx.db.get('users', entry.userId)) return entry.userId;
+  }
+  return null;
+}
+
+// A team left without an adult keeps the gone id, which matches no one, so its organizers run it.
+// Such a team stays in the index, so the read goes by cursor instead of taking the first batch again.
+async function handOverCaptainedTeams(ctx: DeletionCtx, userId: Id<'users'>): Promise<void> {
+  let cursor: string | null = null;
+  for (;;) {
+    const page = await ctx.db
+      .query('teams')
+      .withIndex('by_captainUserId', (q) => q.eq('captainUserId', userId))
+      .paginate({ numItems: USER_ROWS_BATCH, cursor });
+    for (const team of page.page) {
+      const successor = await longestRosteredAdult(ctx, team._id, userId);
+      if (successor) await ctx.db.patch('teams', team._id, { captainUserId: successor });
+    }
+    if (page.isDone) return;
+    cursor = page.continueCursor;
+  }
+}
+
+async function deleteUserRosterEntries(ctx: DeletionCtx, userId: Id<'users'>): Promise<void> {
+  for (;;) {
+    const batch = await ctx.db
+      .query('rosterEntries')
+      .withIndex('by_userId_and_status', (q) => q.eq('userId', userId))
+      .take(USER_ROWS_BATCH);
+    for (const entry of batch) {
+      await ctx.db.delete('rosterEntries', entry._id);
+      if (entry.status !== 'rostered') continue;
+      // Read per row: several entries of one team each lower its count.
+      const team = await ctx.db.get('teams', entry.teamId);
+      if (!team) continue;
+      await ctx.db.patch('teams', team._id, { rosterCount: Math.max(0, team.rosterCount - 1) });
+    }
+    if (batch.length < USER_ROWS_BATCH) return;
+  }
+}
+
+async function deleteUserFreeAgents(ctx: DeletionCtx, userId: Id<'users'>): Promise<void> {
+  for (;;) {
+    const batch = await ctx.db
+      .query('freeAgents')
+      .withIndex('by_userId_and_status', (q) => q.eq('userId', userId))
+      .take(USER_ROWS_BATCH);
+    for (const freeAgent of batch) await ctx.db.delete('freeAgents', freeAgent._id);
+    if (batch.length < USER_ROWS_BATCH) return;
+  }
+}
+
+// An unset counter stays unset: the next change to it recounts.
+async function lowerWaitlistCount(ctx: DeletionCtx, entry: Doc<'waitlistEntries'>): Promise<void> {
+  if (entry.tournamentId !== undefined) {
+    const tournament = await ctx.db.get('tournaments', entry.tournamentId);
+    if (tournament?.waitlistCount === undefined) return;
+    await ctx.db.patch('tournaments', tournament._id, {
+      waitlistCount: Math.max(0, tournament.waitlistCount - 1),
+    });
+    return;
+  }
+  if (entry.seasonId === undefined) return;
+  const season = await ctx.db.get('seasons', entry.seasonId);
+  if (season?.waitlistCount === undefined) return;
+  await ctx.db.patch('seasons', season._id, {
+    waitlistCount: Math.max(0, season.waitlistCount - 1),
+  });
+}
+
+async function deleteUserWaitlistEntries(ctx: DeletionCtx, userId: Id<'users'>): Promise<void> {
+  for (;;) {
+    const batch = await ctx.db
+      .query('waitlistEntries')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .take(USER_ROWS_BATCH);
+    for (const entry of batch) {
+      await ctx.db.delete('waitlistEntries', entry._id);
+      if (entry.status === 'waiting') await lowerWaitlistCount(ctx, entry);
+    }
+    if (batch.length < USER_ROWS_BATCH) return;
+  }
+}
+
+/** Never throws on a gone team, season, or tournament: it runs inside the account-deletion trigger, where a throw rolls back the deletion. */
+export async function deleteUserRosterRows(ctx: DeletionCtx, userId: Id<'users'>): Promise<void> {
+  await handOverCaptainedTeams(ctx, userId);
+  await deleteUserRosterEntries(ctx, userId);
+  await deleteUserFreeAgents(ctx, userId);
+  await deleteUserWaitlistEntries(ctx, userId);
+}

@@ -289,6 +289,20 @@ describe('SeasonPage', () => {
     });
   });
 
+  describe('a team whose captain deleted their account', () => {
+    it('reads No captain on the team row and Captain with the name on the others', async () => {
+      const teams = [
+        { ...team('tm_dig', 'Dig Deep', 2), captainName: '' },
+        team('tm_sharks', 'Sand Sharks', 4),
+      ];
+      await open(COED, { ...VIEW, teams, teamCount: 2 }, FREE_AGENTS);
+      const rows = teamRows();
+      expect(text(rows[0])).toContain('No captain');
+      expect(text(rows[0])).not.toContain('Captain:');
+      expect(text(rows[1])).toContain('Captain: Captain of Sand Sharks');
+    });
+  });
+
   describe('empty states', () => {
     it('a published season with no teams says captains register them', async () => {
       await open(COED, { ...VIEW, teams: [], teamCount: 0 }, FREE_AGENTS);
