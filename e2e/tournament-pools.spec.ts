@@ -17,6 +17,7 @@ import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type Sport, type Tenant } from './support/tenant';
+import { expectSameTextBoxes, textBoxes } from './support/text-boxes';
 import { seedTournament } from './support/tournament';
 import { newUser } from './support/users';
 
@@ -803,7 +804,11 @@ interface PoolReportWorld {
 async function withPoolReportWorld(
   page: Page,
   browser: Browser,
-  { sport = 'beachVolleyball', names = SIX }: { sport?: Sport; names?: readonly string[] },
+  {
+    sport = 'beachVolleyball',
+    names = SIX,
+    aceName = 'Ace',
+  }: { sport?: Sport; names?: readonly string[]; aceName?: string },
   use: (world: PoolReportWorld) => Promise<void>,
 ) {
   const seeded = await adminOf(page, { teams: [], sport });
@@ -820,7 +825,7 @@ async function withPoolReportWorld(
       tournamentSlug: SLUG,
       teams: names.map((name) => ({
         name,
-        ...(name === 'Ace' && { captainEmail: captains[0].email }),
+        ...(name === aceName && { captainEmail: captains[0].email }),
         ...(name === 'Dune' && { captainEmail: captains[1].email }),
       })),
     })) as { teamIds: string[] };
@@ -1047,6 +1052,88 @@ test.describe('Tournaments: pool score reports', () => {
         });
       });
     }
+  }
+
+  const LONG_ACE = 'Gulf Coast Sand Crabs Beach Volleyball Club of Fun Times Cos';
+  const LONG_EDDY = 'Emerald Coast Spike Squads Volleyball Society of Beach Clubs';
+  const LONG_NAMES = SIX.map((name) =>
+    name === 'Ace' ? LONG_ACE : name === 'Eddy' ? LONG_EDDY : name,
+  );
+  const LONG_ROUND_TWO = `Round 2: ${LONG_ACE} v ${LONG_EDDY}`;
+
+  for (const width of [320, 360, 1280]) {
+    test(`at ${width}px two 60-character team names, one pool game reported and one not, load at the height of their skeleton`, async ({
+      page,
+      browser,
+    }) => {
+      for (const name of [LONG_ACE, LONG_EDDY]) expect(name).toHaveLength(60);
+      await withPoolReportWorld(
+        page,
+        browser,
+        { names: LONG_NAMES, aceName: LONG_ACE },
+        async (world) => {
+          const { ace } = world;
+          await ace.setViewportSize({ width, height: 900 });
+          const rosterTop = async () =>
+            (await ace.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+          await ace.goto(world.teamPath(LONG_ACE));
+          const form = reportForm(ace, LONG_ROUND_TWO);
+          await reportBox(form, LONG_ACE).fill('21');
+          await reportBox(form, LONG_EDDY).fill('18');
+          await reportButton(form).click();
+          await expect(reportPanel(ace).locator('[data-slot="reported"]')).toHaveCount(1);
+
+          const held = await holdQueries(ace, ['scoreReports:forTeam']);
+          await ace.reload();
+          await expect(reportPanel(ace).getByRole('status')).toHaveText('Loading the game.');
+          await expect.poll(() => held.isHolding()).toBe(true);
+          const before = await reportPanel(ace).boundingBox();
+          const rosterBefore = await rosterTop();
+          const skeletonLabels = await textBoxes(reportPanel(ace), '[data-slot="skeleton-label"]');
+          const skeletonBoxLabels = await textBoxes(
+            reportPanel(ace),
+            '[data-slot="skeleton-box-label"]',
+          );
+          const skeletonReportedLines = await textBoxes(
+            reportPanel(ace),
+            '[data-slot="skeleton-reported-line"]',
+          );
+          const skeletonReportedNotes = await textBoxes(
+            reportPanel(ace),
+            '[data-slot="skeleton-reported-note"]',
+          );
+          expect(describeViolations((await axeScan(ace)).violations)).toEqual([]);
+
+          held.release();
+          await expect(reportPanel(ace).getByRole('form')).toHaveCount(1);
+          await expect(reportPanel(ace).locator('[data-slot="reported"]')).toHaveCount(1);
+          const after = await reportPanel(ace).boundingBox();
+          expect(Math.abs((after?.height ?? Infinity) - (before?.height ?? -1))).toBeLessThan(0.5);
+          expect(Math.abs(((await rosterTop()) ?? Infinity) - (rosterBefore ?? -1))).toBeLessThan(
+            0.5,
+          );
+          await expectNoSidewaysScroll(ace);
+
+          const loaded = (selector: string) => textBoxes(reportPanel(ace), selector);
+          expectSameTextBoxes(
+            skeletonLabels,
+            await loaded('[data-slot="game-label"]'),
+            'game label',
+          );
+          expectSameTextBoxes(skeletonBoxLabels, await loaded('label'), 'box label');
+          expectSameTextBoxes(
+            skeletonReportedLines,
+            await loaded('[data-slot="reported"]'),
+            'reported line',
+          );
+          expectSameTextBoxes(
+            skeletonReportedNotes,
+            await loaded('[data-slot="reported-note"]'),
+            'reported note',
+          );
+        },
+      );
+    });
   }
 
   test('Undo after Confirm returns the pool game to Reported, and Clear result then Undo restores the result and the standings', async ({
