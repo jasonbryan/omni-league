@@ -747,10 +747,15 @@ test.describe('public tournament page: pools', () => {
     }
     await page.goto(path);
     const section = page.locator('section#pools');
-    await expect(section.locator('[data-testid="standing"]').nth(0)).toBeVisible();
-    await expect(
-      section.locator('[data-testid="standings"]').first().locator('[data-testid="standing"]'),
-    ).toHaveText([
+    const poolA = section.locator('[data-testid="standings"]').first();
+    await expect(poolA.locator('[data-testid="standing"]')).toHaveCount(4);
+    const rowsOf = () =>
+      poolA
+        .locator('[data-testid="standing"]')
+        .evaluateAll((rows) =>
+          rows.map((row) => [...row.children].map((cell) => cell.textContent?.trim()).join(' ')),
+        );
+    expect(await rowsOf()).toEqual([
       '1 Ace 1 1 0 0 +1 3',
       '1 Dune 2 1 0 1 +1 3',
       '1 Eddy 2 1 0 1 +1 3',
