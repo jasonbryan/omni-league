@@ -136,7 +136,7 @@ const inviteBy = (s: TournamentWorld, who: Person, teamId: Id<'teams'>, email: s
 const refusalOf = (failure: unknown) =>
   failure instanceof ConvexError ? (failure.data as Record<string, unknown>) : failure;
 
-/** Four teams of two players make two semifinals and a final; each team's captain is its own person, and `player` is on Sand Crabs. */
+/** Four teams make two semifinals and a final. */
 async function fourTournamentTeams(s: TournamentWorld) {
   const teamIds = {
     crabs: await tournamentTeam(s, 'Sand Crabs', s.captain),
