@@ -6,8 +6,10 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { expectLinkHeights, pointerOf } from './support/link-heights';
 import { BRACKET_MESSAGES } from '../convex/lib/bracket';
+import { MAX_TEAM_NAME_LENGTH } from '../convex/lib/teamInput';
 import { seedResult, type SeededResult } from './support/bracket';
 import { screenshot } from './support/screenshot';
+import { expectSameTextBoxes, textBoxes } from './support/text-boxes';
 import { signUp } from './support/session';
 import { dateFromToday, seedTenant, type Tenant } from './support/tenant';
 import { seedTournament } from './support/tournament';
@@ -917,6 +919,8 @@ const reportedLines = (game: Locator) => game.locator('[data-slot="report"] > sp
 const confirmButtons = (game: Locator) => game.getByRole('button', { name: /^Confirm/ });
 const correctScoreButton = (game: Locator) => game.getByRole('button', { name: /^Correct score/ });
 
+const DEFAULT_REPORT_TEAMS = ['Sand Crabs', 'Beach Bombers', 'Set Point', 'Spike Squad'] as const;
+
 interface ReportWorld {
   tenant: Tenant;
   managePath: string;
@@ -931,7 +935,11 @@ interface ReportWorld {
 async function withReportWorld(
   page: Page,
   browser: Browser,
-  { bracket = true, setsPerGame = 1 }: { bracket?: boolean; setsPerGame?: 1 | 3 },
+  {
+    bracket = true,
+    setsPerGame = 1,
+    names = DEFAULT_REPORT_TEAMS,
+  }: { bracket?: boolean; setsPerGame?: 1 | 3; names?: readonly string[] },
   use: (world: ReportWorld) => Promise<void>,
 ) {
   const seeded = await adminOf(page, { teams: [], registration: 'closed' });
@@ -943,14 +951,13 @@ async function withReportWorld(
     const captains = [newUser('Crabs'), newUser('Squad')];
     await signUp(crabs, captains[0]);
     await signUp(squad, captains[1]);
-    const names = ['Sand Crabs', 'Beach Bombers', 'Set Point', 'Spike Squad'];
     const { teamIds } = (await convexRun('testing:seedTournamentRosters', {
       organizationSlug: seeded.tenant.slug,
       tournamentSlug: SLUG,
       teams: names.map((name) => ({
         name,
-        ...(name === 'Sand Crabs' && { captainEmail: captains[0].email }),
-        ...(name === 'Spike Squad' && { captainEmail: captains[1].email }),
+        ...(name === names[0] && { captainEmail: captains[0].email }),
+        ...(name === names[3] && { captainEmail: captains[1].email }),
       })),
     })) as { teamIds: string[] };
     if (setsPerGame === 3) {
@@ -1336,63 +1343,239 @@ test.describe('Tournaments: Confirm of a report the team changed', () => {
   });
 });
 
+const teamsNamed = (first: string, fourth: string) =>
+  [first, 'Beach Bombers', 'Set Point', fourth] as const;
+
+const SIXTY_CHARACTER_TEAMS = teamsNamed(
+  'Gulf Coast Sand Crabs Beach Volleyball Club of Fun Times Cos',
+  'Emerald Coast Spike Squads Volleyball Society of Beach Clubs',
+);
+for (const name of [SIXTY_CHARACTER_TEAMS[0], SIXTY_CHARACTER_TEAMS[3]]) {
+  if (name.length !== MAX_TEAM_NAME_LENGTH) {
+    throw new Error(`"${name}" has ${name.length} characters, not ${MAX_TEAM_NAME_LENGTH}`);
+  }
+}
+
+interface LoadingCase {
+  state: string;
+  names: readonly string[];
+  bracket: boolean;
+  reported: boolean;
+  setsPerGame: readonly (1 | 3)[];
+  widths: readonly number[];
+  oneLineLabel?: boolean;
+}
+
+const BOTH_SETS = [1, 3] as const;
+const THREE_WIDTHS = [320, 360, 1280] as const;
+
+const LOADING_CASES: readonly LoadingCase[] = [
+  {
+    state: 'the form',
+    names: DEFAULT_REPORT_TEAMS,
+    bracket: true,
+    reported: false,
+    setsPerGame: BOTH_SETS,
+    widths: THREE_WIDTHS,
+  },
+  {
+    state: 'the Reported view',
+    names: DEFAULT_REPORT_TEAMS,
+    bracket: true,
+    reported: true,
+    setsPerGame: BOTH_SETS,
+    widths: THREE_WIDTHS,
+  },
+  {
+    state: 'the empty state',
+    names: DEFAULT_REPORT_TEAMS,
+    bracket: false,
+    reported: false,
+    setsPerGame: BOTH_SETS,
+    widths: THREE_WIDTHS,
+  },
+  {
+    state: 'the form with a label that wraps',
+    names: teamsNamed('Sun Chasers', 'Sand Crabs'),
+    bracket: true,
+    reported: false,
+    setsPerGame: [1],
+    widths: [320, 360],
+  },
+  {
+    state: 'the Reported view with a label that wraps',
+    names: teamsNamed('Sun Chasers', 'Sand Crabs'),
+    bracket: true,
+    reported: true,
+    setsPerGame: [1],
+    widths: [320, 360],
+  },
+  {
+    state: 'the form with two 60-character team names',
+    names: SIXTY_CHARACTER_TEAMS,
+    bracket: true,
+    reported: false,
+    setsPerGame: [3],
+    widths: THREE_WIDTHS,
+  },
+  {
+    state: 'the Reported view with two 60-character team names',
+    names: SIXTY_CHARACTER_TEAMS,
+    bracket: true,
+    reported: true,
+    setsPerGame: [3],
+    widths: THREE_WIDTHS,
+  },
+  {
+    state: 'the form with a short label',
+    names: teamsNamed('Ace', 'Dune'),
+    bracket: true,
+    reported: false,
+    setsPerGame: [1],
+    widths: [320],
+    oneLineLabel: true,
+  },
+];
+
 test.describe('Tournaments: the Report score panel while it loads', () => {
   const rosterTop = async (page: Page) =>
     (await page.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
 
-  for (const [state, bracket] of [
-    ['the form', true],
-    ['the empty state', false],
-  ] as const) {
-    for (const setsPerGame of [1, 3] as const) {
-      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px; at 320px the label wraps to a second line.
-      for (const width of [320, 360, 1280]) {
-        test(`at ${width}px its skeleton is as tall as ${state} of a ${setsPerGame === 1 ? 'game of 1 set' : 'best of 3'}, so the roster below does not move`, async ({
+  async function reportFirstSets(page: Page, team: string, other: string, setsPerGame: 1 | 3) {
+    const sets = reportPanel(page).locator('fieldset');
+    await expect(sets).toHaveCount(setsPerGame);
+    const played = [
+      [21, 15],
+      [21, 18],
+    ].slice(0, setsPerGame === 3 ? 2 : 1);
+    for (const [index, [a, b]] of played.entries()) {
+      await sets.nth(index).getByRole('textbox', { name: team, exact: true }).fill(String(a));
+      await sets.nth(index).getByRole('textbox', { name: other, exact: true }).fill(String(b));
+    }
+    await reportButton(page).click();
+    await expect(reportPanel(page).locator('[data-slot="reported"]')).toBeVisible();
+  }
+
+  for (const {
+    state,
+    names,
+    bracket,
+    reported,
+    setsPerGame,
+    widths,
+    oneLineLabel,
+  } of LOADING_CASES) {
+    for (const sets of setsPerGame) {
+      // Widths on both projects give each pointer type, fine and coarse, at 360px and at 1280px; at 320px the label can wrap to a second line.
+      for (const width of widths) {
+        test(`at ${width}px its skeleton is as tall as ${state} of a ${sets === 1 ? 'game of 1 set' : 'best of 3'}, so the roster below does not move`, async ({
           page,
           browser,
         }, testInfo) => {
-          await withReportWorld(page, browser, { bracket, setsPerGame }, async (world) => {
-            const { crabs } = world;
-            await crabs.setViewportSize({ width, height: 900 });
-            const held = await holdQueries(crabs, ['scoreReports:forTeam']);
-            await crabs.goto(world.teamPath('Sand Crabs'));
-            await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
-            await expect.poll(() => held.isHolding()).toBe(true);
-            const before = await reportPanel(crabs).boundingBox();
-            const rosterBefore = await rosterTop(crabs);
-            const parts = (selector: string) =>
-              reportPanel(crabs)
-                .locator(selector)
-                .evaluateAll((els) =>
-                  els.map((el) => `${el.tagName}:${el.getBoundingClientRect().height}`).join(' '),
-                );
-            const skeletonParts = await parts('[data-slot="skeleton"]');
+          await withReportWorld(
+            page,
+            browser,
+            { bracket, setsPerGame: sets, names },
+            async (world) => {
+              const { crabs } = world;
+              const [first, , , fourth] = names;
+              await crabs.setViewportSize({ width, height: 900 });
+              if (reported) {
+                await crabs.goto(world.teamPath(first));
+                await reportFirstSets(crabs, first, fourth, sets);
+              }
+              const held = await holdQueries(crabs, ['scoreReports:forTeam']);
+              if (reported) await crabs.reload();
+              else await crabs.goto(world.teamPath(first));
+              await expect(reportPanel(crabs).getByRole('status')).toHaveText('Loading the game.');
+              await expect.poll(() => held.isHolding()).toBe(true);
+              const before = await reportPanel(crabs).boundingBox();
+              const rosterBefore = await rosterTop(crabs);
+              const parts = (selector: string) =>
+                reportPanel(crabs)
+                  .locator(selector)
+                  .evaluateAll((els) =>
+                    els.map((el) => `${el.tagName}:${el.getBoundingClientRect().height}`).join(' '),
+                  );
+              const skeletonParts = await parts('[data-slot="skeleton"]');
+              const bars = (slot: string) => textBoxes(reportPanel(crabs), `[data-slot="${slot}"]`);
+              const skeletonText = {
+                label: await bars('skeleton-label'),
+                setNames: await bars('skeleton-set-name'),
+                boxLabels: await bars('skeleton-box-label'),
+                note: await bars('skeleton-note'),
+                reportedLine: await bars('skeleton-reported-line'),
+                reportedNote: await bars('skeleton-reported-note'),
+              };
 
-            held.release();
-            await expect(
-              bracket
-                ? reportPanel(crabs).locator('form')
-                : reportPanel(crabs).locator('[data-slot="empty"]'),
-            ).toBeVisible();
-            if (bracket) {
-              await expect(reportPanel(crabs).locator('legend')).toHaveCount(setsPerGame);
-            }
-            const after = await reportPanel(crabs).boundingBox();
-            testInfo.annotations.push({
-              type: 'panel height',
-              description: `skeleton ${before?.height}, loaded ${after?.height}`,
-            });
-            const loadedParts = await parts(
-              '[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"]',
-            );
-            expect(before).not.toBeNull();
-            const shift = Math.abs((after?.height ?? Infinity) - (before?.height ?? -1));
-            expect(shift, `skeleton: ${skeletonParts} || loaded: ${loadedParts}`).toBeLessThan(0.5);
-            const rosterShift = Math.abs(
-              ((await rosterTop(crabs)) ?? Infinity) - (rosterBefore ?? -1),
-            );
-            expect(rosterShift).toBeLessThan(0.5);
-          });
+              expect(describeViolations((await axeScan(crabs)).violations)).toEqual([]);
+              held.release();
+              await expect(
+                !bracket
+                  ? reportPanel(crabs).locator('[data-slot="empty"]')
+                  : reported
+                    ? reportPanel(crabs).locator('[data-slot="reported"]')
+                    : reportPanel(crabs).locator('form'),
+              ).toBeVisible();
+              if (bracket && !reported) {
+                await expect(reportPanel(crabs).locator('legend')).toHaveCount(sets);
+              }
+              const after = await reportPanel(crabs).boundingBox();
+              testInfo.annotations.push({
+                type: 'panel height',
+                description: `skeleton ${before?.height}, loaded ${after?.height}`,
+              });
+              const loadedParts = await parts(
+                '[data-slot="game-label"], legend, label, input, button[type="submit"], [data-slot="field-description"], [data-slot="badge"], [data-slot="reported"], [data-slot="reported-note"], button[data-slot="button"]',
+              );
+              expect(before).not.toBeNull();
+              const shift = Math.abs((after?.height ?? Infinity) - (before?.height ?? -1));
+              expect(shift, `skeleton: ${skeletonParts} || loaded: ${loadedParts}`).toBeLessThan(
+                0.5,
+              );
+              const rosterShift = Math.abs(
+                ((await rosterTop(crabs)) ?? Infinity) - (rosterBefore ?? -1),
+              );
+              expect(rosterShift).toBeLessThan(0.5);
+              await expectNoSidewaysScroll(crabs);
+
+              if (!bracket) return;
+              const loaded = (selector: string) => textBoxes(reportPanel(crabs), selector);
+              expectSameTextBoxes(
+                skeletonText.label,
+                await loaded('[data-slot="game-label"]'),
+                'game label',
+              );
+              if (reported) {
+                expectSameTextBoxes(
+                  skeletonText.reportedLine,
+                  await loaded('[data-slot="reported"]'),
+                  'reported line',
+                );
+                expectSameTextBoxes(
+                  skeletonText.reportedNote,
+                  await loaded('[data-slot="reported-note"]'),
+                  'reported note',
+                );
+              } else {
+                expectSameTextBoxes(skeletonText.setNames, await loaded('legend'), 'set name');
+                expectSameTextBoxes(skeletonText.boxLabels, await loaded('label'), 'box label');
+                if (sets === 3) {
+                  expectSameTextBoxes(
+                    skeletonText.note,
+                    await loaded('[data-slot="field-description"]'),
+                    'set 3 note',
+                  );
+                }
+              }
+              if (oneLineLabel) {
+                const [skeletonLabel] = skeletonText.label;
+                const [loadedLabel] = await loaded('[data-slot="game-label"]');
+                expect(skeletonLabel.height).toBeCloseTo(parseFloat(skeletonLabel.lineHeight), 1);
+                expect(loadedLabel.height).toBeCloseTo(parseFloat(loadedLabel.lineHeight), 1);
+              }
+            },
+          );
         });
       }
     }

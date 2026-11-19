@@ -1,12 +1,14 @@
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
+import { playoffRoundName } from './doubleBracket';
 import { scoreValidator } from './sports';
 import {
   allPlayoffGames,
   gameHasResult,
   gameIsDecided,
   playoffGames,
+  playoffRoundsOf,
   reportsOfGame,
 } from './tournamentBracket';
 import { poolGames } from './tournamentPools';
@@ -34,16 +36,46 @@ export function reportableGamesOf(
   return [...open.filter((game) => game.stage === 'pool'), ...current];
 }
 
-export async function reportableGamesOfTeam(
+export interface ReportableGameView {
+  gameId: Id<'tournamentGames'>;
+  stage: 'bracket' | 'pool';
+  roundName: string;
+  teams: { teamId: Id<'teams'>; name: string }[];
+  report: { score: Doc<'scoreReports'>['score']; reportedAt: number } | null;
+}
+
+export async function reportableGameViewsOfTeam(
   ctx: Pick<QueryCtx, 'db'>,
   tournamentId: Id<'tournaments'>,
   teamId: Id<'teams'>,
-): Promise<Doc<'tournamentGames'>[]> {
-  const games = [
-    ...(await poolGames(ctx, tournamentId)),
-    ...allPlayoffGames(await playoffGames(ctx, tournamentId)),
-  ];
-  return reportableGamesOf(games, teamId);
+): Promise<ReportableGameView[]> {
+  const playoff = await playoffGames(ctx, tournamentId);
+  const open = reportableGamesOf(
+    [...(await poolGames(ctx, tournamentId)), ...allPlayoffGames(playoff)],
+    teamId,
+  );
+  const rounds = playoffRoundsOf(playoff);
+  const views: ReportableGameView[] = [];
+  for (const game of open) {
+    const reported = await ctx.db
+      .query('scoreReports')
+      .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', game._id).eq('teamId', teamId))
+      .unique();
+    const teams = [];
+    for (const placed of game.teamIds) {
+      const row = placed && (await ctx.db.get('teams', placed));
+      if (row) teams.push({ teamId: row._id, name: row.name });
+    }
+    views.push({
+      gameId: game._id,
+      // The losers' bracket and the grand final are bracket games to a captain, as the previous frontend reads them.
+      stage: game.stage === 'pool' ? 'pool' : 'bracket',
+      roundName: playoffRoundName(game, rounds),
+      teams,
+      report: reported && { score: reported.score, reportedAt: reported.reportedAt },
+    });
+  }
+  return views;
 }
 
 export async function reportsInPlaceOrder(

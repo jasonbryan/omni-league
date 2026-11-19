@@ -571,6 +571,7 @@ describe('teams.getForMember for a tournament team', () => {
       sport: 'beachVolleyball',
       setsPerGame: 1,
       reportableGameCount: 0,
+      reportableGames: [],
     });
     await s.t.run((ctx) => ctx.db.patch('tournaments', s.gulf, { setsPerGame: 3 }));
     expect(await tournament()).toMatchObject({ setsPerGame: 3 });
@@ -609,6 +610,96 @@ describe('teams.getForMember for a tournament team', () => {
           .then((team) => team?.tournament?.reportableGameCount);
       expect(await countFor('captain')).toBe(2);
       expect(await countFor('admin-a')).toBe(0);
+    });
+
+    const SET = { kind: 'sets' as const, sets: [{ a: 21, b: 18 }] };
+    const reportableGamesFor = (
+      s: Awaited<ReturnType<typeof registered>>['s'],
+      who: string,
+      id: Id<'teams'>,
+    ) =>
+      as(s, who)
+        .query(api.teams.getForMember, { teamId: id })
+        .then((team) => team?.tournament?.reportableGames);
+
+    test('lists the games the captain reports in the order Report score lists them, with the team’s own report and no ids', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      const first = await poolGame(s, [teamId, otherTeamId], 1);
+      await poolGame(s, [otherTeamId, teamId], 2);
+      await as(s, 'captain').mutation(api.scoreReports.report, {
+        gameId: first,
+        teamId,
+        score: SET,
+      });
+      const listed = await reportableGamesFor(s, 'captain', teamId);
+      expect(listed).toEqual([
+        {
+          stage: 'pool',
+          roundName: 'Round 1',
+          teams: [{ name: 'Sand Crabs' }, { name: 'Net Results' }],
+          report: { score: SET },
+        },
+        {
+          stage: 'pool',
+          roundName: 'Round 2',
+          teams: [{ name: 'Net Results' }, { name: 'Sand Crabs' }],
+          report: null,
+        },
+      ]);
+      const reportView = await as(s, 'captain').query(api.scoreReports.forTeam, { teamId });
+      expect(listed).toEqual(
+        reportView?.games.map((game) => ({
+          stage: game.stage,
+          roundName: game.roundName,
+          teams: game.teams.map((team) => ({ name: team.name })),
+          report: game.report && { score: game.report.score },
+        })),
+      );
+      expect(JSON.stringify(listed)).not.toMatch(/"(_id|gameId|teamId|userId|reportedAt)"/);
+      expect(JSON.stringify(listed)).not.toContain(first);
+    });
+
+    test('lists the bracket game of a team that has a game to report, and counts what it lists', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      await s.t.run((ctx) =>
+        ctx.db.insert('tournamentGames', {
+          tournamentId: s.gulf,
+          stage: 'bracket',
+          round: 1,
+          slot: 1,
+          teamIds: [teamId, otherTeamId],
+        }),
+      );
+      const team = await as(s, 'captain').query(api.teams.getForMember, { teamId });
+      expect(team?.tournament?.reportableGames).toHaveLength(1);
+      expect(team?.tournament?.reportableGames?.[0]).toMatchObject({
+        stage: 'bracket',
+        teams: [{ name: 'Sand Crabs' }, { name: 'Net Results' }],
+        report: null,
+      });
+      expect(team?.tournament?.reportableGameCount).toBe(1);
+    });
+
+    test('is empty for an admin of the organization and for a rostered player who is not the captain', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      await poolGame(s, [teamId, otherTeamId], 1);
+      await s.t.run(async (ctx) => {
+        await addRosterEntry(ctx, (await ctx.db.get('teams', teamId))!, {
+          userId: s.player,
+          source: 'invite',
+          addedByUserId: s.captain,
+        });
+      });
+      expect(await reportableGamesFor(s, 'player', teamId)).toEqual([]);
+      expect(await reportableGamesFor(s, 'admin-a', teamId)).toEqual([]);
+      expect(await reportableGamesFor(s, 'organizer-assigned', teamId)).toEqual([]);
+    });
+
+    test('is empty for the captain of another team in the tournament, who has a game of their own to report', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      await poolGame(s, [teamId, otherTeamId], 1);
+      expect(await reportableGamesFor(s, 'rival', otherTeamId)).toHaveLength(1);
+      expect(await reportableGamesFor(s, 'rival', teamId)).toEqual([]);
     });
   });
 

@@ -32,8 +32,8 @@ import {
   TOURNAMENT_NOT_FOUND_CODE,
   type RegistrationClosedError,
 } from './lib/teamInput';
-import { reportableGamesOfTeam } from './lib/scoreReports';
-import { sportValidator } from './lib/sports';
+import { reportableGameViewsOfTeam } from './lib/scoreReports';
+import { scoreValidator, sportValidator } from './lib/sports';
 import { bracketExists } from './lib/tournamentBracket';
 import { findTournamentBySlugs, tournamentSlugsValidator } from './lib/tournamentLookup';
 import { getCurrentUser } from './lib/users';
@@ -287,8 +287,19 @@ const teamForMemberValidator = v.object({
       slug: v.string(),
       sport: v.optional(sportValidator),
       setsPerGame: v.optional(v.number()),
-      /** The games the captain's Report score panel lists, which it holds space for while it loads; 0 for any other viewer. */
+      /** What the previous frontend reads: the length of `reportableGames`. */
       reportableGameCount: v.optional(v.number()),
+      /** The games the captain's Report score panel lists, with the text it draws, which it holds space for while it loads; `[]` for any other viewer. */
+      reportableGames: v.optional(
+        v.array(
+          v.object({
+            stage: v.union(v.literal('bracket'), v.literal('pool')),
+            roundName: v.string(),
+            teams: v.array(v.object({ name: v.string() })),
+            report: v.union(v.null(), v.object({ score: scoreValidator })),
+          }),
+        ),
+      ),
     }),
   ),
   minimumRosterSize: v.number(),
@@ -332,6 +343,9 @@ async function tournamentTeamForMember(
   if (!tournament || !program || !organization) return null;
   const viewerCanManage = await canManageTournamentTeam(ctx, reader.user._id, team);
   const viewerIsCaptain = team.captainUserId === reader.user._id;
+  const reportableGames = viewerIsCaptain
+    ? await reportableGameViewsOfTeam(ctx, tournament._id, team._id)
+    : [];
   return {
     name: team.name,
     organization: { name: organization.name, slug: organization.slug },
@@ -340,9 +354,13 @@ async function tournamentTeamForMember(
       slug: program.slug,
       sport: tournament.sport,
       setsPerGame: setsPerGameOf(tournament),
-      reportableGameCount: viewerIsCaptain
-        ? (await reportableGamesOfTeam(ctx, tournament._id, team._id)).length
-        : 0,
+      reportableGameCount: reportableGames.length,
+      reportableGames: reportableGames.map((game) => ({
+        stage: game.stage,
+        roundName: game.roundName,
+        teams: game.teams.map(({ name }) => ({ name })),
+        report: game.report && { score: game.report.score },
+      })),
     },
     // The previous frontend reads `season` and `league` without a check, so a tournament team answers with stand-ins.
     season: { name: program.name, slug: program.slug },

@@ -138,6 +138,29 @@ describe('TeamPage: a tournament team', () => {
     ).toHaveLength(3);
   });
 
+  it('draws the Report score skeleton from the games the team page listed, not from the count', async () => {
+    await open({
+      ...CRABS,
+      tournament: {
+        ...CRABS.tournament,
+        reportableGameCount: 3,
+        reportableGames: [
+          {
+            stage: 'pool',
+            roundName: 'Round 2',
+            teams: [{ name: 'Sand Crabs' }, { name: 'Net Results' }],
+            report: null,
+          },
+        ],
+      },
+    });
+    const panel = main().querySelector('app-score-report-panel')!;
+    expect(panel.querySelectorAll('[data-slot="skeleton-block"]')).toHaveLength(1);
+    expect(text(panel.querySelector('[data-slot="skeleton-label"]'))).toBe(
+      'Round 2: Sand Crabs v Net Results',
+    );
+  });
+
   it('shows a player who is not the captain no Report score panel, and asks for no game', async () => {
     await open({
       ...CRABS,
