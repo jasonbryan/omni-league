@@ -285,9 +285,10 @@ describe('PublicTrainingPage registration, a guardian’s children', () => {
     expect(host().querySelectorAll('[data-slot="series-registered"]')).toHaveLength(1);
   });
 
-  it('is a plain line that truncates, in the one row with the Register link', async () => {
+  it('is a plain line that wraps, in the one row with the Register link', async () => {
     await emit(MINE, { self: false, minorNames: ['Maya R.'] });
-    expect(registered()?.querySelector('.truncate')).not.toBeNull();
+    expect(registered()?.querySelector('.wrap-anywhere')).not.toBeNull();
+    expect(registered()?.querySelector('.truncate')).toBeNull();
     expect(registered()?.closest('[data-slot="series-actions"]')).toBe(actions());
     expect(registerLink()?.parentElement).toBe(actions());
   });
@@ -434,11 +435,12 @@ describe('PublicTrainingPage registration of one class, signed in', () => {
     ]);
   });
 
-  it('is a plain line that truncates, in the one row with the Register link', async () => {
+  it('is a plain line that wraps, in the one row with the Register link', async () => {
     await emit(MINE, { ...NONE, classes: [{ classId: CLASS_IDS[0], self: true, minorNames: [] }] });
     expect(classRegistered()[0].tagName).toBe('P');
     expect(classRegistered()[0].hasAttribute('role')).toBe(false);
-    expect(classRegistered()[0].querySelector('.truncate')).not.toBeNull();
+    expect(classRegistered()[0].querySelector('.wrap-anywhere')).not.toBeNull();
+    expect(classRegistered()[0].querySelector('.truncate')).toBeNull();
     expect(classRegistered()[0].parentElement).toBe(classActions()[0]);
   });
 
