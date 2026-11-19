@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { forfeitScore, type Score } from './sports';
 import {
+  SCORE_WORDS,
   STANDINGS_TIEBREAKER_NOTES,
+  allPlayedEachOther,
   standingsCells,
   standingsColumns,
   standingsOf,
@@ -303,15 +305,89 @@ describe('standingsColumns and standingsCells', () => {
     );
   });
 
-  test('describe the tiebreakers of each sport in order', () => {
+  test('describe the tiebreakers of each sport in order, then what the level teams scored against each other', () => {
     expect(STANDINGS_TIEBREAKER_NOTES.beachVolleyball).toBe(
-      'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential.',
+      'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the points they scored against each other, then by seed.',
     );
     expect(STANDINGS_TIEBREAKER_NOTES.soccer).toBe(
-      'Teams level on points are ordered by goal difference, goals scored, then head-to-head.',
+      'Teams level on points are ordered by goal difference, goals scored, then head-to-head. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the goals they scored against each other, then by seed.',
     );
     expect(STANDINGS_TIEBREAKER_NOTES.softball).toBe(
-      'Teams level on win percentage are ordered by head-to-head, run differential (at most 7 a game), then fewest runs allowed.',
+      'Teams level on win percentage are ordered by head-to-head, run differential (at most 7 a game), then fewest runs allowed. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the runs they scored against each other, then by seed.',
     );
+  });
+
+  test('name what each sport scores', () => {
+    expect(SCORE_WORDS).toEqual({ beachVolleyball: 'points', soccer: 'goals', softball: 'runs' });
+  });
+});
+
+describe('allPlayedEachOther', () => {
+  const games = [played('A', 'B', goals(1, 0)), played('B', 'C', goals(0, 0))];
+
+  test('is true when every two of the teams have a game', () => {
+    expect(allPlayedEachOther(['A', 'B'], games)).toBe(true);
+    expect(allPlayedEachOther(['A', 'B', 'C'], [...games, played('C', 'A', goals(2, 1))])).toBe(
+      true,
+    );
+  });
+
+  test('is false when a pair has no game, whichever team a game lists first', () => {
+    expect(allPlayedEachOther(['A', 'B', 'C'], games)).toBe(false);
+    expect(allPlayedEachOther(['A', 'B', 'C'], [...games, played('A', 'D', goals(2, 1))])).toBe(
+      false,
+    );
+    expect(allPlayedEachOther(['B', 'A'], games)).toBe(true);
+  });
+
+  test('is true for one team or none, which have no pair to miss', () => {
+    expect(allPlayedEachOther(['A'], [])).toBe(true);
+    expect(allPlayedEachOther([], [])).toBe(true);
+  });
+});
+
+describe('standingsOf: head-to-head needs every level team to have played the others', () => {
+  // A, B, and C and no one else are level on points, goal difference, and goals scored; A beat B, and C played neither.
+  const pool = [
+    played('A', 'B', goals(2, 0)),
+    played('D', 'A', goals(2, 1)),
+    played('B', 'D', goals(3, 0)),
+    played('C', 'D', goals(3, 2)),
+  ];
+
+  test('does not place a team below teams it has not played: A beat B, and C played neither', () => {
+    const rows = standingsOf('soccer', ['A', 'B', 'C', 'D'], pool);
+    expect(order(rows)).toEqual(['A', 'B', 'C', 'D']);
+    expect(places(rows)).toEqual([1, 1, 1, 4]);
+  });
+
+  test('keeps the given order for the level teams', () => {
+    const rows = standingsOf('soccer', ['C', 'B', 'A', 'D'], pool);
+    expect(order(rows)).toEqual(['C', 'B', 'A', 'D']);
+    expect(places(rows)).toEqual([1, 1, 1, 4]);
+  });
+
+  test('lists two level teams that did not play each other in the given order, in one place', () => {
+    const rows = standingsOf(
+      'beachVolleyball',
+      ['B', 'A', 'C'],
+      [played('A', 'C', set(21, 15)), played('B', 'C', set(21, 15))],
+    );
+    expect(order(rows)).toEqual(['B', 'A', 'C']);
+    expect(places(rows)).toEqual([1, 1, 3]);
+  });
+
+  test('applies the rule again to the smaller group a tiebreaker leaves level', () => {
+    // All four are level on win percentage and run differential splits D from A, B, and C, who are level on it and on runs allowed. B and C never met.
+    const cycle = [
+      played('A', 'B', runs(3, 0)),
+      played('B', 'D', runs(4, 0)),
+      played('D', 'C', runs(2, 1)),
+      played('C', 'A', runs(3, 1)),
+    ];
+    const rows = standingsOf('softball', ['B', 'A', 'C', 'D'], cycle);
+    expect(rows.map((row) => row.won)).toEqual([1, 1, 1, 1]);
+    expect(order(rows)).toEqual(['B', 'A', 'C', 'D']);
+    expect(places(rows)).toEqual([1, 1, 1, 4]);
   });
 });

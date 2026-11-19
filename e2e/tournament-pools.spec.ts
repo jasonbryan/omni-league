@@ -40,6 +40,11 @@ const TWELVE = [
 ];
 const SIX = TWELVE.slice(0, 6);
 
+const BEACH_NOTE =
+  'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the points they scored against each other, then by seed.';
+const SOCCER_NOTE =
+  'Teams level on points are ordered by goal difference, goals scored, then head-to-head. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the goals they scored against each other, then by seed.';
+
 interface Seeded {
   tenant: Tenant;
   managePath: string;
@@ -572,7 +577,7 @@ test.describe('Tournaments: pool results', () => {
     await expect(game.locator('[data-slot="field-error"]')).toHaveCount(0);
     await saveButton(game).click();
     await expect(savedStatus(game, 'Result saved')).toContainText('The game ended in a tie.');
-    await expect(gameResult(game)).toHaveText('Ace 2–2 Eddy. The game was tied.');
+    await expect(gameResult(game)).toHaveText('Ace 2–2 Eddy. The game ended in a tie.');
     await expect(panel(page).locator('[data-slot="split-reason"]')).toHaveText(
       'A pool result is entered, so the pools cannot change.',
     );
@@ -689,6 +694,7 @@ test.describe('public tournament page: pools', () => {
     await expect(section.locator('[data-testid="no-standings"]')).toHaveText(
       'Standings appear after the first result.',
     );
+    await expect(section.getByText(BEACH_NOTE)).toBeVisible();
     await screenshot(page, testInfo, 'public-pools');
     await expectAccessible(page);
   });
@@ -719,6 +725,41 @@ test.describe('public tournament page: pools', () => {
     });
     await expect(section.locator('table')).toHaveCount(1);
     await expect(section.locator('tbody th').first()).toHaveText('Dune');
+  });
+
+  test('a part-played soccer pool lists a team that has not played the level teams with them, not last, and a drawn game reads as a tie', async ({
+    page,
+  }) => {
+    // The snake split of 8 teams puts Ace, Dune, Eddy, and Haze in Pool A and Bay, Cove, Flow, and Gulf in Pool B.
+    const { tenant, path } = await seedPublicPools(false, {
+      sport: 'soccer',
+      names: TWELVE.slice(0, 8),
+    });
+    // Ace, Dune, and Eddy are level on points, goal difference, and goals scored, and Ace has not played Dune or Eddy.
+    for (const [teams, a, b] of [
+      [['Eddy', 'Dune'], 2, 0],
+      [['Haze', 'Eddy'], 2, 1],
+      [['Dune', 'Haze'], 3, 0],
+      [['Ace', 'Haze'], 3, 2],
+      [['Bay', 'Cove'], 2, 2],
+    ] as const) {
+      await seedPoolResult(tenant, SLUG, teams, { score: { kind: 'goals', a, b } });
+    }
+    await page.goto(path);
+    const section = page.locator('section#pools');
+    await expect(section.locator('[data-testid="standing"]').nth(0)).toBeVisible();
+    await expect(
+      section.locator('[data-testid="standings"]').first().locator('[data-testid="standing"]'),
+    ).toHaveText([
+      '1 Ace 1 1 0 0 +1 3',
+      '1 Dune 2 1 0 1 +1 3',
+      '1 Eddy 2 1 0 1 +1 3',
+      '4 Haze 3 1 0 2 -3 3',
+    ]);
+    await expect(section.getByText(SOCCER_NOTE).first()).toBeVisible();
+    await expect(
+      section.locator('[data-testid="pool-game"]').filter({ hasText: 'Bay v Cove' }),
+    ).toContainText('2–2. The game ended in a tie.');
   });
 
   test('a soccer standings table with long team names scrolls inside itself at 320px, and the page does not scroll sideways', async ({
@@ -928,7 +969,7 @@ test.describe('Tournaments: pool score reports', () => {
       await expect(reportedLines(game)).toHaveText(['Ace reported Ace 2–2 Eddy.']);
       await confirmButton(game).click();
       await expect(savedStatus(game, 'Report confirmed')).toContainText('The game ended in a tie.');
-      await expect(gameResult(game)).toHaveText('Ace 2–2 Eddy. The game was tied.');
+      await expect(gameResult(game)).toHaveText('Ace 2–2 Eddy. The game ended in a tie.');
       await screenshot(page, testInfo, 'pool-score-report-tie-confirmed');
       await expectAccessible(page);
     });
@@ -1082,6 +1123,16 @@ const FINISH: [readonly [string, string], { a: number; b: number }][] = [
   [['Cove', 'Flow'], { a: 21, b: 19 }],
 ];
 
+// Pool A is a circle, each team a game up and a game down by 2 points, so only the points scored between Ace, Dune, and Eddy separate them.
+const POINTS_CIRCLE: [readonly [string, string], { a: number; b: number }][] = [
+  [['Ace', 'Dune'], { a: 21, b: 19 }],
+  [['Dune', 'Eddy'], { a: 22, b: 20 }],
+  [['Eddy', 'Ace'], { a: 22, b: 20 }],
+  [['Bay', 'Cove'], { a: 21, b: 19 }],
+  [['Bay', 'Flow'], { a: 21, b: 19 }],
+  [['Cove', 'Flow'], { a: 21, b: 19 }],
+];
+
 async function playPools(tenant: Tenant, results = FINISH) {
   for (const [teams, { a, b }] of results) {
     await seedPoolResult(tenant, SLUG, teams, { score: { kind: 'sets', sets: [{ a, b }] } });
@@ -1172,7 +1223,7 @@ test.describe('Tournaments: bracket from pools', () => {
     await page.goto(managePath);
     await expect(seedOrder(page)).toHaveText(['Ace', 'Bay', 'Dune', 'Cove']);
     await expect(bracketPanel(page).locator('[data-slot="tie-note"]').first()).toHaveText(
-      'Pool A is tied for 1st between Ace, Dune, and Eddy. They scored the same points against each other, or did not play, so seed order decides.',
+      'Pool A is tied for 1st between Ace, Dune, and Eddy. They scored the same number of goals against each other, or did not all play each other, so seed order decides.',
     );
     await screenshot(page, testInfo, 'pool-bracket-tie');
     await expectAccessible(page);
@@ -1330,16 +1381,7 @@ test.describe('Tournaments: bracket from pools', () => {
   }) => {
     const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
     await seedPoolPlay(tenant, SLUG, 2);
-    // Pool A is a circle, each team a game up and a game down by 2 points, so only the points scored between them separate Ace, Dune, and Eddy.
-    const circle: [readonly [string, string], { a: number; b: number }][] = [
-      [['Ace', 'Dune'], { a: 21, b: 19 }],
-      [['Dune', 'Eddy'], { a: 22, b: 20 }],
-      [['Eddy', 'Ace'], { a: 22, b: 20 }],
-      [['Bay', 'Cove'], { a: 21, b: 19 }],
-      [['Bay', 'Flow'], { a: 21, b: 19 }],
-      [['Cove', 'Flow'], { a: 21, b: 19 }],
-    ];
-    await playPools(tenant, circle);
+    await playPools(tenant, POINTS_CIRCLE);
     await page.goto(managePath);
     await expect(seedOrder(page)).toHaveText(['Bay', 'Eddy', 'Ace', 'Cove']);
     await expect(bracketPanel(page).locator('[data-slot="tie-note"]')).toHaveCount(1);
@@ -1388,6 +1430,20 @@ test.describe('Tournaments: bracket from pools', () => {
     await expectNoSidewaysScroll(page);
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await page.setViewportSize(reflowViewport);
+  });
+
+  test('the public table lists a finished pool in the order the Bracket section takes, so the teams it preselects are the top rows', async ({
+    page,
+  }) => {
+    const { tenant, managePath } = await adminOf(page, { teams: full(SIX) });
+    await seedPoolPlay(tenant, SLUG, 2);
+    await playPools(tenant, POINTS_CIRCLE);
+    await page.goto(managePath);
+    await expect(seedOrder(page)).toHaveText(['Bay', 'Eddy', 'Ace', 'Cove']);
+    await page.goto(`/organizations/${tenant.slug}/tournaments/${SLUG}`);
+    const rows = page.locator('section#pools [data-testid="standings"]').first();
+    await expect(rows.locator('tbody th')).toHaveText(['Eddy', 'Ace', 'Dune']);
+    await expect(rows.locator('tbody tr td:first-child')).toHaveText(['1', '1', '1']);
   });
 
   test('shows a pool’s count error only once focus leaves the pool or Create is pressed, and clears it when the count is right', async ({

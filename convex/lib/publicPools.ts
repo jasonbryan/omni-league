@@ -1,17 +1,13 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
-import { inSeedOrder } from './bracket';
 import { poolIndexOf } from './pools';
+import { poolOrder } from './poolBracket';
 import type { PublicPool } from './publicPage';
 import type { Sport } from './sports';
-import {
-  STANDINGS_TIEBREAKER_NOTES,
-  standingsCells,
-  standingsColumns,
-  standingsOf,
-} from './standings';
+import { STANDINGS_TIEBREAKER_NOTES, standingsCells, standingsColumns } from './standings';
 import { gameHasResult } from './tournamentBracket';
-import { poolGames } from './tournamentPools';
+import { poolStandings } from './tournamentPoolBracket';
+import { poolGames, poolSetup } from './tournamentPools';
 
 type Game = Doc<'tournamentGames'>;
 type PublicGame = PublicPool['games'][number];
@@ -23,40 +19,31 @@ export async function publicPools(
 ): Promise<PublicPool[] | undefined> {
   const games = await poolGames(ctx, tournament._id);
   if (games.length === 0) return undefined;
-  const teams = await teamsOf(ctx, games);
-  const nameOf = (teamId: Id<'teams'> | null) =>
-    (teamId ? teams.get(teamId)?.name : undefined) ?? '';
+  const setup = await poolSetup(ctx, tournament);
+  const names = new Map<string, string>(
+    [...setup.seeds, ...(await teamsOf(ctx, games)).values()].map((team) => [team._id, team.name]),
+  );
+  const nameOf = (teamId: string | null) => (teamId ? names.get(teamId) : undefined) ?? '';
+  const standingOf = new Map(
+    poolStandings(setup, games).map((standing) => [standing.pool, standing]),
+  );
   const pools = [...new Set(games.flatMap((game) => (game.pool ? [game.pool] : [])))].sort(
     (a, b) => poolIndexOf(a) - poolIndexOf(b),
   );
   return pools.map((pool) => {
-    const poolGamesOf = games.filter((game) => game.pool === pool);
-    const teamIds = inSeedOrder(
-      [...new Set(poolGamesOf.flatMap((game) => game.teamIds))].flatMap((teamId) => {
-        const team = teamId && teams.get(teamId);
-        return team ? [team] : [];
-      }),
-    ).map((team) => team._id);
-    const standings = standingsOf(
-      sport,
-      teamIds,
-      poolGamesOf.flatMap((game) => {
-        const [first, second] = game.teamIds;
-        return gameHasResult(game) && game.score && first && second
-          ? [{ teamIds: [first, second] as const, score: game.score }]
-          : [];
-      }),
-    );
+    const standing = standingOf.get(pool);
     return {
       pool,
       columns: standingsColumns(sport),
-      standings: standings.map((row) => ({
-        place: row.place,
-        name: nameOf(row.teamId as Id<'teams'>),
-        cells: standingsCells(sport, row),
-      })),
+      standings: (standing ? poolOrder(sport, standing) : []).map(
+        ({ teamId, place, tie, row }) => ({
+          place: tie?.place ?? place,
+          name: nameOf(teamId),
+          cells: standingsCells(sport, row),
+        }),
+      ),
       tiebreakers: STANDINGS_TIEBREAKER_NOTES[sport],
-      games: poolGamesOf.map((game) => gameView(game, nameOf)),
+      games: games.filter((game) => game.pool === pool).map((game) => gameView(game, nameOf)),
     };
   });
 }

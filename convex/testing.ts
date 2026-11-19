@@ -1155,6 +1155,9 @@ export const seedPoolResult = internalMutation({
     const reversed = game.teamIds[0] !== first._id;
     const setsPerGame = tournament.setsPerGame ?? DEFAULT_SETS_PER_GAME;
     const forfeiting = forfeitTeamName === undefined ? null : await teamNamed(forfeitTeamName);
+    if (forfeiting && !game.teamIds.includes(forfeiting._id)) {
+      throw new Error(`${JSON.stringify(forfeitTeamName)} is not in ${teams.join(' v ')}`);
+    }
     const played: Score = forfeiting
       ? forfeitScore(tournament.sport, setsPerGame, game.teamIds[0] === forfeiting._id ? 0 : 1)
       : reversed

@@ -577,6 +577,7 @@ export class PoolBracketPanel {
               band.map((team) => team.name),
               place,
               deciding,
+              this.tournament().sport,
             ),
           },
         ];

@@ -1,4 +1,6 @@
 import type { Pool } from '../../../../convex/lib/pools';
+import type { Sport } from '../../../../convex/lib/sports';
+import { SCORE_WORDS } from '../../../../convex/lib/standings';
 import type { ChipOption } from './chip-radio-group';
 
 const ordinals = new Intl.PluralRules('en-US', { type: 'ordinal' });
@@ -20,13 +22,15 @@ export function tieNote(
   tieNames: readonly string[],
   place: number,
   deciding: TieDeciding,
+  sport: Sport,
 ): string {
   const lead = `Pool ${pool} is tied for ${ordinal(place)} between ${names.format(tieNames)}.`;
+  const scored = SCORE_WORDS[sport];
   switch (deciding) {
     case 'headToHead':
-      return `${lead} The team that scored more points in the games between them advances.`;
+      return `${lead} The team that scored more ${scored} in the games between them advances.`;
     case 'seedOrder':
-      return `${lead} They scored the same points against each other, or did not play, so seed order decides.`;
+      return `${lead} They scored the same number of ${scored} against each other, or did not all play each other, so seed order decides.`;
     case 'organizer':
       return `${lead} Your choice decides who advances.`;
   }
