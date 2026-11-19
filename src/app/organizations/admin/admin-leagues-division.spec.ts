@@ -131,6 +131,16 @@ describe('AdminLeagues: the Division group', () => {
       expect(group('level').labels).toEqual(['Rec', 'Intermediate', 'Competitive']);
     });
 
+    it('tells the organizer the division choices show in Find a program', async () => {
+      await open();
+      const legend = [...form().querySelectorAll('fieldset > legend')].find(
+        (candidate) => text(candidate) === 'Division',
+      )!;
+      expect(text(legend.nextElementSibling)).toBe(
+        'Players filter leagues by these on your public page and in Find a program.',
+      );
+    });
+
     it('explains Gender, Format, and Level in a hint under each', async () => {
       await open();
       await choose('sport-beachVolleyball');
