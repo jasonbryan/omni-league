@@ -4,6 +4,7 @@ import { mutation, query } from './_generated/server';
 import { requireTrainingClassOrganizer, requireTrainingOrganizer } from './lib/access';
 import { dateAtUtcMinus12 } from './lib/registration';
 import { heldPlacesIn } from './lib/trainingRegistrationReads';
+import { waitingClassEntriesOf } from './lib/trainingWaitlistReads';
 import { insertTrainingClasses, setTrainingClassStatus } from './lib/tenantWrites';
 import {
   TRAINING_PATTERN_MESSAGES,
@@ -87,6 +88,7 @@ export const listForTraining = query({
       endTime: v.string(),
       places: v.number(),
       registeredCount: v.number(),
+      waitlistCount: v.optional(v.number()),
       status: trainingClassStatusValidator,
     }),
   ),
@@ -96,15 +98,21 @@ export const listForTraining = query({
       .query('trainingClasses')
       .withIndex('by_trainingId_and_date', (q) => q.eq('trainingId', trainingId))
       .take(MAX_TRAINING_WEEKS);
-    return classes.map((row) => ({
-      trainingClassId: row._id,
-      date: row.date,
-      startTime: row.startTime,
-      endTime: row.endTime,
-      places: row.places,
-      registeredCount: row.registeredCount,
-      status: row.status,
-    }));
+    const rows = [];
+    for (const row of classes) {
+      const waiting = await waitingClassEntriesOf(ctx, trainingId, row._id);
+      rows.push({
+        trainingClassId: row._id,
+        date: row.date,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        places: row.places,
+        registeredCount: row.registeredCount,
+        ...(waiting.length > 0 && { waitlistCount: waiting.length }),
+        status: row.status,
+      });
+    }
+    return rows;
   },
 });
 
@@ -118,6 +126,13 @@ export const cancel = mutation({
       throw new ConvexError({
         code: 'hasRegistrations',
         message: TRAINING_PATTERN_MESSAGES.hasRegistrations(trainingClass.registeredCount),
+      });
+    }
+    const waiting = await waitingClassEntriesOf(ctx, trainingClass.trainingId, trainingClass._id);
+    if (waiting.length > 0) {
+      throw new ConvexError({
+        code: 'hasWaitlist',
+        message: TRAINING_PATTERN_MESSAGES.hasWaitlist(waiting.length),
       });
     }
     await setTrainingClassStatus(ctx, trainingClass, 'cancelled');

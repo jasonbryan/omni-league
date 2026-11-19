@@ -1143,6 +1143,7 @@ describe('seed:demo', () => {
       'insertDemoTeamPlayer',
       'insertDemoTeams',
       'insertDemoTournamentInvites',
+      'insertDemoTrainingClassWaitlist',
       'insertDemoTrainingRegistration',
       'insertDemoTrainingWaitlist',
       'setDemoLogo',

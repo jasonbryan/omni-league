@@ -76,10 +76,8 @@ export class RegisterTrainingCard {
   readonly joining = input(false);
 
   protected readonly kicker = computed(() => {
-    if (this.classAsked()) return 'Register for a class';
-    return this.joining()
-      ? 'Join the waitlist for a training series'
-      : 'Register for a training series';
+    const subject = this.classAsked() ? 'a class' : 'a training series';
+    return `${this.joining() ? 'Join the waitlist for' : 'Register for'} ${subject}`;
   });
 
   protected readonly facts = computed(() => {

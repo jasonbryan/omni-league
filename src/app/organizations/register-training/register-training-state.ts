@@ -19,14 +19,13 @@ export type RegisterTrainingState =
   | 'registered'
   | 'waitlisted'
   | 'closed'
-  | 'full'
   | 'waitlist'
   | 'form'
   | 'class-not-open'
   | 'single-not-allowed';
 
 function selfHoldsPlace(answer: Answer): boolean {
-  if (answer.waitlisted) return true;
+  if (answer.waitlisted || answer.singleClass?.waitlisted === true) return true;
   return answer.singleClass === undefined
     ? answer.registered
     : answer.singleClass.held !== undefined;
@@ -45,21 +44,14 @@ function isOpen(answer: Schedule, nowMs: number): boolean {
 
 /**
  * "Registered" and "waitlisted" come first once nothing else can be asked for, so a person holding a place or a spot still sees it
- * after the deadline or when a class is full. A full series offers the form to join its waitlist; a full class has none.
+ * after the deadline or when a class is full. A full series or class offers the form to join its waitlist.
  */
-function stateFor(
-  answer: Answer,
-  held: boolean,
-  open: boolean,
-  full: boolean,
-  scope: 'series' | 'class',
-) {
+function stateFor(answer: Answer, held: boolean, waiting: boolean, open: boolean, full: boolean) {
   const noOptionLeft = registrationOptions(answer).length === 0;
   if (held && (noOptionLeft || !open || full)) return 'registered';
-  if (answer.waitlisted && (noOptionLeft || !open)) return 'waitlisted';
+  if (waiting && (noOptionLeft || !open)) return 'waitlisted';
   if (!open) return 'closed';
-  if (!full) return 'form';
-  return scope === 'series' ? 'waitlist' : 'full';
+  return full ? 'waitlist' : 'form';
 }
 
 export function registerTrainingState({
@@ -83,17 +75,17 @@ export function registerTrainingState({
     return stateFor(
       answer,
       singleClass.held !== undefined,
+      answer.waitlisted || singleClass.waitlisted === true,
       singleClassIsOpen(singleClass.date, nowMs),
       singleClass.placesLeft === 0,
-      'class',
     );
   }
   return stateFor(
     answer,
     answer.registered,
+    answer.waitlisted,
     isOpen(answer, nowMs),
     answer.fullClassDate !== undefined,
-    'series',
   );
 }
 

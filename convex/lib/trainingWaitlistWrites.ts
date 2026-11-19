@@ -1,21 +1,35 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { participantKey, type Participant } from './individualRegistration';
-import { insertTrainingSeriesRegistration } from './trainingRegistrationWrites';
+import {
+  insertTrainingClassRegistration,
+  insertTrainingSeriesRegistration,
+} from './trainingRegistrationWrites';
+import { classParticipantKey } from './trainingRegistration';
+import { waitingClassEntriesOfUser } from './trainingWaitlistReads';
 
-/** The caller has checked access, the rules, and that the series counts as full. */
+/** The caller has checked access, the rules, and that the series, or the class `classId` names, counts as full. */
 export async function insertTrainingWaitlistEntry(
   ctx: MutationCtx,
   training: Doc<'trainings'>,
-  entry: { userId: Id<'users'>; participant: Participant; ageConfirmedAt?: number },
+  entry: {
+    userId: Id<'users'>;
+    participant: Participant;
+    ageConfirmedAt?: number;
+    classId?: Id<'trainingClasses'>;
+  },
 ): Promise<Id<'trainingWaitlistEntries'>> {
-  const { ageConfirmedAt, ...fixed } = entry;
+  const { ageConfirmedAt, classId, ...fixed } = entry;
   return ctx.db.insert('trainingWaitlistEntries', {
     ...fixed,
     ...(ageConfirmedAt !== undefined && { ageConfirmedAt }),
+    ...(classId !== undefined && { classId }),
     trainingId: training._id,
     organizationId: training.organizationId,
-    participantKey: participantKey(entry.participant),
+    participantKey:
+      classId === undefined
+        ? participantKey(entry.participant)
+        : classParticipantKey(classId, entry.participant),
     status: 'waiting',
     requestedAt: Date.now(),
   });
@@ -43,6 +57,40 @@ export async function promoteTrainingWaitlistEntry(
     },
     replaced,
   );
+  await ctx.db.patch('trainingWaitlistEntries', entry._id, {
+    status: 'promoted',
+    promotedAt: Date.now(),
+    registrationId,
+  });
+  return registrationId;
+}
+
+/** The series takes the place of the participant's class entries, as it takes the place of their single-class registrations. */
+export async function deleteWaitingClassEntriesOf(
+  ctx: MutationCtx,
+  trainingId: Id<'trainings'>,
+  userId: Id<'users'>,
+  participant: Participant,
+): Promise<void> {
+  const key = participantKey(participant);
+  for (const entry of await waitingClassEntriesOfUser(ctx, trainingId, userId)) {
+    if (participantKey(entry.participant) === key)
+      await ctx.db.delete('trainingWaitlistEntries', entry._id);
+  }
+}
+
+/** The caller has checked access, that the entry is the first one a place can go to, and that its class has a place. */
+export async function promoteTrainingClassEntry(
+  ctx: MutationCtx,
+  entry: Doc<'trainingWaitlistEntries'>,
+  training: Doc<'trainings'>,
+  trainingClass: Doc<'trainingClasses'>,
+): Promise<Id<'trainingRegistrations'>> {
+  const registrationId = await insertTrainingClassRegistration(ctx, training, trainingClass, {
+    userId: entry.userId,
+    participant: entry.participant,
+    ...(entry.ageConfirmedAt !== undefined && { ageConfirmedAt: entry.ageConfirmedAt }),
+  });
   await ctx.db.patch('trainingWaitlistEntries', entry._id, {
     status: 'promoted',
     promotedAt: Date.now(),

@@ -30,7 +30,14 @@ import {
   insertTrainingClassRegistration,
   insertTrainingSeriesRegistration,
 } from './lib/trainingRegistrationWrites';
-import { seriesEntryWaits, waitingSeriesEntryOf } from './lib/trainingWaitlistReads';
+import {
+  classesWithWaitingEntries,
+  seriesEntryWaits,
+  waitingClassEntriesOfUser,
+  waitingSeriesEntryOf,
+  waitlistHoldsClass,
+} from './lib/trainingWaitlistReads';
+import { deleteWaitingClassEntriesOf } from './lib/trainingWaitlistWrites';
 import { getCurrentUser } from './lib/users';
 
 export const register = mutation({
@@ -62,10 +69,10 @@ export const register = mutation({
         asked,
         ageConfirmed,
       });
-      // A waiting series entry holds the next place in every class, so a place raised or freed goes to the waitlist.
+      // A waiting entry holds the next place, so a place raised or freed goes to the waitlist.
       if (
         trainingClass.registeredCount >= trainingClass.places ||
-        (await seriesEntryWaits(ctx, training._id))
+        (await waitlistHoldsClass(ctx, trainingClass))
       ) {
         refuseTrainingRegistration({
           code: 'classFull',
@@ -89,15 +96,21 @@ export const register = mutation({
       ageConfirmed,
     });
     // The series takes the place of the participant's single-class rows, so a class they fill alone is not full to them.
+    const withWaiting = await classesWithWaitingEntries(ctx, classes, {
+      userId: user._id,
+      participant,
+    });
     const full =
       classes.find((row) => placesHeldExcluding(row, replaced) >= row.places) ??
-      ((await seriesEntryWaits(ctx, training._id)) ? classes[0] : undefined);
+      ((await seriesEntryWaits(ctx, training._id)) ? classes[0] : undefined) ??
+      classes.find((row) => withWaiting.has(row._id));
     if (full) {
       refuseTrainingRegistration({
         code: 'classFull',
         message: TRAINING_REGISTRATION_MESSAGES.classFull(full.date),
       });
     }
+    await deleteWaitingClassEntriesOf(ctx, training._id, user._id, participant);
     const registrationId = await insertTrainingSeriesRegistration(
       ctx,
       training,
@@ -117,8 +130,11 @@ async function singleClassAnswer(
   training: Doc<'trainings'>,
   pattern: NonNullable<Doc<'trainings'>['pattern']>,
   rawClassId: string,
-  mine: { series: boolean; singles: readonly Doc<'trainingRegistrations'>[] },
-  seriesWaits: boolean,
+  mine: {
+    series: boolean;
+    singles: readonly Doc<'trainingRegistrations'>[];
+    waitingClassIds: ReadonlySet<Id<'trainingClasses'>>;
+  },
 ) {
   const classId = ctx.db.normalizeId('trainingClasses', rawClassId);
   const trainingClass = classId && (await ctx.db.get('trainingClasses', classId));
@@ -135,9 +151,12 @@ async function singleClassAnswer(
     date: trainingClass.date,
     startTime: trainingClass.startTime,
     endTime: trainingClass.endTime,
-    placesLeft: seriesWaits ? 0 : Math.max(0, trainingClass.places - trainingClass.registeredCount),
+    placesLeft: (await waitlistHoldsClass(ctx, trainingClass))
+      ? 0
+      : Math.max(0, trainingClass.places - trainingClass.registeredCount),
     allowed: pattern.allowSingleRegistration,
     ...(held && { held }),
+    ...(mine.waitingClassIds.has(trainingClass._id) && { waitlisted: true }),
   };
 }
 
@@ -182,6 +201,8 @@ export const getForRegistration = query({
           placesLeft: v.number(),
           allowed: v.boolean(),
           held: v.optional(heldValidator),
+          /** The account holder waits for this class. */
+          waitlisted: v.optional(v.boolean()),
         }),
       ),
     }),
@@ -203,29 +224,39 @@ export const getForRegistration = query({
     // The server's `classFull` answers for a participant who does not hold the place.
     const singles = user ? await singleClassRegistrationsOf(ctx, training._id, user._id) : [];
     const seriesWaits = await seriesEntryWaits(ctx, training._id);
+    const withWaiting = await classesWithWaitingEntries(
+      ctx,
+      classes,
+      user ? { userId: user._id, participant: SELF_PARTICIPANT } : undefined,
+    );
     const left = classes.map((row) =>
-      seriesWaits ? 0 : Math.max(0, row.places - placesHeldExcluding(row, singles)),
+      seriesWaits || withWaiting.has(row._id)
+        ? 0
+        : Math.max(0, row.places - placesHeldExcluding(row, singles)),
     );
     const fullClass = seriesWaits
       ? classes[0]
-      : classes.find((row) => placesHeldExcluding(row, singles) >= row.places);
+      : classes.find(
+          (row) => withWaiting.has(row._id) || placesHeldExcluding(row, singles) >= row.places,
+        );
     const waiting = user
       ? await waitingSeriesEntryOf(ctx, training._id, user._id, SELF_PARTICIPANT)
       : null;
     const singleClass =
       classId === undefined
         ? undefined
-        : await singleClassAnswer(
-            ctx,
-            training,
-            pattern,
-            classId,
-            {
-              series: series !== null,
-              singles: singles.filter((row) => row.participant.kind === 'self'),
-            },
-            seriesWaits,
-          );
+        : await singleClassAnswer(ctx, training, pattern, classId, {
+            series: series !== null,
+            singles: singles.filter((row) => row.participant.kind === 'self'),
+            waitingClassIds: new Set(
+              (user ? await waitingClassEntriesOfUser(ctx, training._id, user._id) : []).flatMap(
+                (entry) =>
+                  entry.participant.kind === 'self' && entry.classId !== undefined
+                    ? [entry.classId]
+                    : [],
+              ),
+            ),
+          });
     return {
       trainingId: training._id,
       organizationName: organization.name,

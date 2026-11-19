@@ -24,17 +24,22 @@ export async function seedTrainingRegistration(
   });
 }
 
-/** Skips the rules of joining, the places included, so a series can wait with places free. Local runs only. `user` must already have an account (`seedUser`). */
+/**
+ * Skips the rules of joining, the places included, so a series can wait with places free. `date` names the one class to wait for
+ * instead. Local runs only. `user` must already have an account (`seedUser`).
+ */
 export async function seedTrainingWaitlistEntry(
   tenant: Tenant,
   trainingSlug: string,
   user: TestUser,
   participant: TrainingParticipant,
+  date?: string,
 ): Promise<void> {
   await convexRun('testing:seedTrainingWaitlistEntry', {
     organizationSlug: tenant.slug,
     trainingSlug,
     email: user.email,
     participant,
+    ...(date !== undefined && { date }),
   });
 }

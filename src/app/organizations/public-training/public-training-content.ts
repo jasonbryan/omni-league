@@ -54,6 +54,10 @@ export interface RegisteredClass {
   readonly minorNames: readonly string[];
 }
 
+export interface ClassWaitingSpot extends WaitingSpot {
+  readonly classId: string;
+}
+
 const ENDED_TEXT = 'This training has ended.';
 const CANCELLED_TEXT = 'Every class of this training program is cancelled.';
 const FULL_TEXT = 'A class is full, so no place is left for the whole series.';
@@ -150,7 +154,27 @@ function waitingLine({ participant, position }: WaitingSpot): string {
                       >
                     </p>
                     @if (row.single) {
-                      <div data-slot="class-actions" [class]="actionsRow">
+                      <div
+                        data-slot="class-actions"
+                        [class]="actionsRow"
+                        [class.flex-wrap]="row.waitingLines.length > 0"
+                      >
+                        @if (row.waitingLines.length > 0) {
+                          <div class="flex min-w-0 basis-full flex-col gap-0.5">
+                            @for (line of row.waitingLines; track line) {
+                              <p
+                                data-slot="class-waitlist"
+                                class="flex min-w-0 items-start gap-1.5 text-sm font-medium"
+                              >
+                                <ng-icon
+                                  name="lucideListOrdered"
+                                  class="mt-0.5 shrink-0 text-base"
+                                  aria-hidden="true"
+                                /><span class="wrap-anywhere">{{ line }}</span>
+                              </p>
+                            }
+                          </div>
+                        }
                         @if (row.registeredLine; as line) {
                           <p
                             data-slot="class-registered"
@@ -170,6 +194,15 @@ function waitingLine({ participant, position }: WaitingSpot): string {
                             data-slot="button"
                             [class]="registerButton + ' ms-auto shrink-0'"
                             >Register<span class="sr-only"> for {{ row.day }}</span></a
+                          >
+                        }
+                        @if (row.canJoin) {
+                          <a
+                            [routerLink]="registerPath()"
+                            [queryParams]="row.query"
+                            data-slot="button"
+                            [class]="registerButton + ' ms-auto shrink-0'"
+                            >Join the waitlist<span class="sr-only"> for {{ row.day }}</span></a
                           >
                         }
                       </div>
@@ -339,6 +372,7 @@ export class PublicTrainingContent {
   /** What the viewer holds in single classes; the series is in `registeredSelf` and `registeredMinors`. */
   readonly registeredClasses = input<readonly RegisteredClass[]>([]);
   readonly waitlist = input<readonly WaitingSpot[]>([]);
+  readonly classWaitlist = input<readonly ClassWaitingSpot[]>([]);
 
   protected readonly endedText = ENDED_TEXT;
   protected readonly cancelledText = CANCELLED_TEXT;
@@ -369,6 +403,7 @@ export class PublicTrainingContent {
       const { classId } = row;
       const full = row.placesLeft === 0;
       const held = this.registeredClasses().find((entry) => entry.classId === classId);
+      const spots = this.classWaitlist().filter((spot) => spot.classId === classId);
       return {
         date: row.date,
         day: trainingClassDate(row.date),
@@ -383,7 +418,9 @@ export class PublicTrainingContent {
         single: allowSingleRegistration === true && classId !== undefined,
         query: { [CLASS_QUERY]: classId },
         registeredLine: held ? registeredLine(held.self, held.minorNames) : null,
+        waitingLines: spots.map(waitingLine),
         canRegister: !full && this.canAddToClass(held),
+        canJoin: full && this.canAddToClass(held, spots),
       };
     });
   });
@@ -421,13 +458,19 @@ export class PublicTrainingContent {
         this.registeredMinors().length + waitingChildren.length < MAX_MINORS_PER_SESSION)
     );
   });
-  private canAddToClass(held: RegisteredClass | undefined): boolean {
+  private canAddToClass(
+    held: RegisteredClass | undefined,
+    spots: readonly WaitingSpot[] = [],
+  ): boolean {
     const offered = participantsOffered(this.training());
+    // A waiting account holder is refused another wait, for the series or the class, so only a child can still be added.
+    const selfFree =
+      !this.registeredSelf() &&
+      held?.self !== true &&
+      !this.waitlist().some(({ participant }) => participant.kind === 'self') &&
+      !spots.some(({ participant }) => participant.kind === 'self');
     // A child already held may take another class, so the link stays at the most children.
-    return (
-      (offered.includes('self') && !this.registeredSelf() && held?.self !== true) ||
-      offered.includes('minor')
-    );
+    return (offered.includes('self') && selfFree) || offered.includes('minor');
   }
   private readonly asks = computed(() => this.status()?.registrationOpen === true && this.canAdd());
   protected readonly canRegister = computed(() => this.asks() && !this.full());

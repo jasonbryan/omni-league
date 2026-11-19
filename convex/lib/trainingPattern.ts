@@ -120,6 +120,8 @@ export const TRAINING_PATTERN_MESSAGES = {
   alreadyScheduled: 'Classes are already scheduled for this training program.',
   hasRegistrations: (registeredCount: number) =>
     `${registeredCount} ${registeredCount === 1 ? 'registration is' : 'registrations are'} in this class, so it cannot be cancelled.`,
+  hasWaitlist: (waitlistCount: number) =>
+    `${waitlistCount} ${waitlistCount === 1 ? 'person is' : 'people are'} waiting for a place in this class, so it cannot be cancelled.`,
 } as const;
 
 export interface TrainingPatternValues {

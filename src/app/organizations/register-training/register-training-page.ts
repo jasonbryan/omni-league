@@ -85,6 +85,7 @@ export const REGISTER_TRAINING_MESSAGES = {
   registeredDescription: 'Your place is held in every class. You’ll find it on the training page.',
   closedTitle: 'Registration for this training program is closed.',
   fullTitle: 'A class is full.',
+  thisClassFullTitle: 'This class is full.',
   fullDescription: (date: string | undefined) =>
     date === undefined
       ? 'A series registration holds a place in every class, so it cannot be taken while one is full. You can join the waitlist instead.'
@@ -92,19 +93,28 @@ export const REGISTER_TRAINING_MESSAGES = {
   joinWaitlist: 'Join the waitlist',
   hasPlaceTitle: 'Every class has a place free.',
   hasPlaceDescription: 'Register for the series instead.',
+  classHasPlaceTitle: 'This class has a place free.',
+  classHasPlaceDescription: 'Register for it instead.',
   registerInstead: 'Register',
-  waitlistNoteTitle: (waiting: boolean) =>
-    waiting ? 'People are waiting for a place.' : 'A class is full.',
+  waitlistNoteTitle: (waiting: boolean, singleClass: boolean) => {
+    if (waiting) return 'People are waiting for a place.';
+    return singleClass ? 'This class is full.' : 'A class is full.';
+  },
   waitingTitle: 'People are waiting for a place.',
   waitingDescription:
     'A new registration waits behind them, so no place is left for the series. You can join the waitlist instead.',
-  waitlistNoteDescription:
-    'Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
+  waitlistNoteDescription: (singleClass: boolean) =>
+    singleClass
+      ? 'Join the waitlist. When a place is free, the organizer offers it to the first person waiting.'
+      : 'Join the waitlist. When every class has a place, the organizer offers the series to the first person waiting.',
   joinFailedTitle: 'You could not be added to the waitlist.',
   joinFailedDescription: 'You were not added. Check your connection and try again.',
   waitlistedTitle: (name: string) => `You're on the waitlist for ${name}.`,
   waitlistedDescription:
     'The organizer offers the series to the first person waiting. Your position is on the training page.',
+  classWaitlistedTitle: (date: string) => `You're on the waitlist for ${trainingClassDate(date)}.`,
+  classWaitlistedDescription:
+    'The organizer offers a place to the first person waiting. Your position is on the training page.',
   adultNotAllowedTitle: (maximumAge: number | undefined) =>
     maximumAge === undefined
       ? 'This training program is not for adults.'
@@ -122,7 +132,8 @@ export const REGISTER_TRAINING_MESSAGES = {
   singleNotAllowedDescription: 'Register for the whole series from the training page.',
   classClosedTitle: 'Registration for this class is closed.',
   classFullTitle: 'This class is full.',
-  classFullDescription: (date: string) => `${trainingClassDate(date)} has no place left.`,
+  classFullDescription: (date: string) =>
+    `${trainingClassDate(date)} has no place left. You can join the waitlist instead.`,
   classRegisteredTitle: (date: string) => `You're registered for ${trainingClassDate(date)}.`,
   classRegisteredDescription: 'You’ll find your place on the training page.',
   seriesHoldsClassDescription:
@@ -140,6 +151,7 @@ type Refusal =
   | 'has-place'
   | 'registered'
   | 'waitlisted'
+  | 'class-waitlisted'
   | 'adult-not-allowed'
   | 'minor-not-allowed'
   | 'no-training'
@@ -163,8 +175,10 @@ const REFUSAL_CODES: Readonly<Record<string, Refusal>> = {
   registrationClosed: 'closed',
   classFull: 'full',
   seriesHasPlace: 'has-place',
+  classHasPlace: 'has-place',
   alreadyRegistered: 'registered',
   alreadyWaiting: 'waitlisted',
+  alreadyWaitingForClass: 'class-waitlisted',
   adultNotAllowed: 'adult-not-allowed',
   minorNotAllowed: 'minor-not-allowed',
   trainingNotFound: 'no-training',
@@ -282,9 +296,13 @@ function refusalData(failure: unknown): Record<string, unknown> | null {
                     <div hlmAlert role="note" class="mb-5">
                       <ng-icon name="lucideUsers" aria-hidden="true" />
                       <div hlmAlertTitle>
-                        {{ messages.waitlistNoteTitle(training.seriesWaitlist === true) }}
+                        {{
+                          messages.waitlistNoteTitle(training.seriesWaitlist === true, classAsked())
+                        }}
                       </div>
-                      <div hlmAlertDescription>{{ messages.waitlistNoteDescription }}</div>
+                      <div hlmAlertDescription>
+                        {{ messages.waitlistNoteDescription(classAsked()) }}
+                      </div>
                     </div>
                   }
                   @if (formAlert(); as alert) {
@@ -565,18 +583,26 @@ export class RegisterTrainingPage {
           : training.seriesWaitlist
             ? messages.waitingDescription
             : messages.fullDescription(training.fullClassDate),
-        ...(!singleClass && { action: { label: messages.joinWaitlist, join: true } }),
+        action: { label: messages.joinWaitlist, join: true },
       }),
       'has-place': () => ({
         icon: 'lucideCircleCheck',
-        title: messages.hasPlaceTitle,
-        description: messages.hasPlaceDescription,
+        title: singleClass ? messages.classHasPlaceTitle : messages.hasPlaceTitle,
+        description: singleClass ? messages.classHasPlaceDescription : messages.hasPlaceDescription,
         action: { label: messages.registerInstead, join: false },
       }),
       waitlisted: () => ({
         icon: 'lucideCircleCheck',
-        title: messages.waitlistedTitle(training.name),
-        description: messages.waitlistedDescription,
+        ...(singleClass?.waitlisted
+          ? this.classWaitlistedNotice(singleClass.date)
+          : {
+              title: messages.waitlistedTitle(training.name),
+              description: messages.waitlistedDescription,
+            }),
+      }),
+      'class-waitlisted': () => ({
+        icon: 'lucideCircleCheck',
+        ...this.classWaitlistedNotice(singleClass?.date ?? ''),
       }),
       'class-not-open': () => ({
         icon: 'lucideCalendarX',
@@ -591,6 +617,14 @@ export class RegisterTrainingPage {
     };
     return state in byState ? byState[state as NoticeState | Refusal]() : null;
   });
+
+  private classWaitlistedNotice(date: string): Pick<Notice, 'title' | 'description'> {
+    const messages = REGISTER_TRAINING_MESSAGES;
+    return {
+      title: messages.classWaitlistedTitle(date),
+      description: messages.classWaitlistedDescription,
+    };
+  }
 
   private registeredNotice(
     training: NonNullable<TrainingRegistrationAnswer>,
@@ -730,14 +764,12 @@ export class RegisterTrainingPage {
       participant: minorName === null ? participant : ({ kind: 'minor', minorName } as const),
       ageConfirmed: this.model().ageConfirmed,
     };
+    const classRequest = {
+      ...request,
+      ...(this.classAsked() && training.singleClass && { classId: training.singleClass.classId }),
+    };
     try {
-      await (this.joining()
-        ? this.join.run(request)
-        : this.register.run({
-            ...request,
-            ...(this.classAsked() &&
-              training.singleClass && { classId: training.singleClass.classId }),
-          }));
+      await (this.joining() ? this.join.run(classRequest) : this.register.run(classRequest));
     } catch (failure) {
       this.submitting.set(false);
       this.showFailure(failure);

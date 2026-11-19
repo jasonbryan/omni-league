@@ -86,9 +86,9 @@ describe('registerTrainingState', () => {
     expect(state({ ...FULL, seriesWaitlist: true })).toBe('waitlist');
   });
 
-  it('is full, with no waitlist to join, for a class with no place', () => {
+  it('offers the waitlist for a class with no place', () => {
     const full = { ...FULL, singleClass: { ...SINGLE_CLASS, placesLeft: 0 } };
-    expect(state(full, { classAsked: true })).toBe('full');
+    expect(state(full, { classAsked: true })).toBe('waitlist');
   });
 
   it('is the form for a class that has a place while another class is full', () => {
@@ -175,7 +175,7 @@ describe('for one class', () => {
     allowed: true,
   };
   const withClass = (
-    over: Partial<typeof CLASS & { held: 'series' | 'class' }> = {},
+    over: Partial<typeof CLASS & { held: 'series' | 'class'; waitlisted: boolean }> = {},
     answer = {},
   ) => ({ ...OPEN, ...answer, singleClass: { ...CLASS, ...over } }) as Answer;
   const stateOfClass = (answer: Parameters<typeof registerTrainingState>[0]['answer'], over = {}) =>
@@ -205,8 +205,31 @@ describe('for one class', () => {
     expect(stateOfClass(withClass(), { nowMs: Date.parse('2027-02-03T12:00:00Z') })).toBe('form');
   });
 
-  it('is full when the class has no place left', () => {
-    expect(stateOfClass(withClass({ placesLeft: 0 }))).toBe('full');
+  it('offers the class waitlist when the class has no place left', () => {
+    expect(stateOfClass(withClass({ placesLeft: 0 }))).toBe('waitlist');
+  });
+
+  it('is waitlisted once the account holder waits for the class and nothing else can be asked for', () => {
+    const waiting = { minimumAge: 18 };
+    expect(stateOfClass(withClass({ placesLeft: 0, waitlisted: true }, waiting))).toBe(
+      'waitlisted',
+    );
+    expect(
+      stateOfClass(withClass({ placesLeft: 0, waitlisted: true }, waiting), {
+        nowMs: Date.parse('2027-02-10T12:00:00Z'),
+      }),
+    ).toBe('waitlisted');
+  });
+
+  it('is the waitlist form for a guardian whose own wait for the class leaves only a child to add', () => {
+    expect(stateOfClass(withClass({ placesLeft: 0, waitlisted: true }))).toBe('waitlist');
+    expect(registrationOptions(withClass({ placesLeft: 0, waitlisted: true }))).toEqual(['minor']);
+  });
+
+  it('is waitlisted for an account holder who waits for the series, which a class waitlist refuses', () => {
+    expect(stateOfClass(withClass({ placesLeft: 0 }, { minimumAge: 18, waitlisted: true }))).toBe(
+      'waitlisted',
+    );
   });
 
   it('ignores a full class elsewhere in the series', () => {

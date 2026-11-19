@@ -51,6 +51,7 @@ function description(training: PublicTrainingData): string {
           [registeredMinors]="registeredMinors()"
           [registeredClasses]="registeredClasses()"
           [waitlist]="waitlist()"
+          [classWaitlist]="classWaitlist()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -99,10 +100,15 @@ export class PublicTrainingPage {
       ? { orgSlug: this.orgSlug(), trainingSlug: this.trainingSlug() }
       : skipToken,
   );
-  /** The two answers apply together, so the series row changes once and not for each answer. */
+  private readonly classWaiting = injectQuery(api.trainingWaitlist.listMineForClasses, () =>
+    this.auth.signedIn() && this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), trainingSlug: this.trainingSlug() }
+      : skipToken,
+  );
+  /** The answers apply together, so the rows change once and not for each answer. */
   private readonly viewerReady = computed(() => {
     if (!this.auth.signedIn() || !this.auth.convexAuthenticated()) return true;
-    return [this.mine, this.waiting].every(
+    return [this.mine, this.waiting, this.classWaiting].every(
       (query) => query.value() !== undefined || query.error() !== undefined,
     );
   });
@@ -117,6 +123,9 @@ export class PublicTrainingPage {
   );
   protected readonly waitlist = computed(() =>
     this.viewerReady() ? (this.waiting.value() ?? []) : [],
+  );
+  protected readonly classWaitlist = computed(() =>
+    this.viewerReady() ? (this.classWaiting.value() ?? []) : [],
   );
   private readonly online = injectOnline();
   protected readonly now = injectNow();

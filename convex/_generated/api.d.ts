@@ -115,6 +115,7 @@ import type * as lib_trainingRegistrationReads from "../lib/trainingRegistration
 import type * as lib_trainingRegistrationRules from "../lib/trainingRegistrationRules.js";
 import type * as lib_trainingRegistrationWrites from "../lib/trainingRegistrationWrites.js";
 import type * as lib_trainingWaitlist from "../lib/trainingWaitlist.js";
+import type * as lib_trainingWaitlistQueue from "../lib/trainingWaitlistQueue.js";
 import type * as lib_trainingWaitlistReads from "../lib/trainingWaitlistReads.js";
 import type * as lib_trainingWaitlistWrites from "../lib/trainingWaitlistWrites.js";
 import type * as lib_userName from "../lib/userName.js";
@@ -259,6 +260,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trainingRegistrationRules": typeof lib_trainingRegistrationRules;
   "lib/trainingRegistrationWrites": typeof lib_trainingRegistrationWrites;
   "lib/trainingWaitlist": typeof lib_trainingWaitlist;
+  "lib/trainingWaitlistQueue": typeof lib_trainingWaitlistQueue;
   "lib/trainingWaitlistReads": typeof lib_trainingWaitlistReads;
   "lib/trainingWaitlistWrites": typeof lib_trainingWaitlistWrites;
   "lib/userName": typeof lib_userName;
