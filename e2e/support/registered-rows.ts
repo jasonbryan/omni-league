@@ -5,7 +5,6 @@ import { holdQueries } from './hold-queries';
 
 const BOX_TOLERANCE = 0.5;
 
-/** Where a page keeps its rows, the row's actions slot, and the viewer's lines. */
 export interface RowLayout {
   rows: string;
   actions: string;
@@ -127,12 +126,7 @@ interface Recorder {
   pageHeights: number[];
 }
 
-/**
- * Records every row, and the boxes `otherColumn` matches, per animation frame while the held answers
- * are released. `otherColumn` names content that does not stretch to the grid row: in a two-column
- * layout the page then grows by at most the own row's growth, and that content never moves or resizes.
- * Without it the page grows by exactly the own row's growth.
- */
+/** `otherColumn` must not stretch to the grid row, or a growth in the own row's column resizes it. */
 export async function expectOwnRowGrowsOnce(
   page: Page,
   url: string,

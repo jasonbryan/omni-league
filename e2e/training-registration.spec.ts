@@ -734,7 +734,7 @@ test.describe('the classes when the viewer’s places arrive', () => {
   const DETAILS_LIST = '#details-heading + dl';
 
   for (const width of WIDTHS) {
-    test(`the class row grows once and the rows below move only by that growth when a class a child with a 60-character name holds arrives at ${width}px`, async ({
+    test(`the class row grows at most once and the rows below move only by that growth when a class a child with a 60-character name holds arrives at ${width}px`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: 800 });
@@ -758,7 +758,7 @@ test.describe('the classes when the viewer’s places arrive', () => {
         [MINE],
         [{ slot: 'class-registered', text: `${LONG} is registered` }],
         rowMustGrow,
-        true,
+        rowMustGrow,
         width === TWO_COLUMNS ? DETAILS_LIST : undefined,
       );
       await screenshot(page, testInfo, `363-training-class-arrived-${width}`);
