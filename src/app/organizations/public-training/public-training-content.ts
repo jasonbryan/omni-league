@@ -184,7 +184,7 @@ function waitingLine({ participant, position }: WaitingSpot): string {
                               name="lucideCircleCheck"
                               class="shrink-0 text-base"
                               aria-hidden="true"
-                            /><span class="truncate">{{ line }}</span>
+                            /><span class="wrap-anywhere">{{ line }}</span>
                           </p>
                         }
                         @if (row.canRegister) {
@@ -320,7 +320,7 @@ function waitingLine({ participant, position }: WaitingSpot): string {
                             name="lucideCircleCheck"
                             class="shrink-0 text-base"
                             aria-hidden="true"
-                          /><span class="truncate">{{ line }}</span>
+                          /><span class="wrap-anywhere">{{ line }}</span>
                         </p>
                       }
                       @for (line of waitingLines(); track line) {
