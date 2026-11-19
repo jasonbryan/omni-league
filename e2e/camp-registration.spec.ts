@@ -1038,7 +1038,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       });
     }
 
-    test(`on a camp that admits both, the sessions below stay where they were when the guardian’s lines arrive at ${width}px`, async ({
+    test(`on a camp that admits both, the guardian’s row grows at most once and nothing above it moves when the lines arrive at ${width}px`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -1052,11 +1052,14 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
       await registerChild(page, path, mixed, 'Maya R.');
 
-      await expectRowsStay(
+      // Two lines need 42px, which a touch screen's 44px row holds and a mouse's 36px row does not.
+      await expectOwnRowGrowsOnce(
         page,
         mixed,
+        'Week 1',
         ['campRegistrations:listMineForCamp', 'campRegistrations:listMyMinorsForCamp'],
-        'You and Maya R. are registered',
+        [{ slot: 'session-registered', text: 'You and Maya R. are registered' }],
+        false,
       );
     });
   }
