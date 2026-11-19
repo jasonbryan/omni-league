@@ -391,3 +391,37 @@ describe('standingsOf: head-to-head needs every level team to have played the ot
     expect(places(rows)).toEqual([1, 1, 1, 4]);
   });
 });
+
+describe('standingsOf: the next tiebreaker separates level teams that did not all play each other', () => {
+  // Five teams: A, B, and C are 1 win and 1 loss and level; A beat B, and C played neither.
+  const sets = (...pairs: [number, number][]): Score => ({
+    kind: 'sets',
+    sets: pairs.map(([a, b]) => ({ a, b })),
+  });
+
+  test('beach volleyball: set win percentage orders them, not head-to-head and not seed', () => {
+    const pool = [
+      played('A', 'B', sets([21, 19], [21, 19])),
+      played('D', 'A', sets([21, 19], [21, 19])),
+      played('B', 'D', sets([21, 19], [19, 21], [15, 12])),
+      played('C', 'D', sets([21, 19], [21, 19])),
+      played('E', 'C', sets([21, 19], [19, 21], [15, 12])),
+    ];
+    const rows = standingsOf('beachVolleyball', ['B', 'A', 'C', 'D', 'E'], pool);
+    expect(order(rows)).toEqual(['E', 'C', 'A', 'B', 'D']);
+    expect(places(rows)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test('softball: run differential orders them, not head-to-head and not seed', () => {
+    const pool = [
+      played('A', 'B', runs(3, 2)),
+      played('D', 'A', runs(5, 2)),
+      played('B', 'D', runs(4, 0)),
+      played('C', 'D', runs(9, 0)),
+      played('E', 'C', runs(1, 0)),
+    ];
+    const rows = standingsOf('softball', ['B', 'A', 'C', 'D', 'E'], pool);
+    expect(order(rows)).toEqual(['E', 'C', 'B', 'A', 'D']);
+    expect(places(rows)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
