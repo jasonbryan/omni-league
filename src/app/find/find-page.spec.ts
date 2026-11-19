@@ -433,6 +433,44 @@ describe('FindPage searching', () => {
     expect(results(harness)!.querySelector('[data-testid="find-skeleton"]')).toBeNull();
   });
 
+  it('marks the skeleton as the page loading, so the layout leaves its footer out, until the results arrive', async () => {
+    const harness = await open('/programs?q=coed');
+    expect(host(harness).querySelectorAll('[data-page-loading]')).toHaveLength(1);
+    expect(
+      results(harness)!
+        .querySelector('[data-testid="find-skeleton"]')!
+        .hasAttribute('data-page-loading'),
+    ).toBe(true);
+
+    subscription().emit(COED_RESULTS);
+    await settle(harness);
+    expect(host(harness).querySelector('[data-page-loading]')).toBeNull();
+    expect(host(harness).querySelector('footer')).not.toBeNull();
+  });
+
+  it('leaves no page-loading mark with no results or a failed search', async () => {
+    const harness = await open('/programs?q=pickleball');
+    expect(host(harness).querySelector('[data-page-loading]')).not.toBeNull();
+    subscription().emit(NO_RESULTS);
+    await settle(harness);
+    expect(host(harness).querySelector('[data-page-loading]')).toBeNull();
+    expect(host(harness).querySelector('footer')).not.toBeNull();
+
+    await search(harness, 'coed');
+    expect(host(harness).querySelector('[data-page-loading]')).not.toBeNull();
+    subscription().fail(new Error('boom'));
+    await settle(harness);
+    expect(host(harness).querySelector('[data-page-loading]')).toBeNull();
+    expect(host(harness).querySelector('footer')).not.toBeNull();
+  });
+
+  it('draws the count bar as tall as the count line, 20px', async () => {
+    const harness = await open('/programs?q=coed');
+    const bar = results(harness)!.querySelector('[data-testid="find-skeleton"] > span')!;
+    expect(bar.classList.contains('h-5')).toBe(true);
+    expect(bar.classList.contains('h-4')).toBe(false);
+  });
+
   it('draws each skeleton logo rounded-xl and each badge rounded-full', async () => {
     const harness = await open('/programs?q=coed');
     const skeleton = results(harness)!.querySelector('[data-testid="find-skeleton"]')!;
