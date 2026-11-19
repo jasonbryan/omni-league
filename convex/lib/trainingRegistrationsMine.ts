@@ -25,11 +25,15 @@ export const trainingMineRowValidator = v.object({
   organizationSlug: v.string(),
   trainingName: v.string(),
   trainingSlug: v.string(),
-  /** The class itself, or a series' next one. */
+  /** The class itself, or a series' next one as of this answer. */
   classDate: v.string(),
   startTime: v.string(),
   endTime: v.string(),
   locations: v.array(v.string()),
+  /** Set on a series: a query does not rerun as time passes, so the page picks the next class from these with its own clock. */
+  upcomingClasses: v.optional(
+    v.array(v.object({ date: v.string(), startTime: v.string(), endTime: v.string() })),
+  ),
 });
 
 export type TrainingMineRow = Infer<typeof trainingMineRowValidator>;
@@ -100,6 +104,13 @@ export async function trainingRowsOf(
         startTime: next.startTime,
         endTime: next.endTime,
         locations: found.summary.locations,
+        ...(held.classId === undefined && {
+          upcomingClasses: found.classes.map(({ date, startTime, endTime }) => ({
+            date,
+            startTime,
+            endTime,
+          })),
+        }),
       },
     });
   };

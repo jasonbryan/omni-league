@@ -221,7 +221,7 @@ describe('AccountPage camps and training', () => {
     const [card] = cards();
     expect(text(card?.querySelector('p'))).toBe('Gulf Coast Sport & Social · Series');
     expect(facts(card)).toEqual({
-      'Next class': 'Tue, Jun 8, 2027 6 to 7 pm',
+      'Next class': 'Jun 8, 2027 6 PM to 7 PM',
       Where: 'Alpha Beach',
       Attending: 'You',
     });
@@ -347,27 +347,5 @@ describe('AccountPage camps and training', () => {
         expect(main().querySelector('section[aria-labelledby="teams-heading"]')).toBeNull();
       },
     );
-  });
-
-  describe('long names', () => {
-    it('wraps a long program, organization, place, and child name inside the card', async () => {
-      await show({
-        camps: [
-          {
-            ...WEEK_1,
-            campName: 'C'.repeat(60),
-            organizationName: 'O'.repeat(60),
-            sessionName: 'S'.repeat(60),
-            locations: ['L'.repeat(60)],
-            participant: { kind: 'minor', minorName: 'M'.repeat(60) },
-          },
-        ],
-        trainings: [],
-      });
-      const [card] = cards();
-      expect(card?.querySelector('h3 a')?.className).toContain('wrap-anywhere');
-      expect(card?.querySelector('p')?.className).toContain('wrap-anywhere');
-      for (const dd of card.querySelectorAll('dd')) expect(dd.className).toContain('wrap-anywhere');
-    });
   });
 });

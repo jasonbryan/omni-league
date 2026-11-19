@@ -101,6 +101,29 @@ describe('trainingRegistrations.listMine', () => {
     expect(row?.position).toBeUndefined();
   });
 
+  test('gives a series every upcoming class, so the page can move it on with its own clock, and a single class none', async () => {
+    const s = await setup();
+    await registerSeries(s, 'dropIn', 'alice', SELF);
+    await registerClass(s, 'dropIn', 1, 'alice', SELF);
+    await wait(s, 'dropIn', 'bob', SELF);
+    vi.setSystemTime(Date.UTC(2027, 1, 10, 12));
+    const [series, single] = await mine(s.alice);
+    expect(series).toMatchObject({
+      kind: 'series',
+      classDate: CLASS_DATES[2],
+      upcomingClasses: [{ date: CLASS_DATES[2], startTime: '18:00', endTime: '19:00' }],
+    });
+    expect(single).toBeUndefined();
+    vi.setSystemTime(NOW);
+    const rows = await mine(s.alice);
+    expect(rows[0]?.upcomingClasses?.map((row) => row.date)).toEqual([...CLASS_DATES]);
+    expect(rows[1]).toMatchObject({ kind: 'class' });
+    expect(rows[1]).not.toHaveProperty('upcomingClasses');
+    expect(await mine(s.bob)).toMatchObject([
+      { status: 'waiting', upcomingClasses: [{ date: CLASS_DATES[0] }, {}, {}] },
+    ]);
+  });
+
   test('moves a series to its next class as the classes pass, and drops it after the last', async () => {
     const s = await setup();
     await registerSeries(s, 'open', 'alice', SELF);

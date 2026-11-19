@@ -2,7 +2,6 @@ import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../convex/_generated/api';
 import { campSessionTimes } from '../../../convex/lib/campSessionInput';
 import { dateAtUtcMinus12 } from '../../../convex/lib/registration';
-import { trainingClassDate, trainingHours } from '../../../convex/lib/trainingPattern';
 import { publicCampPath } from '../organizations/public-camp/public-camp-path';
 import { publicTrainingPath } from '../organizations/public-training/public-training-path';
 import { seasonRange } from './season-range';
@@ -54,7 +53,7 @@ function campCard(row: HomeCampRow): HomeProgramCard {
   };
 }
 
-function trainingCard(row: HomeTrainingRow): HomeProgramCard {
+function trainingCard(row: HomeTrainingRow, next: UpcomingClass): HomeProgramCard {
   const { detail, whenLabel } = TRAINING_KINDS[row.kind];
   return {
     key: `training:${row.rowId}`,
@@ -62,16 +61,29 @@ function trainingCard(row: HomeTrainingRow): HomeProgramCard {
     path: publicTrainingPath(row.organizationSlug, row.trainingSlug),
     detail: `${row.organizationName} · ${detail}`,
     whenLabel,
-    when: trainingClassDate(row.classDate),
-    times: trainingHours(row.startTime, row.endTime),
+    when: seasonRange(next.date, next.date),
+    times: campSessionTimes(next.startTime, next.endTime),
     where: whereOf(row.locations),
     who: whoOf(row.participant),
     waitlist: waitlistOf(row),
-    date: row.classDate,
+    date: next.date,
   };
 }
 
-// A series stays once its next class has passed: that date moves on only when the server answers again.
+interface UpcomingClass {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+/** A series' next class from the day it is today, not the day the server answered, which a query does not move on as time passes. */
+function nextClassOf(row: HomeTrainingRow, today: string): UpcomingClass | undefined {
+  const classes = row.upcomingClasses ?? [
+    { date: row.classDate, startTime: row.startTime, endTime: row.endTime },
+  ];
+  return classes.find(({ date }) => date >= today);
+}
+
 export function homeProgramCards(
   camps: readonly HomeCampRow[],
   trainings: readonly HomeTrainingRow[],
@@ -80,6 +92,9 @@ export function homeProgramCards(
   const today = dateAtUtcMinus12(now);
   return [
     ...camps.filter((row) => row.endDate >= today).map(campCard),
-    ...trainings.filter((row) => row.kind === 'series' || row.classDate >= today).map(trainingCard),
+    ...trainings.flatMap((row) => {
+      const next = nextClassOf(row, today);
+      return next ? [trainingCard(row, next)] : [];
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 }

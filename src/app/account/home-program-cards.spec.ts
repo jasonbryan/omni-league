@@ -72,8 +72,8 @@ describe('homeProgramCards', () => {
       path: '/organizations/gulf-coast/training/tuesday-serving-clinic',
       detail: 'Gulf Coast Sport & Social · Series',
       whenLabel: 'Next class',
-      when: 'Tue, Jun 8, 2027',
-      times: '6 to 7 pm',
+      when: 'Jun 8, 2027',
+      times: '6 PM to 7 PM',
       where: 'Alpha Beach',
       who: 'You',
       waitlist: null,
@@ -129,9 +129,42 @@ describe('homeProgramCards', () => {
     expect(cards.map((card) => card.key)).toEqual(['camp:today']);
   });
 
-  it('keeps a series whose next class the server has not moved on yet', () => {
-    const cards = homeProgramCards([], [{ ...TRAINING, classDate: '2027-05-25' }], NOW);
-    expect(cards.map((card) => card.key)).toEqual(['training:t1']);
+  describe('a series', () => {
+    const SERIES: HomeTrainingRow = {
+      ...TRAINING,
+      upcomingClasses: [
+        { date: '2027-06-08', startTime: '18:00', endTime: '19:00' },
+        { date: '2027-06-15', startTime: '17:30', endTime: '18:30' },
+        { date: '2027-06-22', startTime: '17:30', endTime: '18:30' },
+      ],
+    };
+    const at = (day: number, hour = 15) => Date.UTC(2027, 5, day, hour);
+    const next = (now: number) => homeProgramCards([], [SERIES], now)[0];
+
+    it('shows its first upcoming class, with that class’s times', () => {
+      expect(next(at(1))).toMatchObject({ when: 'Jun 8, 2027', times: '6 PM to 7 PM' });
+    });
+
+    it('keeps a class until its day is over', () => {
+      expect(next(at(8, 23))).toMatchObject({ when: 'Jun 8, 2027' });
+    });
+
+    it('moves on to the next class once a class has passed, with no new answer', () => {
+      expect(next(at(9))).toMatchObject({ when: 'Jun 15, 2027', times: '5:30 PM to 6:30 PM' });
+      expect(next(at(16))).toMatchObject({ when: 'Jun 22, 2027' });
+    });
+
+    it('drops off after its last class', () => {
+      expect(next(at(22, 12))).toBeDefined();
+      expect(next(at(23))).toBeUndefined();
+    });
+
+    it('reads the row’s own class when an answer lists no classes', () => {
+      const { upcomingClasses, ...older } = SERIES;
+      void upcomingClasses;
+      expect(homeProgramCards([], [older], at(1))).toHaveLength(1);
+      expect(homeProgramCards([], [older], at(9))).toHaveLength(0);
+    });
   });
 
   it('keeps a camp session that has begun ahead of one still to come', () => {
