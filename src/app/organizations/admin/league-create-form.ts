@@ -207,7 +207,7 @@ export interface LeagueLocationChoice {
         <fieldset data-slot="field-set" class="border-t border-border pt-5">
           <legend class="float-start w-full text-base font-semibold">Division</legend>
           <p class="clear-both pt-1 text-sm text-muted-foreground">
-            Players filter leagues by these on your public page and in Find a league.
+            Players filter leagues by these on your public page and in Find a program.
           </p>
           <div role="status">
             @if (filledMessage(); as message) {

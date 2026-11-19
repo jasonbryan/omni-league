@@ -156,6 +156,14 @@ describe('LeagueDetailsForm', () => {
       );
     });
 
+    it('tells the organizer the division choices show in Find a program', async () => {
+      await open();
+      const legend = section().querySelector('fieldset > legend')!;
+      expect(text(legend.nextElementSibling)).toBe(
+        'Players filter leagues by these on your public page and in Find a program.',
+      );
+    });
+
     it('points the name field at its description while the name is valid', async () => {
       await open();
       expect(nameInput().getAttribute('aria-describedby')).toBe('league-name-description');
