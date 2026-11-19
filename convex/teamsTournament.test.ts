@@ -694,6 +694,13 @@ describe('teams.getForMember for a tournament team', () => {
       expect(await reportableGamesFor(s, 'admin-a', teamId)).toEqual([]);
       expect(await reportableGamesFor(s, 'organizer-assigned', teamId)).toEqual([]);
     });
+
+    test('is empty for the captain of another team in the tournament, who has a game of their own to report', async () => {
+      const { s, teamId, otherTeamId } = await registered();
+      await poolGame(s, [teamId, otherTeamId], 1);
+      expect(await reportableGamesFor(s, 'rival', otherTeamId)).toHaveLength(1);
+      expect(await reportableGamesFor(s, 'rival', teamId)).toEqual([]);
+    });
   });
 
   test('gives an admin of the organization the team', async () => {
