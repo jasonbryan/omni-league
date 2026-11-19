@@ -720,6 +720,42 @@ describe('testing:seedTournamentPools and testing:seedPoolResult', () => {
     expect(tied?.winner).toBeUndefined();
   });
 
+  test('seeds the forfeit on the side of the team that forfeits, whichever team of the game it is', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    for (const [teams, forfeitTeamName] of [
+      [['Alpha', 'Delta'], 'Alpha'],
+      [['Alpha', 'Echo'], 'Echo'],
+    ] as const) {
+      await t.mutation(internal.testing.seedPoolResult, {
+        ...ARGS,
+        teams: [...teams],
+        forfeitTeamName,
+      });
+    }
+    const forfeits = (await publicPools(t))![0].games.filter((game) => game.forfeit !== undefined);
+    expect(forfeits.map((game) => game.teams[game.forfeit!]).sort()).toEqual(['Alpha', 'Echo']);
+  });
+
+  test('throws for a forfeit by a team that is not in the game, and writes nothing', async () => {
+    const t = await withTeams();
+    await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });
+    const games = () => t.run((ctx) => ctx.db.query('tournamentGames').collect());
+    const users = () => t.run((ctx) => ctx.db.query('users').collect());
+    const [gamesBefore, usersBefore] = [await games(), await users()];
+    for (const forfeitTeamName of ['Bravo', 'Echo']) {
+      await expect(
+        t.mutation(internal.testing.seedPoolResult, {
+          ...ARGS,
+          teams: ['Alpha', 'Delta'],
+          forfeitTeamName,
+        }),
+      ).rejects.toThrow(`"${forfeitTeamName}" is not in Alpha v Delta`);
+    }
+    expect(await games()).toEqual(gamesBefore);
+    expect(await users()).toEqual(usersBefore);
+  });
+
   test('refuses a pair that does not play each other, a missing score, and an unknown team', async () => {
     const t = await withTeams();
     await t.mutation(internal.testing.seedTournamentPools, { ...ARGS, poolCount: 2 });

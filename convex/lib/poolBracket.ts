@@ -6,7 +6,14 @@ import {
   type PoolIssue,
 } from './pools';
 import type { Sport } from './sports';
-import { crossPoolValues, pointsAmong, standingsOf, type StandingsGame } from './standings';
+import {
+  allPlayedEachOther,
+  crossPoolValues,
+  pointsAmong,
+  standingsOf,
+  type StandingsGame,
+  type StandingsRow,
+} from './standings';
 
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
 
@@ -66,7 +73,8 @@ function compareValues(first: readonly number[], second: readonly number[]): num
 
 /**
  * Teams level in a pool, best first: the points rule is applied again to each group it leaves level, and the pool's seed order
- * separates what is still level. `level` is the pool index of the first team of the group a team ends in.
+ * separates what is still level.
+ * `level` is the pool index of the first team of the group a team ends in.
  */
 function byPointsAmong(
   group: readonly string[],
@@ -74,7 +82,7 @@ function byPointsAmong(
   firstIndex: number,
 ): { teamId: string; level: number }[] {
   const points = pointsAmong(group, games);
-  if (new Set(points.values()).size === 1) {
+  if (!allPlayedEachOther(group, games) || new Set(points.values()).size === 1) {
     return group.map((teamId) => ({ teamId, level: firstIndex }));
   }
   const ordered: { teamId: string; level: number }[] = [];
@@ -86,9 +94,20 @@ function byPointsAmong(
   return ordered;
 }
 
-function orderedPool({ pool, teamIds, games }: PoolStanding, sport: Sport) {
+export interface PoolOrderEntry {
+  teamId: string;
+  pool: Pool;
+  /** The team's place in the pool, from 1, which tied teams take one after the other. */
+  place: number;
+  tie: PoolSeed['tie'];
+  values: number[];
+  row: StandingsRow;
+}
+
+export function poolOrder(sport: Sport, { pool, teamIds, games }: PoolStanding): PoolOrderEntry[] {
   const rows = standingsOf(sport, teamIds, games);
-  const ordered: { teamId: string; place: number; tie: PoolSeed['tie']; values: number[] }[] = [];
+  const rowOf = new Map(rows.map((row) => [row.teamId, row]));
+  const ordered: Omit<PoolOrderEntry, 'pool'>[] = [];
   const valuesOf = new Map(rows.map((row) => [row.teamId, crossPoolValues(sport, row)]));
   for (let start = 0; start < rows.length;) {
     const band = rows.filter((row) => row.place === rows[start].place);
@@ -101,6 +120,7 @@ function orderedPool({ pool, teamIds, games }: PoolStanding, sport: Sport) {
         place: ordered.length + 1,
         tie: band.length > 1 ? { place: rows[start].place, level } : null,
         values: valuesOf.get(teamId)!,
+        row: rowOf.get(teamId)!,
       });
     }
     start += band.length;
@@ -111,7 +131,7 @@ function orderedPool({ pool, teamIds, games }: PoolStanding, sport: Sport) {
 /** Every team: the pool winners first, then the runners-up, and so on, each place ordered across the pools. */
 export function seedsFromPools(sport: Sport, pools: readonly PoolStanding[]): PoolSeed[] {
   return pools
-    .flatMap((standing) => orderedPool(standing, sport))
+    .flatMap((standing) => poolOrder(sport, standing))
     .sort(
       (a, b) =>
         a.place - b.place ||

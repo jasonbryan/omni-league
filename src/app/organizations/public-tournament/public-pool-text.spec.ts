@@ -35,8 +35,10 @@ describe('poolGameResultText', () => {
     ).toBe('21–15, 18–21, 9–15. Bay won.');
   });
 
-  it('says a game with a score and no winner was tied', () => {
-    expect(poolGameResultText(game({ score: { kind: 'goals', a: 2, b: 2 } }))).toBe('2–2. Tied.');
+  it('says a game with a score and no winner ended in a tie', () => {
+    expect(poolGameResultText(game({ score: { kind: 'goals', a: 2, b: 2 } }))).toBe(
+      '2–2. The game ended in a tie.',
+    );
   });
 
   it('names the team that forfeited and the winner, with no score', () => {

@@ -202,7 +202,7 @@ describe('Pool game results', () => {
       'The game ended in a tie.',
     );
     expect(text(row('g_1').querySelector('[data-slot="game-result"]'))).toBe(
-      'Team 01 2–2 Team 04. The game was tied.',
+      'Team 01 2–2 Team 04. The game ended in a tie.',
     );
   });
 

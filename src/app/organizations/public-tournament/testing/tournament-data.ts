@@ -100,7 +100,7 @@ export const BEACH_OPEN_POOLS: PublicPool[] = [
       { place: 3, name: 'Dig Dogs', cells: ['1', '0', '1', '0%', '-6'] },
     ],
     tiebreakers:
-      'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential.',
+      'Teams level on win percentage are ordered by head-to-head, set win percentage, then point differential. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the points they scored against each other, then by seed.',
     games: [
       {
         round: 1,

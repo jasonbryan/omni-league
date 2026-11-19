@@ -12,4 +12,12 @@ crons.daily(
   {},
 );
 
+// The UTC-12 day turns at 12:00 UTC.
+crons.daily(
+  'mark programs that ended as no longer current',
+  { hourUTC: 12, minuteUTC: 1 },
+  internal.programEnds.markEnded,
+  {},
+);
+
 export default crons;

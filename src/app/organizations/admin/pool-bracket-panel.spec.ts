@@ -607,12 +607,23 @@ describe('PoolBracketPanel', () => {
 
     it.each([
       [[1, 2], 'The team that scored more points in the games between them advances.'],
-      [[1, 1], 'so seed order decides.'],
+      [
+        [1, 1],
+        'They scored the same number of points against each other, or did not all play each other, so seed order decides.',
+      ],
     ] as const)('says what decided it, in one line, for levels %j', async (levels, words) => {
       await open(tied(levels));
       expect(panel().querySelectorAll('[data-slot="tie-note"]')).toHaveLength(1);
       expect(note()).toContain('Pool A is tied for 2nd between Team 03 and Team 05.');
       expect(note()).toContain(words);
+    });
+
+    it.each([
+      ['soccer', 'goals'],
+      ['softball', 'runs'],
+    ] as const)('words the note with the %s measure: %s', async (sport, word) => {
+      await open(tied([1, 2]), { ...TOURNAMENT, sport });
+      expect(note()).toContain(`The team that scored more ${word} in the games between them`);
     });
 
     it('names the rule that separated the last team in from the first team out, in a band the points split only partly', async () => {

@@ -7,10 +7,6 @@ const root = join(import.meta.dirname, '..');
 const appDir = join(root, 'src', 'app');
 
 const LEAGUES_REDIRECT = 'src/app/find/leagues-redirect.ts';
-const LEAGUE_FORMS = [
-  'src/app/organizations/admin/league-create-form.ts',
-  'src/app/organizations/league/league-details-form.ts',
-];
 const NEW_USER_FILE = 'src/app/account/home-new-user.ts';
 const OLD_NAME = /Find (a|another) league/;
 const NEW_USER_SENTENCE = /Find a league, then register a team or register as a free agent\./;
@@ -35,9 +31,9 @@ function filesMatching(pattern, exempt, text = read) {
 }
 
 describe('the entry points to the search', () => {
-  it('no template reads "Find a league" or "Find another league", apart from the league forms and the new-user sentence', () => {
+  it('no template reads "Find a league" or "Find another league", apart from the new-user sentence', () => {
     const withoutSentence = (file) => read(file).replace(NEW_USER_SENTENCE, '');
-    assert.deepEqual(filesMatching(OLD_NAME, LEAGUE_FORMS, withoutSentence), []);
+    assert.deepEqual(filesMatching(OLD_NAME, [], withoutSentence), []);
   });
 
   it('no template or component links to /leagues, which redirects: they go straight to /programs', () => {
@@ -45,7 +41,6 @@ describe('the entry points to the search', () => {
   });
 
   it('each exemption is still needed', () => {
-    for (const file of LEAGUE_FORMS) assert.match(read(file), OLD_NAME, file);
     assert.match(read(NEW_USER_FILE), NEW_USER_SENTENCE);
   });
 });

@@ -257,6 +257,8 @@ export function forfeitScore(
   return { kind, sets: Array.from({ length: toWin }, () => ({ ...points })) };
 }
 
+export const TIED_GAME_TEXT = 'The game ended in a tie.';
+
 export function scoreText(score: Score): string {
   if (score.kind !== 'sets') return `${score.a}–${score.b}`;
   return score.sets.map(({ a, b }) => `${a}–${b}`).join(', ');

@@ -18,6 +18,7 @@ import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { classDates, MAX_TRAINING_WEEKS, type TrainingPattern } from './trainingPattern';
 import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
+import { dateAtUtcMinus12 } from './registration';
 import { joinSearchText } from './searchQuery';
 import {
   DEFAULT_BRACKET_TYPE,
@@ -80,6 +81,26 @@ export type Tenant = Omit<Infer<typeof tenantValidator>, 'leagues'> & { leagues:
 
 export function sortName(name: string): string {
   return name.toLowerCase();
+}
+
+// Compared on the UTC-12 day, as every deadline is, so a program stays current until its last day has ended everywhere.
+export function programEndFields(
+  type: Doc<'programs'>['type'],
+  endDate: string | undefined,
+): { current: boolean; endDate: string | undefined } {
+  if (type === 'league') return { current: true, endDate: undefined };
+  return { current: endDate !== undefined && endDate >= dateAtUtcMinus12(Date.now()), endDate };
+}
+
+async function syncProgramEnd(
+  ctx: Pick<MutationCtx, 'db'>,
+  program: Doc<'programs'>,
+  endDate: string | undefined,
+): Promise<boolean> {
+  const fields = programEndFields(program.type, endDate);
+  if (program.endDate === fields.endDate && program.current === fields.current) return false;
+  await ctx.db.patch('programs', program._id, fields);
+  return true;
 }
 
 // An organization's `sortName` and `hasPublishedLeague` feed the organizations list: a writer that renames an organization, or unpublishes or deletes its last published league, must keep both current.
@@ -562,6 +583,7 @@ export async function insertDraftTournament(
     locationIds: tournament.locationIds,
     ...divisionFields(division),
     searchText,
+    ...programEndFields('tournament', tournament.endDate),
   });
   return ctx.db.insert('tournaments', {
     programId,
@@ -610,6 +632,7 @@ export async function insertDraftCamp(
     locationIds: camp.locationIds,
     ...defaultDivision(camp.sport),
     searchText,
+    current: false,
   });
   return ctx.db.insert('camps', {
     programId,
@@ -653,6 +676,7 @@ export async function insertDraftTraining(
     locationIds: training.locationIds,
     ...defaultDivision(training.sport),
     searchText,
+    current: false,
   });
   return ctx.db.insert('trainings', {
     programId,
@@ -720,6 +744,7 @@ async function refreshTraining(ctx: MutationCtx, trainingId: Id<'trainings'>): P
       status === 'scheduled' && (latest === undefined || date > latest) ? date : latest,
     undefined,
   );
+  await syncProgramEnd(ctx, program, lastClassDate);
   const unchanged =
     training.status === program.status &&
     training.sport === program.sport &&
@@ -764,6 +789,51 @@ export function backfillTrainingFields(
   training: Doc<'trainings'>,
 ): Promise<boolean> {
   return refreshTraining(ctx, training._id);
+}
+
+async function endDateOfProgram(
+  ctx: Pick<MutationCtx, 'db'>,
+  program: Doc<'programs'>,
+): Promise<string | undefined> {
+  const programId = program._id;
+  if (program.type === 'tournament') {
+    const tournament = await ctx.db
+      .query('tournaments')
+      .withIndex('by_programId', (q) => q.eq('programId', programId))
+      .unique();
+    return tournament?.endDate;
+  }
+  if (program.type === 'camp') {
+    const camp = await ctx.db
+      .query('camps')
+      .withIndex('by_programId', (q) => q.eq('programId', programId))
+      .unique();
+    return camp?.lastSessionEndDate;
+  }
+  if (program.type === 'training') {
+    const training = await ctx.db
+      .query('trainings')
+      .withIndex('by_programId', (q) => q.eq('programId', programId))
+      .unique();
+    return training?.lastClassDate;
+  }
+  return undefined;
+}
+
+// Recomputed for every row, because a release that did not keep the fields leaves them missing or stale; the camp and training passes run first, so their type rows are current.
+export async function backfillProgramEndFields(
+  ctx: MutationCtx,
+  program: Doc<'programs'>,
+): Promise<boolean> {
+  return syncProgramEnd(ctx, program, await endDateOfProgram(ctx, program));
+}
+
+export async function backfillAllProgramEndFields(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const program of await ctx.db.query('programs').take(BACKFILL_SCAN_LIMIT)) {
+    if (await backfillProgramEndFields(ctx, program)) backfilled++;
+  }
+  return backfilled;
 }
 
 export async function backfillAllTrainingFields(ctx: MutationCtx): Promise<number> {
@@ -843,6 +913,7 @@ async function refreshCamp(
     sport: program.sport,
     lastSessionEndDate,
   });
+  await syncProgramEnd(ctx, program, lastSessionEndDate);
 }
 
 export async function publishCamp(ctx: MutationCtx, camp: Doc<'camps'>): Promise<void> {
@@ -910,6 +981,11 @@ export async function updateTournamentDetails(
     grandFinal: change.grandFinal,
   };
   await ctx.db.patch('tournaments', tournament._id, written);
+  const program = await ctx.db.get('programs', tournament.programId);
+  if (program?.organizationId !== tournament.organizationId) {
+    throw new Error(`Tournament ${tournament._id} has no program of its organization`);
+  }
+  await syncProgramEnd(ctx, program, written.endDate);
   return { earlier, written };
 }
 
@@ -1335,6 +1411,7 @@ function programFieldsOfLeague(
     level: league.level,
     customLevelId: league.customLevelId,
     ageGroup: league.ageGroup,
+    current: true,
   };
 }
 
