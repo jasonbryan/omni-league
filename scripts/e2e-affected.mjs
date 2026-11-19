@@ -65,8 +65,10 @@ const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 const TOURNAMENT_PAGE = ['tournament-page', 'cache-key'];
 // cache-key samples the camp route. The camp page's session rows link to the register route and read "You're registered".
 const CAMP_PAGE = ['camp-page', 'camp-registration', 'cache-key'];
+// The race spec reads the public page's class rows after a register-route sign-up, so both routes' files select it.
+const TRAINING_REGISTRATION = ['training-registration', 'training-registration-race'];
 // cache-key samples the training route. The training page's breadcrumb, the organization page's Training section, and Find a program's Training rows link to it, and its Registration fact links to the register route and reads "You're registered".
-const TRAINING_PAGE = ['training-page', 'training-registration', 'cache-key'];
+const TRAINING_PAGE = ['training-page', ...TRAINING_REGISTRATION, 'cache-key'];
 // The season page's registration card links to the register routes, and the register routes open the team page.
 const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
@@ -151,7 +153,7 @@ export const ROUTE_SPECS = {
     'camp-page',
     'after-sign-in',
   ],
-  'app/organizations/:orgSlug/training/:trainingSlug/register': ['training-registration'],
+  'app/organizations/:orgSlug/training/:trainingSlug/register': TRAINING_REGISTRATION,
   'app/organizations/:orgSlug/training/:trainingSlug': [
     'organization-training',
     'training-page',

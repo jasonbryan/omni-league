@@ -554,6 +554,33 @@ describe('the training page specs', () => {
   });
 });
 
+describe('the training registration race spec', () => {
+  const RACE = specFile('training-registration-race');
+
+  it('runs for the public training page, the register page, the admin waitlist, and the convex training files', () => {
+    for (const file of [
+      'src/app/organizations/public-training/public-training-content.ts',
+      'src/app/organizations/register-training/register-training-page.ts',
+      'src/app/organizations/register-training/register-training-state.ts',
+      'src/app/organizations/admin/training-waitlist.ts',
+      'convex/trainingWaitlist.ts',
+      'convex/trainingRegistrations.ts',
+      'convex/lib/trainingWaitlistQueue.ts',
+      'convex/lib/trainingRegistrationRules.ts',
+    ]) {
+      assert.ok(specsFor([file]).includes(RACE), file);
+    }
+  });
+
+  it('runs for the register route', () => {
+    assert.ok(
+      ROUTE_SPECS['app/organizations/:orgSlug/training/:trainingSlug/register'].includes(
+        'training-registration-race',
+      ),
+    );
+  });
+});
+
 describe('the route tables', () => {
   /**
    * Written apart from the rule: the route file's text with each `loadChildren: () => import('./file').then((m) => m.name)`
