@@ -9,7 +9,7 @@ test.skip(remoteBaseUrl !== undefined, LOCAL_BUILD_ONLY);
 const SCRIPT_URL = /\/(main|chunk-[^/]+)\.js$/;
 const STILL_PENDING_MS = 1_000;
 
-/** The HTML of a document arrives and its scripts do not, so it cannot hydrate until `release`. */
+/** A document whose HTML arrives but whose scripts wait cannot hydrate until the returned release runs. */
 async function holdScripts(page: Page): Promise<() => void> {
   let release!: () => void;
   const released = new Promise<void>((resolve) => {

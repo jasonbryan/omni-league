@@ -9,9 +9,9 @@ export type HydratedOptions =
 
 /**
  * Angular replays a click made before hydration but does not stop the browser following the
- * server-rendered `href`. With `page`, the wait is for that page's hydration number `after + 1`:
- * read `hydrationCount(page)` before a hard load, so a later document is not satisfied by an
- * earlier one, or by another page in the context. Without it, any hydration of any page counts.
+ * server-rendered `href`. `consoleGuard.hydrated` is true once any page has hydrated, so after a
+ * later hard load, or another page's hydration, pass `page` and the `hydrationCount(page)` read
+ * before that load as `after`.
  */
 export async function hydrated(
   consoleGuard: HydrationLog,
@@ -32,7 +32,6 @@ export async function hydrated(
     .toBeGreaterThan(after);
 }
 
-/** Loads a new document and waits for this page to hydrate it. */
 export async function gotoHydrated(
   page: Page,
   consoleGuard: HydrationLog,

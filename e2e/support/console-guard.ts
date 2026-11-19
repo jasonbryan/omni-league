@@ -125,12 +125,10 @@ export class ConsoleGuard {
     return this.logs;
   }
 
-  /** True once any page has hydrated; `hydrationCount` says which page, and how many times. */
   get hydrated(): boolean {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
   }
 
-  /** The "Angular hydrated" logs from this page: one per server-rendered document it has loaded. */
   hydrationCount(page: Page): number {
     return this.hydrations.get(page) ?? 0;
   }
