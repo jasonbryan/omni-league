@@ -584,3 +584,146 @@ describe('deleting an account with many rows', () => {
     expect(await seasonCounters(s)).toMatchObject({ waitlistCount: 0 });
   });
 });
+
+describe('deleting an account across teams, parents and kinds of row', () => {
+  test('deletes a guardian’s minors on several season and tournament teams and leaves other guardians’ minors', async () => {
+    const s = await tournamentWorld();
+    const sharks = await seasonTeam(s, 'Sharks', s.captain);
+    const dunes = await seasonTeam(s, 'Dunes', s.rival);
+    const crabs = await tournamentTeam(s, 'Crabs', s.stranger);
+    await join(s, sharks, s.guardian);
+    await joinMinor(s, sharks, s.guardian, 'Maya R.');
+    await joinMinor(s, dunes, s.guardian, 'Noa R.');
+    await joinMinor(s, crabs, s.guardian, 'Eli R.');
+    await joinMinor(s, sharks, s.rivalPlayer, 'Kai P.');
+    expect(await rosterCount(s, sharks)).toBe(4);
+
+    await deleteAccount(s, s.guardian);
+
+    expect(await entriesOf(s, s.guardian)).toEqual([]);
+    expect(await rosterCount(s, sharks)).toBe(2);
+    expect(await rosterCount(s, dunes)).toBe(1);
+    expect(await rosterCount(s, crabs)).toBe(1);
+    expect(await entriesOf(s, s.rivalPlayer)).toHaveLength(1);
+  });
+
+  test('passes a season team and a tournament team on in one deletion, skipping a removed adult and one removed then re-added', async () => {
+    const s = await tournamentWorld();
+    const sharks = await seasonTeam(s, 'Sharks', s.captain);
+    const crabs = await tournamentTeam(s, 'Crabs', s.captain);
+    await join(s, sharks, s.player);
+    await join(s, sharks, s.rival);
+    await join(s, crabs, s.player);
+    await s.t.run(async (ctx) => {
+      const first = (await ctx.db.query('rosterEntries').collect()).find(
+        (row) => row.teamId === sharks && row.userId === s.player.userId,
+      )!;
+      await removeRosterEntry(ctx, first, s.captain.userId);
+    });
+    await join(s, sharks, s.player);
+
+    await deleteAccount(s, s.captain);
+
+    expect((await team(s, sharks))?.captainUserId).toBe(s.rival.userId);
+    expect((await team(s, crabs))?.captainUserId).toBe(s.player.userId);
+    expect(await rosterCount(s, sharks)).toBe(2);
+    expect(await rosterCount(s, crabs)).toBe(1);
+  });
+
+  test('passes a team on even when its season is gone', async () => {
+    const s = await tournamentWorld();
+    const sharks = await seasonTeam(s, 'Sharks', s.captain);
+    await join(s, sharks, s.player);
+    await s.t.run((ctx) => ctx.db.delete('seasons', s.season));
+
+    await deleteAccount(s, s.captain);
+
+    expect((await team(s, sharks))?.captainUserId).toBe(s.player.userId);
+  });
+
+  test('keeps a tournament waitlist count that is already 0 at 0', async () => {
+    const s = await tournamentWorld();
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('tournaments', s.gulf, { waitlistCount: 0 });
+      await ctx.db.insert('waitlistEntries', {
+        organizationId: s.a,
+        tournamentId: s.gulf,
+        userId: s.traveller.userId,
+        teamName: 'Zero count',
+        sortName: 'zero count',
+        status: 'waiting',
+        requestedAt: 1,
+      });
+    });
+
+    await deleteAccount(s, s.traveller);
+
+    expect(await waitlistOf(s, s.traveller)).toEqual([]);
+    expect(await tournamentWaitlistCount(s)).toBe(0);
+  });
+
+  test('deletes more than 100 rows of every kind in one deletion and hands over only the teams that have an adult', async () => {
+    const s = await tournamentWorld();
+    const account = await bystander(s, 'everything');
+    const host = await bystander(s, 'host');
+    const captained = await bulkTeams(s, account, MANY, 1);
+    for (const [index, teamId] of captained.entries()) {
+      if (index % 2 === 0) await rosterRow(s, teamId, s.player.userId);
+    }
+    const hosted = await bulkTeams(s, host, MANY, 1);
+    for (const teamId of hosted) await rosterRow(s, teamId, account.userId);
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch('seasons', s.season, { waitlistCount: MANY + 1 });
+      for (let i = 0; i < MANY; i += 1) {
+        await ctx.db.insert('freeAgents', {
+          organizationId: s.a,
+          seasonId: s.season,
+          userId: account.userId,
+          status: 'waiting',
+          registeredAt: i,
+        });
+        await ctx.db.insert('waitlistEntries', {
+          organizationId: s.a,
+          seasonId: s.season,
+          userId: account.userId,
+          teamName: `Wait ${i}`,
+          sortName: `wait ${i}`,
+          status: 'waiting',
+          requestedAt: i,
+        });
+      }
+      await ctx.db.insert('waitlistEntries', {
+        organizationId: s.a,
+        seasonId: s.season,
+        userId: s.stranger.userId,
+        teamName: 'Other',
+        sortName: 'other',
+        status: 'waiting',
+        requestedAt: 1,
+      });
+      await ctx.db.insert('freeAgents', {
+        organizationId: s.a,
+        seasonId: s.season,
+        userId: s.stranger.userId,
+        status: 'waiting',
+        registeredAt: 1,
+      });
+    });
+
+    await deleteAccount(s, account);
+
+    expect(await entriesOf(s, account)).toEqual([]);
+    expect(await freeAgentsOf(s, account)).toEqual([]);
+    expect(await waitlistOf(s, account)).toEqual([]);
+    const hostedCounts = await Promise.all(hosted.map((teamId) => rosterCount(s, teamId)));
+    expect(hostedCounts.every((count) => count === 0)).toBe(true);
+    expect(await seasonCounters(s)).toMatchObject({ waitlistCount: 1 });
+    const captains = await Promise.all(
+      captained.map(async (teamId) => (await team(s, teamId))?.captainUserId),
+    );
+    expect(captains.filter((id) => id === s.player.userId)).toHaveLength(MANY / 2);
+    expect(captains.filter((id) => id === account.userId)).toHaveLength(MANY / 2);
+    expect(await waitlistOf(s, s.stranger)).toHaveLength(1);
+    expect(await freeAgentsOf(s, s.stranger)).toHaveLength(1);
+  });
+});
