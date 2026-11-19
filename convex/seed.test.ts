@@ -58,6 +58,7 @@ const NONE = {
   draftLeagueCounts: 0,
   campFields: 0,
   trainingFields: 0,
+  programFields: 0,
 };
 const NO_ROWS = {
   organizations: 0,
@@ -878,6 +879,7 @@ describe('seed:demo', () => {
         draftLeagueCounts: 2,
         campFields: 0,
         trainingFields: 0,
+        programFields: 0,
       },
     });
 
@@ -1959,6 +1961,7 @@ describe('seed:demo backfill against a recount', () => {
       draftLeagueCounts: 1,
       campFields: 0,
       trainingFields: 0,
+      programFields: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({
@@ -2219,9 +2222,12 @@ describe('seed:demo seasons dated from the run', () => {
     await t.mutation(internal.seed.insertDemoData, {});
     const first = await seasonsOf(t, 'current-season');
     vi.setSystemTime(RUN + 90 * 24 * 60 * 60 * 1000);
-    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
+    // The programs whose last day has passed in the 90 days stop being current.
+    const second = await t.mutation(internal.seed.insertDemoData, {});
+    expect(second.backfilled.programFields).toBeGreaterThan(0);
+    expect(second).toEqual({
       ...NO_ROWS,
-      backfilled: NONE,
+      backfilled: { ...NONE, programFields: second.backfilled.programFields },
     });
     expect(await seasonsOf(t, 'current-season')).toEqual(first);
   });

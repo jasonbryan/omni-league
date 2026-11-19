@@ -1768,6 +1768,7 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
   }
 
   test('an org admin changes the dates, deadline, maximum, and sets per game, and nothing else changes', async () => {
+    vi.useFakeTimers({ now: TODAY });
     const s = await setup();
     const tournamentId = await draftIn(s);
     const before = await snapshot(s.t);
@@ -1775,7 +1776,18 @@ describe('tournaments.updateDetails and undoUpdateDetails', () => {
     expect(result).toEqual({ earlier: held, written: changed });
     const after = await snapshot(s.t);
     expect(after.tournaments).toEqual([{ ...before.tournaments[0], ...changed }]);
-    expect({ ...after, tournaments: [] }).toEqual({ ...before, tournaments: [] });
+    expect({ ...after, tournaments: [], programs: [] }).toEqual({
+      ...before,
+      tournaments: [],
+      programs: [],
+    });
+    expect(after.programs).toEqual(
+      before.programs.map((program) =>
+        program.type === 'tournament'
+          ? { ...program, endDate: changed.endDate, current: true }
+          : program,
+      ),
+    );
   });
 
   test('a blank end date makes a one-day tournament, and an omitted sets per game keeps the one held', async () => {

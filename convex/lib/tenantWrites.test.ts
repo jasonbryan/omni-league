@@ -74,6 +74,7 @@ function mirrored(league: Doc<'leagues'>) {
     customLevelId: league.customLevelId,
     ageGroup: league.ageGroup,
     searchText: league.searchText,
+    current: true,
   };
 }
 
