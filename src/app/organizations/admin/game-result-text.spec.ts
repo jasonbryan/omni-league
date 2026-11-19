@@ -1,3 +1,6 @@
+import { TIED_GAME_TEXT } from '../../../../convex/lib/sports';
+import { offenders } from '../../ui/testing/app-sources';
+import { poolGameResultText } from '../public-tournament/public-pool-text';
 import { confirmedText, playedText, restoredText, savedText } from './game-result-text';
 
 const SCORE = { kind: 'goals' as const, a: 2, b: 2 };
@@ -14,10 +17,33 @@ describe('playedText', () => {
     ).toBe('Ace 3–1 Bay. Ace won.');
   });
 
-  it('says a game with no winner was tied', () => {
+  it('says a game with no winner ended in a tie', () => {
     expect(
       playedText({ teams: ['Ace', 'Bay'], score: SCORE, winnerName: null, forfeitName: null }),
-    ).toBe('Ace 2–2 Bay. The game was tied.');
+    ).toBe('Ace 2–2 Bay. The game ended in a tie.');
+  });
+});
+
+describe('the wording of a tied game', () => {
+  it('is one sentence in the organizer’s result line, the saved and confirmed status, and the public game', () => {
+    const tied = {
+      teams: ['Ace', 'Bay'] as const,
+      score: SCORE,
+      winnerName: null,
+      forfeitName: null,
+    };
+    expect(TIED_GAME_TEXT).toBe('The game ended in a tie.');
+    expect(playedText(tied)).toContain(TIED_GAME_TEXT);
+    expect(savedText(null, null, false, 'pool').description).toBe(TIED_GAME_TEXT);
+    expect(confirmedText(null, null, 'pool').description).toBe(TIED_GAME_TEXT);
+    expect(poolGameResultText({ round: 1, teams: ['Ace', 'Bay'], score: SCORE })).toContain(
+      TIED_GAME_TEXT,
+    );
+  });
+
+  it('is the only wording in the app: no template or string says the game was tied or gives the bare result Tied.', () => {
+    expect(offenders('The game was tied.')).toEqual([]);
+    expect(offenders(/['"`]Tied\./)).toEqual([]);
   });
 });
 

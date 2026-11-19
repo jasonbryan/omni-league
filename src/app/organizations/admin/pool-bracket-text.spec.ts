@@ -1,3 +1,4 @@
+import { SCORE_WORDS, STANDINGS_TIEBREAKER_NOTES } from '../../../../convex/lib/standings';
 import { advanceDescription, advanceOptions, placeText, tieNote } from './pool-bracket-text';
 
 describe('pool bracket text', () => {
@@ -27,12 +28,37 @@ describe('pool bracket text', () => {
     expect(placeText('A', 3, { place: 2 })).toBe('Pool A, 2nd, tied');
   });
 
-  it('says what decided a tie on the advance line', () => {
+  describe('tieNote', () => {
     const teams = ['Team 04', 'Team 05'];
-    expect(tieNote('A', teams, 2, 'headToHead')).toBe(
-      'Pool A is tied for 2nd between Team 04 and Team 05. The team that scored more points in the games between them advances.',
-    );
-    expect(tieNote('A', teams, 2, 'seedOrder')).toContain('so seed order decides.');
-    expect(tieNote('A', teams, 2, 'organizer')).toContain('Your choice decides who advances.');
+
+    it.each([
+      ['beachVolleyball', 'points'],
+      ['soccer', 'goals'],
+      ['softball', 'runs'],
+    ] as const)('says what decided a tie on the advance line in %s, in %s', (sport, word) => {
+      expect(tieNote('A', teams, 2, 'headToHead', sport)).toBe(
+        `Pool A is tied for 2nd between Team 04 and Team 05. The team that scored more ${word} in the games between them advances.`,
+      );
+      expect(tieNote('A', teams, 2, 'seedOrder', sport)).toBe(
+        `Pool A is tied for 2nd between Team 04 and Team 05. They scored the same number of ${word} against each other, or did not all play each other, so seed order decides.`,
+      );
+    });
+
+    it('says a tie the organizer decided is their choice', () => {
+      expect(tieNote('A', teams, 2, 'organizer', 'soccer')).toContain(
+        'Your choice decides who advances.',
+      );
+    });
+
+    it('uses the words of the standings notes', () => {
+      for (const sport of ['beachVolleyball', 'soccer', 'softball'] as const) {
+        expect(STANDINGS_TIEBREAKER_NOTES[sport]).toContain(
+          `listed by the ${SCORE_WORDS[sport]} they scored against each other`,
+        );
+        expect(tieNote('A', teams, 2, 'headToHead', sport)).toContain(
+          `scored more ${SCORE_WORDS[sport]} in the games between them`,
+        );
+      }
+    });
   });
 });

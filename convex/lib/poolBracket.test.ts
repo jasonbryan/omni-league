@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { planBracket } from './bracket';
 import { POOL_MESSAGES, type Pool } from './pools';
-import { checkAdvance, checkAdvancing, seedsFromPools, type PoolStanding } from './poolBracket';
+import {
+  checkAdvance,
+  checkAdvancing,
+  poolOrder,
+  seedsFromPools,
+  type PoolStanding,
+} from './poolBracket';
 import type { Score, Sport } from './sports';
 import type { StandingsGame } from './standings';
 
@@ -137,6 +143,75 @@ describe('seedsFromPools: teams level in a pool', () => {
       'a3',
     ]);
     expect(seeds.map((seed) => seed.tie?.level)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe('seedsFromPools: teams level that did not all play each other', () => {
+  // A, B, and C are level on points, goal difference, and goals scored; A beat B, and C played neither.
+  const games = [
+    game('A', 'B', goals(2, 0)),
+    game('D', 'A', goals(2, 1)),
+    game('B', 'D', goals(3, 0)),
+    game('C', 'D', goals(3, 2)),
+  ];
+  const poolA = (teamIds: string[]) => [pool('A', teamIds, games)];
+
+  test('lists them in seed order, not by what they scored among the teams that met', () => {
+    const seeds = seedsFromPools('soccer', poolA(['C', 'B', 'A', 'D']));
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['C', 'B', 'A', 'D']);
+    expect(seeds.map((seed) => seed.tie)).toEqual([
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+      null,
+    ]);
+  });
+
+  test('does not use head-to-head for them either', () => {
+    expect(labels('soccer', poolA(['B', 'A', 'C', 'D']))).toEqual(['B', 'A', 'C', 'D']);
+  });
+
+  test('orders two level teams that did not play each other by seed, in one place', () => {
+    const seeds = seedsFromPools('beachVolleyball', [
+      pool('A', ['b', 'a', 'c'], [game('a', 'c', set(21, 15)), game('b', 'c', set(21, 15))]),
+    ]);
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['b', 'a', 'c']);
+    expect(seeds.map((seed) => seed.tie)).toEqual([
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+      null,
+    ]);
+  });
+
+  test('orders two level teams that played and drew by seed, in one place', () => {
+    const seeds = seedsFromPools('soccer', [pool('A', ['b', 'a'], [game('a', 'b', goals(2, 2))])]);
+    expect(seeds.map((seed) => seed.teamId)).toEqual(['b', 'a']);
+    expect(seeds.map((seed) => seed.tie)).toEqual([
+      { place: 1, level: 0 },
+      { place: 1, level: 0 },
+    ]);
+  });
+});
+
+describe('poolOrder', () => {
+  const standing = pool(
+    'A',
+    ['a1', 'a2', 'a3'],
+    [game('a1', 'a2', goals(0, 1)), game('a1', 'a3', goals(0, 0))],
+  );
+
+  test('lists a pool’s teams in the order the bracket takes them, with the standings row of each', () => {
+    const ordered = poolOrder('soccer', standing);
+    expect(ordered.map((team) => team.teamId)).toEqual(['a2', 'a3', 'a1']);
+    expect(ordered.map((team) => team.place)).toEqual([1, 2, 3]);
+    expect(ordered.map((team) => team.row.played)).toEqual([1, 1, 2]);
+    expect(ordered.every((team) => team.pool === 'A')).toBe(true);
+  });
+
+  test('gives the order seedsFromPools takes from the pool', () => {
+    expect(poolOrder('soccer', standing).map((team) => team.teamId)).toEqual(
+      seedsFromPools('soccer', [standing]).map((seed) => seed.teamId),
+    );
   });
 });
 

@@ -4,7 +4,7 @@ import { POOL_MESSAGES } from './pools';
 import { checkAdvancing, seedsFromPools, type PoolSeed, type PoolStanding } from './poolBracket';
 import type { Sport } from './sports';
 import { gameHasResult, replaceBracketGames } from './tournamentBracket';
-import { poolGames, poolSetup, refusePool } from './tournamentPools';
+import { poolGames, poolSetup, refusePool, type PoolSetup } from './tournamentPools';
 
 export interface PoolResults {
   gameCount: number;
@@ -13,14 +13,11 @@ export interface PoolResults {
   ranked: (PoolSeed & { team: Doc<'teams'> })[];
 }
 
-export async function poolResults(
-  ctx: Pick<QueryCtx, 'db'>,
-  tournament: Doc<'tournaments'>,
-  sport: Sport,
-): Promise<PoolResults> {
-  const setup = await poolSetup(ctx, tournament);
-  const games = await poolGames(ctx, tournament._id);
-  const standings: PoolStanding[] = [...setup.pools].map(([pool, teams]) => ({
+export function poolStandings(
+  setup: Pick<PoolSetup, 'pools'>,
+  games: readonly Doc<'tournamentGames'>[],
+): PoolStanding[] {
+  return [...setup.pools].map(([pool, teams]) => ({
     pool,
     teamIds: teams.map((team) => team._id),
     games: games.flatMap((game) => {
@@ -30,6 +27,16 @@ export async function poolResults(
         : [];
     }),
   }));
+}
+
+export async function poolResults(
+  ctx: Pick<QueryCtx, 'db'>,
+  tournament: Doc<'tournaments'>,
+  sport: Sport,
+): Promise<PoolResults> {
+  const setup = await poolSetup(ctx, tournament);
+  const games = await poolGames(ctx, tournament._id);
+  const standings = poolStandings(setup, games);
   const teamOf = new Map<string, Doc<'teams'>>(setup.seeds.map((team) => [team._id, team]));
   return {
     gameCount: games.length,

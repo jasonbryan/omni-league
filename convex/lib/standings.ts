@@ -135,6 +135,24 @@ function bandsBestFirst(group: readonly string[], valueOf: (teamId: string) => n
   return bands;
 }
 
+export const SCORE_WORDS = {
+  beachVolleyball: 'points',
+  soccer: 'goals',
+  softball: 'runs',
+} as const satisfies Record<Sport, string>;
+
+const pairKey = (first: string, second: string) => JSON.stringify([first, second].sort());
+
+export function allPlayedEachOther(
+  teamIds: readonly string[],
+  games: readonly StandingsGame[],
+): boolean {
+  const met = new Set(games.map(({ teamIds: [first, second] }) => pairKey(first, second)));
+  return teamIds.every((first, index) =>
+    teamIds.slice(index + 1).every((second) => met.has(pairKey(first, second))),
+  );
+}
+
 /** The points each of the teams scored in the games they played against each other. */
 export function pointsAmong(
   teamIds: readonly string[],
@@ -176,7 +194,10 @@ export function standingsOf(
   const separate = (group: readonly string[]): string[][] => {
     if (group.length < 2) return [[...group]];
     const amongTied = totalsOf(group, games);
+    const havePlayed = allPlayedEachOther(group, games);
     for (const tiebreaker of tiebreakers) {
+      // A team with no game against the others would otherwise rank below them for want of a game.
+      if (tiebreaker === 'headToHead' && !havePlayed) continue;
       const bands = bandsBestFirst(group, (teamId) =>
         TIEBREAKER_VALUES[tiebreaker](overall.get(teamId)!, amongTied.get(teamId)!, ranking),
       );
@@ -263,7 +284,8 @@ function tiebreakerNote(sport: Sport): string {
   const names = tiebreakers.map((tiebreaker) => TIEBREAKER_TEXT[tiebreaker]);
   const list = `${names.slice(0, -1).join(', ')}, then ${names.at(-1)}`;
   const ranked = ranking.kind === 'points' ? 'points' : 'win percentage';
-  return `Teams level on ${ranked} are ordered by ${list}.`;
+  const scored = SCORE_WORDS[sport];
+  return `Teams level on ${ranked} are ordered by ${list}. Head-to-head counts once the level teams have all played each other. Teams still level are listed by the ${scored} they scored against each other, then by seed.`;
 }
 
 export const STANDINGS_TIEBREAKER_NOTES: Readonly<Record<Sport, string>> = {

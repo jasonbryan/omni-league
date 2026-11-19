@@ -578,6 +578,7 @@ describe('teams tied in a pool', () => {
       ['Team 01', { place: 1, level: 1 }],
       ['Team 04', { place: 1, level: 2 }],
     ]);
+    expect((await tableOf(s))[0]).toEqual(['Team 05', 'Team 01', 'Team 04']);
     await create(s, { advancePerPool: 1 });
     const [final] = await bracketGames(s);
     expect((await teamNames(s, final.teamIds)).sort()).toEqual(['Team 02', 'Team 05']);

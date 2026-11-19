@@ -1,5 +1,5 @@
 import type { PublicPool } from '../../../../convex/lib/publicPage';
-import { scoreText } from '../../../../convex/lib/sports';
+import { scoreText, TIED_GAME_TEXT } from '../../../../convex/lib/sports';
 
 type Game = PublicPool['games'][number];
 
@@ -15,7 +15,7 @@ export function poolGameResultText(game: Game): string | null {
   const outcome = game.winner === undefined ? null : `${game.teams[game.winner]} won.`;
   if (forfeited !== null) return outcome === null ? forfeited : `${forfeited} ${outcome}`;
   if (game.score === undefined) return null;
-  return `${scoreText(game.score)}. ${outcome ?? 'Tied.'}`;
+  return `${scoreText(game.score)}. ${outcome ?? TIED_GAME_TEXT}`;
 }
 
 export function columnKey({ columns }: Pick<PublicPool, 'columns'>): string {

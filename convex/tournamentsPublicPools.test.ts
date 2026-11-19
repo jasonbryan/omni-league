@@ -2,8 +2,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { STANDINGS_TIEBREAKER_NOTES } from './lib/standings';
 import { type Score, type Sport } from './lib/sports';
+import { STANDINGS_TIEBREAKER_NOTES } from './lib/standings';
+import { poolResults } from './lib/tournamentPoolBracket';
 import { TOURNAMENT_SLUGS, tournamentWorld, type TournamentWorld } from './tournamentWorld.setup';
 
 afterEach(() => {
@@ -17,8 +18,11 @@ const GAME_INDEX = 'by_tournamentId_and_stage_and_round_and_slot';
 
 let registeredAt = 1_000;
 
-/** Six teams in 2 pools of 3: Pool A holds Team 01, Team 04, and Team 05, Pool B Team 02, Team 03, and Team 06. */
-async function worldWithPools(sport: Sport = 'beachVolleyball', createGames = true) {
+/**
+ * Six teams in 2 pools of 3: Pool A holds Team 01, Team 04, and Team 05, Pool B Team 02, Team 03, and Team 06.
+ * Eight teams make 2 pools of 4: Pool A holds Team 01, Team 04, Team 05, and Team 08.
+ */
+async function worldWithPools(sport: Sport = 'beachVolleyball', createGames = true, teamCount = 6) {
   vi.useFakeTimers({ now: AFTER_DEADLINE });
   const s = await tournamentWorld();
   await s.t.run(async (ctx) => {
@@ -27,7 +31,7 @@ async function worldWithPools(sport: Sport = 'beachVolleyball', createGames = tr
     await ctx.db.patch('programs', tournament.programId, { sport });
   });
   const teamIds: Id<'teams'>[] = [];
-  for (let number = 1; number <= 6; number++) {
+  for (let number = 1; number <= teamCount; number++) {
     registeredAt += 1;
     teamIds.push(
       await s.t.run(async (ctx) => {
@@ -234,4 +238,129 @@ describe('tournaments.getPublicPage: pools', () => {
     });
     expect(await publicPage(s)).toBeNull();
   });
+});
+
+describe('tournaments.getPublicPage: pool order follows the bracket', () => {
+  test('lists teams level on everything but what they scored against each other by that score, at one shared place', async () => {
+    // Each of Team 01, 04, and 05 beats one of the others by 6, so they score 45, 40, and 49 against each other.
+    const { s, teamIds } = await worldWithPools();
+    await play(s, teamIds, [1, 4], [21, 15]);
+    await play(s, teamIds, [4, 5], [25, 19]);
+    await play(s, teamIds, [5, 1], [30, 24]);
+    const [a] = (await poolsOf(s))!;
+    expect(a.standings.map((row) => [row.place, row.name])).toEqual([
+      [1, 'Team 05'],
+      [1, 'Team 01'],
+      [1, 'Team 04'],
+    ]);
+  });
+
+  test('keeps a team that has not played the level teams in the given order with them, in the soccer pool of 4', async () => {
+    // Team 05 beat Team 04, and Team 01 played neither; Teams 01, 04, and 05 are level on points, goal difference, and goals scored.
+    const { s, teamIds } = await worldWithPools('soccer', true, 8);
+    await play(s, teamIds, [5, 4], [2, 0], 'soccer');
+    await play(s, teamIds, [8, 5], [2, 1], 'soccer');
+    await play(s, teamIds, [4, 8], [3, 0], 'soccer');
+    await play(s, teamIds, [1, 8], [3, 2], 'soccer');
+    const [a] = (await poolsOf(s))!;
+    expect(a.standings.map((row) => [row.place, row.name])).toEqual([
+      [1, 'Team 01'],
+      [1, 'Team 04'],
+      [1, 'Team 05'],
+      [4, 'Team 08'],
+    ]);
+  });
+
+  test('leaves a team that is no longer confirmed out of the table and the bracket’s results, and keeps its game', async () => {
+    const { s, teamIds } = await worldWithPools();
+    await play(s, teamIds, [4, 1], [21, 15]);
+    await play(s, teamIds, [4, 5], [21, 10]);
+    await s.t.run((ctx) => ctx.db.patch('teams', teamIds[3], { rosterCount: 0 }));
+    const [a] = (await poolsOf(s))!;
+    expect(a.standings.map((row) => row.name)).toEqual(['Team 01', 'Team 05']);
+    expect(a.games).toHaveLength(3);
+    expect(a.games.flatMap((game) => game.teams)).toContain('Team 04');
+    const results = await s.t.run(async (ctx) =>
+      poolResults(ctx, (await ctx.db.get('tournaments', s.gulf))!, 'beachVolleyball'),
+    );
+    expect(
+      results.ranked.filter((seed) => seed.pool === 'A').map((seed) => seed.team.name),
+    ).toEqual(['Team 01', 'Team 05']);
+  });
+});
+
+/** A repeatable stream of numbers in [0, 1), so a failing case can be played again. */
+function randoms(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+describe('tournaments.getPublicPage: the rows are the order the bracket takes', () => {
+  // Narrow ranges make level teams common, and a fixed margin makes a circle of wins level on everything but the points scored.
+  const pick = (random: () => number, values: readonly number[]) =>
+    values[Math.floor(random() * values.length)];
+  const SCORES: Record<Sport, (random: () => number) => Score> = {
+    beachVolleyball: (random) => {
+      const winner = pick(random, [21, 23, 25]);
+      const loser = winner - 6;
+      return {
+        kind: 'sets',
+        sets: [random() < 0.5 ? { a: winner, b: loser } : { a: loser, b: winner }],
+      };
+    },
+    soccer: (random) => ({ kind: 'goals', a: pick(random, [0, 1, 2]), b: pick(random, [0, 1, 2]) }),
+    softball: (random) => ({
+      kind: 'runs',
+      a: pick(random, [0, 1, 3]),
+      b: pick(random, [0, 1, 3]),
+    }),
+  };
+
+  for (const sport of ['beachVolleyball', 'soccer', 'softball'] as const) {
+    test(`matches each pool’s order in the pool results over part-played and finished ${sport} pools`, async () => {
+      const { s } = await worldWithPools(sport);
+      const random = randoms(746);
+      const games = await s.t.run((ctx) =>
+        ctx.db
+          .query('tournamentGames')
+          .withIndex(GAME_INDEX, (q) => q.eq('tournamentId', s.gulf).eq('stage', 'pool'))
+          .collect(),
+      );
+      let scoredAmongThem = 0;
+      for (let trial = 0; trial < 30; trial++) {
+        const share = trial % 2 === 0 ? 1 : 0.6;
+        const entered: Id<'tournamentGames'>[] = [];
+        for (const game of games) {
+          if (random() >= share) continue;
+          await s.as(s.admin).mutation(api.tournamentGames.enterResult, {
+            gameId: game._id,
+            score: SCORES[sport](random),
+          });
+          entered.push(game._id);
+        }
+        const results = await s.t.run(async (ctx) =>
+          poolResults(ctx, (await ctx.db.get('tournaments', s.gulf))!, sport),
+        );
+        for (const pool of (await poolsOf(s))!) {
+          const bracket = results.ranked.filter((seed) => seed.pool === pool.pool);
+          expect(pool.standings.map((row) => row.name)).toEqual(
+            bracket.map((seed) => seed.team.name),
+          );
+          expect(pool.standings.map((row) => row.place)).toEqual(
+            bracket.map((seed) => seed.tie?.place ?? seed.place),
+          );
+          if (bracket.some((seed) => seed.tie && seed.tie.level >= seed.tie.place)) {
+            scoredAmongThem++;
+          }
+        }
+        for (const gameId of entered) {
+          await s.as(s.admin).mutation(api.tournamentGames.undoResult, { gameId });
+        }
+      }
+      if (sport === 'beachVolleyball') expect(scoredAmongThem).toBeGreaterThan(0);
+    }, 60_000);
+  }
 });

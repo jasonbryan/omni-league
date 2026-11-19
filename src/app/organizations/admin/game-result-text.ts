@@ -4,6 +4,7 @@ import {
   isScoreField,
   scoreText,
   scoreKindOf,
+  TIED_GAME_TEXT,
   type Score,
   type ScoreField,
   type Sport,
@@ -45,7 +46,7 @@ export type GameStage = 'bracket' | 'pool';
 
 export function playedText({ teams, score, winnerName, forfeitName }: PlayedGame): string {
   const forfeited = forfeitName === null ? '' : ` ${forfeitName} forfeited.`;
-  const outcome = winnerName === null ? 'The game was tied.' : `${winnerName} won.`;
+  const outcome = winnerName === null ? TIED_GAME_TEXT : `${winnerName} won.`;
   return `${teams[0]} ${scoreText(score)} ${teams[1]}.${forfeited} ${outcome}`;
 }
 
@@ -54,7 +55,7 @@ function advancesText(
   advancesTo: string | null,
   stage: GameStage = 'bracket',
 ): string {
-  if (winnerName === null) return 'The game ended in a tie.';
+  if (winnerName === null) return TIED_GAME_TEXT;
   if (stage === 'pool') return `${winnerName} won.`;
   return advancesTo === null
     ? `${winnerName} wins the tournament.`
