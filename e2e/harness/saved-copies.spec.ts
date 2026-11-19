@@ -1,6 +1,7 @@
 import { remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 import { holdQueries } from '../support/hold-queries';
+import { gotoHydrated } from '../support/hydrated';
 import {
   expectSavedCopies,
   organizationCampSavedKeys,
@@ -97,8 +98,7 @@ test.describe('expectSavedCopies', VIEWPORT_AGNOSTIC, () => {
       leagues: [{ name: 'Alpha League', sport: 'soccer', locations: ['Alpha Field'] }],
     });
     const held = await holdQueries(page, ['organizations:listPublicLeagues']);
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect.poll(() => held.isHolding()).toBe(true);
 
     const keys = organizationPageSavedKeys(tenant.slug);

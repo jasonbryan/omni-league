@@ -60,6 +60,7 @@ export class ConsoleGuard {
   private readonly expectedConsoleWarnings: readonly (string | RegExp)[];
   private readonly expectedDocumentStatus: ExpectedDocumentStatus | undefined;
   private readonly documents = new WeakMap<Page, { url: string; status: number }>();
+  private readonly hydrations = new WeakMap<Page, number>();
 
   constructor(options: ConsoleGuardOptions = {}) {
     const status = options.expectedDocumentStatus;
@@ -124,8 +125,14 @@ export class ConsoleGuard {
     return this.logs;
   }
 
+  /** True once any page has hydrated; `hydrationCount` says which page, and how many times. */
   get hydrated(): boolean {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
+  }
+
+  /** The "Angular hydrated" logs from this page: one per server-rendered document it has loaded. */
+  hydrationCount(page: Page): number {
+    return this.hydrations.get(page) ?? 0;
   }
 
   /**
@@ -175,6 +182,7 @@ export class ConsoleGuard {
     const text = message.text();
     if (type === 'log' || type === 'info') {
       this.logs.push(text);
+      if (HYDRATED_LOG.test(text)) this.hydrations.set(page, this.hydrationCount(page) + 1);
       return;
     }
     const url = message.location().url;

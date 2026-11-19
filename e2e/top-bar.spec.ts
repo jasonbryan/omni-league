@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated } from './support/hydrated';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -14,14 +15,6 @@ const LOCAL_ONLY = 'seeds a tenant or a user on the local Convex backend';
 
 const signInLink = (page: Page) => page.locator('header a[href^="/sign-in"]');
 const accountLink = (page: Page) => page.locator('header a[href="/app"]');
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
-}
 
 async function signInAs(page: Page, user: { email: string; password: string }): Promise<void> {
   const tokens = tokensSettled(page);
@@ -76,8 +69,7 @@ test.describe('top bar', () => {
     }, testInfo) => {
       test.skip(!!remoteBaseUrl, LOCAL_ONLY);
       const tenant = await seedTenant();
-      await page.goto(`${tenant.path}?tab=leagues`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?tab=leagues`);
       await expect(signInLink(page)).toHaveText('Sign in');
       await expect(signInLink(page)).toHaveAttribute(
         'href',
@@ -129,8 +121,7 @@ test.describe('top bar', () => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own width');
     const tenant = await seedTenant();
     await page.setViewportSize({ width: 768, height: 800 });
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
 
     const box = await page.locator('header a[href="/"]').boundingBox();
     expect(box?.height).toBeLessThanOrEqual(44);
@@ -150,8 +141,7 @@ test.describe('top bar', () => {
       const raw = await page.request.get(tenant.path);
       expect(await raw.text()).toMatch(/>Sign in<\/a>/);
 
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       const link = accountLink(page);
       await expect(link).toBeVisible();
       await expect(link).toHaveAccessibleName(`Account: ${user.name}`);
@@ -182,8 +172,7 @@ test.describe('top bar', () => {
       await seedUser(user);
       const tenant = await seedTenant();
       await signInAs(page, user);
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
 
       const link = accountLink(page);
       await expect(link).toHaveAccessibleName(`Account: ${user.name}`);
@@ -233,8 +222,7 @@ test.describe('top bar', () => {
         };
         requestAnimationFrame(sample);
       });
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await expect(accountLink(page)).toBeVisible();
       await page.evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
@@ -256,8 +244,7 @@ test.describe('top bar', () => {
       const tenant = await seedTenant();
       await signInAs(page, user);
       await page.setViewportSize({ width: 768, height: 800 });
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
 
       await expect(accountLink(page)).toBeVisible();
       const box = await accountLink(page).boundingBox();
@@ -281,8 +268,7 @@ test.describe('top bar', () => {
       const tenant = await seedTenant();
       await signInAs(page, user);
       await page.setViewportSize({ width: 320, height: 800 });
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
 
       await expect(accountLink(page)).toBeVisible();
       const find = page.getByRole('banner').getByRole('link', { name: 'Find a program' });

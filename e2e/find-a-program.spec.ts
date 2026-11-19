@@ -6,6 +6,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
 import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { rawGet } from './support/raw-get';
 import { fetchRawHtml } from './support/raw-html';
@@ -102,14 +103,6 @@ async function raw(request: APIRequestContext, path: string) {
   const response = await fetchRawHtml(request, path);
   expect(response.status, path).toBe(200);
   return response;
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 const field = (page: Page) =>
@@ -599,8 +592,7 @@ test.describe('find a program: in the browser', () => {
     const { id } = await seed();
     // The socket must be routed before the page opens it.
     const held = await holdQueries(page, ['search:programs']);
-    await page.goto('/programs');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await submit(page, id);
     await expect(page).toHaveURL(`${baseURL}${url(id)}`);
     const skeleton = page.getByTestId('find-skeleton');
@@ -631,8 +623,7 @@ test.describe('find a program: in the browser', () => {
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const { id } = await seed();
-      await page.goto('/programs');
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, '/programs');
       await field(page).fill(id);
       await field(page).press('Enter');
       await expect(page).toHaveURL(`${baseURL}${url(id)}`);
@@ -667,8 +658,7 @@ test.describe('find a program: in the browser', () => {
     consoleGuard,
   }) => {
     const { tenant } = await seed();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.getByRole('contentinfo').getByRole('link', { name: 'Find a program' }).click();
     await expect(page).toHaveURL(`${baseURL}/programs`);
     await expect(page.getByRole('heading', { level: 1, name: 'Find a program' })).toBeVisible();
@@ -699,8 +689,7 @@ test.describe('find a program: in the browser', () => {
         page.locator('section[aria-labelledby="locations-heading"]').getByRole('status'),
       ).toHaveText(`${word} Fields saved.`);
 
-      await page.goto(url(word));
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, url(word));
       await expect(rowNames(page)).toHaveText([THURSDAY]);
       await page.goto(url(`harbor ${id}`));
       await expect(results(page)).toContainText(`No programs match “harbor ${id}”`);
@@ -714,8 +703,7 @@ test.describe('find a program: in the browser', () => {
   }, testInfo) => {
     const { id } = await seed();
     await freezeOrganizations(page);
-    await page.goto('/programs');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await screenshot(page, testInfo, '300-find-start');
     await expectAccessible(page);
 
@@ -752,8 +740,7 @@ test.describe('find a program: in the browser', () => {
     consoleGuard,
   }) => {
     const { id } = await seed();
-    await page.goto(url(`coed 4s ${id} zz${id}`));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(`coed 4s ${id} zz${id}`));
     await results(page)
       .getByRole('link', { name: `coed 4s ${id}` })
       .focus();
@@ -770,8 +757,7 @@ test.describe('find a program: in the browser', () => {
     page,
     consoleGuard,
   }) => {
-    await page.goto(url('pickleball'));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url('pickleball'));
     await results(page).getByRole('link', { name: 'Clear the search' }).focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(`${baseURL}/programs`);
@@ -784,8 +770,7 @@ test.describe('find a program: in the browser', () => {
     consoleGuard,
   }) => {
     const { id } = await seed();
-    await page.goto(url(`coed 4s ${id} zz${id}`));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(`coed 4s ${id} zz${id}`));
     const link = results(page).getByRole('link', { name: `coed 4s ${id}` });
     await link.click({ modifiers: ['ControlOrMeta'] });
     await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id} zz${id}`)}`);
@@ -929,8 +914,7 @@ test.describe('find a program: a full season with registration open', () => {
     consoleGuard,
   }, testInfo) => {
     const { searchWord } = await seedFullSeasonTenant();
-    await page.goto(url(searchWord));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(searchWord));
     await expect(rowNames(page)).toHaveCount(2);
     const row = results(page)
       .locator('ul > li')
@@ -960,8 +944,7 @@ test.describe('find a program: sport chips and division filters, in the browser'
     consoleGuard,
   }) => {
     await seedYouth('over30');
-    await page.goto('/programs?sport=soccer&age=over30&gender=womens');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs?sport=soccer&age=over30&gender=womens');
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
     await expect(rowNamed(page, GIRLS_SELECT).first()).toBeVisible();
     await expect(rowNamed(page, BOYS_ROOKIES)).toHaveCount(0);
@@ -1006,8 +989,7 @@ test.describe('find a program: sport chips and division filters, in the browser'
       }
       const { id } = await seed();
       const held = await holdQueries(page, ['search:programs']);
-      await page.goto('/programs');
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, '/programs');
       await submit(page, id);
       await expect.poll(() => held.isHolding()).toBe(true);
       await expect(page.getByTestId('find-skeleton')).toBeVisible();
@@ -1023,8 +1005,7 @@ test.describe('find a program: sport chips and division filters, in the browser'
 
   test('a new search keeps the sport and the filters', async ({ page, consoleGuard }) => {
     await seedYouth('over35');
-    await page.goto('/programs?sport=soccer&age=over35');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs?sport=soccer&age=over35');
     await submit(page, 'girls');
     await expect(page).toHaveURL(/\/programs\?q=girls&sport=soccer&age=over35$/);
     await expect(rowNamed(page, GIRLS_ROOKIES).first()).toBeVisible();
@@ -1077,8 +1058,7 @@ test.describe('find a program: sport chips and division filters, in the browser'
           },
         ],
       });
-      await page.goto('/programs?sport=softball');
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, '/programs?sport=softball');
       await filtersButton(page).click();
       await expect(sheet(page).locator('[data-slot="sheet-content"]')).toBeVisible();
       const age = sheet(page).getByRole('group', { name: 'Age group' });
@@ -1119,8 +1099,7 @@ test.describe('find a program: sport chips and division filters, in the browser'
     consoleGuard,
   }, testInfo) => {
     await seedYouth('over50');
-    await page.goto('/programs?sport=soccer&age=over50&gender=womens');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs?sport=soccer&age=over50&gender=womens');
     await expect(rowNames(page).first()).toBeVisible();
     await expectAccessible(page);
     await screenshot(page, testInfo, 'find-sport-filtered');
@@ -1136,10 +1115,11 @@ test.describe('find a program: sport chips and division filters, in the browser'
   }) => {
     await seedYouth('over40');
     // The league type, because a soccer camp in the same backend stays listed under any filter.
-    await page.goto(
+    await gotoHydrated(
+      page,
+      consoleGuard,
       '/programs?type=league&sport=soccer&gender=womens&age=over40&level=intermediate',
     );
-    await hydrated(consoleGuard);
     await expect(results(page).getByRole('status')).toHaveText(
       'No soccer leagues match these filters',
     );
@@ -1179,8 +1159,7 @@ test.describe('find a program: top bar', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'the field shows from 768px');
     const { tenant, id } = await seed();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(phoneLink(page)).toBeHidden();
     const input = searchForm(page).getByRole('searchbox', { name: 'Find a program' });
     await input.fill(id);
@@ -1213,8 +1192,7 @@ test.describe('find a program: top bar', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'the link shows below 768px');
     const { tenant } = await seed();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(searchForm(page)).toBeHidden();
     const link = phoneLink(page);
     await expect(link).toHaveAttribute('href', '/programs');
@@ -1244,8 +1222,7 @@ test.describe('find a program: top bar', () => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own width');
       const { tenant } = await seed();
       await page.setViewportSize({ width, height: 800 });
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await expect(searchForm(page)).toBeVisible();
       await expectAccessible(page);
     });
@@ -1257,8 +1234,7 @@ test.describe('find a program: top bar', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'the phone project is 360px');
     const { tenant } = await seed();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(phoneLink(page)).toBeVisible();
     await expectAccessible(page);
   });
@@ -1684,20 +1660,21 @@ test.describe('find a program: camps', () => {
     consoleGuard,
   }, testInfo) => {
     const { id, campName } = await seedWithCamp();
-    await page.goto(url(`junior ${id}`));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(`junior ${id}`));
     await expect(rowNames(page)).toHaveText([campName]);
     await screenshot(page, testInfo, '373-programs-camp-result');
     await expectAccessible(page);
 
-    await page.goto(`/programs?type=camp&q=${encodeURIComponent(`sunday ${id}`)}`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      `/programs?type=camp&q=${encodeURIComponent(`sunday ${id}`)}`,
+    );
     await expect(results(page)).toContainText(`No camps match “sunday ${id}”`);
     await screenshot(page, testInfo, '373-programs-camp-other-type');
     await expectAccessible(page);
 
-    await page.goto('/programs?type=camp&sport=beach-volleyball');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs?type=camp&sport=beach-volleyball');
     await expect(results(page).locator('ul > li').first()).toContainText('Camp');
     await screenshot(page, testInfo, '373-programs-camp-browse');
     await expectAccessible(page);
@@ -1708,8 +1685,7 @@ test.describe('find a program: camps', () => {
     consoleGuard,
   }) => {
     const { id } = await seedWithCamp();
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     const chips = page.getByRole('navigation', { name: 'Program type' });
     await chips.getByRole('link', { name: 'Camps' }).click();
@@ -1798,21 +1774,18 @@ test.describe('find a program: ended tournaments', () => {
     consoleGuard,
   }, testInfo) => {
     const { id, upcomingName } = await seedWithEndedTournament('Aab ');
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await expect(results(page)).toContainText(upcomingName);
     await expect(results(page)).not.toContainText('Ended Beach Open');
     await expectAccessible(page);
     await screenshot(page, testInfo, '782-programs-ended-tournament-left-out');
 
-    await page.goto(ENDED_TOURNAMENT_BROWSE);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, ENDED_TOURNAMENT_BROWSE);
     await expect(rowNames(page).filter({ hasText: id })).toHaveText([upcomingName]);
 
     // Tests in parallel add tournaments to the browse as it is scanned, so the axe helper's tab walk runs on a view only this test's tenant fills.
-    await page.goto(`/programs?type=tournament&sport=softball&q=${id}`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `/programs?type=tournament&sport=softball&q=${id}`);
     await expect(rowNames(page)).toHaveText([upcomingName]);
     await expectAccessible(page);
 
@@ -1850,8 +1823,7 @@ test.describe('find a program: /leagues redirects', () => {
     page,
     consoleGuard,
   }) => {
-    await page.goto('/programs');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await page.evaluate(() => {
       history.pushState(null, '', '/leagues');
       dispatchEvent(new PopStateEvent('popstate', { state: null }));
@@ -1870,8 +1842,7 @@ test.describe('find a program: type chips in the browser', () => {
     consoleGuard,
   }) => {
     const { id } = await seedWithTournament();
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     const chips = page.getByRole('navigation', { name: 'Program type' });
     await chips.getByRole('link', { name: 'Tournaments' }).click();
@@ -1888,8 +1859,7 @@ test.describe('find a program: type chips in the browser', () => {
 
   test('a new search keeps the chosen type', async ({ page, consoleGuard }) => {
     const { id } = await seedWithTournament();
-    await page.goto('/programs?type=tournament&sport=beach-volleyball');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs?type=tournament&sport=beach-volleyball');
     await submit(page, id);
     await expect(page).toHaveURL(
       `${baseURL}/programs?type=tournament&q=${id}&sport=beach-volleyball`,
@@ -1903,20 +1873,17 @@ test.describe('find a program: type chips in the browser', () => {
   }, testInfo) => {
     const { id } = await seedWithTournament();
     const over60 = await seedOver60Tournaments();
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await screenshot(page, testInfo, '350-programs-results');
     await expectAccessible(page);
 
-    await page.goto(`/programs?type=camp&q=${id}`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `/programs?type=camp&q=${id}`);
     await expect(results(page)).toContainText(`No camps match “${id}”`);
     await screenshot(page, testInfo, '350-programs-other-type');
     await expectAccessible(page);
 
-    await page.goto(OVER_60_BROWSE);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, OVER_60_BROWSE);
     await expect(rowNames(page).filter({ hasText: over60.id }).first()).toBeVisible();
     await screenshot(page, testInfo, '350-programs-browse');
     await expectAccessible(page);
@@ -1931,8 +1898,7 @@ test.describe('find a program: type chips in the browser', () => {
       watchFromStart: false,
       holdFromStart: false,
     });
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     const chips = page.getByRole('navigation', { name: 'Program type' }).getByRole('link');
     const positions = async () =>
@@ -1958,8 +1924,7 @@ test.describe('find a program: type chips in the browser', () => {
   }) => {
     const { id } = await seedWithTournament();
     const held = await holdQueries(page, ['search:programs']);
-    await page.goto('/programs');
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, '/programs');
     await submit(page, id);
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(page.getByTestId('find-skeleton')).toBeVisible();
@@ -2020,8 +1985,7 @@ for (const width of [320, 360, 1280]) {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
       const { id } = await seedWithTournament();
       const held = await holdQueries(page, ['search:programs']);
-      await page.goto('/programs');
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, '/programs');
       await submit(page, id);
       await expect.poll(() => held.isHolding()).toBe(true);
       await expect(page.getByTestId('find-skeleton')).toBeVisible();
@@ -2077,8 +2041,7 @@ for (const width of [320, 360, 1280]) {
           watchFromStart: false,
           holdFromStart: false,
         });
-        await page.goto(url(id));
-        await hydrated(consoleGuard);
+        await gotoHydrated(page, consoleGuard, url(id));
         await expect(rowNames(page)).toHaveCount(3);
         const before = await programsFrame(page);
         expect(before.typeChips).toHaveLength(3);
@@ -2122,8 +2085,7 @@ for (const width of [320, 360, 1280]) {
       const serverSports = await sportNav(serverPage).getByRole('link').allTextContents();
       await bare.close();
 
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await expect(rowNames(page)).toHaveCount(3);
       expect(await programsFrame(page)).toEqual(server);
       expect(await typeNav(page).getByRole('link').allTextContents()).toEqual(serverTypes);
@@ -2146,8 +2108,7 @@ for (const width of [320, 360, 1280]) {
         test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
         const { id } = await seedWithCamp('', withTournament);
         const held = await holdQueries(page, ['search:programs']);
-        await page.goto('/programs');
-        await hydrated(consoleGuard);
+        await gotoHydrated(page, consoleGuard, '/programs');
         await submit(page, id);
         await expect.poll(() => held.isHolding()).toBe(true);
         await expect(page.getByTestId('find-skeleton')).toBeVisible();
@@ -2180,8 +2141,7 @@ for (const width of [320, 360, 1280]) {
         watchFromStart: false,
         holdFromStart: false,
       });
-      await page.goto(url(id));
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, url(id));
       await expect(rowNames(page)).toHaveCount(4);
       const before = await programsFrame(page);
       expect(before.typeChips).toHaveLength(4);
@@ -2232,8 +2192,7 @@ test.describe('find a program: the chips with script off and by keyboard', () =>
     consoleGuard,
   }) => {
     const { id } = await seedWithTournament();
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await page.getByRole('button', { name: 'Search', exact: true }).focus();
     const reached: string[] = [];
@@ -2257,8 +2216,7 @@ test.describe('find a program: the chips with script off and by keyboard', () =>
     consoleGuard,
   }) => {
     const { id } = await seedWithTournament();
-    await page.goto(url(id));
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await expectAccessible(page);
     await sportNav(page).getByRole('link', { name: 'Beach volleyball' }).focus();

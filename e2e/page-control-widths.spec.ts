@@ -1,8 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
+import type { ConsoleGuard } from './support/console-guard';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
+import { gotoHydrated } from './support/hydrated';
 import { numberedSeasons, seedSeasons, seedTenant, type LeagueSeed } from './support/tenant';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -115,15 +117,9 @@ const elementsPastRightEdge = (page: Page) =>
       .map((element) => `${element.tagName.toLowerCase()} ${element.textContent?.slice(0, 30)}`);
   });
 
-async function openAtWidth(
-  page: Page,
-  consoleGuard: { hydrated: boolean },
-  path: string,
-  width: number,
-) {
+async function openAtWidth(page: Page, consoleGuard: ConsoleGuard, path: string, width: number) {
   await page.setViewportSize({ width, height: 800 });
-  await page.goto(path);
-  await expect.poll(() => consoleGuard.hydrated).toBe(true);
+  await gotoHydrated(page, consoleGuard, path);
 }
 
 test.describe('the page control at each width', () => {

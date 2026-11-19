@@ -4,6 +4,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
 import { homeHeading } from './support/home';
+import { gotoHydrated } from './support/hydrated';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
@@ -57,8 +58,7 @@ async function signUpAsAdminOfNewOrganization(page: Page) {
 test.describe('focus moves to the page after navigation', () => {
   test('from the organization page to a league', async ({ page, consoleGuard }) => {
     const { tenant, leaguePath } = await seed();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.getByRole('main').getByRole('link', { name: LEAGUE, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(leaguePath);
@@ -187,8 +187,7 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     consoleGuard,
   }) => {
     const { tenant } = await seed();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.evaluate(() => {
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
     });
@@ -213,8 +212,7 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
 
   test('Back and Forward between two pages move focus to main', async ({ page, consoleGuard }) => {
     const { tenant, leaguePath } = await seed();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.getByRole('main').getByRole('link', { name: LEAGUE, exact: true }).click();
     await expect(page).toHaveURL(`${baseURL}${leaguePath}`);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -228,8 +226,7 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     consoleGuard,
   }) => {
     const { tenant, leaguePath } = await seed();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.getByRole('main').getByRole('link', { name: LEAGUE, exact: true }).click();
     await expect(page).toHaveURL(`${baseURL}${leaguePath}`);
     await expect(page.locator('main#main')).toBeFocused();

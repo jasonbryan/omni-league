@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { expectLinkHeights, footerAnchors, pointerOf, TOUCH_TABLET } from './support/link-heights';
@@ -32,14 +33,6 @@ async function seed(): Promise<{ tenant: Tenant; paths: string[] }> {
   ]);
   const league = `${tenant.path}/leagues/${LEAGUE_SLUG}`;
   return { tenant, paths: [tenant.path, league, `${league}/seasons/summer-2027`] };
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 const footerLinks = (path: string) =>
@@ -117,8 +110,7 @@ test.describe('public layout: signed in', () => {
       const { paths } = await seed();
       const user = newUser('Layout');
       await signUp(page, user);
-      await page.goto(paths[0]);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, paths[0]);
       await expect(page.locator('header a[href="/app"]')).toContainText(user.name);
       await expect(page.locator('header a[href^="/sign-in"]')).toHaveCount(0);
       await expect(page.locator('footer')).toHaveCount(1);
@@ -177,8 +169,7 @@ test.describe('public layout: other routes', () => {
   }, testInfo) => {
     const { paths } = await seed();
     for (const path of paths) {
-      await page.goto(path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, path);
       await expectInPublicLayout(page);
       await expectAccessible(page);
       await expectTouchTargets(page, testInfo.project.name === 'chromium-mobile');
@@ -192,8 +183,7 @@ test.describe('public layout: footer link heights', () => {
     consoleGuard,
   }, testInfo) => {
     const { tenant } = await seed();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expectLinkHeights(page, footerAnchors(page), pointerOf(testInfo));
   });
 
@@ -206,8 +196,7 @@ test.describe('public layout: footer link heights', () => {
     }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
       const { tenant } = await seed();
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await expectLinkHeights(page, footerAnchors(page), 'touch');
     });
   });

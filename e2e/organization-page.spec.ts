@@ -3,9 +3,11 @@ import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved
 import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { expectBadges, PUBLIC_BADGE_HEIGHT } from './support/badges';
+import type { ConsoleGuard } from './support/console-guard';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -134,14 +136,6 @@ async function plantSavedCopyAndRecordH1s(page: Page, key: string, saved: string
     },
     [key, saved] as const,
   );
-}
-
-async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
-  await expect
-    .poll(() => consoleGuard.hydrated, {
-      message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-    })
-    .toBe(true);
 }
 
 test.describe('organization page: raw server HTML', () => {
@@ -359,8 +353,7 @@ test.describe('organization page in the browser', () => {
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const tenant = await smallTenant();
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await page.evaluate(() => {
         (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
       });
@@ -434,8 +427,7 @@ test.describe('organization page in the browser', () => {
     consoleGuard,
   }) => {
     const tenant = await seedTenant({ name: 'E2E Empty Org' });
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { level: 1 })).toHaveText(tenant.name);
     await expect(main.getByText('No leagues published yet')).toBeVisible();
@@ -497,8 +489,7 @@ test.describe('organization page: hero, divisions, and sports', () => {
     consoleGuard,
   }) => {
     const tenant = await gulfCoastTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const mark = page.locator('app-organization-mark');
     const h1 = page.getByRole('heading', { level: 1 });
     const size = (page.viewportSize()?.width ?? 0) >= 768 ? 48 : 32;
@@ -519,8 +510,7 @@ test.describe('organization page: hero, divisions, and sports', () => {
     consoleGuard,
   }) => {
     const tenant = await gulfCoastTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const leagues = await page.locator('#leagues').boundingBox();
     const locations = await page.locator('#locations').boundingBox();
     if ((page.viewportSize()?.width ?? 0) >= 1024) {
@@ -533,8 +523,7 @@ test.describe('organization page: hero, divisions, and sports', () => {
 
   test('browser: nothing scrolls sideways at 320px', async ({ page, consoleGuard }) => {
     const tenant = await gulfCoastTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.setViewportSize({ width: 320, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
@@ -585,7 +574,7 @@ test.describe('organization page: first load', () => {
 test.describe('organization page: after an in-app navigation', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  async function navigateToHeldOrganization(page: Page, consoleGuard: { hydrated: boolean }) {
+  async function navigateToHeldOrganization(page: Page, consoleGuard: ConsoleGuard) {
     const tenant = await smallTenant();
     const leaguePath = `${tenant.path}/leagues/alpha-league`;
     const held = await holdQueries(page, [
@@ -945,8 +934,7 @@ test.describe('organization page: Registration open', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await openSeasonsTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const section = page.locator('#registration-open');
     await expect(
       section.getByRole('heading', { level: 2, name: 'Registration open' }),
@@ -964,8 +952,7 @@ test.describe('organization page: Registration open', () => {
     consoleGuard,
   }) => {
     const tenant = await openSeasonsTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page
       .locator('#registration-open')
       .getByRole('link', { name: 'Register for Open League, Sooner Season' })
@@ -982,8 +969,7 @@ test.describe('organization page: Registration open', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await openSeasonsTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const register = page
       .locator('#leagues')
       .getByRole('link', { name: 'Register for Open League, Sooner Season' });
@@ -1020,8 +1006,7 @@ test.describe('organization page: Registration open', () => {
       );
       const touch = testInfo.project.name === 'chromium-mobile';
       const tenant = await openSeasonsTenant();
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
       // The client shell renders the saved lists at once, so dropping the open seasons' copy and holding their answer leaves only that section loading.
       await page.evaluate(() => {
@@ -1062,8 +1047,7 @@ test.describe('organization page: Registration open', () => {
       'the accessibility tree is the same on every screen',
     );
     const tenant = await openSeasonsTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(page.locator('#registration-open > ul > li')).toHaveCount(2);
     await page.evaluate(() => {
       for (const key of Object.keys(localStorage)) {
@@ -1164,7 +1148,7 @@ test.describe('organization page: the open-season skeleton follows the views alr
 
   async function expectLeaguesStaysAfter(
     page: Page,
-    consoleGuard: { hydrated: boolean },
+    consoleGuard: ConsoleGuard,
     hops: readonly SportChip[],
     shown: {
       cards: number;
@@ -1179,8 +1163,7 @@ test.describe('organization page: the open-season skeleton follows the views alr
       shown.longName ? LONG_ORGANIZATION_NAME : undefined,
     );
     const held = await holdQueries(page, [OPEN_SEASONS_QUERY], { holdFromStart: false });
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await expect(loadedCards(page)).toHaveCount(OPEN_SOCCER_SEASONS);
     if (shown.titleWrapsBesideButton) {
       expect(await titleLines(page), 'the title beside the Register button').toBe(2);
@@ -1336,8 +1319,7 @@ test.describe('organization page: a full season with registration open', () => {
     consoleGuard,
   }, testInfo) => {
     const { tenant } = await seedFullSeasonTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const row = page.locator('#league-1');
     await expect(row.locator('[data-slot="badge"]')).toHaveText('Full');
     await expect(row).toContainText('Full Season · waitlist open');
@@ -1375,8 +1357,7 @@ test.describe('organization page: a full season with registration open', () => {
     consoleGuard,
   }, testInfo) => {
     const { tenant } = await seedFullSeasonTenant();
-    await page.goto(`${tenant.path}/sports/softball`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}/sports/softball`);
     const row = page.locator('#league-1');
     await expect(row.locator('h3')).toHaveText(PACKED_LEAGUE);
     await expect(row.locator('[data-slot="badge"]')).toHaveText('Full');
@@ -1559,8 +1540,7 @@ test.describe('organization page: numbered pages in the browser', () => {
   }, testInfo) => {
     test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
     const tenant = await pagedTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await page.evaluate(() => {
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
     });
@@ -1603,8 +1583,7 @@ test.describe('organization page: numbered pages in the browser', () => {
   }, testInfo) => {
     test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
     const tenant = await pagedTenant();
-    await page.goto(`${tenant.path}?leagues=2`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?leagues=2`);
     const leagues = page.locator('#leagues li[id] h3');
     await expect(leagues).toHaveText(rowNames('League', 6, 10));
     await page.evaluate(() => {
@@ -1648,8 +1627,7 @@ test.describe('organization page: numbered pages in the browser', () => {
   }, testInfo) => {
     test.skip(isDesktop(testInfo), 'the phone layout runs in chromium-mobile');
     const tenant = await pagedTenant();
-    await page.goto(`${tenant.path}?leagues=3&locations=2`);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?leagues=3&locations=2`);
     await page.setViewportSize({ width: 320, height: 800 });
     await expect(page.getByRole('navigation', { name: 'Leagues pages' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
@@ -2082,8 +2060,7 @@ test.describe('organization page: Tournaments in the browser', () => {
       GULF_COAST_BEACH_OPEN,
       ...Array.from({ length: 6 }, (_, i) => sandTournament(`Open ${i + 1}`, 40 + i)),
     ]);
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const section = page.locator('#tournaments');
     await expect(section.getByRole('heading', { level: 2, name: 'Tournaments' })).toBeVisible();
     await expect(section.locator(':scope > ul > li h3')).toHaveText([
@@ -2135,8 +2112,7 @@ test.describe('organization page: Tournaments in the browser', () => {
           }),
         ),
       );
-      await page.goto(`${tenant.path}${query}`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}${query}`);
       if (count > 0) await expect(page.locator('#tournaments')).toBeVisible();
       for (const width of [360, 1280]) {
         await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
@@ -2457,8 +2433,7 @@ test.describe('organization page: Camps in the browser', () => {
       JUNIOR_CAMP,
       ...Array.from({ length: 6 }, (_, i) => sandCamp(`Camp ${i + 1}`, [{ startsInDays: 40 + i }])),
     ]);
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const section = page.locator('#camps');
     await expect(section.getByRole('heading', { level: 2, name: 'Camps' })).toBeVisible();
     await expect(section.locator(':scope > ul > li h3')).toHaveText([
@@ -2498,8 +2473,7 @@ test.describe('organization page: Camps in the browser', () => {
       ]),
     ]);
     await page.clock.install();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const row = page.locator('#camps li', { hasText: 'Clock Camp' });
     await expect(row).toContainText('Registration closed');
     await expect(row).toContainText(`${monthDay(2)} – ${monthDay(6)}`);
@@ -2531,8 +2505,7 @@ test.describe('organization page: Camps in the browser', () => {
           ]),
         ),
       );
-      await page.goto(`${tenant.path}${query}`);
-      await hydrated(consoleGuard);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}${query}`);
       if (count > 0) await expect(page.locator('#camps')).toBeVisible();
       for (const width of [360, 1280]) {
         await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });

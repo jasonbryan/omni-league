@@ -4,6 +4,7 @@
 import { join } from 'node:path';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { hydrated } from './support/hydrated';
 
 const routes = (process.env['E2E_SCREENSHOT_ROUTES'] ?? '/')
   .split(',')
@@ -37,7 +38,7 @@ test.describe('screenshots', () => {
       const response = await page.goto(route);
       // Client routes render in the browser only, so they never log hydration.
       if (isClientRoute(route)) await expect(page.locator('main h1')).toBeVisible();
-      else if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      else if (!remoteBaseUrl) await hydrated(consoleGuard);
       await page.evaluate(() => document.fonts.ready);
       const width = page.viewportSize()?.width ?? 0;
       const path = join(testInfo.config.rootDir, 'screenshots', `${routeSlug(route)}-${width}.png`);

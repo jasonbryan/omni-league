@@ -4,6 +4,7 @@ import { seedCamp, seedCampSession, seedPublishedCamp, type CampSessionSeed } fr
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -160,7 +161,7 @@ test.describe('public camp page: in the browser', () => {
     const response = await page.goto(published);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { level: 1, name: JUNIOR.name })).toBeVisible();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${JUNIOR.name} | ${tenant.name} | Omni League`);
     await expect(page.getByText('Ages 9 to 14').first()).toBeVisible();
     await expect(page.getByText(ADDRESS)).toBeVisible();
@@ -182,18 +183,17 @@ test.describe('public camp page: in the browser', () => {
   });
 
   test('the breadcrumb leads to the organization page, and its Camps crumb opens the Camps section', async ({
+    context,
     page,
     consoleGuard,
   }) => {
     const { tenant, published } = await seed();
-    await page.goto(published);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, published);
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
     await crumbs.getByRole('link', { name: 'E2E Camp Page' }).click();
     await expect(page).toHaveURL(tenant.path);
 
     await page.goBack();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
     const campsCrumb = crumbs.getByRole('link', { name: 'Camps' });
     const campsHref = await campsCrumb.getAttribute('href');
     await campsCrumb.click();
@@ -202,9 +202,11 @@ test.describe('public camp page: in the browser', () => {
     await expect(section.getByRole('link', { name: JUNIOR.name, exact: true })).toBeVisible();
 
     // Opened as a link, in a new tab or from a shared URL, the browser scrolls to the section.
-    await page.goto(campsHref!);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await expect(section.getByRole('heading', { level: 2, name: 'Camps' })).toBeInViewport();
+    const opened = await context.newPage();
+    await gotoHydrated(opened, consoleGuard, campsHref!);
+    await expect(
+      opened.locator('#camps').getByRole('heading', { level: 2, name: 'Camps' }),
+    ).toBeInViewport();
   });
 
   test.describe('a draft camp', () => {
@@ -218,7 +220,7 @@ test.describe('public camp page: in the browser', () => {
         const response = await page.goto(draft);
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await hydrated(consoleGuard);
       },
     );
   });

@@ -1,9 +1,11 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { answerWithClientShell } from './support/client-shell';
+import type { ConsoleGuard } from './support/console-guard';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -313,8 +315,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
     await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
 
     await pills(page).filter({ hasText: 'Gender: Coed' }).click();
@@ -342,8 +343,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=mens&format=6v6`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=mens&format=6v6`);
     await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
     await expect(removeLinks(page)).toHaveText([
       "Remove Men's (3 leagues)",
@@ -364,8 +364,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=mens&format=6v6`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=mens&format=6v6`);
     await expect(removeLinks(page)).toHaveCount(2);
     await expectAccessible(page);
     const expected = isDesktop(testInfo) ? 36 : 44;
@@ -398,8 +397,7 @@ test.describe('organization filters in the browser', () => {
         soccer('Women Rec', 'womens', 'rec'),
       ],
     });
-    await page.goto(`${tenant.path}?gender=womens&level=competitive`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=womens&level=competitive`);
     await expect(
       noMatchesBox(page).getByRole('link', { name: 'Remove Level: Competitive (1 league)' }),
     ).toBeVisible();
@@ -408,12 +406,11 @@ test.describe('organization filters in the browser', () => {
 
   async function expectClearAllStaysWhileFacetsArrive(
     page: Page,
-    consoleGuard: { readonly hydrated: boolean },
+    consoleGuard: ConsoleGuard,
   ): Promise<void> {
     const tenant = await filterTenant();
     const path = `${tenant.path}?gender=mens&format=6v6`;
-    await page.goto(path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, path);
     await expect(removeLinks(page)).toHaveCount(2);
     // The client shell renders the saved lists at once, so dropping the facets' copy and holding every answer leaves the facets alone loading.
     await page.evaluate(() => {
@@ -475,8 +472,7 @@ test.describe('organization filters in the browser', () => {
     const held = await holdQueries(page, ['organizations:listPublicLeagues'], {
       holdFromStart: false,
     });
-    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
     await expect(count(page)).toHaveText('2 of 7 leagues');
     held.holdNextAnswer();
     await pills(page).filter({ hasText: 'Gender: Coed' }).click();
@@ -495,8 +491,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?format=4v4&format=6v6&leagues=2`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?format=4v4&format=6v6&leagues=2`);
     const opener = isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page);
     await opener.focus();
     await page.keyboard.press('Enter');
@@ -528,8 +523,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await filterTenant();
-    await page.goto(tenant.path);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     await (isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page)).click();
     const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
     const genders = (
@@ -558,8 +552,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed&locations=2`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&locations=2`);
     const locationPages = page
       .getByRole('navigation', { name: 'Locations pages' })
       .getByRole('link');
@@ -580,8 +573,7 @@ test.describe('organization filters in the browser', () => {
       holdFromStart: false,
     });
     await page.clock.install();
-    await page.goto(`${tenant.path}?format=4v4&format=6v6`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?format=4v4&format=6v6`);
     held.holdNextAnswer();
     await page
       .getByRole('navigation', { name: 'Leagues pages' })
@@ -601,8 +593,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
     await expect(page.locator('[data-filter-buttons]')).toBeVisible();
     await expectAccessible(page);
   });
@@ -625,7 +616,7 @@ test.describe('organization filters in the browser', () => {
     await expect(page.locator('main details summary')).toBeVisible();
     const before = (await heading.boundingBox())?.y;
     releaseScripts();
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await hydrated(consoleGuard);
     await expect(page.locator('[data-filter-buttons]')).toBeVisible();
     await expect(page.locator('main details')).toHaveCount(0);
     expect(before).toBeDefined();
@@ -643,8 +634,7 @@ test.describe('organization filters in the browser', () => {
         scripts.push(request.url());
       }
     });
-    await page.goto(tenant.path, { waitUntil: 'networkidle' });
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, tenant.path, { waitUntil: 'networkidle' });
     const beforePress = [...scripts];
     if (isDesktop(testInfo)) {
       await dimensionButton(page, 'Level').click();
@@ -663,8 +653,7 @@ test.describe('organization filters in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed&locations=2`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&locations=2`);
     await expect(count(page)).toHaveText('4 of 7 leagues');
     const pageState = () =>
       page.evaluate(() => ({
@@ -698,8 +687,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
       const filters = filtersButton(page);
       await expect(filters).toHaveAttribute('aria-haspopup', 'dialog');
@@ -738,8 +726,7 @@ test.describe('organization filters in the browser', () => {
     }) => {
       await page.setViewportSize({ width: 360, height: 640 });
       const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       await filtersButton(page).click();
       await expect(sheet(page).getByRole('group')).toHaveCount(4);
       const show = sheet(page).getByRole('button', { name: 'Show 7 leagues' });
@@ -754,8 +741,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
       await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
       const filters = filtersButton(page);
       await filters.click();
@@ -780,8 +766,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
       await filtersButton(page).click();
       await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
       await sheet(page).evaluate((element) =>
@@ -801,8 +786,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed`);
       await filtersButton(page).click();
       await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
       const focusInSheet = () =>
@@ -823,8 +807,7 @@ test.describe('organization filters in the browser', () => {
       }) => {
         await page.setViewportSize({ width, height: 800 });
         const tenant = await filterTenant();
-        await page.goto(tenant.path);
-        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await gotoHydrated(page, consoleGuard, tenant.path);
         await filtersButton(page).click();
         await expect(sheet(page).getByRole('group')).toHaveCount(4);
         const gaps = await sheet(page)
@@ -852,8 +835,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       const level = dimensionButton(page, 'Level');
       await expect(level).toHaveAttribute('aria-expanded', 'false');
 
@@ -880,8 +862,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed&locations=2&leagues=2`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&locations=2&leagues=2`);
       const level = dimensionButton(page, 'Level');
       await level.click();
       await levelPanel(page).getByText('BB', { exact: true }).click();
@@ -896,8 +877,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
       await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
       await dimensionButton(page, 'Gender: Coed').click();
       await genderPanel(page).getByRole('link', { name: 'Clear gender' }).click();
@@ -912,8 +892,7 @@ test.describe('organization filters in the browser', () => {
 
     test('the open popover passes axe', async ({ page, consoleGuard }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
       await dimensionButton(page, 'Level').click();
       await expect(levelPanel(page)).toBeVisible();
       await levelPanel(page).evaluate((element) =>
@@ -927,8 +906,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed`);
       const focusState = () =>
         page.evaluate(() => {
           const active = document.activeElement;
@@ -963,8 +941,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       const level = dimensionButton(page, 'Level');
       await level.focus();
       await page.keyboard.press('Enter');
@@ -987,8 +964,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, tenant.path);
       const level = dimensionButton(page, 'Level');
       const outside = {
         'the Leagues heading': page.getByRole('heading', { name: 'Leagues', exact: true }),
@@ -1008,8 +984,7 @@ test.describe('organization filters in the browser', () => {
       consoleGuard,
     }) => {
       const tenant = await filterTenant();
-      await page.goto(`${tenant.path}?gender=coed`);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed`);
       await dimensionButton(page, 'Level').click();
       await expect(levelPanel(page)).toBeVisible();
       await levelPanel(page).locator('legend').click();
@@ -1063,8 +1038,7 @@ test.describe('organization filters on the sport view in the browser', () => {
     test.skip(!isDesktop(testInfo), 'the popovers run from 768px');
     const tenant = await filterTenant();
     const sportPath = `${tenant.path}/sports/beach-volleyball`;
-    await page.goto(`${sportPath}?page=2`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${sportPath}?page=2`);
     await page
       .getByRole('search', { name: 'Filter leagues' })
       .getByRole('button', { name: 'Format', exact: true })
@@ -1089,8 +1063,7 @@ test.describe('organization filters offline', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed`);
     const form = page.getByRole('search', { name: 'Filter leagues' });
     const filters = form.getByRole('button', { name: /^Filters/ });
     const sheet = page.getByRole('dialog', { name: 'Filters' });
@@ -1124,8 +1097,7 @@ test.describe('organization filters offline', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
     const tenant = await filterTenant();
-    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await gotoHydrated(page, consoleGuard, `${tenant.path}?gender=coed&format=4v4`);
     await expect(count(page)).toHaveText('2 of 7 leagues');
 
     await context.setOffline(true);
