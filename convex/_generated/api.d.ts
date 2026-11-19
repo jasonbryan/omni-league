@@ -127,6 +127,7 @@ import type * as lib_waitlist from "../lib/waitlist.js";
 import type * as locations from "../locations.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
+import type * as programEnds from "../programEnds.js";
 import type * as push from "../push.js";
 import type * as pushSend from "../pushSend.js";
 import type * as releaseBackfill from "../releaseBackfill.js";
@@ -275,6 +276,7 @@ declare const fullApi: ApiFromModules<{
   locations: typeof locations;
   memberships: typeof memberships;
   organizations: typeof organizations;
+  programEnds: typeof programEnds;
   push: typeof push;
   pushSend: typeof pushSend;
   releaseBackfill: typeof releaseBackfill;

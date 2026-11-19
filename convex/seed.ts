@@ -83,6 +83,7 @@ import {
   backfilledValidator,
   backfillAllCampFields,
   backfillAllTrainingFields,
+  backfillAllProgramEndFields,
   backfillDraftLeagueCounts,
   backfillTenantFields,
   findCustomLevel,
@@ -1097,6 +1098,7 @@ const resultValidator = v.object({
     draftLeagueCounts: v.number(),
     campFields: v.number(),
     trainingFields: v.number(),
+    programFields: v.number(),
   }),
 });
 
@@ -1182,6 +1184,7 @@ export const insertDemoData = internalMutation({
       draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
       campFields: await backfillAllCampFields(ctx),
       trainingFields: await backfillAllTrainingFields(ctx),
+      programFields: await backfillAllProgramEndFields(ctx),
     };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);

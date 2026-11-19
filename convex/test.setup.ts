@@ -2,7 +2,7 @@
 import type { TestConvex } from 'convex-test';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
-import { defaultDivision } from './lib/tenantWrites';
+import { defaultDivision, programEndFields } from './lib/tenantWrites';
 import type schema from './schema';
 import type { Sport } from './lib/sports';
 // The docs' "./**/!(*.*.*)*.*s" pattern matches nothing on Vite 8.
@@ -28,7 +28,11 @@ export function leagueRequiredFields(sport: Sport, name: string) {
   return { ...defaultDivision(sport), searchText: name };
 }
 
-export function tournamentProgramFields(organizationId: Id<'organizations'>, slug: string) {
+export function tournamentProgramFields(
+  organizationId: Id<'organizations'>,
+  slug: string,
+  endDate?: string,
+) {
   return {
     ...defaultDivision('soccer'),
     organizationId,
@@ -39,6 +43,7 @@ export function tournamentProgramFields(organizationId: Id<'organizations'>, slu
     sport: 'soccer' as const,
     status: 'published' as const,
     locationIds: [],
+    ...programEndFields('tournament', endDate),
   };
 }
 
@@ -47,8 +52,12 @@ export function insertTournamentProgram(
   organizationId: Id<'organizations'>,
   name: string,
   slug: string,
+  endDate?: string,
 ): Promise<Id<'programs'>> {
-  return ctx.db.insert('programs', { ...tournamentProgramFields(organizationId, slug), name });
+  return ctx.db.insert('programs', {
+    ...tournamentProgramFields(organizationId, slug, endDate),
+    name,
+  });
 }
 
 export function insertCampProgram(
@@ -56,9 +65,11 @@ export function insertCampProgram(
   organizationId: Id<'organizations'>,
   name: string,
   slug: string,
+  endDate?: string,
 ): Promise<Id<'programs'>> {
   return ctx.db.insert('programs', {
     ...tournamentProgramFields(organizationId, slug),
+    ...programEndFields('camp', endDate),
     type: 'camp',
     name,
   });
@@ -69,9 +80,11 @@ export function insertTrainingProgram(
   organizationId: Id<'organizations'>,
   name: string,
   slug: string,
+  endDate?: string,
 ): Promise<Id<'programs'>> {
   return ctx.db.insert('programs', {
     ...tournamentProgramFields(organizationId, slug),
+    ...programEndFields('training', endDate),
     type: 'training',
     name,
   });
@@ -95,6 +108,7 @@ export async function insertLeagueWithProgram(
     level: league.level,
     customLevelId: league.customLevelId,
     ageGroup: league.ageGroup,
+    current: true,
   });
   const leagueId = await ctx.db.insert('leagues', { ...league, programId });
   await ctx.db.patch('programs', programId, { leagueId });

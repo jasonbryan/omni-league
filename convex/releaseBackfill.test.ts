@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi } from 
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { BACKFILL_TEAM_COUNT_SCAN_LIMIT } from './lib/rosterWrites';
-import { BACKFILL_SCAN_LIMIT, insertTenant } from './lib/tenantWrites';
+import { BACKFILL_SCAN_LIMIT, defaultDivision, insertTenant } from './lib/tenantWrites';
 import { BATCH_SIZE } from './releaseBackfill';
 import schema from './schema';
 import {
   insertCampProgram,
   insertLeagueWithProgram,
+  insertTournamentProgram,
   insertTrainingProgram,
   modules,
   leagueRequiredFields,
@@ -34,6 +35,7 @@ const ZERO = {
   pendingInviteCounts: 0,
   campFields: 0,
   trainingFields: 0,
+  programFields: 0,
 };
 
 beforeEach(() => {
@@ -456,6 +458,151 @@ describe('the release backfill', () => {
     ).toBe(true);
     expect((await t.action(internal.releaseBackfill.run, {})).backfilled.trainingFields).toBe(0);
     expect(await snapshot()).toEqual(first);
+  });
+
+  describe('the programs phase', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // A program written by a release that did not keep `endDate` and `current`.
+    async function insertLegacyPrograms(t: T) {
+      return t.run(async (ctx) => {
+        const organizationId = await insertTenant(ctx, {
+          organization: { name: 'Org', slug: 'org' },
+          locations: [],
+          leagues: [
+            {
+              name: 'Coed 7s',
+              sport: 'soccer',
+              locations: [],
+              division: defaultDivision('soccer'),
+            },
+          ],
+        });
+        const typed = { organizationId, status: 'published', sport: 'soccer' } as const;
+        const tournament = async (slug: string, endDate: string) => {
+          const programId = await insertTournamentProgram(ctx, organizationId, slug, slug);
+          await ctx.db.insert('tournaments', {
+            ...typed,
+            programId,
+            startDate: endDate,
+            endDate,
+            registrationDeadline: endDate,
+            maximumTeams: 8,
+            minimumRosterSize: 7,
+            structure: 'bracket',
+            bracketType: 'single',
+          });
+          return programId;
+        };
+        const camp = async (slug: string, lastSessionEndDate: string | undefined) => {
+          const programId = await insertCampProgram(ctx, organizationId, slug, slug);
+          await ctx.db.insert('camps', {
+            ...typed,
+            programId,
+            minimumAge: 9,
+            maximumAge: 14,
+            ...(lastSessionEndDate !== undefined && { lastSessionEndDate }),
+          });
+          return programId;
+        };
+        const programIds = {
+          ending: await tournament('ending', '2030-06-01'),
+          ended: await tournament('ended', '2030-05-31'),
+          camp: await camp('camp', '2030-07-12'),
+          emptyCamp: await camp('empty-camp', undefined),
+          orphan: await insertCampProgram(ctx, organizationId, 'orphan', 'orphan'),
+          training: await insertTrainingProgram(ctx, organizationId, 'training', 'training'),
+        };
+        const trainingId = await ctx.db.insert('trainings', {
+          ...typed,
+          programId: programIds.training,
+          coachName: 'Dana Ruiz',
+        });
+        await ctx.db.insert('trainingClasses', {
+          trainingId,
+          organizationId,
+          date: '2030-06-20',
+          startTime: '18:00',
+          endTime: '19:00',
+          places: 10,
+          registeredCount: 0,
+          status: 'scheduled',
+        });
+        const league = (await ctx.db.query('leagues').first())!.programId;
+        for (const id of [...Object.values(programIds), league]) {
+          await ctx.db.patch('programs', id, { endDate: undefined, current: undefined });
+        }
+        return { ...programIds, league };
+      });
+    }
+
+    test('sets endDate and current on every program from its type row, and a second run changes nothing', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2030-06-01T12:00:00Z') });
+      const t = setup();
+      const ids = await insertLegacyPrograms(t);
+      const read = () =>
+        t.run(async (ctx) => {
+          const rows: Record<string, unknown> = {};
+          for (const [name, id] of Object.entries(ids)) {
+            const { endDate, current } = (await ctx.db.get('programs', id))!;
+            rows[name] = { endDate, current };
+          }
+          return rows;
+        });
+
+      const first = await t.action(internal.releaseBackfill.run, {});
+      // The trainings pass has already set the training program's.
+      expect(first.backfilled.programFields).toBe(Object.keys(ids).length - 1);
+      expect(await read()).toEqual({
+        ending: { endDate: '2030-06-01', current: true },
+        ended: { endDate: '2030-05-31', current: false },
+        camp: { endDate: '2030-07-12', current: true },
+        emptyCamp: { endDate: undefined, current: false },
+        orphan: { endDate: undefined, current: false },
+        training: { endDate: '2030-06-20', current: true },
+        league: { endDate: undefined, current: true },
+      });
+      const rows = await t.run((ctx) => ctx.db.query('programs').collect());
+      expect((await t.action(internal.releaseBackfill.run, {})).backfilled.programFields).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('programs').collect())).toEqual(rows);
+    });
+
+    test('fills the programs of several batches', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2030-06-01T12:00:00Z') });
+      const t = setup();
+      const count = BATCH_SIZE.programs * 2 + 5;
+      await t.run(async (ctx) => {
+        const organizationId = await insertTenant(ctx, {
+          organization: { name: 'Many', slug: 'many' },
+          locations: [],
+          leagues: [],
+        });
+        for (let i = 0; i < count; i++) {
+          const programId = await insertTournamentProgram(ctx, organizationId, `T ${i}`, `t-${i}`);
+          await ctx.db.insert('tournaments', {
+            programId,
+            organizationId,
+            status: 'published',
+            sport: 'soccer',
+            startDate: '2030-06-02',
+            endDate: '2030-06-02',
+            registrationDeadline: '2030-06-01',
+            maximumTeams: 8,
+            minimumRosterSize: 7,
+            structure: 'bracket',
+            bracketType: 'single',
+          });
+          await ctx.db.patch('programs', programId, { endDate: undefined, current: undefined });
+        }
+      });
+      expect((await t.action(internal.releaseBackfill.run, {})).backfilled.programFields).toBe(
+        count,
+      );
+      const rows = await t.run((ctx) => ctx.db.query('programs').collect());
+      expect(rows.every((row) => row.current === true && row.endDate === '2030-06-02')).toBe(true);
+    });
   });
 
   test('runs on a deployment that is not a preview or staging one', async () => {

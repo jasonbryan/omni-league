@@ -966,6 +966,7 @@ describe('convex/lib', () => {
     'password.ts': 'imported by convex/auth.ts',
     'previewOrigin.ts': 'loaded with import() by scripts/e2e-convex.mjs',
     'programs.ts': 'imported by convex/schema.ts',
+    'registration.ts': 'imported by convex/lib/tenantWrites.ts',
     'roles.ts': 'imported by convex/testing.ts',
     'seasonStatus.ts': 'imported by convex/testing.ts',
     'seedCallLimits.ts': 'imported by convex/testing.ts',
