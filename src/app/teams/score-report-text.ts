@@ -4,6 +4,8 @@ import type { GameStage } from '../organizations/admin/game-result-text';
 
 const CHECK_CONNECTION = 'Check your connection and try again.';
 
+export const SET_THREE_NOTE = 'Only if each team won a set.';
+
 export const NO_GAME_TITLE = 'No game to report right now.';
 
 export const NO_GAME_TEXT = 'A game shows here once both of its teams are set.';

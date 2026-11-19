@@ -982,14 +982,19 @@ test.describe('Tournaments: pool score reports', () => {
 
   const EIGHT = TWELVE.slice(0, 8);
   const GAME_COUNTS = [
-    { games: 1, names: SIX, played: ['Eddy'] },
-    { games: 2, names: SIX, played: [] },
-    { games: 3, names: EIGHT, played: [] },
+    { games: 1, names: SIX, played: ['Eddy'], reported: [] },
+    { games: 2, names: SIX, played: [], reported: [] },
+    { games: 2, names: SIX, played: [], reported: [ACE_ROUND_TWO] },
+    { games: 3, names: EIGHT, played: [], reported: [] },
   ] as const;
 
-  for (const { games, names, played } of GAME_COUNTS) {
+  for (const { games, names, played, reported } of GAME_COUNTS) {
     for (const width of [320, 360, 1280]) {
-      test(`at ${width}px the skeleton holds the space of the team's ${games} pool ${games === 1 ? 'game' : 'games'} to report, so the roster below does not move`, async ({
+      const state =
+        reported.length > 0
+          ? `${games} pool games to report, ${reported.length} already reported by the team`
+          : `${games} pool ${games === 1 ? 'game' : 'games'} to report`;
+      test(`at ${width}px the skeleton holds the space of the team's ${state}, so the roster below does not move`, async ({
         page,
         browser,
       }, testInfo) => {
@@ -1003,15 +1008,32 @@ test.describe('Tournaments: pool score reports', () => {
           await ace.setViewportSize({ width, height: 900 });
           const rosterTop = async () =>
             (await ace.locator('section[aria-labelledby="roster-heading"]').boundingBox())?.y;
+          if (reported.length > 0) {
+            await ace.goto(world.teamPath('Ace'));
+            for (const label of reported) {
+              const form = reportForm(ace, label);
+              await reportBox(form, 'Ace').fill('21');
+              await reportBox(form, label.split(' v ')[1]).fill('18');
+              await reportButton(form).click();
+            }
+            await expect(reportPanel(ace).locator('[data-slot="reported"]')).toHaveCount(
+              reported.length,
+            );
+          }
           const held = await holdQueries(ace, ['scoreReports:forTeam']);
-          await ace.goto(world.teamPath('Ace'));
+          if (reported.length > 0) await ace.reload();
+          else await ace.goto(world.teamPath('Ace'));
           await expect(reportPanel(ace).getByRole('status')).toHaveText('Loading the game.');
           await expect.poll(() => held.isHolding()).toBe(true);
           const before = await reportPanel(ace).boundingBox();
           const rosterBefore = await rosterTop();
+          expect(describeViolations((await axeScan(ace)).violations)).toEqual([]);
 
           held.release();
-          await expect(reportPanel(ace).getByRole('form')).toHaveCount(games);
+          await expect(reportPanel(ace).getByRole('form')).toHaveCount(games - reported.length);
+          await expect(reportPanel(ace).locator('[data-slot="reported"]')).toHaveCount(
+            reported.length,
+          );
           const after = await reportPanel(ace).boundingBox();
           const panelShift = (after?.height ?? Infinity) - (before?.height ?? -1);
           const rosterShift = ((await rosterTop()) ?? Infinity) - (rosterBefore ?? -1);

@@ -275,6 +275,7 @@ export interface TeamPageNavigationState {
                       [sport]="team.tournament.sport ?? 'beachVolleyball'"
                       [setsPerGame]="team.tournament.setsPerGame ?? 1"
                       [gameCount]="team.tournament.reportableGameCount ?? 1"
+                      [reportableGames]="team.tournament.reportableGames"
                     />
                   }
                   <section aria-labelledby="roster-heading" hlmCard size="bare" class="${PANEL}">

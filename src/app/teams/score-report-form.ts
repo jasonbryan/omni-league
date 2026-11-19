@@ -46,7 +46,7 @@ export type ReportableGame = NonNullable<
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block px-4 py-4 md:px-5' },
   template: `
-    <p class="font-medium max-[359px]:min-h-12" data-slot="game-label">{{ label() }}</p>
+    <p class="font-medium" data-slot="game-label">{{ label() }}</p>
     @if (status(); as status) {
       <app-admin-alert
         #statusAlert
@@ -122,7 +122,9 @@ export type ReportableGame = NonNullable<
           ><span class="text-muted-foreground">Your report: </span>{{ reportedText() }}</span
         >
       </p>
-      <p class="mt-1 text-sm text-muted-foreground">{{ reportedNote() }}</p>
+      <p class="mt-1 text-sm text-muted-foreground" data-slot="reported-note">
+        {{ reportedNote() }}
+      </p>
       <button
         #openButton
         type="button"

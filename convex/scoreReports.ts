@@ -2,7 +2,6 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireGameOrganizer, requireUser } from './lib/access';
 import { BRACKET_MESSAGES } from './lib/bracket';
-import { playoffRoundName } from './lib/doubleBracket';
 import {
   refuseInvalidScore,
   saveFor,
@@ -10,16 +9,9 @@ import {
   setsPerGameOf,
   tiesAllowedIn,
 } from './lib/gameResults';
-import { reportableGamesOf } from './lib/scoreReports';
+import { reportableGameViewsOfTeam } from './lib/scoreReports';
 import { scoreValidator, sportValidator } from './lib/sports';
-import {
-  allPlayoffGames,
-  gameIsDecided,
-  playoffGames,
-  playoffRoundsOf,
-  refuseBracket,
-} from './lib/tournamentBracket';
-import { poolGames } from './lib/tournamentPools';
+import { gameIsDecided, refuseBracket } from './lib/tournamentBracket';
 
 const reportedValidator = v.object({ score: scoreValidator, reportedAt: v.number() });
 
@@ -49,32 +41,7 @@ export const forTeam = query({
     if (team?.tournamentId === undefined || team.captainUserId !== user._id) return null;
     const tournament = await ctx.db.get('tournaments', team.tournamentId);
     if (!tournament) return null;
-    const playoff = await playoffGames(ctx, tournament._id);
-    const open = reportableGamesOf(
-      [...(await poolGames(ctx, tournament._id)), ...allPlayoffGames(playoff)],
-      team._id,
-    );
-    const rounds = playoffRoundsOf(playoff);
-    const games = [];
-    for (const game of open) {
-      const reported = await ctx.db
-        .query('scoreReports')
-        .withIndex('by_gameId_and_teamId', (q) => q.eq('gameId', game._id).eq('teamId', team._id))
-        .unique();
-      const teams = [];
-      for (const placed of game.teamIds) {
-        const row = placed && (await ctx.db.get('teams', placed));
-        if (row) teams.push({ teamId: row._id, name: row.name });
-      }
-      games.push({
-        gameId: game._id,
-        // The losers' bracket and the grand final are bracket games to a captain, as the previous frontend reads them.
-        stage: game.stage === 'pool' ? ('pool' as const) : ('bracket' as const),
-        roundName: playoffRoundName(game, rounds),
-        teams,
-        report: reported && { score: reported.score, reportedAt: reported.reportedAt },
-      });
-    }
+    const games = await reportableGameViewsOfTeam(ctx, tournament._id, team._id);
     const game = games.find((row) => row.stage === 'bracket') ?? null;
     return { sport: tournament.sport, setsPerGame: setsPerGameOf(tournament), games, game };
   },

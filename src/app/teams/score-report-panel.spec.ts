@@ -2,17 +2,22 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../convex/_generated/dataModel';
-import type { Sport } from '../../../convex/lib/sports';
+import type { Score, Sport } from '../../../convex/lib/sports';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
 import { expectPendingSpinner } from '../ui/testing/spinner';
-import { ScoreReportPanel } from './score-report-panel';
+import { ScoreReportPanel, type ReportableGames } from './score-report-panel';
 
 const FOR_TEAM = 'scoreReports:forTeam';
 const REPORT = 'scoreReports:report';
 
 /** What the team page knows of its tournament before the game answers. */
-const TOURNAMENT: { sport: Sport; setsPerGame: number; gameCount: number } = {
+const TOURNAMENT: {
+  sport: Sport;
+  setsPerGame: number;
+  gameCount: number;
+  reportableGames?: ReportableGames;
+} = {
   sport: 'beachVolleyball',
   setsPerGame: 1,
   gameCount: 1,
@@ -21,7 +26,7 @@ const TOURNAMENT: { sport: Sport; setsPerGame: number; gameCount: number } = {
 @Component({
   imports: [ScoreReportPanel],
   template:
-    '<app-score-report-panel [teamId]="teamId" [sport]="tournament.sport" [setsPerGame]="tournament.setsPerGame" [gameCount]="tournament.gameCount" />',
+    '<app-score-report-panel [teamId]="teamId" [sport]="tournament.sport" [setsPerGame]="tournament.setsPerGame" [gameCount]="tournament.gameCount" [reportableGames]="tournament.reportableGames" />',
 })
 class Host {
   protected readonly teamId = 'tm_crabs' as Id<'teams'>;
@@ -562,17 +567,185 @@ describe('ScoreReportPanel', () => {
     });
   });
 
-  describe('a long game label', () => {
-    it('keeps two lines at the narrowest widths, in the skeleton and in the form', async () => {
+  describe('a game label', () => {
+    it('takes the height of its own text, in the skeleton and in the form, with no reserved lines', async () => {
       await open();
       const skeletonLabel = page.querySelector('[data-slot="skeleton-label"]')!;
-      expect(skeletonLabel.className).toContain('max-[359px]:min-h-12');
+      expect(skeletonLabel.className).not.toContain('min-h');
       o.subscription(FOR_TEAM)!.emit(answer());
       await o.flush();
-      expect(text(section()!.querySelector('[data-slot="game-label"]'))).toBeTruthy();
-      expect(section()!.querySelector('[data-slot="game-label"]')!.className).toContain(
-        'max-[359px]:min-h-12',
+      expect(section()!.querySelector('[data-slot="game-label"]')!.className).not.toContain(
+        'min-h',
       );
+    });
+  });
+
+  describe('the skeleton drawn from the team’s listed games', () => {
+    const TWENTY_ONE_EIGHTEEN = { kind: 'sets' as const, sets: [{ a: 21, b: 18 }] };
+    const listed = (
+      roundName: string,
+      names: readonly [string, string],
+      report: { score: Score } | null = null,
+      stage: 'bracket' | 'pool' = 'bracket',
+    ): NonNullable<ReportableGames>[number] => ({
+      stage,
+      roundName,
+      teams: names.map((name) => ({ name })),
+      report,
+    });
+    const SEMI = listed('Semifinals', ['Sand Crabs', 'Spike Squad']);
+    const REPORTED = listed(
+      'Round 2',
+      ['Sand Crabs', 'Net Results'],
+      { score: TWENTY_ONE_EIGHTEEN },
+      'pool',
+    );
+    const blocks = () => [...page.querySelectorAll<HTMLElement>('[data-slot="skeleton-block"]')];
+    const invisibleTexts = (root: ParentNode) =>
+      [...root.querySelectorAll('.invisible')].map((el) => text(el));
+
+    afterEach(() => {
+      delete TOURNAMENT.reportableGames;
+      Object.assign(TOURNAMENT, { sport: 'beachVolleyball', setsPerGame: 1, gameCount: 1 });
+    });
+
+    it('draws one block for each listed game, whatever the count says', async () => {
+      TOURNAMENT.gameCount = 5;
+      TOURNAMENT.reportableGames = [SEMI, REPORTED, SEMI];
+      await open();
+      expect(blocks()).toHaveLength(3);
+      expect(blocks().map((block) => block.classList.contains('border-t'))).toEqual([
+        false,
+        true,
+        true,
+      ]);
+    });
+
+    it('draws an unreported game with its real text, invisibly, in the bars of the form', async () => {
+      TOURNAMENT.reportableGames = [SEMI];
+      await open();
+      const [block] = blocks();
+      expect(text(block.querySelector('[data-slot="skeleton-label"]'))).toBe(
+        'Semifinals: Sand Crabs v Spike Squad',
+      );
+      expect(text(block.querySelector('[data-slot="skeleton-set-name"]'))).toBe('Set 1');
+      expect(
+        [...block.querySelectorAll('[data-slot="skeleton-box-label"]')].map((el) => text(el)),
+      ).toEqual(['Sand Crabs', 'Spike Squad']);
+      expect(block.querySelector('[data-slot="skeleton-reported"]')).toBeNull();
+    });
+
+    it('words the box labels as the form does for a sport scored in goals', async () => {
+      TOURNAMENT.sport = 'soccer';
+      TOURNAMENT.reportableGames = [SEMI];
+      await open();
+      expect(
+        [...page.querySelectorAll('[data-slot="skeleton-box-label"]')].map((el) => text(el)),
+      ).toEqual(['Sand Crabs goals', 'Spike Squad goals']);
+    });
+
+    it('draws the set 3 note of a best of 3 in words', async () => {
+      TOURNAMENT.setsPerGame = 3;
+      TOURNAMENT.reportableGames = [SEMI];
+      await open();
+      expect(text(page.querySelector('[data-slot="skeleton-note"]'))).toBe(
+        'Only if each team won a set.',
+      );
+      expect(page.querySelectorAll('[data-slot="skeleton-set-name"]')).toHaveLength(3);
+    });
+
+    it('draws a reported game as the Reported view: label, badge row, note, and button, with no boxes', async () => {
+      TOURNAMENT.reportableGames = [REPORTED];
+      await open();
+      const [block] = blocks();
+      expect(text(block.querySelector('[data-slot="skeleton-label"]'))).toBe(
+        'Round 2: Sand Crabs v Net Results',
+      );
+      const row = block.querySelector('[data-slot="skeleton-reported"]')!;
+      expect(invisibleTexts(row)).toEqual([
+        'Reported',
+        'Your report: Sand Crabs 21–18 Net Results.',
+      ]);
+      expect(text(block.querySelector('[data-slot="skeleton-reported-note"]'))).toBe(
+        'The organizer confirms it before it counts in the standings. Report again to change it until then.',
+      );
+      expect(block.querySelector('[data-slot="skeleton-button"]')).not.toBeNull();
+      expect(block.querySelectorAll('[data-slot="skeleton-set"]')).toHaveLength(0);
+    });
+
+    it('draws a bracket game’s reported note for the winner', async () => {
+      TOURNAMENT.reportableGames = [{ ...REPORTED, stage: 'bracket' }];
+      await open();
+      expect(text(page.querySelector('[data-slot="skeleton-reported-note"]'))).toContain(
+        'before the winner advances',
+      );
+    });
+
+    it('draws a mix of reported and unreported games in the order listed', async () => {
+      TOURNAMENT.reportableGames = [REPORTED, SEMI];
+      await open();
+      expect(
+        blocks().map((block) => block.querySelector('[data-slot="skeleton-reported"]') !== null),
+      ).toEqual([true, false]);
+    });
+
+    it('draws one blank form block when the team has no game listed', async () => {
+      TOURNAMENT.gameCount = 3;
+      TOURNAMENT.reportableGames = [];
+      await open();
+      expect(blocks()).toHaveLength(1);
+      expect(blocks()[0].querySelector('[data-slot="skeleton-reported"]')).toBeNull();
+    });
+
+    it('falls back to a form block for each counted game when the list is absent', async () => {
+      TOURNAMENT.gameCount = 2;
+      await open();
+      expect(blocks()).toHaveLength(2);
+    });
+
+    it('gives no text bar a fixed width, and gives each the loaded text’s font weight and size', async () => {
+      TOURNAMENT.setsPerGame = 3;
+      TOURNAMENT.reportableGames = [SEMI, REPORTED];
+      await open();
+      const bars = (slot: string) => [
+        ...page.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`),
+      ];
+      const textBars = [
+        ...bars('skeleton-label'),
+        ...bars('skeleton-set-name'),
+        ...bars('skeleton-box-label'),
+        ...bars('skeleton-note'),
+        ...bars('skeleton-reported-note'),
+        ...bars('skeleton-reported-line'),
+      ];
+      expect(textBars.length).toBeGreaterThan(6);
+      for (const bar of textBars) {
+        expect([...bar.classList].filter((name) => /^(min-|max-)?w-\d/.test(name))).toEqual([]);
+        expect([...bar.classList]).not.toContain('h-5');
+        expect([...bar.classList]).not.toContain('h-6');
+      }
+      expect(bars('skeleton-label')[0].classList).toContain('font-medium');
+      expect(bars('skeleton-box-label')[0].classList).toContain('font-medium');
+      expect(bars('skeleton-box-label')[0].classList).toContain('text-sm');
+      expect(bars('skeleton-note')[0].classList).toContain('text-sm');
+      expect(bars('skeleton-reported-note')[0].classList).toContain('text-sm');
+    });
+
+    it('keeps the status text and hides every bar, with its invisible text, from the accessibility tree', async () => {
+      TOURNAMENT.reportableGames = [SEMI, REPORTED];
+      await open();
+      expect(page.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(text(page.querySelector('[role="status"]'))).toBe('Loading the game.');
+      for (const block of blocks()) {
+        const hidden = block.querySelector('[aria-hidden="true"]')!;
+        expect(hidden.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+        for (const bar of block.querySelectorAll('[data-slot="skeleton"]')) {
+          expect(bar.closest('[aria-hidden="true"]')).not.toBeNull();
+        }
+        for (const hiddenText of block.querySelectorAll('.invisible')) {
+          expect(hiddenText.closest('[aria-hidden="true"]')).not.toBeNull();
+        }
+      }
     });
   });
 });
