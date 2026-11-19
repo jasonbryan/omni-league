@@ -2097,15 +2097,15 @@ async function stopRecording(page: Page): Promise<ProgramsFrameBoxes[]> {
 }
 
 const FRAME_TOLERANCE = 0.5;
-// The start view offers Camps, which leaves the row when no camp matches, after the chips before it.
-const MAY_LEAVE = 'type chip: Camps';
-// The count bar is as wide as a placeholder, not as the count line, and a row's height depends on its text.
+// The start view offers Camps and Training, which leave the row when nothing of theirs matches, after the chips before them.
+const MAY_LEAVE = ['type chip: Camps', 'type chip: Training'];
+// The count bar is a 224px placeholder and the loaded line is a block, so only their width differs.
 const FRAME_COMPARES: Record<string, readonly (keyof ProgramsBox)[]> = {
-  'count line': ['x', 'y'],
-  'first row': ['x', 'width'],
+  'count line': ['x', 'y', 'height'],
+  'first row': ['x', 'y', 'width'],
 };
 
-/** A count line that wraps on a phone is taller than the bar, and the rows below follow it by the lines it adds, which no skeleton can know. */
+/** What in each frame differs from the first, which is the skeleton: a part that moved, or one that went. */
 function framesThatMove(frames: readonly ProgramsFrameBoxes[]): string[] {
   const [first, ...rest] = frames;
   const moved: string[] = [];
@@ -2114,7 +2114,7 @@ function framesThatMove(frames: readonly ProgramsFrameBoxes[]): string[] {
     for (const [name, was] of Object.entries(first)) {
       const now = frame[name];
       if (now === undefined) {
-        if (name !== MAY_LEAVE) moved.push(`${at}: ${name} has no box`);
+        if (!MAY_LEAVE.includes(name)) moved.push(`${at}: ${name} has no box`);
         continue;
       }
       for (const side of FRAME_COMPARES[name] ?? (['x', 'y', 'width', 'height'] as const)) {
@@ -2122,13 +2122,6 @@ function framesThatMove(frames: readonly ProgramsFrameBoxes[]): string[] {
           moved.push(`${at}: ${name} ${side} ${String(was[side])} to ${String(now[side])}`);
         }
       }
-    }
-    const [rowWas, rowNow] = [first['first row'], frame['first row']];
-    const wrapped = (frame['count line']?.height ?? 0) - (first['count line']?.height ?? 0);
-    if (rowWas && rowNow && Math.abs(rowNow.y - rowWas.y - wrapped) > FRAME_TOLERANCE) {
-      moved.push(
-        `${at}: first row y ${String(rowWas.y)} to ${String(rowNow.y)}, count line grew ${String(wrapped)}`,
-      );
     }
   }
   return moved;

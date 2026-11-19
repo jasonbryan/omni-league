@@ -464,11 +464,14 @@ describe('FindPage searching', () => {
     expect(host(harness).querySelector('footer')).not.toBeNull();
   });
 
-  it('draws the count bar as tall as the count line, 20px', async () => {
-    const harness = await open('/programs?q=coed');
-    const bar = results(harness)!.querySelector('[data-testid="find-skeleton"] > span')!;
+  it('draws the count bar 20px tall over the words of the count line, so it wraps as the loaded line does', async () => {
+    const harness = await open('/programs?type=league&sport=soccer&q=coed');
+    const line = results(harness)!.querySelector('[data-testid="find-skeleton"] > span')!;
+    const bar = line.querySelector('[data-slot="skeleton"]')!;
     expect(bar.classList.contains('h-5')).toBe(true);
     expect(bar.classList.contains('h-4')).toBe(false);
+    expect(text(line.querySelector('.invisible'))).toBe('10 soccer leagues match “coed”');
+    expect(line.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('draws each skeleton logo rounded-xl and each badge rounded-full', async () => {

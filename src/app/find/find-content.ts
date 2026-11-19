@@ -84,6 +84,8 @@ const REMOVE_BUTTON = `${OUTLINE_BUTTON} h-auto! min-h-9 max-w-full whitespace-n
 
 const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
 
+const SKELETON_COUNT = 10;
+
 @Component({
   selector: 'app-find-content',
   imports: [
@@ -160,7 +162,7 @@ const CLEAR_BUTTON = `${OUTLINE_BUTTON} mt-4 pointer-coarse:h-11`;
           </h2>
           @switch (status()) {
             @case ('searching') {
-              <app-find-skeleton [withCount]="query() !== ''" />
+              <app-find-skeleton [withCount]="query() !== ''" [countText]="skeletonCountText()" />
             }
             @case ('error') {
               <div hlmAlert variant="destructive" role="alert" class="max-w-xl">
@@ -562,6 +564,11 @@ export class FindContent {
   );
 
   protected readonly suggestions = computed(() => this.results()?.suggestions ?? []);
+
+  // The words decide whether the loaded count line wraps on a phone; the number adds only a digit or two.
+  protected readonly skeletonCountText = computed(
+    () => `${SKELETON_COUNT} ${this.noun()}s match “${this.query()}”`,
+  );
 
   protected readonly countLine = computed(() => {
     const count = this.rows().length;

@@ -361,7 +361,7 @@ export class FindPage {
     if (this.mode() === 'organizations') return 'start';
     if (this.failed()) return 'error';
     if (!this.searching()) return 'results';
-    return this.online() && this.waitedOut() ? 'error' : 'searching';
+    return this.waitedOut() ? 'error' : 'searching';
   });
 
   // The server renders the whole page as the error view so its status is 503; the browser keeps the form and shows an alert in place of the results.

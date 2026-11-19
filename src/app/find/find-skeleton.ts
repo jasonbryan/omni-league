@@ -12,7 +12,10 @@ const BAR = 'block rounded-md';
   template: `
     <p role="status" class="sr-only">Searching.</p>
     @if (withCount()) {
-      <span hlmSkeleton aria-hidden="true" class="${BAR} h-5 w-56"></span>
+      <span aria-hidden="true" class="relative block min-h-5 text-sm">
+        <span class="invisible block">{{ countText() }}</span>
+        <span hlmSkeleton class="${BAR} absolute top-0 start-0 h-5 w-56"></span>
+      </span>
     }
     <div class="mt-2 max-w-3xl divide-y divide-border">
       @for (row of rows; track row) {
@@ -50,6 +53,8 @@ const BAR = 'block rounded-md';
 })
 export class FindSkeleton {
   readonly withCount = input(true);
+  /** The words of the count line, drawn invisibly under the bar so the line wraps as the loaded one does. */
+  readonly countText = input('');
 
   protected readonly rows = [1, 2, 3];
 }
