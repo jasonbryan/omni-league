@@ -192,7 +192,10 @@ test.describe('two accounts register for the last place of one class at once', (
       await expect(placesLeft(loser, 1)).toHaveText('Full');
       await expect(placesLeft(loser, 2)).toHaveText(`${PLACES} places left`);
       await expect(loser.locator('[data-slot="class-registered"]')).toHaveCount(0);
-      await expect(classRows(loser).nth(1).locator('a[data-slot="button"]')).toHaveCount(0);
+      const fullRow = classRows(loser).nth(1);
+      await expect(fullRow.locator('a[data-slot="button"]')).toHaveCount(1);
+      await expect(fullRow.getByRole('link', { name: /^Join the waitlist/ })).toHaveCount(1);
+      await expect(fullRow.getByRole('link', { name: /^Register/ })).toHaveCount(0);
     } finally {
       await first.context().close();
       await second.context().close();
