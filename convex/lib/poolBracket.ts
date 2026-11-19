@@ -73,7 +73,7 @@ function compareValues(first: readonly number[], second: readonly number[]): num
 
 /**
  * Teams level in a pool, best first: the points rule is applied again to each group it leaves level, and the pool's seed order
- * separates what is still level. The rule needs every two of the group to have played, as head-to-head does.
+ * separates what is still level.
  * `level` is the pool index of the first team of the group a team ends in.
  */
 function byPointsAmong(
