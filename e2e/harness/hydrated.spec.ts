@@ -9,7 +9,6 @@ test.skip(remoteBaseUrl !== undefined, LOCAL_BUILD_ONLY);
 const SCRIPT_URL = /\/(main|chunk-[^/]+)\.js$/;
 const STILL_PENDING_MS = 1_000;
 
-/** A document whose HTML arrives but whose scripts wait cannot hydrate until the returned release runs. */
 async function holdScripts(page: Page): Promise<() => void> {
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
@@ -44,7 +43,7 @@ test.describe('hydrated waits for the page under test', VIEWPORT_AGNOSTIC, () =>
         (response) =>
           response.request().isNavigationRequest() && response.url().endsWith('/programs'),
       );
-      const second = gotoHydrated(page, consoleGuard, '/programs');
+      const second = gotoHydrated(page, consoleGuard, '/programs', { waitUntil: 'commit' });
       const state = trackSettled(second);
       await documentArrived;
       await page.waitForTimeout(STILL_PENDING_MS);
