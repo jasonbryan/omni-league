@@ -13,6 +13,7 @@ import {
   insertTrainingClasses,
   publishCamp,
   publishTraining,
+  setTrainingClassStatus,
   updateLocation,
   updateOrganizationCityState,
 } from './lib/tenantWrites';
@@ -235,9 +236,11 @@ describe('search.programs and training programs', () => {
     const { t, gulf } = await setup();
     await insertTraining(t, gulf, { name: 'Empty Clinic', slug: 'empty-clinic', weeks: 1 });
     await t.run(async (ctx) => {
-      const row = (await ctx.db.query('trainingClasses').first())!;
-      await ctx.db.patch('trainingClasses', row._id, { status: 'cancelled' });
-      await ctx.db.patch('trainings', row.trainingId, { lastClassDate: undefined });
+      await setTrainingClassStatus(
+        ctx,
+        (await ctx.db.query('trainingClasses').first())!,
+        'cancelled',
+      );
     });
     expect((await browse(t, { type: 'training' })).total).toBe(0);
   });

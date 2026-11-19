@@ -59,15 +59,6 @@ export function campOfProgram(
     .unique();
 }
 
-/** The `programs` row holds no session date, so the camp's last session end is read from its own row. */
-export async function campIsUpcoming(
-  ctx: Pick<QueryCtx, 'db'>,
-  program: Doc<'programs'>,
-): Promise<boolean> {
-  const camp = await campOfProgram(ctx, program);
-  return camp?.lastSessionEndDate !== undefined && camp.lastSessionEndDate >= today();
-}
-
 export function trainingOfProgram(
   ctx: Pick<QueryCtx, 'db'>,
   program: Doc<'programs'>,
@@ -78,15 +69,6 @@ export function trainingOfProgram(
     .unique();
 }
 
-/** The `programs` row holds no class date, so the training program's last class is read from its own row. */
-export async function trainingIsUpcoming(
-  ctx: Pick<QueryCtx, 'db'>,
-  program: Doc<'programs'>,
-): Promise<boolean> {
-  const training = await trainingOfProgram(ctx, program);
-  return training?.lastClassDate !== undefined && training.lastClassDate >= today();
-}
-
 export function tournamentOfProgram(
   ctx: Pick<QueryCtx, 'db'>,
   program: Doc<'programs'>,
@@ -95,15 +77,6 @@ export function tournamentOfProgram(
     .query('tournaments')
     .withIndex('by_programId', (q) => q.eq('programId', program._id))
     .unique();
-}
-
-/** The `programs` row holds no end date, so the tournament's own row is read. */
-export async function tournamentIsUpcoming(
-  ctx: Pick<QueryCtx, 'db'>,
-  program: Doc<'programs'>,
-): Promise<boolean> {
-  const tournament = await tournamentOfProgram(ctx, program);
-  return tournament !== null && tournament.endDate >= today();
 }
 
 async function trainingRow(

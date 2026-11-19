@@ -72,4 +72,35 @@ describe('seed:demo and Find a program', () => {
     expect(result.total).toBe(2);
     expect(result.typeCounts).toContainEqual({ type: 'camp', count: 2 });
   });
+
+  test('sets current on every demo program, and its end date from the tournament, camp, or training program', async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.seed.insertDemoData, {});
+    const { programs, typeRows } = await t.run(async (ctx) => {
+      const typeRows: [string, string | null][] = [];
+      for (const row of await ctx.db.query('tournaments').collect()) {
+        typeRows.push([row.programId, row.endDate]);
+      }
+      for (const row of await ctx.db.query('camps').collect()) {
+        typeRows.push([row.programId, row.lastSessionEndDate ?? null]);
+      }
+      for (const row of await ctx.db.query('trainings').collect()) {
+        typeRows.push([row.programId, row.lastClassDate ?? null]);
+      }
+      return { programs: await ctx.db.query('programs').collect(), typeRows };
+    });
+    const ends = new Map(typeRows);
+    expect(programs.map((program) => program.type)).toEqual(
+      expect.arrayContaining(['league', 'tournament', 'camp', 'training']),
+    );
+    for (const program of programs) {
+      expect(program.current, program.slug).toBeDefined();
+      if (program.type === 'league') {
+        expect(program).toMatchObject({ current: true });
+        expect(program).not.toHaveProperty('endDate');
+      } else {
+        expect(program.endDate ?? null, program.slug).toBe(ends.get(program._id));
+      }
+    }
+  });
 });

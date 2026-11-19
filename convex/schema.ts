@@ -161,6 +161,10 @@ export default defineSchema({
     leagueId: v.optional(v.id('leagues')),
     /** The words a search finds the program by: its name, sport, division, organization's name, locations' names, and City, state; a camp's or training program's hold no division words. Absent on a program written before its type was searchable. */
     searchText: v.optional(v.string()),
+    /** The last day, `YYYY-MM-DD`: a tournament's `endDate`, a camp's `lastSessionEndDate`, a training program's `lastClassDate`. Absent on a league, and on a camp or training program with no session or class. */
+    endDate: v.optional(v.string()),
+    /** Whether the program still has a day left: `true` for a league, otherwise `true` while `endDate` is today or later. Kept by `convex/lib/tenantWrites.ts` and, once the day passes, `convex/programEnds.ts`; absent on a row written before it was kept. */
+    current: v.optional(v.boolean()),
   })
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
     .index('by_customLevelId', ['customLevelId'])
@@ -171,9 +175,17 @@ export default defineSchema({
       'sortName',
     ])
     .index('by_status_and_type_and_sport_and_sortName', ['status', 'type', 'sport', 'sortName'])
+    .index('by_status_and_type_and_sport_and_current_and_sortName', [
+      'status',
+      'type',
+      'sport',
+      'current',
+      'sortName',
+    ])
+    .index('by_current_and_endDate', ['current', 'endDate'])
     .searchIndex('search_searchText', {
       searchField: 'searchText',
-      filterFields: ['status', 'type', 'sport'],
+      filterFields: ['status', 'type', 'sport', 'current'],
     }),
 
   // The tournament part of a program of type `tournament`; `programs` holds its name, slug, and division. Written only by `convex/lib/tenantWrites.ts`.

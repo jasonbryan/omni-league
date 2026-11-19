@@ -298,6 +298,7 @@ const NO_BACKFILL = {
   draftLeagueCounts: 0,
   campFields: 0,
   trainingFields: 0,
+  programFields: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {

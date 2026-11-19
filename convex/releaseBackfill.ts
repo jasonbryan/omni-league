@@ -9,6 +9,7 @@ import {
   BACKFILL_SCAN_LIMIT,
   backfillCampFields,
   backfillTrainingFields,
+  backfillProgramEndFields,
   backfillOrganizationTenantFields,
   recountDraftLeagues,
   recountPublishedSeasons,
@@ -25,10 +26,11 @@ const phaseValidator = v.union(
   v.literal('teams'),
   v.literal('camps'),
   v.literal('trainings'),
+  v.literal('programs'),
 );
 type Phase = Infer<typeof phaseValidator>;
 
-// Leagues run before organizations, because an organization's counts read them.
+// Leagues run before organizations, because an organization's counts read them. Programs run last, because they read the camps' and training programs' last dates.
 const PHASES: readonly Phase[] = [
   'locations',
   'leagues',
@@ -37,9 +39,10 @@ const PHASES: readonly Phase[] = [
   'teams',
   'camps',
   'trainings',
+  'programs',
 ];
 
-// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A camp reads its sessions, at most 200; a training program its classes, at most 52.
+// A batch is one transaction, which may read 16,384 documents. A row's recount reads up to `BACKFILL_SCAN_LIMIT - 1` rows of each table it counts: an organization six, a season two, a league one. A camp reads its sessions, at most 200; a training program its classes, at most 52. A program reads its type row.
 export const BATCH_SIZE: Record<Phase, number> = {
   locations: 100,
   leagues: 10,
@@ -48,6 +51,7 @@ export const BATCH_SIZE: Record<Phase, number> = {
   teams: 100,
   camps: 20,
   trainings: 50,
+  programs: 100,
 };
 
 const backfilledValidator = v.object({
@@ -62,6 +66,7 @@ const backfilledValidator = v.object({
   pendingInviteCounts: v.number(),
   campFields: v.number(),
   trainingFields: v.number(),
+  programFields: v.number(),
 });
 type Backfilled = Infer<typeof backfilledValidator>;
 
@@ -78,6 +83,7 @@ function noneBackfilled(): Backfilled {
     pendingInviteCounts: 0,
     campFields: 0,
     trainingFields: 0,
+    programFields: 0,
   };
 }
 
@@ -247,6 +253,15 @@ async function backfillPhase(
         .paginate(paginationOpts);
       for (const training of page) {
         if (await backfillTrainingFields(ctx, training)) backfilled.trainingFields++;
+      }
+      return { continueCursor, isDone };
+    }
+    case 'programs': {
+      const { page, continueCursor, isDone } = await ctx.db
+        .query('programs')
+        .paginate(paginationOpts);
+      for (const program of page) {
+        if (await backfillProgramEndFields(ctx, program)) backfilled.programFields++;
       }
       return { continueCursor, isDone };
     }
