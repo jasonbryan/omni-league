@@ -4,6 +4,11 @@ import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import {
+  expectOwnRowGrowsOnce,
+  TRAINING_CLASS_ROWS,
+  TRAINING_SERIES_ROWS,
+} from './support/registered-rows';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedTenant } from './support/tenant';
@@ -394,17 +399,16 @@ test.describe('a guardian registers the same child again', () => {
 test.describe('the training page when the viewer’s places arrive', () => {
   const WIDTHS = [320, 360, 1280] as const;
   const TOLERANCE = 0.5;
+  const TWO_COLUMNS = 1280;
+  const CLASSES_CARD = '#classes > div';
 
-  const layout = (page: Page) =>
-    page.evaluate(() => ({
-      page: document.documentElement.scrollHeight,
-      boxes: ['#classes', '[data-slot="series-actions"]', '#details-heading + dl > div:last-child']
-        .map((selector) => document.querySelector(selector)?.getBoundingClientRect())
-        .map((box) => (box ? { top: box.top + window.scrollY, height: box.height } : null)),
-    }));
+  const seriesRow = (page: Page) =>
+    page
+      .locator(TRAINING_SERIES_ROWS.rows)
+      .filter({ has: page.locator('[data-slot="series-actions"]') });
 
   for (const width of WIDTHS) {
-    test(`keeps the content where it was when a registered child with a 60-character name arrives at ${width}px`, async ({
+    test(`the series row grows once and nothing above it moves when a registered child with a 60-character name arrives at ${width}px`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: 800 });
@@ -416,40 +420,44 @@ test.describe('the training page when the viewer’s places arrive', () => {
       await registerButton(page).click();
       await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
 
-      const held = await holdQueries(page, [MINE]);
-      await page.goto(paths.youth);
-      await expect.poll(() => held.isHolding()).toBe(true);
-      await expect(registerLink(page)).toBeVisible();
-      const before = await layout(page);
-      expect(before.boxes[1]).not.toBeNull();
-
-      held.release();
-      await expect(registeredLine(page)).toHaveText(`${LONG} is registered`);
-      const after = await layout(page);
-      expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
-      after.boxes.forEach((box, index) => {
-        expect(box, `box ${index}`).not.toBeNull();
-        expect(
-          Math.abs(box!.top - before.boxes[index]!.top),
-          `box ${index} top`,
-        ).toBeLessThanOrEqual(TOLERANCE);
-        expect(
-          Math.abs(box!.height - before.boxes[index]!.height),
-          `box ${index} height`,
-        ).toBeLessThanOrEqual(TOLERANCE);
-      });
-      const [lineBox, registerBox, rowBox] = [
-        (await registeredLine(page).boundingBox())!,
-        (await registerLink(page).boundingBox())!,
-        (await page.locator('[data-slot="series-actions"]').boundingBox())!,
-      ];
-      expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(registerBox.x + TOLERANCE);
-      expect(registerBox.x + registerBox.width).toBeLessThanOrEqual(
-        rowBox.x + rowBox.width + TOLERANCE,
+      await expectOwnRowGrowsOnce(
+        page,
+        paths.youth,
+        TRAINING_SERIES_ROWS,
+        seriesRow(page),
+        [MINE],
+        [{ slot: 'series-registered', text: `${LONG} is registered` }],
+        true,
+        true,
+        width === TWO_COLUMNS ? CLASSES_CARD : undefined,
       );
-      expect(await overflow(page)).toBeLessThanOrEqual(0);
-      await expectAccessible(page);
       await screenshot(page, testInfo, `362-training-child-arrived-${width}`);
+    });
+  }
+
+  for (const width of [320, TWO_COLUMNS]) {
+    test(`an adult’s line takes the place of the Register link and the series row keeps its height at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { paths } = await seed();
+      await signUp(page, newUser('Adult'));
+      await page.goto(registerPathOf(paths.adult));
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+
+      await expectOwnRowGrowsOnce(
+        page,
+        paths.adult,
+        TRAINING_SERIES_ROWS,
+        seriesRow(page),
+        [MINE],
+        [{ slot: 'series-registered', text: "You're registered" }],
+        false,
+        false,
+        width === TWO_COLUMNS ? CLASSES_CARD : undefined,
+      );
     });
   }
 
@@ -722,24 +730,11 @@ test.describe('register for one class', () => {
 
 test.describe('the classes when the viewer’s places arrive', () => {
   const WIDTHS = [320, 360, 1280] as const;
-  const TOLERANCE = 0.5;
-
-  const layout = (page: Page) =>
-    page.evaluate(() => ({
-      page: document.documentElement.scrollHeight,
-      boxes: [
-        '#classes',
-        '#classes li:nth-child(1) [data-slot="class-actions"]',
-        '#classes li:nth-child(2)',
-        '#classes li:nth-child(3)',
-        '#details-heading + dl > div:last-child',
-      ]
-        .map((selector) => document.querySelector(selector)?.getBoundingClientRect())
-        .map((box) => (box ? { top: box.top + window.scrollY, height: box.height } : null)),
-    }));
+  const TWO_COLUMNS = 1280;
+  const DETAILS_LIST = '#details-heading + dl';
 
   for (const width of WIDTHS) {
-    test(`keeps the content where it was when a class a child with a 60-character name holds arrives at ${width}px`, async ({
+    test(`the class row grows at most once and the rows below move only by that growth when a class a child with a 60-character name holds arrives at ${width}px`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: 800 });
@@ -752,38 +747,48 @@ test.describe('the classes when the viewer’s places arrive', () => {
       await registerButton(page).click();
       await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
 
-      const held = await holdQueries(page, [MINE]);
-      await page.goto(paths.youth);
-      await expect.poll(() => held.isHolding()).toBe(true);
-      await expect(classLink(page, 0)).toBeVisible();
-      const before = await layout(page);
-      expect(before.boxes[1]).not.toBeNull();
-
-      held.release();
-      await expect(classRegisteredLine(page, 0)).toHaveText(`${LONG} is registered`);
-      const after = await layout(page);
-      expect(Math.abs(after.page - before.page), 'page height').toBeLessThanOrEqual(TOLERANCE);
-      after.boxes.forEach((box, index) => {
-        expect(box, `box ${index}`).not.toBeNull();
-        expect(
-          Math.abs(box!.top - before.boxes[index]!.top),
-          `box ${index} top`,
-        ).toBeLessThanOrEqual(TOLERANCE);
-        expect(
-          Math.abs(box!.height - before.boxes[index]!.height),
-          `box ${index} height`,
-        ).toBeLessThanOrEqual(TOLERANCE);
-      });
-      const [lineBox, linkBox, rowBox] = [
-        (await classRegisteredLine(page, 0).boundingBox())!,
-        (await classLink(page, 0).boundingBox())!,
-        (await page.locator('[data-slot="class-actions"]').first().boundingBox())!,
-      ];
-      expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(linkBox.x + TOLERANCE);
-      expect(linkBox.x + linkBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + TOLERANCE);
-      expect(await overflow(page)).toBeLessThanOrEqual(0);
-      await expectAccessible(page);
+      const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+      // At 1280px a touch screen's 44px row holds the wrapped line, so the row has no growth to record.
+      const rowMustGrow = !(touch && width === TWO_COLUMNS);
+      await expectOwnRowGrowsOnce(
+        page,
+        paths.youth,
+        TRAINING_CLASS_ROWS,
+        classRow(page, 0),
+        [MINE],
+        [{ slot: 'class-registered', text: `${LONG} is registered` }],
+        rowMustGrow,
+        rowMustGrow,
+        width === TWO_COLUMNS ? DETAILS_LIST : undefined,
+      );
       await screenshot(page, testInfo, `363-training-class-arrived-${width}`);
+    });
+  }
+
+  for (const width of [320, TWO_COLUMNS]) {
+    test(`an adult’s line takes the place of the class Register link and the class row keeps its height at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const { paths } = await seedSingle();
+      await signUp(page, newUser('Dropin'));
+      await page.goto(paths.adult);
+      await classLink(page, 0).click();
+      await ageBox(page).click();
+      await registerButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}${paths.adult}`, { timeout: 20_000 });
+
+      await expectOwnRowGrowsOnce(
+        page,
+        paths.adult,
+        TRAINING_CLASS_ROWS,
+        classRow(page, 0),
+        [MINE],
+        [{ slot: 'class-registered', text: "You're registered" }],
+        false,
+        false,
+        width === TWO_COLUMNS ? DETAILS_LIST : undefined,
+      );
     });
   }
 
@@ -1645,4 +1650,68 @@ test.describe('the waitlist of one class', () => {
       await screenshot(page, testInfo, '368-register-class-320');
     });
   });
+});
+
+test.describe('the registered lines with a long email or a long name made of words', () => {
+  const NAMES = {
+    email: 'maya.richardson.longname@very-long-subdomain.example.org',
+    words: 'Alexandria Bartholomew Montgomery-Featherstonehaugh III',
+  };
+
+  for (const [kind, name] of Object.entries(NAMES)) {
+    for (const width of [320, 360, 1280]) {
+      test(`the series line for a ${kind} name is whole and the page keeps its layout at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { paths } = await seed();
+        await signUp(page, newUser('Steady'));
+        await page.goto(registerPathOf(paths.youth));
+        await childName(page).fill(name);
+        await ageBox(page).click();
+        await registerButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+
+        await expectOwnRowGrowsOnce(
+          page,
+          paths.youth,
+          TRAINING_SERIES_ROWS,
+          page
+            .locator(TRAINING_SERIES_ROWS.rows)
+            .filter({ has: page.locator('[data-slot="series-actions"]') }),
+          [MINE],
+          [{ slot: 'series-registered', text: `${name} is registered` }],
+          false,
+          true,
+          width === 1280 ? '#classes > div' : undefined,
+        );
+      });
+
+      test(`the class line for a ${kind} name is whole and the page keeps its layout at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { paths } = await seedSingle();
+        await signUp(page, newUser('Steady'));
+        await page.goto(paths.youth);
+        await classLink(page, 0).click();
+        await childName(page).fill(name);
+        await ageBox(page).click();
+        await registerButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+
+        await expectOwnRowGrowsOnce(
+          page,
+          paths.youth,
+          TRAINING_CLASS_ROWS,
+          classRow(page, 0),
+          [MINE],
+          [{ slot: 'class-registered', text: `${name} is registered` }],
+          false,
+          true,
+          width === 1280 ? '#details-heading + dl' : undefined,
+        );
+      });
+    }
+  }
 });
