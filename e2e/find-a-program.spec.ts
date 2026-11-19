@@ -2105,7 +2105,6 @@ const FRAME_COMPARES: Record<string, readonly (keyof ProgramsBox)[]> = {
   'first row': ['x', 'y', 'width'],
 };
 
-/** What in each frame differs from the first, which is the skeleton: a part that moved, or one that went. */
 function framesThatMove(frames: readonly ProgramsFrameBoxes[]): string[] {
   const [first, ...rest] = frames;
   const moved: string[] = [];
