@@ -23,7 +23,7 @@ import { tournamentProgramFields, modules } from './test.setup';
 
 const BULK = PUBLIC_LIST_MAX_ROWS + 1;
 
-// 2027-02-01, a Monday, at noon UTC.
+// The first moment of the UTC-12 day 2027-02-01.
 const NOW = Date.UTC(2027, 1, 1, 12, 0, 0);
 const today = () => dateAtUtcMinus12(Date.now());
 const inDays = (days: number) => addCalendarDays(today(), days);

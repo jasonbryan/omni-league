@@ -141,7 +141,7 @@ function narrowedByDivision(program: Doc<'programs'>, filters: DivisionFilters):
   return isDivisionless(program) || matchesDivisionFilters(program, filters);
 }
 
-// The daily job marks ended programs a day late at most, so a row that is still `current` can have ended since.
+// The daily job runs a minute after the UTC-12 day turns and can miss a run, so a row that is still `current` can have ended since.
 function withoutEnded(programs: readonly Doc<'programs'>[]): Doc<'programs'>[] {
   const from = today();
   return programs.filter(

@@ -26,7 +26,7 @@ import {
   tournamentProgramFields,
 } from './test.setup';
 
-// 2027-02-02 at 12:00 UTC: the first moment of the UTC-12 day 2027-02-02.
+// The first moment of the UTC-12 day 2027-02-02.
 const NOW = Date.parse('2027-02-02T12:00:00Z');
 
 beforeEach(() => {
@@ -271,7 +271,6 @@ describe('the writers of a program’s end', () => {
       });
       return { trainingId: id, programId: (await ctx.db.get('trainings', id))!.programId };
     });
-    // 2027-02-08 is a Monday.
     await t.run(async (ctx) =>
       insertTrainingClasses(ctx, (await ctx.db.get('trainings', trainingId))!, {
         weekday: weekdayOf('2027-02-08'),
@@ -295,7 +294,7 @@ describe('the writers of a program’s end', () => {
     expect(await programOf(t, programId)).toMatchObject({ endDate: '2027-02-22', current: true });
   });
 
-  test('a league’s program is current with no end date, before and after the league changes', async () => {
+  test('a league’s program is current with no end date', async () => {
     const { t, organizationId } = await setup();
     const programId = await t.run(async (ctx) => {
       const { leagueId: id } = await insertLeague(ctx, organizationId, {
