@@ -229,6 +229,7 @@ test.describe('/app: camps and training', () => {
     const tenant = await seedPrograms();
     await seedFamily(tenant, user);
     await openHome(page);
+    await expect(programs(page)).toBeVisible();
 
     await expectLinkHeights(page, programs(page).getByRole('link'), pointerOf(testInfo));
   });
@@ -250,7 +251,8 @@ const skeleton = {
   card: (page: Page) => page.locator('[data-slot="home-skeleton-card"]').first(),
 };
 
-async function expectWhereItStood(arrived: Locator, stood: Box, what: string) {
+/** A skeleton bar is not as wide as the heading it stands for, so a heading is compared by where it starts. */
+async function expectWhereItStood(arrived: Locator, stood: Box, what: string, sameWidth = true) {
   const now = await boxOf(arrived);
   expect(
     Math.abs(now.y - stood.y),
@@ -260,6 +262,7 @@ async function expectWhereItStood(arrived: Locator, stood: Box, what: string) {
     Math.abs(now.x - stood.x),
     `${what} moved from x ${stood.x} to ${now.x}`,
   ).toBeLessThanOrEqual(1);
+  if (!sameWidth) return;
   expect(
     Math.abs(now.width - stood.width),
     `${what} changed from ${stood.width} to ${now.width}`,
@@ -310,6 +313,7 @@ async function expectLongNamesArriveWhereTheSkeletonStood(page: Page, testInfo: 
     programs(page).getByRole('heading', { level: 2 }),
     stood.heading,
     'the heading',
+    false,
   );
   await expectWhereItStood(
     programs(page).getByRole('listitem').first(),
@@ -335,13 +339,16 @@ async function expectTeamCardsArriveWhereTheSkeletonStood(page: Page) {
       playersPerSide: 4,
     },
   ]);
-  await convexRun('testing:seedTeam', {
+  // A captain below the minimum roster would get the next-step block, which the first load leaves out of its skeleton.
+  const captain = await seedUser(newUser('Captain'));
+  const { teamId } = (await convexRun('testing:seedTeam', {
     organizationSlug: tenant.slug,
     leagueSlug: 'sunday-reverse-coed-4s',
     seasonSlug: 'summer-2099',
     name: LONG,
-    captainEmail: user.email,
-  });
+    captainEmail: captain.email,
+  })) as { teamId: string };
+  await convexRun('testing:addToTeam', { teamId, email: user.email });
   const held = await loadHeld(page);
 
   const stood = {
@@ -357,6 +364,7 @@ async function expectTeamCardsArriveWhereTheSkeletonStood(page: Page) {
     teams(page).getByRole('heading', { level: 2 }),
     stood.heading,
     'the heading',
+    false,
   );
   const [above, below] = [await boxOf(teams(page)), await boxOf(programs(page))];
   expect(below.y).toBeGreaterThan(above.y);
