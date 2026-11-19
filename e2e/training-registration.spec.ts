@@ -1651,3 +1651,67 @@ test.describe('the waitlist of one class', () => {
     });
   });
 });
+
+test.describe('the registered lines with a long email or a long name made of words', () => {
+  const NAMES = {
+    email: 'maya.richardson.longname@very-long-subdomain.example.org',
+    words: 'Alexandria Bartholomew Montgomery-Featherstonehaugh III',
+  };
+
+  for (const [kind, name] of Object.entries(NAMES)) {
+    for (const width of [320, 360, 1280]) {
+      test(`the series line for a ${kind} name is whole and the page keeps its layout at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { paths } = await seed();
+        await signUp(page, newUser('Steady'));
+        await page.goto(registerPathOf(paths.youth));
+        await childName(page).fill(name);
+        await ageBox(page).click();
+        await registerButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+
+        await expectOwnRowGrowsOnce(
+          page,
+          paths.youth,
+          TRAINING_SERIES_ROWS,
+          page
+            .locator(TRAINING_SERIES_ROWS.rows)
+            .filter({ has: page.locator('[data-slot="series-actions"]') }),
+          [MINE],
+          [{ slot: 'series-registered', text: `${name} is registered` }],
+          false,
+          true,
+          width === 1280 ? '#classes > div' : undefined,
+        );
+      });
+
+      test(`the class line for a ${kind} name is whole and the page keeps its layout at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { paths } = await seedSingle();
+        await signUp(page, newUser('Steady'));
+        await page.goto(paths.youth);
+        await classLink(page, 0).click();
+        await childName(page).fill(name);
+        await ageBox(page).click();
+        await registerButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}${paths.youth}`, { timeout: 20_000 });
+
+        await expectOwnRowGrowsOnce(
+          page,
+          paths.youth,
+          TRAINING_CLASS_ROWS,
+          classRow(page, 0),
+          [MINE],
+          [{ slot: 'class-registered', text: `${name} is registered` }],
+          false,
+          true,
+          width === 1280 ? '#details-heading + dl' : undefined,
+        );
+      });
+    }
+  }
+});
