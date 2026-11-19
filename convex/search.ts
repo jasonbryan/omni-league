@@ -27,13 +27,8 @@ import {
   type SearchPrograms,
   type SearchProgramsBrowse,
 } from './lib/publicPage';
-import {
-  campIsUpcoming,
-  searchProgramRows,
-  searchRows,
-  tournamentIsUpcoming,
-  trainingIsUpcoming,
-} from './lib/searchRows';
+import { today } from './lib/campPublicList';
+import { searchProgramRows, searchRows } from './lib/searchRows';
 import {
   matchesEveryWord,
   parseSearchQuery,
@@ -146,22 +141,13 @@ function narrowedByDivision(program: Doc<'programs'>, filters: DivisionFilters):
   return isDivisionless(program) || matchesDivisionFilters(program, filters);
 }
 
-async function isUpcoming(ctx: QueryCtx, program: Doc<'programs'>): Promise<boolean> {
-  if (program.type === 'camp') return campIsUpcoming(ctx, program);
-  if (program.type === 'training') return trainingIsUpcoming(ctx, program);
-  if (program.type === 'tournament') return tournamentIsUpcoming(ctx, program);
-  return true;
-}
-
-async function withoutEnded(
-  ctx: QueryCtx,
-  programs: readonly Doc<'programs'>[],
-): Promise<Doc<'programs'>[]> {
-  const kept: Doc<'programs'>[] = [];
-  for (const program of programs) {
-    if (await isUpcoming(ctx, program)) kept.push(program);
-  }
-  return kept;
+// The daily job runs a minute after the UTC-12 day turns and can miss a run, so a row that is still `current` can have ended since.
+function withoutEnded(programs: readonly Doc<'programs'>[]): Doc<'programs'>[] {
+  const from = today();
+  return programs.filter(
+    (program) =>
+      program.type === 'league' || (program.endDate !== undefined && program.endDate >= from),
+  );
 }
 
 const divisionFacets = (programs: readonly Doc<'programs'>[]) =>
@@ -185,14 +171,16 @@ export const programs = query({
     if (q === '') return { rows: [], more: false, typeCounts: [] };
     const { sport, type } = args;
     const types = searchableProgramTypes(args.withCamps, args.withTraining);
-    const scanned = await withoutEnded(
-      ctx,
+    const scanned = withoutEnded(
       (
         await ctx.db
           .query('programs')
           .withSearchIndex('search_searchText', (search) => {
-            const published = search.search('searchText', q).eq('status', 'published');
-            return sport === undefined ? published : published.eq('sport', sport);
+            const current = search
+              .search('searchText', q)
+              .eq('status', 'published')
+              .eq('current', true);
+            return sport === undefined ? current : current.eq('sport', sport);
           })
           .take(SEARCH_SCAN_LIMIT)
       ).filter((program) => types.includes(program.type)),
@@ -239,8 +227,8 @@ async function firstByName(
     read.push(
       ...(await ctx.db
         .query('programs')
-        .withIndex('by_status_and_type_and_sport_and_sortName', (q) =>
-          q.eq('status', 'published').eq('type', type).eq('sport', own),
+        .withIndex('by_status_and_type_and_sport_and_current_and_sortName', (q) =>
+          q.eq('status', 'published').eq('type', type).eq('sport', own).eq('current', true),
         )
         .take(PUBLIC_LIST_MAX_ROWS)),
     );
@@ -266,7 +254,7 @@ export const programsBrowse = query({
     // Every listed type is read, so the type chips count them all; the chosen type is applied after.
     const read: Doc<'programs'>[] = [];
     for (const listed of types) {
-      read.push(...(await withoutEnded(ctx, await firstByName(ctx, listed, sport))));
+      read.push(...withoutEnded(await firstByName(ctx, listed, sport)));
     }
     read.sort(bySortName);
     const filters = filtersInScope(args, sport);

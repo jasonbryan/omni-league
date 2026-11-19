@@ -262,11 +262,12 @@ describe('PublicCampPage registration, a guardian’s children', () => {
     expect(registered(1)).toBeNull();
   });
 
-  it('is a plain line that truncates and announces nothing on load', async () => {
+  it('is a plain line that wraps instead of truncating and announces nothing on load', async () => {
     await emit(MINORS, [{ sessionId: WEEK_1, minorName: 'Maya R.' }]);
     expect(registered(0)?.tagName).toBe('P');
     expect(registered(0)?.hasAttribute('role')).toBe(false);
-    expect(registered(0)?.querySelector('.truncate')).not.toBeNull();
+    expect(registered(0)?.querySelector('.wrap-anywhere')).not.toBeNull();
+    expect(registered(0)?.querySelector('.truncate')).toBeNull();
   });
 
   it('puts the line and the Register link in the one row, beside each other', async () => {

@@ -11,6 +11,7 @@ import {
   insertDraftTournament,
   insertSeason,
   insertTenant,
+  programEndFields,
   publishCamp,
   publishTournament,
   updateLocation,
@@ -300,6 +301,7 @@ async function insertManyTournaments(
         locationIds: [],
         ...defaultDivision('softball'),
         searchText: name,
+        ...programEndFields('tournament', tournamentDates(9, 10).endDate),
       });
       await ctx.db.insert('tournaments', {
         programId,

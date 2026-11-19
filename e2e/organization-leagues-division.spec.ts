@@ -19,6 +19,8 @@ const LOCATIONS = [
   },
 ];
 
+const DIVISION_HINT = 'Players filter leagues by these on your public page and in Find a program.';
+
 const FILLED_STATUS =
   'Gender, format, and level were filled in from the name. Change any that are wrong.';
 
@@ -32,6 +34,29 @@ async function openLeagues(page: Page) {
     role: 'orgAdmin',
   });
   await page.goto(`/app/organizations/${tenant.slug}/leagues`);
+}
+
+async function openLeagueDetails(page: Page) {
+  const user = newUser('Admin');
+  await signUp(page, user);
+  const tenant = await seedTenant({
+    name: 'E2E Division Hint',
+    locations: LOCATIONS,
+    leagues: [
+      {
+        name: 'Sunday Coed 4s',
+        sport: 'beachVolleyball',
+        locations: ['Pelican Shoals Sand Courts'],
+        division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+      },
+    ],
+  });
+  await convexRun('testing:addMembership', {
+    organizationSlug: tenant.slug,
+    email: user.email,
+    role: 'orgAdmin',
+  });
+  await page.goto(`/app/organizations/${tenant.slug}/leagues/sunday-coed-4s#details`);
 }
 
 const form = (page: Page) => page.locator('#create-league form');
@@ -63,6 +88,18 @@ test.describe('Leagues: the division', () => {
     await chooseChip(chip(page, 'Soccer'));
     await expect(form(page).locator('#format input[type="radio"]')).toHaveCount(8);
     await expect(form(page).locator('#level input[type="radio"]')).toHaveCount(3);
+  });
+
+  test('the create form hint names Find a program', async ({ page }) => {
+    await openLeagues(page);
+    await expect(form(page).getByRole('group', { name: 'Division' })).toContainText(DIVISION_HINT);
+  });
+
+  test('the details form hint names Find a program', async ({ page }) => {
+    await openLeagueDetails(page);
+    await expect(page.locator('#details').getByRole('group', { name: 'Division' })).toContainText(
+      DIVISION_HINT,
+    );
   });
 
   test('leaving Name fills gender, format, and level, and a gender chosen by hand stays', async ({

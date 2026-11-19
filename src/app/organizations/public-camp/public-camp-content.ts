@@ -171,7 +171,7 @@ function waitingLine(participant: Participant, position: number): string {
                                 name="lucideCircleCheck"
                                 class="shrink-0 text-base"
                                 aria-hidden="true"
-                              /><span class="truncate">{{ line }}</span>
+                              /><span class="wrap-anywhere">{{ line }}</span>
                             </p>
                           }
                           @for (line of session.waitingLines; track line) {
