@@ -238,6 +238,85 @@ describe('AccountPage camps and training', () => {
     expectBadge(badges[0], 'muted', 'default');
   });
 
+  describe('with the home left open as the days pass', () => {
+    // A date changes at 12:00 UTC, so each of these lands just after one.
+    const JUN_2 = Date.UTC(2027, 5, 2, 12, 0, 1);
+    const JUN_8 = Date.UTC(2027, 5, 8, 12, 0, 1);
+    const JUN_9 = Date.UTC(2027, 5, 9, 12, 0, 1);
+    const JUN_23 = Date.UTC(2027, 5, 23, 12, 0, 1);
+    const CLASSES = ['2027-06-08', '2027-06-15', '2027-06-22'].map((date) => ({
+      date,
+      startTime: '18:00',
+      endTime: '19:00',
+    }));
+    const SERIES_OF_THREE: HomeTrainingRow = { ...SERIES, upcomingClasses: CLASSES };
+    const SINGLE: HomeTrainingRow = {
+      ...SERIES,
+      rowId: 'k1t3',
+      kind: 'class',
+      trainingName: 'Thursday Drop-in Clinic',
+      trainingSlug: 'thursday-drop-in-clinic',
+    };
+    const ENDING_JUNE_8: HomeCampRow = {
+      ...WEEK_1,
+      startDate: '2027-06-04',
+      endDate: '2027-06-08',
+    };
+
+    async function passTo(until: number) {
+      await vi.advanceTimersByTimeAsync(until - Date.now());
+      await harness.fixture.whenStable();
+    }
+
+    const titles = () => cards().map((card) => text(card.querySelector('h3')));
+    const nextClass = (card: Element) => facts(card)['Next class'];
+
+    it('moves a series to its next class, then drops it after the last, with no new answer', async () => {
+      await show({ camps: [], trainings: [SERIES_OF_THREE] });
+      expect(nextClass(cards()[0])).toBe('Jun 8, 2027 6 PM to 7 PM');
+
+      await passTo(JUN_9);
+      expect(nextClass(cards()[0])).toBe('Jun 15, 2027 6 PM to 7 PM');
+
+      await passTo(JUN_23);
+      expect(cards()).toHaveLength(0);
+      expect(section()).toBeNull();
+    });
+
+    it('keeps a series on a class on the day it is held, and moves on the day after', async () => {
+      await show({ camps: [], trainings: [SERIES_OF_THREE] });
+      await passTo(JUN_8);
+      expect(nextClass(cards()[0])).toBe('Jun 8, 2027 6 PM to 7 PM');
+      await passTo(JUN_9);
+      expect(nextClass(cards()[0])).toBe('Jun 15, 2027 6 PM to 7 PM');
+    });
+
+    it('drops a camp session that ends, and a single class that passes, and keeps the series', async () => {
+      await show({
+        camps: [ENDING_JUNE_8, WEEK_4_WAITING],
+        trainings: [SERIES_OF_THREE, SINGLE],
+      });
+      expect(titles()).toHaveLength(4);
+
+      await passTo(JUN_2);
+      expect(titles()).toHaveLength(4);
+
+      await passTo(JUN_9);
+      expect(titles()).toEqual(['Tuesday Serving Clinic', 'Junior Beach Volleyball Camp']);
+      expect(text(cards()[1].querySelector('p'))).toBe('Gulf Coast Sport & Social · Week 4');
+    });
+
+    it('takes the section away and shows the new-user state once the last item has passed', async () => {
+      await show({ camps: [ENDING_JUNE_8], trainings: [SINGLE] });
+      expect(cards()).toHaveLength(2);
+      expect(newUserHeading()).toBeUndefined();
+
+      await passTo(JUN_9);
+      expect(section()).toBeNull();
+      expect(newUserHeading()).toBeDefined();
+    });
+  });
+
   it('leaves a camp session that has ended off the home', async () => {
     await show({
       camps: [{ ...WEEK_1, startDate: '2027-05-24', endDate: '2027-05-28' }],

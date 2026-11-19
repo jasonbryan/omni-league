@@ -303,6 +303,7 @@ async function expectLongNamesArriveWhereTheSkeletonStood(page: Page, testInfo: 
     heading: await boxOf(skeleton.heading(page)),
     card: await boxOf(skeleton.card(page)),
   };
+  await expectAccessible(page);
   await screenshot(page, testInfo, '367-home-loading');
   held.release();
   await expect(programs(page)).toBeVisible();
@@ -321,6 +322,7 @@ async function expectLongNamesArriveWhereTheSkeletonStood(page: Page, testInfo: 
     'the first card',
   );
   await expectNoHorizontalScroll(page);
+  await expectAccessible(page);
   await screenshot(page, testInfo, '367-home-long-names');
 }
 
