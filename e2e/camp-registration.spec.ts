@@ -717,10 +717,6 @@ async function expectNoLineClippedOrSpilled(page: Page, sessionName: string, cou
   ).toBeLessThanOrEqual(page.viewportSize()!.width);
 }
 
-/**
- * Holds the caller's answers, lets the rows draw, then releases them and records every frame's box of every row. The caller's own
- * row grows at most once, nothing above it moves, and the rows below move only by that growth, once.
- */
 async function expectOwnRowGrowsOnce(
   page: Page,
   camp: string,
@@ -728,6 +724,7 @@ async function expectOwnRowGrowsOnce(
   answers: string[],
   lines: RowLine[],
   mustGrow: boolean,
+  mayGrow = true,
 ): Promise<void> {
   const held = await holdQueries(page, answers);
   await page.goto(camp);
@@ -803,6 +800,7 @@ async function expectOwnRowGrowsOnce(
   );
   expect(ownHeights.length, 'the own row changes height at most once').toBeLessThanOrEqual(1);
   if (mustGrow) expect(ownGrowth, 'the own row grows').toBeGreaterThan(BOX_TOLERANCE);
+  if (!mayGrow) expect(ownGrowth, 'the own row does not grow').toBeLessThanOrEqual(BOX_TOLERANCE);
   expect(ownGrowth).toBeGreaterThanOrEqual(-BOX_TOLERANCE);
 
   for (let at = 0; at < index; at++) {
@@ -924,7 +922,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
   const WIDTHS = [320, 360, 1280] as const;
   const TOLERANCE = 0.5;
   const LONG = 'W'.repeat(60);
-  const CHILDREN: { title: string; names: string[]; line: string }[] = [
+  const CHILDREN: { title: string; names: string[]; line: string; fitsAt1280?: boolean }[] = [
     { title: 'one child with a 60-character name', names: [LONG], line: `${LONG} is registered` },
     {
       title: 'two children, one with a 60-character name',
@@ -935,6 +933,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       title: 'two children with short names',
       names: ['Maya R.', 'Leo R.'],
       line: 'Maya R. and Leo R. are registered',
+      fitsAt1280: true,
     },
     {
       title: 'three children, one with a 60-character name',
@@ -1013,8 +1012,8 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       await screenshot(page, testInfo, `356-camp-children-arrived-${width}`);
     });
 
-    for (const { title, names, line } of CHILDREN) {
-      test(`${title} share one row with Register, which grows once with nothing above it moving at ${width}px`, async ({
+    for (const { title, names, line, fitsAt1280 } of CHILDREN) {
+      test(`${title}: the line shares one row with Register, which grows at most once with nothing above it moving at ${width}px`, async ({
         page,
       }) => {
         await page.setViewportSize({ width, height: 800 });
@@ -1031,6 +1030,7 @@ test.describe('the camp page rows when a guardian’s children answer after sign
           ['campRegistrations:listMyMinorsForCamp'],
           [{ slot: 'session-registered', text: line }],
           width <= 360 && names.includes(LONG),
+          !(fitsAt1280 && width === 1280),
         );
         await expect(
           row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }),
@@ -1052,15 +1052,26 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       await expect(page).toHaveURL(`${baseURL}${mixed}`, { timeout: 20_000 });
       await registerChild(page, path, mixed, 'Maya R.');
 
-      // Two lines need 42px, which a touch screen's 44px row holds and a mouse's 36px row does not.
-      await expectOwnRowGrowsOnce(
-        page,
-        mixed,
-        'Week 1',
-        ['campRegistrations:listMineForCamp', 'campRegistrations:listMyMinorsForCamp'],
-        [{ slot: 'session-registered', text: 'You and Maya R. are registered' }],
-        false,
-      );
+      const answers = [
+        'campRegistrations:listMineForCamp',
+        'campRegistrations:listMyMinorsForCamp',
+      ];
+      const line = 'You and Maya R. are registered';
+      const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+      if (touch || width === 1280) {
+        await expectRowsStay(page, mixed, answers, line);
+        await expectNoLineClippedOrSpilled(page, 'Week 1', 1);
+      } else {
+        // The wrapped line needs 40px, which a touch screen's 44px row holds and a mouse's 36px row does not.
+        await expectOwnRowGrowsOnce(
+          page,
+          mixed,
+          'Week 1',
+          answers,
+          [{ slot: 'session-registered', text: line }],
+          true,
+        );
+      }
     });
   }
 });
@@ -1391,6 +1402,9 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
         ],
         width <= 360,
       );
+      await expect(
+        row(page, 'Full week').getByRole('link', { name: 'Join the waitlist for Full week' }),
+      ).toBeVisible();
       await screenshot(page, testInfo, '358-camp-registered-and-waiting');
     });
 
