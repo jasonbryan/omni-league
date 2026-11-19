@@ -244,7 +244,7 @@ function localDay(ms: number): string {
                             name="lucideUserRound"
                             [class]="lineIcon"
                             aria-hidden="true"
-                          /><span>Captain: {{ team.captainName }}</span>
+                          /><span>{{ team.captainLine }}</span>
                         </p>
                         <p [class]="line">
                           <ng-icon name="lucideUsers" [class]="lineIcon" aria-hidden="true" /><span
@@ -469,6 +469,7 @@ export class SeasonManagement {
     return season.teams.map((team) => ({
       ...team,
       path: teamPath(team.teamId),
+      captainLine: team.captainName === '' ? 'No captain' : `Captain: ${team.captainName}`,
       lines: teamRowLines(team.rosterCount, season.minimumRosterSize, team.pendingInviteCount),
     }));
   });

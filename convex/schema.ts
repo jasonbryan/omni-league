@@ -508,6 +508,7 @@ export default defineSchema({
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps `rosterCount` and the parent's `teamCount`.
   // A team has exactly one parent: `leagueId` with `seasonId`, or `tournamentId`.
+  // Deleting the captain's account passes the captaincy to the adult rostered longest; a team with none keeps the gone id.
   teams: defineTable({
     organizationId: v.id('organizations'),
     leagueId: v.optional(v.id('leagues')),
@@ -533,6 +534,7 @@ export default defineSchema({
     .index('by_captainUserId', ['captainUserId']),
 
   // A removed entry keeps its row, with status `removed`, so records that point at it stay valid.
+  // Deleting the account deletes its rows, removed ones included.
   rosterEntries: defineTable({
     organizationId: v.id('organizations'),
     /** Set with the team's `seasonId`, or `tournamentId` with the team's. */
@@ -582,6 +584,7 @@ export default defineSchema({
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps one place per person per season:
   // a free agent is not a roster entry until placement adds one.
+  // Deleting the account deletes its rows.
   freeAgents: defineTable({
     organizationId: v.id('organizations'),
     seasonId: v.id('seasons'),
@@ -597,6 +600,7 @@ export default defineSchema({
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the parent's `waitlistCount`. A waiting entry is not a team or a
   // roster entry, so it carries no fee; promotion turns it into a team. An entry has exactly one parent: `seasonId`, or `tournamentId`.
+  // Deleting the account deletes its rows.
   waitlistEntries: defineTable({
     organizationId: v.id('organizations'),
     seasonId: v.optional(v.id('seasons')),
@@ -617,7 +621,8 @@ export default defineSchema({
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
     .index('by_tournamentId_and_status_and_requestedAt', ['tournamentId', 'status', 'requestedAt'])
     .index('by_tournamentId_and_userId', ['tournamentId', 'userId'])
-    .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName']),
+    .index('by_tournamentId_and_sortName', ['tournamentId', 'sortName'])
+    .index('by_userId', ['userId']),
 
   // An endpoint is an unguessable capability URL only its browser holds, so presenting it is proof
   // enough to move its row to the caller.
