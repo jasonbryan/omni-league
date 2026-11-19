@@ -441,9 +441,7 @@ test.describe('a 60-character name without spaces', () => {
     await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
     const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
     await expect(line).toHaveText(`${LONG} is registered`);
-    const rowBox = (await row(page, 'Week 1').boundingBox())!;
-    const lineBox = (await line.boundingBox())!;
-    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    await expectNoLineClippedOrSpilled(page, 'Week 1', 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       360,
     );
@@ -642,6 +640,194 @@ test.describe('the register form on a phone and offline', () => {
   });
 });
 
+const BOX_TOLERANCE = 0.5;
+const LINE_SELECTOR = '[data-slot="session-registered"], [data-slot="session-waitlist"]';
+
+type LineSlot = 'session-registered' | 'session-waitlist';
+
+interface RowLine {
+  slot: LineSlot;
+  text: string;
+}
+
+const lineIn = (page: Page, sessionName: string, slot: LineSlot) =>
+  row(page, sessionName).locator(`[data-slot="${slot}"]`);
+
+/** Measures the drawn boxes: a line that is clipped or leaves its row fails here, whatever its text says. */
+async function expectNoLineClippedOrSpilled(page: Page, sessionName: string, count: number) {
+  const lines = await row(page, sessionName).evaluate((li, selector) => {
+    const slack = 0.5;
+    const actions = li.querySelector('[data-slot="session-actions"]')!.getBoundingClientRect();
+    const before = [...li.children]
+      .filter((child) => child.getAttribute('data-slot') !== 'session-actions')
+      .map((child) => child.getBoundingClientRect().bottom);
+    const rowBox = li.getBoundingClientRect();
+    const links = [...li.querySelectorAll('[data-slot="session-actions"] > a')].map((link) =>
+      link.getBoundingClientRect(),
+    );
+    return [...li.querySelectorAll(selector)].map((line) => {
+      const text = line.querySelector('span')!;
+      const textBox = text.getBoundingClientRect();
+      const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
+      return {
+        clippedHeight: text.scrollHeight > text.clientHeight + 1,
+        clippedWidth: text.scrollWidth > text.clientWidth + 1,
+        clamped: getComputedStyle(text).webkitLineClamp !== 'none',
+        ellipsis: getComputedStyle(text).textOverflow === 'ellipsis',
+        hidden: getComputedStyle(text).overflow !== 'visible',
+        lines: Math.round(textBox.height / lineHeight),
+        outsideActions:
+          textBox.top < actions.top - slack ||
+          textBox.bottom > actions.bottom + slack ||
+          textBox.left < actions.left - slack ||
+          textBox.right > actions.right + slack,
+        outsideRow:
+          textBox.top < rowBox.top - slack ||
+          textBox.bottom > rowBox.bottom + slack ||
+          textBox.right > rowBox.right + slack,
+        overlapsLineAbove: actions.top < Math.max(...before) - slack,
+        overlapsLink: links.some(
+          (link) =>
+            textBox.left < link.right - slack &&
+            textBox.right > link.left + slack &&
+            textBox.top < link.bottom - slack &&
+            textBox.bottom > link.top + slack,
+        ),
+        linkOutsideRow: links.some((link) => link.right > rowBox.right + slack),
+      };
+    });
+  }, LINE_SELECTOR);
+  expect(lines).toHaveLength(count);
+  for (const line of lines) {
+    expect(line.clippedHeight, 'clipped in height').toBe(false);
+    expect(line.clippedWidth, 'clipped in width').toBe(false);
+    expect(line.clamped, 'line clamp').toBe(false);
+    expect(line.ellipsis, 'text-overflow ellipsis').toBe(false);
+    expect(line.hidden, 'hidden overflow').toBe(false);
+    expect(line.outsideActions, 'outside the actions row').toBe(false);
+    expect(line.outsideRow, 'outside the session row').toBe(false);
+    expect(line.overlapsLineAbove, 'on the line above').toBe(false);
+    expect(line.overlapsLink, 'on the Register or Join link').toBe(false);
+    expect(line.linkOutsideRow, 'the link leaves the session row').toBe(false);
+    expect(line.lines).toBeGreaterThanOrEqual(1);
+  }
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+    'page scrolls sideways',
+  ).toBeLessThanOrEqual(page.viewportSize()!.width);
+}
+
+/**
+ * Holds the caller's answers, lets the rows draw, then releases them and records every frame's box of every row. The caller's own
+ * row grows at most once, nothing above it moves, and the rows below move only by that growth, once.
+ */
+async function expectOwnRowGrowsOnce(
+  page: Page,
+  camp: string,
+  sessionName: string,
+  answers: string[],
+  lines: RowLine[],
+  mustGrow: boolean,
+): Promise<void> {
+  const held = await holdQueries(page, answers);
+  await page.goto(camp);
+  await expect.poll(() => held.isHolding()).toBe(true);
+  const own = row(page, sessionName);
+  await expect(own.locator('[data-slot="session-actions"]')).toBeVisible();
+  await expect(own.locator(LINE_SELECTOR)).toHaveCount(0);
+  await page.evaluate(() => {
+    interface Box {
+      top: number;
+      height: number;
+    }
+    const rows = [...document.querySelectorAll('#sessions li')];
+    const state = {
+      stop: false,
+      changes: [] as { row: number; top: number; height: number }[],
+      pageHeights: [] as number[],
+    };
+    const last: (Box | undefined)[] = [];
+    const sampleRows = () => {
+      rows.forEach((li, index) => {
+        const box = li.getBoundingClientRect();
+        const now = { top: box.top + window.scrollY, height: box.height };
+        const before = last[index];
+        if (
+          !before ||
+          Math.abs(before.top - now.top) > 0.5 ||
+          Math.abs(before.height - now.height) > 0.5
+        ) {
+          last[index] = now;
+          state.changes.push({ row: index, ...now });
+        }
+      });
+      state.pageHeights.push(document.documentElement.scrollHeight);
+      if (!state.stop) requestAnimationFrame(sampleRows);
+    };
+    sampleRows();
+    (window as unknown as { __rowRecorder: typeof state }).__rowRecorder = state;
+  });
+
+  held.release();
+  for (const slot of ['session-registered', 'session-waitlist'] as const) {
+    const texts = lines.filter((line) => line.slot === slot).map((line) => line.text);
+    if (texts.length > 0) await expect(lineIn(page, sessionName, slot)).toHaveText(texts);
+  }
+  // A growth that is still coming would show within these frames.
+  await page.waitForTimeout(700);
+  const record = await page.evaluate(() => {
+    const state = (
+      window as unknown as {
+        __rowRecorder: {
+          stop: boolean;
+          changes: { row: number; top: number; height: number }[];
+          pageHeights: number[];
+        };
+      }
+    ).__rowRecorder;
+    state.stop = true;
+    return { changes: state.changes, pageHeights: state.pageHeights };
+  });
+  const index = await own.evaluate((li) =>
+    [...document.querySelectorAll('#sessions li')].indexOf(li),
+  );
+  const rowCount = new Set(record.changes.map((change) => change.row)).size;
+  const byRow = (at: number) => record.changes.filter((change) => change.row === at);
+  const baseline = (at: number) => byRow(at)[0];
+  const final = (at: number) => byRow(at).at(-1)!;
+  expect(rowCount).toBeGreaterThan(index);
+
+  const ownGrowth = final(index).height - baseline(index).height;
+  const ownHeights = byRow(index).filter(
+    (change, at, all) => at > 0 && Math.abs(change.height - all[at - 1].height) > BOX_TOLERANCE,
+  );
+  expect(ownHeights.length, 'the own row changes height at most once').toBeLessThanOrEqual(1);
+  if (mustGrow) expect(ownGrowth, 'the own row grows').toBeGreaterThan(BOX_TOLERANCE);
+  expect(ownGrowth).toBeGreaterThanOrEqual(-BOX_TOLERANCE);
+
+  for (let at = 0; at < index; at++) {
+    expect(byRow(at), `row ${at} above the caller's row never moves or resizes`).toHaveLength(1);
+  }
+  for (let at = index + 1; at < rowCount; at++) {
+    const changes = byRow(at);
+    expect(changes.length, `row ${at} below moves at most once`).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(final(at).top - baseline(at).top - ownGrowth),
+      `row ${at} below moves by the growth and no more`,
+    ).toBeLessThanOrEqual(BOX_TOLERANCE);
+    expect(
+      Math.abs(final(at).height - baseline(at).height),
+      `row ${at} below keeps its height`,
+    ).toBeLessThanOrEqual(BOX_TOLERANCE);
+  }
+  expect(
+    Math.abs(record.pageHeights.at(-1)! - record.pageHeights[0] - ownGrowth),
+    'the page grows by the growth and no more',
+  ).toBeLessThanOrEqual(BOX_TOLERANCE);
+  await expectNoLineClippedOrSpilled(page, sessionName, lines.length);
+  await expectAccessible(page);
+}
+
 test.describe('the camp page rows when the viewer’s places arrive', () => {
   const WIDTHS = [360, 1280] as const;
   const TOLERANCE = 0.5;
@@ -737,6 +923,25 @@ test.describe('the camp page rows when the viewer’s places arrive', () => {
 test.describe('the camp page rows when a guardian’s children answer after sign-in', () => {
   const WIDTHS = [320, 360, 1280] as const;
   const TOLERANCE = 0.5;
+  const LONG = 'W'.repeat(60);
+  const CHILDREN: { title: string; names: string[]; line: string }[] = [
+    { title: 'one child with a 60-character name', names: [LONG], line: `${LONG} is registered` },
+    {
+      title: 'two children, one with a 60-character name',
+      names: ['Maya R.', LONG],
+      line: `Maya R. and ${LONG} are registered`,
+    },
+    {
+      title: 'two children with short names',
+      names: ['Maya R.', 'Leo R.'],
+      line: 'Maya R. and Leo R. are registered',
+    },
+    {
+      title: 'three children, one with a 60-character name',
+      names: ['Maya R.', LONG, 'Zoe R.'],
+      line: `Maya R., ${LONG}, and Zoe R. are registered`,
+    },
+  ];
 
   async function registerChild(
     page: Page,
@@ -808,41 +1013,30 @@ test.describe('the camp page rows when a guardian’s children answer after sign
       await screenshot(page, testInfo, `356-camp-children-arrived-${width}`);
     });
 
-    test(`three children, one with a 60-character name, share one row with Register and move nothing at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 800 });
-      const { tenant, youth } = await seed();
-      const ids = await sessionIds(tenant, YOUTH.slug);
-      const path = registerPath(tenant, YOUTH.slug, ids['Week 1']);
-      await signUp(page, newUser('Guardian'));
-      for (const name of ['Maya R.', 'W'.repeat(60), 'Zoe R.']) {
-        await registerChild(page, path, youth, name);
-      }
-
-      const answers = ['campRegistrations:listMyMinorsForCamp'];
-      await expectRowsStay(
+    for (const { title, names, line } of CHILDREN) {
+      test(`${title} share one row with Register, which grows once with nothing above it moving at ${width}px`, async ({
         page,
-        youth,
-        answers,
-        `Maya R., ${'W'.repeat(60)}, and Zoe R. are registered`,
-      );
-      const line = row(page, 'Week 1').locator('[data-slot="session-registered"]');
-      const register = row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' });
-      const [lineBox, registerBox, rowBox] = [
-        (await line.boundingBox())!,
-        (await register.boundingBox())!,
-        (await row(page, 'Week 1').boundingBox())!,
-      ];
-      expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(registerBox.x + TOLERANCE);
-      expect(registerBox.x + registerBox.width).toBeLessThanOrEqual(
-        rowBox.x + rowBox.width + TOLERANCE,
-      );
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-        width,
-      );
-      await expectAccessible(page);
-    });
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const { tenant, youth } = await seed();
+        const ids = await sessionIds(tenant, YOUTH.slug);
+        const path = registerPath(tenant, YOUTH.slug, ids['Week 1']);
+        await signUp(page, newUser('Guardian'));
+        for (const name of names) await registerChild(page, path, youth, name);
+
+        await expectOwnRowGrowsOnce(
+          page,
+          youth,
+          'Week 1',
+          ['campRegistrations:listMyMinorsForCamp'],
+          [{ slot: 'session-registered', text: line }],
+          width <= 360 && names.includes(LONG),
+        );
+        await expect(
+          row(page, 'Week 1').getByRole('link', { name: 'Register for Week 1' }),
+        ).toBeVisible();
+      });
+    }
 
     test(`on a camp that admits both, the sessions below stay where they were when the guardian’s lines arrive at ${width}px`, async ({
       page,
@@ -1088,55 +1282,6 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
       }),
     }));
 
-  /** Measures the drawn boxes: a line that is clipped or leaves its row fails here, whatever its text says. */
-  async function expectNoLineClippedOrSpilled(page: Page, sessionName: string, count: number) {
-    const lines = await row(page, sessionName).evaluate((li) => {
-      const slack = 0.5;
-      const actions = li.querySelector('[data-slot="session-actions"]')!.getBoundingClientRect();
-      const before = [...li.children]
-        .filter((child) => child.getAttribute('data-slot') !== 'session-actions')
-        .map((child) => child.getBoundingClientRect().bottom);
-      const rowBox = li.getBoundingClientRect();
-      return [...li.querySelectorAll('[data-slot="session-waitlist"]')].map((line) => {
-        const text = line.querySelector('span')!;
-        const textBox = text.getBoundingClientRect();
-        const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
-        return {
-          clippedHeight: text.scrollHeight > text.clientHeight + 1,
-          clippedWidth: text.scrollWidth > text.clientWidth + 1,
-          clamped: getComputedStyle(text).webkitLineClamp !== 'none',
-          hidden: getComputedStyle(text).overflow !== 'visible',
-          lines: Math.round(textBox.height / lineHeight),
-          outsideActions:
-            textBox.top < actions.top - slack ||
-            textBox.bottom > actions.bottom + slack ||
-            textBox.left < actions.left - slack ||
-            textBox.right > actions.right + slack,
-          outsideRow:
-            textBox.top < rowBox.top - slack ||
-            textBox.bottom > rowBox.bottom + slack ||
-            textBox.right > rowBox.right + slack,
-          overlapsLineAbove: actions.top < Math.max(...before) - slack,
-        };
-      });
-    });
-    expect(lines).toHaveLength(count);
-    for (const line of lines) {
-      expect(line.clippedHeight, 'clipped in height').toBe(false);
-      expect(line.clippedWidth, 'clipped in width').toBe(false);
-      expect(line.clamped, 'line clamp').toBe(false);
-      expect(line.hidden, 'hidden overflow').toBe(false);
-      expect(line.outsideActions, 'outside the actions row').toBe(false);
-      expect(line.outsideRow, 'outside the session row').toBe(false);
-      expect(line.overlapsLineAbove, 'on the line above').toBe(false);
-      expect(line.lines).toBeGreaterThanOrEqual(1);
-    }
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-      'page scrolls sideways',
-    ).toBeLessThanOrEqual(page.viewportSize()!.width);
-  }
-
   async function expectRowsStay(
     page: Page,
     camp: string,
@@ -1183,113 +1328,6 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
     await expectAccessible(page);
   }
 
-  /**
-   * Holds the caller's answers, lets the rows draw, then releases them and records every frame's box of every row. The caller's own
-   * row grows at most once, nothing above it moves, and the rows below move only by that growth, once.
-   */
-  async function expectOwnRowGrowsOnce(
-    page: Page,
-    camp: string,
-    sessionName: string,
-    lines: string[],
-    mustGrow: boolean,
-  ): Promise<void> {
-    const held = await holdQueries(page, [WAITING]);
-    await page.goto(camp);
-    await expect.poll(() => held.isHolding()).toBe(true);
-    const own = row(page, sessionName);
-    await expect(own.locator('[data-slot="session-actions"]')).toBeVisible();
-    await expect(own.locator('[data-slot="session-waitlist"]')).toHaveCount(0);
-    await page.evaluate(() => {
-      interface Box {
-        top: number;
-        height: number;
-      }
-      const rows = [...document.querySelectorAll('#sessions li')];
-      const state = {
-        stop: false,
-        changes: [] as { row: number; top: number; height: number }[],
-        pageHeights: [] as number[],
-      };
-      const last: (Box | undefined)[] = [];
-      const sampleRows = () => {
-        rows.forEach((li, index) => {
-          const box = li.getBoundingClientRect();
-          const now = { top: box.top + window.scrollY, height: box.height };
-          const before = last[index];
-          if (
-            !before ||
-            Math.abs(before.top - now.top) > 0.5 ||
-            Math.abs(before.height - now.height) > 0.5
-          ) {
-            last[index] = now;
-            state.changes.push({ row: index, ...now });
-          }
-        });
-        state.pageHeights.push(document.documentElement.scrollHeight);
-        if (!state.stop) requestAnimationFrame(sampleRows);
-      };
-      sampleRows();
-      (window as unknown as { __rowRecorder: typeof state }).__rowRecorder = state;
-    });
-
-    held.release();
-    await expect(own.locator('[data-slot="session-waitlist"]')).toHaveText(lines);
-    // A growth that is still coming would show within these frames.
-    await page.waitForTimeout(700);
-    const record = await page.evaluate(() => {
-      const state = (
-        window as unknown as {
-          __rowRecorder: {
-            stop: boolean;
-            changes: { row: number; top: number; height: number }[];
-            pageHeights: number[];
-          };
-        }
-      ).__rowRecorder;
-      state.stop = true;
-      return { changes: state.changes, pageHeights: state.pageHeights };
-    });
-    const index = await own.evaluate((li) =>
-      [...document.querySelectorAll('#sessions li')].indexOf(li),
-    );
-    const rowCount = new Set(record.changes.map((change) => change.row)).size;
-    const byRow = (at: number) => record.changes.filter((change) => change.row === at);
-    const baseline = (at: number) => byRow(at)[0];
-    const final = (at: number) => byRow(at).at(-1)!;
-    expect(rowCount).toBeGreaterThan(index);
-
-    const ownGrowth = final(index).height - baseline(index).height;
-    const ownHeights = byRow(index).filter(
-      (change, at, all) => at > 0 && Math.abs(change.height - all[at - 1].height) > TOLERANCE,
-    );
-    expect(ownHeights.length, 'the own row changes height at most once').toBeLessThanOrEqual(1);
-    if (mustGrow) expect(ownGrowth, 'the own row grows').toBeGreaterThan(TOLERANCE);
-    expect(ownGrowth).toBeGreaterThanOrEqual(-TOLERANCE);
-
-    for (let at = 0; at < index; at++) {
-      expect(byRow(at), `row ${at} above the caller's row never moves or resizes`).toHaveLength(1);
-    }
-    for (let at = index + 1; at < rowCount; at++) {
-      const changes = byRow(at);
-      expect(changes.length, `row ${at} below moves at most once`).toBeLessThanOrEqual(2);
-      expect(
-        Math.abs(final(at).top - baseline(at).top - ownGrowth),
-        `row ${at} below moves by the growth and no more`,
-      ).toBeLessThanOrEqual(TOLERANCE);
-      expect(
-        Math.abs(final(at).height - baseline(at).height),
-        `row ${at} below keeps its height`,
-      ).toBeLessThanOrEqual(TOLERANCE);
-    }
-    expect(
-      Math.abs(record.pageHeights.at(-1)! - record.pageHeights[0] - ownGrowth),
-      'the page grows by the growth and no more',
-    ).toBeLessThanOrEqual(TOLERANCE);
-    await expectNoLineClippedOrSpilled(page, sessionName, lines.length);
-    await expectAccessible(page);
-  }
-
   for (const width of WIDTHS) {
     test(`a waiting child: the caller's row grows at most once, nothing above it moves, and the rows below move only by that growth at ${width}px`, async ({
       page,
@@ -1309,7 +1347,8 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
         page,
         youth,
         'Full week',
-        ['Maya R. is on the waitlist, position 1'],
+        [WAITING],
+        [{ slot: 'session-waitlist', text: 'Maya R. is on the waitlist, position 1' }],
         width === 320,
       );
     });
@@ -1342,11 +1381,12 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
         page,
         youth,
         'Full week',
-        ['Maya R. is on the waitlist, position 1'],
+        [WAITING],
+        [
+          { slot: 'session-registered', text: 'Sam R. is registered' },
+          { slot: 'session-waitlist', text: 'Maya R. is on the waitlist, position 1' },
+        ],
         width <= 360,
-      );
-      await expect(row(page, 'Full week').locator('[data-slot="session-registered"]')).toHaveText(
-        'Sam R. is registered',
       );
       await screenshot(page, testInfo, '358-camp-registered-and-waiting');
     });
@@ -1364,7 +1404,11 @@ test.describe('the camp page rows when the waitlist answers after sign-in', () =
         page,
         youth,
         'Full week',
-        ['Maya R. is on the waitlist, position 1', 'Leo R. is on the waitlist, position 2'],
+        [WAITING],
+        [
+          { slot: 'session-waitlist', text: 'Maya R. is on the waitlist, position 1' },
+          { slot: 'session-waitlist', text: 'Leo R. is on the waitlist, position 2' },
+        ],
         width <= 360,
       );
       await screenshot(page, testInfo, '358-camp-two-waiting');
@@ -1421,11 +1465,7 @@ test.describe('a child whose name has no break in it', () => {
     await expect(page).toHaveURL(`${baseURL}${youth}`, { timeout: 20_000 });
     const line = row(page, 'Full week').locator('[data-slot="session-waitlist"]');
     await expect(line).toHaveText(`${UNBROKEN} is on the waitlist, position 1`);
-    const [lineBox, rowBox] = [
-      (await line.boundingBox())!,
-      (await row(page, 'Full week').boundingBox())!,
-    ];
-    expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    await expectNoLineClippedOrSpilled(page, 'Full week', 1);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, 'camp-waitlist-camp-long-name');
