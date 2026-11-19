@@ -1,7 +1,8 @@
-import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
@@ -840,11 +841,15 @@ test.describe('find a program: in the browser', () => {
     await page.goto(url(id));
     const retry = page.getByRole('alert').getByRole('link', { name: 'Try again' });
     await expect(retry).toBeVisible();
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(page.getByRole('contentinfo')).toBeVisible();
     const retryBox = await retry.boundingBox();
     recover();
     await page.goto(url('pickleball'));
     const clear = page.getByRole('link', { name: 'Clear the search' });
     await expect(clear).toBeVisible();
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(page.getByRole('contentinfo')).toBeVisible();
     const clearBox = await clear.boundingBox();
     const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
     return { coarse, clear: clearBox?.height ?? 0, retry: retryBox?.height ?? 0 };
@@ -2008,6 +2013,141 @@ async function programsFrame(page: Page) {
 
 const typeNav = (page: Page) => page.getByRole('navigation', { name: 'Program type' });
 const sportNav = (page: Page) => page.getByRole('navigation', { name: 'Sport' });
+const footer = (page: Page) => page.getByRole('contentinfo');
+
+type ProgramsFrameBoxes = Record<string, ProgramsBox>;
+
+interface ProgramsWatch {
+  e2eFrames?: ProgramsFrameBoxes[];
+  e2eRecording?: boolean;
+  e2eShifts?: number[];
+}
+
+// WebKit records no layout-shift entries, so the layout tests that watch them run in Chromium only.
+async function watchShifts(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const watch = window as Window & ProgramsWatch;
+    watch.e2eShifts = [];
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as (PerformanceEntry & {
+        value: number;
+        hadRecentInput: boolean;
+      })[]) {
+        if (!entry.hadRecentInput) watch.e2eShifts?.push(entry.value);
+      }
+    }).observe({ type: 'layout-shift', buffered: true });
+  });
+}
+
+const forgetShifts = (page: Page) =>
+  page.evaluate(() => {
+    (window as Window & ProgramsWatch).e2eShifts = [];
+  });
+const shifts = (page: Page) =>
+  page.evaluate(() => (window as Window & ProgramsWatch).e2eShifts ?? []);
+
+async function startRecording(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const watch = window as Window & ProgramsWatch;
+    const fixed: Record<string, string> = {
+      'top bar': 'header',
+      heading: 'main h1',
+      'search form': 'main form[role="search"]:not([aria-label])',
+      'filter form': 'main form[role="search"][aria-label="Filter programs"]',
+      'results heading': '#results-heading',
+      'count line':
+        '[data-testid="find-skeleton"] > span, section[aria-labelledby="results-heading"] p[role="status"]:not(.sr-only)',
+      'first row':
+        '[data-testid="find-skeleton"] .divide-y > div, section[aria-labelledby="results-heading"] ul > li',
+    };
+    const boxOf = (element: Element): ProgramsBox => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x: x + scrollX, y: y + scrollY, width, height };
+    };
+    watch.e2eFrames = [];
+    watch.e2eRecording = true;
+    const record = () => {
+      if (!watch.e2eRecording) return;
+      const frame: ProgramsFrameBoxes = {};
+      for (const [name, selector] of Object.entries(fixed)) {
+        const element = document.querySelector(selector);
+        if (element) frame[name] = boxOf(element);
+      }
+      for (const [name, label] of [
+        ['type chip', 'Program type'],
+        ['sport chip', 'Sport'],
+      ]) {
+        for (const chip of document.querySelectorAll(`nav[aria-label="${label}"] a`)) {
+          frame[`${name}: ${(chip.textContent ?? '').trim()}`] = boxOf(chip);
+        }
+      }
+      watch.e2eFrames?.push(frame);
+      requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  });
+}
+
+async function stopRecording(page: Page): Promise<ProgramsFrameBoxes[]> {
+  return page.evaluate(() => {
+    const watch = window as Window & ProgramsWatch;
+    watch.e2eRecording = false;
+    return watch.e2eFrames ?? [];
+  });
+}
+
+const FRAME_TOLERANCE = 0.5;
+// The start view offers Camps and Training, which leave the row when nothing of theirs matches, after the chips before them.
+const MAY_LEAVE = ['type chip: Camps', 'type chip: Training'];
+// The count bar is a 224px placeholder and the loaded line is a block, so only their width differs.
+const FRAME_COMPARES: Record<string, readonly (keyof ProgramsBox)[]> = {
+  'count line': ['x', 'y', 'height'],
+  'first row': ['x', 'y', 'width'],
+};
+
+function framesThatMove(frames: readonly ProgramsFrameBoxes[]): string[] {
+  const [first, ...rest] = frames;
+  const moved: string[] = [];
+  for (const [index, frame] of rest.entries()) {
+    const at = `frame ${String(index + 1)}`;
+    for (const [name, was] of Object.entries(first)) {
+      const now = frame[name];
+      if (now === undefined) {
+        if (!MAY_LEAVE.includes(name)) moved.push(`${at}: ${name} has no box`);
+        continue;
+      }
+      for (const side of FRAME_COMPARES[name] ?? (['x', 'y', 'width', 'height'] as const)) {
+        if (Math.abs(now[side] - was[side]) > FRAME_TOLERANCE) {
+          moved.push(`${at}: ${name} ${side} ${String(was[side])} to ${String(now[side])}`);
+        }
+      }
+    }
+  }
+  return moved;
+}
+
+const SETTLE_AFTER_LAST_ROW_MS = 700;
+const MIN_FRAMES = 10;
+
+async function releaseAndRecord(
+  page: Page,
+  testInfo: TestInfo,
+  held: { release: () => void },
+  rows: number,
+): Promise<ProgramsFrameBoxes[]> {
+  await startRecording(page);
+  await forgetShifts(page);
+  held.release();
+  await expect(rowNames(page)).toHaveCount(rows);
+  await page.waitForTimeout(SETTLE_AFTER_LAST_ROW_MS);
+  const frames = await stopRecording(page);
+  await testInfo.attach('frames', {
+    body: JSON.stringify(frames),
+    contentType: 'application/json',
+  });
+  expect(frames.length).toBeGreaterThan(MIN_FRAMES);
+  return frames;
+}
 
 for (const width of [320, 360, 1280]) {
   test.describe(`find a program: layout at ${String(width)}px`, () => {
@@ -2026,9 +2166,10 @@ for (const width of [320, 360, 1280]) {
       await expect.poll(() => held.isHolding()).toBe(true);
       await expect(page.getByTestId('find-skeleton')).toBeVisible();
       const loading = await programsFrame(page);
-      const skeletonRow = await programsBox(
-        page.getByTestId('find-skeleton').locator('div.py-4').first(),
-      );
+      const skeletonRows = await page
+        .getByTestId('find-skeleton')
+        .locator('div.py-4')
+        .evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
       await screenshot(page, testInfo, `350-programs-loading-${String(width)}`);
 
       held.release();
@@ -2043,16 +2184,54 @@ for (const width of [320, 360, 1280]) {
         .locator('ul > li')
         .evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
       await testInfo.attach('row-heights', {
-        body: JSON.stringify({ skeletonRow: skeletonRow.height, loadedRows: rowHeights }),
+        body: JSON.stringify({ skeletonRows, loadedRows: rowHeights }),
         contentType: 'application/json',
       });
-      // A narrow screen wraps the text of a row, which a skeleton cannot know.
-      if (width >= 1024) {
-        expect(Math.abs(rowHeights[0] - skeletonRow.height)).toBeLessThanOrEqual(2);
+      // A skeleton cannot know the text of a row: a phone's rows are as tall as the shortest wrapped one, and a wide screen's as the row with every line.
+      const compared = width >= 1024 ? rowHeights[0] : Math.min(...rowHeights);
+      expect(skeletonRows).toHaveLength(3);
+      for (const height of skeletonRows) {
+        expect(Math.abs(height - compared)).toBeLessThanOrEqual(2);
       }
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
+    });
+
+    test('nothing on the page moves when the results of a search arrive', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      const { id } = await seedWithTournament();
+      await watchShifts(page);
+      const held = await holdQueries(page, ['search:programs']);
+      await page.goto('/programs');
+      await hydrated(consoleGuard);
+      await submit(page, id);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page.getByTestId('find-skeleton')).toBeVisible();
+      await expect(page.locator('[data-page-loading]')).toHaveCount(1);
+      await expect(page.getByTestId('find-skeleton')).toHaveAttribute('data-page-loading', '');
+      await expect(footer(page)).toBeHidden();
+      expect(await page.locator('footer').boundingBox()).toBeNull();
+      await expectAccessible(page);
+
+      const frames = await releaseAndRecord(page, testInfo, held, 3);
+      expect(frames[0]['first row'], 'the first frame shows the skeleton').toBeDefined();
+      expect(frames.at(-1)?.['count line']).toBeDefined();
+      expect(framesThatMove(frames)).toEqual([]);
+      expect(await shifts(page)).toEqual([]);
+
+      await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+      await expect(footer(page)).toBeVisible();
+      const lastRow = await programsBox(results(page).locator('ul > li').last());
+      const footerBox = await programsBox(footer(page));
+      expect(footerBox.y).toBeGreaterThanOrEqual(lastRow.y + lastRow.height);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await expectAccessible(page);
     });
 
     const PRESSES = [
@@ -2073,6 +2252,7 @@ for (const width of [320, 360, 1280]) {
       }, testInfo) => {
         test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
         const { id } = await seedWithTournament();
+        await watchShifts(page);
         const held = await holdQueries(page, ['search:programs'], {
           watchFromStart: false,
           holdFromStart: false,
@@ -2094,11 +2274,23 @@ for (const width of [320, 360, 1280]) {
         expect(during.heading).toEqual(before.heading);
         expect(during.form).toEqual(before.form);
 
-        held.release();
+        await expect(page.locator('[data-page-loading]')).toHaveCount(1);
+        await expect(footer(page)).toBeHidden();
+
+        const frames = await releaseAndRecord(
+          page,
+          testInfo,
+          held,
+          name === 'a type press' ? 1 : 3,
+        );
+        expect(frames[0]['first row'], 'the first frame shows the skeleton').toBeDefined();
+        expect(framesThatMove(frames)).toEqual([]);
+        expect(await shifts(page)).toEqual([]);
         await expect(page.getByTestId('find-skeleton')).toBeHidden();
         const after = await programsFrame(page);
         expect(after.typeChips).toEqual(before.typeChips);
         expect(after.sportChips).toEqual(before.sportChips);
+        await expect(footer(page)).toBeVisible();
       });
     }
 
@@ -2132,6 +2324,81 @@ for (const width of [320, 360, 1280]) {
     });
   });
 }
+
+test.describe('find a program: while the answer is held', () => {
+  test.describe('at 320px', () => {
+    test.use({ viewport: { width: 320, height: 900 } });
+
+    test('Next on page 1 keeps the rows and the footer while page 2 loads', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the test sets the width itself');
+      // Three tenants list six beach volleyball leagues, one more than a page of five.
+      for (let tenant = 0; tenant < 3; tenant++) await seed();
+      const held = await holdQueries(page, ['search:programsBrowse'], {
+        watchFromStart: false,
+        holdFromStart: false,
+      });
+      await page.goto('/programs?type=league&sport=beach-volleyball');
+      await hydrated(consoleGuard);
+      const names = await rowNames(page).allTextContents();
+      expect(names).toHaveLength(5);
+
+      held.watchNewSubscriptions();
+      held.holdNextAnswer();
+      await page.getByRole('link', { name: 'Next page' }).click();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(page).toHaveURL(/page=2/);
+      await expect(results(page).locator('ul[aria-busy="true"]')).toBeVisible();
+      await expect(rowNames(page)).toHaveText(names);
+      await expect(page.getByTestId('find-skeleton')).toHaveCount(0);
+      await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+      await expect(footer(page)).toBeVisible();
+      await expectAccessible(page);
+
+      held.release();
+      await expect(results(page).locator('ul[aria-busy="true"]')).toHaveCount(0);
+      await expect(footer(page)).toBeVisible();
+    });
+  });
+
+  test('a search that never answers gives way to the error alert after 10 s, and the results still show when they arrive', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'one browser project only');
+    await page.setViewportSize({ width: 320, height: 900 });
+    const { id } = await seed();
+    const held = await holdQueries(page, ['search:programs']);
+    await page.clock.install();
+    await page.goto('/programs');
+    await hydrated(consoleGuard);
+    await submit(page, id);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByTestId('find-skeleton')).toBeVisible();
+    await expect(footer(page)).toBeHidden();
+
+    await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+    const alert = page.getByRole('alert').filter({ hasText: 'The search could not be completed.' });
+    await expect(alert).toBeVisible();
+    await expect(alert.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', url(id));
+    await expect(page.getByTestId('find-skeleton')).toHaveCount(0);
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+    await expect(page.locator('app-page-load-status')).toHaveCount(0);
+    await expect(page.getByText('This page is temporarily unavailable.')).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await expectAccessible(page);
+
+    held.release();
+    await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+    await expect(alert).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+  });
+});
 
 for (const width of [320, 360, 1280]) {
   test.describe(`find a program: camp layout at ${String(width)}px`, () => {
