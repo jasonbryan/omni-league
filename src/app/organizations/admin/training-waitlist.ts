@@ -200,9 +200,7 @@ function refusalMessage(error: unknown): string | null {
                             class="block text-xs font-normal text-muted-foreground"
                           >
                             @if (row.classDate; as classDate) {
-                              <span data-slot="waiting-class"
-                                >This class · {{ classDay(classDate) }}</span
-                              >
+                              <span data-slot="waiting-class">For {{ classDay(classDate) }}</span>
                             }
                             @if (row.classDate && row.guardian) {
                               ·
@@ -225,7 +223,7 @@ function refusalMessage(error: unknown): string | null {
                         <button
                           type="button"
                           data-slot="button"
-                          [class]="outlineButton"
+                          [class]="promoteButtonClasses"
                           [class.opacity-50]="
                             !row.canPromote || (!online() && promoting() === null)
                           "
@@ -236,15 +234,16 @@ function refusalMessage(error: unknown): string | null {
                           (click)="promote(row)"
                         >
                           @if (promoting() === row.trainingWaitlistEntryId) {
-                            <hlm-spinner data-icon="inline-start" />Promoting…<span class="sr-only">
-                              {{ row.name }}</span
-                            >
+                            <hlm-spinner data-icon="inline-start" /><span class="max-sm:sr-only"
+                              >Promoting…</span
+                            ><span class="sr-only"> {{ row.name }}</span>
                           } @else {
                             <ng-icon
                               name="lucideCircleArrowUp"
                               data-icon="inline-start"
                               aria-hidden="true"
-                            />Promote<span class="sr-only"> {{ row.name }}</span>
+                            /><span class="max-sm:sr-only">Promote</span
+                            ><span class="sr-only"> {{ row.name }}</span>
                           }
                         </button>
                       </td>
@@ -295,7 +294,7 @@ function refusalMessage(error: unknown): string | null {
                       <td hlmTd class="text-end">
                         <div
                           hlmSkeleton
-                          class="ms-auto h-9 w-24 rounded-lg pointer-coarse:h-11"
+                          class="ms-auto h-9 w-11 rounded-lg pointer-coarse:h-11 sm:w-24"
                         ></div>
                       </td>
                     </tr>
@@ -326,7 +325,8 @@ export class TrainingWaitlist {
   private readonly promoteEntry = injectMutation(api.trainingWaitlist.promote);
 
   protected readonly online = injectOnline();
-  protected readonly outlineButton = OUTLINE_BUTTON;
+  // Icon only below `sm`, so the pinned button leaves the name and the class day in view on a phone.
+  protected readonly promoteButtonClasses = `${OUTLINE_BUTTON} max-sm:w-11 max-sm:justify-center max-sm:gap-0 max-sm:px-0 max-sm:has-data-[icon=inline-start]:ps-0`;
   protected readonly day = formatDay;
   protected readonly classDay = shortDay;
   protected readonly noOneWaiting = NO_ONE_WAITING_FOR_SERIES;

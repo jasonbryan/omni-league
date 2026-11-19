@@ -117,13 +117,9 @@ describe('TrainingManagement waitlist', () => {
       const detail = (index: number) =>
         rows()[index].querySelector('th[scope="row"] [data-slot="waiting-detail"]');
       expect(text(detail(0))).toBe('Guardian: Demo Guardian, guardian@example.test');
-      expect(text(detail(1))).toBe(
-        'This class · Feb 9 · Guardian: Demo Guardian, guardian@example.test',
-      );
-      expect(text(detail(2))).toBe('This class · Feb 9');
-      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe(
-        'This class · Feb 9',
-      );
+      expect(text(detail(1))).toBe('For Feb 9 · Guardian: Demo Guardian, guardian@example.test');
+      expect(text(detail(2))).toBe('For Feb 9');
+      expect(text(rows()[1].querySelector('[data-slot="waiting-class"]'))).toBe('For Feb 9');
       expect(rows()[0].querySelector('[data-slot="waiting-class"]')).toBeNull();
       expect(detail(2)!.classList).toContain('block');
     });

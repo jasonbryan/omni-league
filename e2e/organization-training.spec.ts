@@ -1617,7 +1617,7 @@ test.describe('Training: the series waitlist', () => {
     ]);
     await expect(waitingRows(page).nth(0).locator('[data-slot="waiting-class"]')).toHaveCount(0);
     await expect(waitingRows(page).nth(1).locator('[data-slot="waiting-class"]')).toHaveText(
-      /^This class · \w{3} \d{1,2}$/,
+      /^For \w{3} \d{1,2}$/,
     );
     await expectClassDaysVisible(page, 1);
     await expect(promoteButton(page)).toHaveCount(2);
