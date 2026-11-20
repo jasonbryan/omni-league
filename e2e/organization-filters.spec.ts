@@ -634,7 +634,9 @@ test.describe('organization filters in the browser', () => {
       .getByRole('link', { name: 'Next page' })
       .click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2`);
+    await expect(page).toHaveURL(
+      `${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2#leagues`,
+    );
     // The page-load timer starts in the render that marks the list busy, so the clock moves after it.
     await expect(page.locator('#leagues ul[aria-busy="true"]')).toBeVisible();
     await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
@@ -653,7 +655,9 @@ test.describe('organization filters in the browser', () => {
       'Wednesday Reverse Coed 4s',
     ]);
     await expect(page.locator('#leagues [aria-busy="true"]')).toHaveCount(0);
-    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2`);
+    await expect(page).toHaveURL(
+      `${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2#leagues`,
+    );
   });
 
   test('the filtered page with its filter buttons passes the axe helper', async ({
