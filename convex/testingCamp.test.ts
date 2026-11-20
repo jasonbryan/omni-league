@@ -386,6 +386,18 @@ describe('testing:seedCampRegistrations', () => {
     expect(await registeredCount(t)).toBe(0);
   });
 
+  test('adds exactly as many participants as a session has places for', async () => {
+    const t = await withSession();
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        participants: minors(MAX_CAMP_SESSION_PLACES),
+      }),
+    ).resolves.toEqual({ count: MAX_CAMP_SESSION_PLACES });
+    expect(await registrations(t)).toHaveLength(MAX_CAMP_SESSION_PLACES);
+    expect(await registeredCount(t)).toBe(MAX_CAMP_SESSION_PLACES);
+  });
+
   test('refuses an unknown account, a session the camp does not have, and a camp it does not have', async () => {
     const t = await withSession();
     const participants = minors(2);
