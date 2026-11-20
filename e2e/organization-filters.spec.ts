@@ -1,4 +1,5 @@
 import type { Page, TestInfo } from '@playwright/test';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { answerWithClientShell } from './support/client-shell';
 import type { ConsoleGuard } from './support/console-guard';
@@ -633,12 +634,26 @@ test.describe('organization filters in the browser', () => {
       .getByRole('link', { name: 'Next page' })
       .click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await page.clock.fastForward('00:11');
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2`);
+    // The page-load timer starts in the render that marks the list busy, so the clock moves after it.
+    await expect(page.locator('#leagues ul[aria-busy="true"]')).toBeVisible();
+    await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute(
       'href',
       `${tenant.path}?format=4v4&format=6v6&leagues=2`,
     );
     held.release();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+    ).toHaveCount(0);
+    await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
+      'Wednesday Reverse Coed 4s',
+    ]);
+    await expect(page.locator('#leagues [aria-busy="true"]')).toHaveCount(0);
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2`);
   });
 
   test('the filtered page with its filter buttons passes the axe helper', async ({
