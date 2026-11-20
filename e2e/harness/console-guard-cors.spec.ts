@@ -356,6 +356,29 @@ test.describe(
         expect(guard.localBackendErrors).toEqual([]);
       });
 
+      test('keeps a failure when the wait for a page that never replies runs out', async ({
+        browser,
+      }) => {
+        const doc = await documentServer();
+        const stub = await backendStub({ preflight: 'no-header', answer: TOKEN_ANSWER_503 });
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
+        await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
+        await guard.settle();
+        const settled = guard.problems();
+        await page.evaluate(() => {
+          setTimeout(() => {
+            for (;;);
+          }, 0);
+        });
+        await guard.settle();
+        expect(guard.problems()).toEqual(settled);
+        expect(guard.problems()).toEqual([
+          expect.stringContaining('blocked by CORS policy'),
+          expect.stringMatching(/preflight 204 PreflightMissingAllowOriginHeader\]$/),
+        ]);
+        expect(guard.localBackendErrors).toEqual([]);
+      });
+
       test('fails when the status of the preflight cannot be read', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 503, answer: TOKEN_ANSWER_503 });
