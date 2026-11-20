@@ -22,8 +22,14 @@ type AnswerReply = { status: number; body: string } | 'empty-response';
 
 interface Stub {
   origin: string;
-  close: () => Promise<void>;
 }
+
+const cleanups: (() => Promise<void>)[] = [];
+
+// Runs after a failing test too, which would otherwise leave its servers and context open.
+test.afterEach(async () => {
+  await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+});
 
 async function listen(
   handler: (request: IncomingMessage, response: ServerResponse) => void,
@@ -31,14 +37,14 @@ async function listen(
   const server = createServer(handler);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
-  return {
-    origin: `http://127.0.0.1:${port}`,
-    close: () =>
+  cleanups.push(
+    () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();
         server.close(() => resolve());
       }),
-  };
+  );
+  return { origin: `http://127.0.0.1:${port}` };
 }
 
 /** A page document served by a real server, because `page.route` would answer the preflights itself. */
@@ -86,7 +92,7 @@ async function guardedPage(
   documentOrigin: string,
   localBackendOrigin?: string,
   { blindToResponses = false } = {},
-): Promise<{ page: Page; guard: ConsoleGuard; close: () => Promise<void> }> {
+): Promise<{ page: Page; guard: ConsoleGuard }> {
   const context = await browser.newContext();
   if (blindToResponses) hideResponseEvents(context);
   const page = await context.newPage();
@@ -94,7 +100,8 @@ async function guardedPage(
   guard.attach(page);
   await guard.settle();
   await page.goto(documentOrigin);
-  return { page, guard, close: () => context.close() };
+  cleanups.push(() => context.close());
+  return { page, guard };
 }
 
 /** The guard then never learns a status, as when the browser does not report an answer. */
@@ -157,7 +164,7 @@ test.describe(
             preflight: 'allow',
             answer: { status, body: '{"message":"busy"}' },
           });
-          const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+          const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
           await fetchAuth(page, `${stub.origin}${path}`);
           await guard.settle();
           expect(guard.problems()).toEqual([]);
@@ -166,9 +173,6 @@ test.describe(
               `GET ${stub.origin}${path}: ${status}, no access-control-allow-origin, body `,
             ),
           ]);
-          await close();
-          await stub.close();
-          await doc.close();
         });
       }
 
@@ -176,45 +180,36 @@ test.describe(
         const doc = await documentServer();
         const body = JSON.stringify({ message: 'x'.repeat(300) });
         const stub = await backendStub({ preflight: 'allow', answer: { status: 503, body } });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.localBackendErrors).toEqual([
           expect.stringContaining(`body ${body.slice(0, 200)}`),
         ]);
         expect(guard.localBackendErrors[0]).not.toContain(body.slice(0, 201));
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('annotates one record per blocked request', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 'allow', answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await fetchAuth(page, `${stub.origin}${SESSION_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([]);
         expect(guard.localBackendErrors).toHaveLength(2);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('passes for an empty response from the backend', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 'allow', answer: 'empty-response' });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([]);
         expect(guard.localBackendErrors).toEqual([
           expect.stringContaining('net::ERR_EMPTY_RESPONSE'),
         ]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       for (const [abort, errorText] of [
@@ -223,20 +218,18 @@ test.describe(
       ] as const) {
         test(`passes when the token request fails with ${errorText}`, async ({ browser }) => {
           const doc = await documentServer();
-          const { page, guard, close } = await guardedPage(browser, doc.origin);
+          const { page, guard } = await guardedPage(browser, doc.origin);
           await page.route(`${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`, (route) => route.abort(abort));
           await fetchAuth(page, `${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`);
           await guard.settle();
           expect(guard.problems()).toEqual([]);
           expect(guard.localBackendErrors).toEqual([expect.stringContaining(errorText)]);
-          await close();
-          await doc.close();
         });
       }
 
       test('fails when the token request fails with net::ERR_FAILED', async ({ browser }) => {
         const doc = await documentServer();
-        const { page, guard, close } = await guardedPage(browser, doc.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin);
         await page.route(`${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`, (route) => route.abort('failed'));
         await fetchAuth(page, `${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`);
         await guard.settle();
@@ -246,8 +239,6 @@ test.describe(
           ),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await doc.close();
       });
 
       test('fails on a 401 with no CORS header, with the status and the body in the failure line', async ({
@@ -258,7 +249,7 @@ test.describe(
           preflight: 'allow',
           answer: { status: 401, body: '{"message":"Unauthorized"}' },
         });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([
@@ -268,9 +259,6 @@ test.describe(
           ),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails on a 200 with no CORS header, with the body length and none of its bytes', async ({
@@ -279,7 +267,7 @@ test.describe(
         const doc = await documentServer();
         const body = JSON.stringify({ token: SECRET_TOKEN });
         const stub = await backendStub({ preflight: 'allow', answer: { status: 200, body } });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         const problems = guard.problems();
@@ -291,9 +279,6 @@ test.describe(
         ]);
         expect(JSON.stringify(problems)).not.toContain('SECRET-PAYLOAD');
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails on a 503 that carries the CORS header, which the app produced', async ({
@@ -305,22 +290,19 @@ test.describe(
           answer: TOKEN_ANSWER_503,
           answerAllowsOrigin: true,
         });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([
           expect.stringContaining('the server responded with a status of 503'),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails on a 503 with no CORS header on another auth route', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 'allow', answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}/api/auth/sign-in/email`);
         await guard.settle();
         expect(guard.problems()).toEqual([
@@ -330,15 +312,12 @@ test.describe(
           ),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails on a 503 with no CORS header from another origin', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 'allow', answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([
@@ -346,9 +325,6 @@ test.describe(
           expect.stringMatching(/^console\.error: Failed to load resource: net::ERR_FAILED /),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('passes when the backend answers the preflight 503, and records the preflight', async ({
@@ -356,16 +332,13 @@ test.describe(
       }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 503, answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([]);
         expect(guard.localBackendErrors).toEqual([
           expect.stringMatching(/preflight 503 PreflightMissingAllowOriginHeader$/),
         ]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails when the preflight is answered 204 without the CORS header', async ({
@@ -373,7 +346,7 @@ test.describe(
       }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 'no-header', answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin);
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([
@@ -381,15 +354,12 @@ test.describe(
           expect.stringMatching(/preflight 204 PreflightMissingAllowOriginHeader\]$/),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails when the status of the preflight cannot be read', async ({ browser }) => {
         const doc = await documentServer();
         const stub = await backendStub({ preflight: 503, answer: TOKEN_ANSWER_503 });
-        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin, {
+        const { page, guard } = await guardedPage(browser, doc.origin, stub.origin, {
           blindToResponses: true,
         });
         await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
@@ -399,9 +369,6 @@ test.describe(
           expect.stringMatching(/preflight status unreadable PreflightMissingAllowOriginHeader\]$/),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await stub.close();
-        await doc.close();
       });
 
       test('fails when the real backend refuses the preflight of an untrusted origin', async ({
@@ -409,7 +376,7 @@ test.describe(
       }) => {
         test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
         const doc = await documentServer();
-        const { page, guard, close } = await guardedPage(browser, doc.origin);
+        const { page, guard } = await guardedPage(browser, doc.origin);
         await fetchAuth(page, `${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`);
         await guard.settle();
         expect(guard.problems()).toEqual([
@@ -421,8 +388,6 @@ test.describe(
           ),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
-        await close();
-        await doc.close();
       });
     });
 
@@ -433,6 +398,7 @@ test.describe(
       class FakeSession implements CdpSession {
         readonly handlers = new Map<string, (payload: unknown) => void>();
         bodies = new Map<string, string | Error>();
+        hang = false;
         on(event: string, handler: (payload: never) => void): this {
           this.handlers.set(event, handler as (payload: unknown) => void);
           return this;
@@ -451,6 +417,7 @@ test.describe(
               base64Encoded: true,
             });
           }
+          if (method === 'Runtime.evaluate' && this.hang) return new Promise(() => undefined);
           return Promise.resolve({});
         }
       }
@@ -531,7 +498,7 @@ test.describe(
             headers: {},
           });
         }
-        // The second request finishes first.
+        // Failing in reverse order shows the link does not follow the order of the events.
         for (const id of ['2.1', '1.1']) {
           session.emit('Network.loadingFailed', {
             requestId: id,
@@ -543,6 +510,15 @@ test.describe(
         expect(recorder.failedAnswers(URL_TOKEN).map((a) => a.preflight?.status)).toEqual([
           503, 204,
         ]);
+      });
+
+      test('stops waiting for a page that never replies, and keeps the records it has', async () => {
+        const session = new FakeSession();
+        session.hang = true;
+        const recorder = new BackendRecorder(session, ORIGIN, 50);
+        answered(session, '1.1', 503, {});
+        await recorder.settle();
+        expect(recorder.failedAnswers(URL_TOKEN)).toHaveLength(1);
       });
 
       test('ignores requests to another origin', async () => {
@@ -688,16 +664,14 @@ test.describe(
         route.abort('connectionreset'),
       );
       await fetchAuth(page, `${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`);
-      await doc.close();
     });
 
     test('a token request that fails with net::ERR_FAILED fails the test', async ({ page }) => {
-      test.fail(true, 'net::ERR_FAILED with a 204 preflight is not a backend error');
+      test.fail(true, 'net::ERR_FAILED with no readable 5xx preflight is not a backend error');
       const doc = await documentServer();
       await page.goto(doc.origin);
       await page.route(`${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`, (route) => route.abort('failed'));
       await fetchAuth(page, `${LOCAL_CONVEX_SITE_URL}${TOKEN_PATH}`);
-      await doc.close();
     });
   },
 );

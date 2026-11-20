@@ -47,6 +47,7 @@ interface Entry {
   corsError?: string;
 }
 
+const SETTLE_TIMEOUT_MS = 5_000;
 const CORS_HEADER = 'access-control-allow-origin';
 let recorders = 0;
 
@@ -74,6 +75,7 @@ export class BackendRecorder {
   constructor(
     private readonly session: CdpSession,
     origin: string,
+    private readonly settleTimeoutMs = SETTLE_TIMEOUT_MS,
   ) {
     this.origin = new URL(origin).origin;
     this.on<RequestWillBeSent>('Network.requestWillBeSent', (event) => this.onRequest(event));
@@ -100,7 +102,20 @@ export class BackendRecorder {
     ]);
   }
 
+  /** A page that a dialog or a busy script blocks never replies; the records so far then decide. */
   async settle(): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, this.settleTimeoutMs);
+    });
+    try {
+      await Promise.race([this.drain(), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async drain(): Promise<void> {
     await this.ready;
     await Promise.all(this.pending);
     // A reply follows the events sent before it on the same session.
