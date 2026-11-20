@@ -552,7 +552,11 @@ test.describe('organization filters in the browser', () => {
   test(
     'Show leagues pressed before hydration loads the filtered page once, with no console error',
     VIEWPORT_AGNOSTIC,
-    async ({ page, consoleGuard }) => {
+    async ({ page, consoleGuard, browserName }) => {
+      test.skip(
+        browserName === 'webkit',
+        'WebKit does not deliver the click on the Filters summary while the page chunk is held',
+      );
       const tenant = await filterTenant();
       const target = `${tenant.path}?gender=mens`;
       const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
