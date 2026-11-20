@@ -157,7 +157,7 @@ export class ConsoleGuard {
     return () => pending !== null;
   }
 
-  /** Waits for what the browser reported about the backend's answers; call before `problems()`. */
+  // `problems()` is synchronous, but the browser reports an answer after its console error.
   async settle(): Promise<void> {
     await Promise.all(this.recorderSetups);
     await Promise.all([...this.recorders.values()].map((recorder) => recorder.settle()));

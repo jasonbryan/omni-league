@@ -60,9 +60,9 @@ function headerValue(headers: Record<string, string>, name: string): string | un
  * one page. Playwright's own `response` event never fires for an answer the page's CORS check
  * blocks, and its `requestfailed` event hides the preflight, which it does not report in Chromium.
  *
- * The body comes from a `Fetch` pause on the two token routes, because the `Network` domain has no body
- * for a blocked answer. Every pause is continued unchanged, and the pause reads the body only when
- * the answer lacks the CORS header, which the app's answers never do.
+ * The body comes from a `Fetch` pause on the two token routes, because the `Network` domain has no
+ * body for a blocked answer. Every pause is continued unchanged, and the pause reads the body only
+ * when the answer lacks the CORS header, which the app's answers never have.
  */
 export class BackendRecorder {
   readonly ready: Promise<void>;
@@ -100,7 +100,6 @@ export class BackendRecorder {
     ]);
   }
 
-  /** Waits for every body read and for the events the browser sent before this call. */
   async settle(): Promise<void> {
     await this.ready;
     await Promise.all(this.pending);
@@ -109,7 +108,6 @@ export class BackendRecorder {
     await Promise.all(this.pending);
   }
 
-  /** The requests to `url` that failed, each with the answer or the failure and its preflight. */
   failedAnswers(url: string): BackendAnswer[] {
     const preflights = [...this.entries.values()].filter((entry) => entry.preflightOf).reverse();
     return [...this.entries.values()]
