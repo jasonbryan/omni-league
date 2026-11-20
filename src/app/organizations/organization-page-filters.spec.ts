@@ -9,6 +9,7 @@ import {
 } from '../core/data/convex/testing/fake-convex-client';
 import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { LOAD_PAGE } from '../shell/follow-link';
+import { dispatchSubmit } from '../core/testing/dispatch-submit';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import { SAND, sandResults } from './testing/pages';
@@ -218,5 +219,33 @@ describe('the no-matches state', () => {
     await settle(harness);
     expect(url()).toBe(ORG);
     expect(document.activeElement).toBe(count(harness));
+  });
+});
+
+describe('the filter form submitted', () => {
+  async function openForm() {
+    const harness = await shown(ORG, sandResults());
+    const form = host(harness).querySelector<HTMLFormElement>('form[aria-label="Filter leagues"]')!;
+    form.insertAdjacentHTML('beforeend', '<input type="hidden" name="gender" value="mens" />');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    return { harness, form, navigate };
+  }
+
+  it('navigates through the router to the filtered view and prevents the form submission', async () => {
+    const { harness, form, navigate } = await openForm();
+    const { preventDefaultCalls } = dispatchSubmit(form);
+    await settle(harness);
+    expect(preventDefaultCalls()).toBe(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(url()).toBe(`${ORG}?gender=mens`);
+  });
+
+  it('leaves a replayed submit to the browser: no preventDefault and no router navigation', async () => {
+    const { harness, form, navigate } = await openForm();
+    const { preventDefaultCalls } = dispatchSubmit(form, { replayed: true });
+    await settle(harness);
+    expect(preventDefaultCalls()).toBe(0);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(url()).toBe(ORG);
   });
 });

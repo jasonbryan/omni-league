@@ -304,7 +304,7 @@ test.describe('find a program: the top bar search beside the organizations list'
     await expect(bar(page).getByRole('link', { name: 'Find a program' })).toHaveCount(0);
     await expect(page.getByRole('search')).toHaveCount(1);
 
-    await page.goto(tenant.path);
+    await gotoHydrated(page, consoleGuard, tenant.path);
     const field = bar(page).getByRole('searchbox', { name: 'Find a program' });
     await expect(field).toBeVisible();
     await field.fill(id);
