@@ -94,7 +94,7 @@ export class ConsoleGuard {
   }
 
   attach(page: Page): void {
-    if (remoteBaseUrl === undefined) this.recorderSetups.push(this.record(page));
+    if (remoteBaseUrl === undefined) this.recorderSetups.push(this.startRecorder(page));
     const leaving = this.trackLeaving(page);
     page.on('pageerror', (error) => {
       // Playwright's WebKit backend keeps the logged text only as the stack's first line.
@@ -115,7 +115,7 @@ export class ConsoleGuard {
   }
 
   /** Chromium only: another engine has no session, and its backend errors then fail the test. */
-  private async record(page: Page): Promise<void> {
+  private async startRecorder(page: Page): Promise<void> {
     try {
       const session = await page.context().newCDPSession(page);
       const recorder = new BackendRecorder(

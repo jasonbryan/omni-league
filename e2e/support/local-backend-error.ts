@@ -1,9 +1,6 @@
 export const LOCAL_BACKEND_ERROR_ANNOTATION = 'local-backend-error';
 
-const ALLOWED_ROUTES: ReadonlySet<string> = new Set([
-  '/api/auth/convex/token',
-  '/api/auth/get-session',
-]);
+export const ALLOWED_ROUTES = ['/api/auth/convex/token', '/api/auth/get-session'] as const;
 const CONNECTION_ERRORS: ReadonlySet<string> = new Set([
   'net::ERR_CONNECTION_RESET',
   'net::ERR_CONNECTION_REFUSED',
@@ -33,7 +30,10 @@ export type BackendDecision = Pick<
 function isAllowedRoute(url: string, origin: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.origin === new URL(origin).origin && ALLOWED_ROUTES.has(parsed.pathname);
+    return (
+      parsed.origin === new URL(origin).origin &&
+      (ALLOWED_ROUTES as readonly string[]).includes(parsed.pathname)
+    );
   } catch {
     return false;
   }

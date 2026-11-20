@@ -1,4 +1,9 @@
-import { ERROR_BODY_BYTES, FIRST_ERROR_WITH_BODY, type BackendAnswer } from './local-backend-error';
+import {
+  ALLOWED_ROUTES,
+  ERROR_BODY_BYTES,
+  FIRST_ERROR_WITH_BODY,
+  type BackendAnswer,
+} from './local-backend-error';
 
 export interface CdpSession {
   send(method: string, params?: object): Promise<unknown>;
@@ -55,7 +60,7 @@ function headerValue(headers: Record<string, string>, name: string): string | un
  * one page. Playwright's own `response` event never fires for an answer the page's CORS check
  * blocks, and its `requestfailed` event hides the preflight, which it does not report in Chromium.
  *
- * The body comes from a `Fetch` pause on the auth routes, because the `Network` domain has no body
+ * The body comes from a `Fetch` pause on the two token routes, because the `Network` domain has no body
  * for a blocked answer. Every pause is continued unchanged, and the pause reads the body only when
  * the answer lacks the CORS header, which the app's answers never do.
  */
@@ -85,7 +90,10 @@ export class BackendRecorder {
   }
 
   private async enable(): Promise<void> {
-    const patterns = [{ urlPattern: `${this.origin}/api/auth/*`, requestStage: 'Response' }];
+    const patterns = ALLOWED_ROUTES.map((route) => ({
+      urlPattern: `${this.origin}${route}*`,
+      requestStage: 'Response',
+    }));
     await Promise.all([
       this.session.send('Network.enable').catch(() => undefined),
       this.session.send('Fetch.enable', { patterns }).catch(() => undefined),

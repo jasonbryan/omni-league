@@ -1,4 +1,4 @@
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { BackendRecorder, type CdpSession } from '../support/backend-recorder';
@@ -85,14 +85,28 @@ async function guardedPage(
   browser: Browser,
   documentOrigin: string,
   localBackendOrigin?: string,
+  { blindToResponses = false } = {},
 ): Promise<{ page: Page; guard: ConsoleGuard; close: () => Promise<void> }> {
   const context = await browser.newContext();
+  if (blindToResponses) hideResponseEvents(context);
   const page = await context.newPage();
   const guard = new ConsoleGuard({ localBackendOrigin });
   guard.attach(page);
   await guard.settle();
   await page.goto(documentOrigin);
   return { page, guard, close: () => context.close() };
+}
+
+/** The guard then never learns a status, as when the browser does not report an answer. */
+function hideResponseEvents(context: BrowserContext): void {
+  const open = context.newCDPSession.bind(context);
+  context.newCDPSession = async (target) => {
+    const session = await open(target);
+    const listen = session.on.bind(session) as (event: string, handler: () => void) => unknown;
+    session.on = ((event: string, handler: () => void) =>
+      event === 'Network.responseReceivedExtraInfo' ? session : listen(event, handler)) as never;
+    return session;
+  };
 }
 
 /** A credentialed fetch with a custom header, which makes the browser send a preflight first. */
@@ -365,6 +379,24 @@ test.describe(
         expect(guard.problems()).toEqual([
           expect.stringContaining('blocked by CORS policy'),
           expect.stringMatching(/preflight 204 PreflightMissingAllowOriginHeader\]$/),
+        ]);
+        expect(guard.localBackendErrors).toEqual([]);
+        await close();
+        await stub.close();
+        await doc.close();
+      });
+
+      test('fails when the status of the preflight cannot be read', async ({ browser }) => {
+        const doc = await documentServer();
+        const stub = await backendStub({ preflight: 503, answer: TOKEN_ANSWER_503 });
+        const { page, guard, close } = await guardedPage(browser, doc.origin, stub.origin, {
+          blindToResponses: true,
+        });
+        await fetchAuth(page, `${stub.origin}${TOKEN_PATH}`);
+        await guard.settle();
+        expect(guard.problems()).toEqual([
+          expect.stringContaining('blocked by CORS policy'),
+          expect.stringMatching(/preflight status unreadable PreflightMissingAllowOriginHeader\]$/),
         ]);
         expect(guard.localBackendErrors).toEqual([]);
         await close();
