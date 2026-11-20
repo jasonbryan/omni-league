@@ -6,6 +6,7 @@ import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { freezeOrganizations } from './support/freeze-organizations';
+import { documentRequests, gotoUnhydrated, holdDocument, settle } from './support/early-submit';
 import { holdQueries } from './support/hold-queries';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
@@ -630,6 +631,50 @@ test.describe('find a program: in the browser', () => {
       await expect(page).toHaveURL(`${baseURL}${url(id)}`);
       await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
       await expect(results(page).getByRole('status')).toContainText('2 programs match');
+    },
+  );
+
+  test(
+    'a search submitted before hydration loads the results once, with no console error',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const { id } = await seed();
+      const target = url(id);
+      const searches = await holdQueries(page, ['search:programs']);
+      const unhydrated = await gotoUnhydrated(page, consoleGuard, '/programs', 'FindPage');
+      const document = await holdDocument(page, target);
+
+      await field(page).fill(id);
+      // The held request would otherwise keep the press waiting for the navigation to commit.
+      await field(page).press('Enter', { noWaitAfter: true });
+      await expect.poll(document.isRequested).toBe(true);
+      unhydrated.release();
+      await hydrated(consoleGuard, { page });
+      await settle(page);
+
+      expect(page.url()).toBe(`${baseURL}/programs`);
+      expect(searches.isHolding()).toBe(false);
+      searches.release();
+      document.release();
+      await expect(page).toHaveURL(`${baseURL}${target}`);
+      await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+      expect(document.requests).toEqual([target]);
+    },
+  );
+
+  test(
+    'a hydrated search navigates in the app with no document request',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const { id } = await seed();
+      await gotoHydrated(page, consoleGuard, '/programs');
+      const requests = documentRequests(page);
+
+      await field(page).fill(id);
+      await field(page).press('Enter');
+      await expect(page).toHaveURL(`${baseURL}${url(id)}`);
+      await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+      expect(requests).toEqual([]);
     },
   );
 

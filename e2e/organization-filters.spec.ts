@@ -4,12 +4,14 @@ import { answerWithClientShell } from './support/client-shell';
 import type { ConsoleGuard } from './support/console-guard';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { documentRequests, gotoUnhydrated, holdDocument, settle } from './support/early-submit';
 import { holdQueries } from './support/hold-queries';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
   dateFromToday,
   numberedLocations,
@@ -545,6 +547,53 @@ test.describe('organization filters in the browser', () => {
     await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
       'Thursday Men 4s',
     ]);
+  });
+
+  test(
+    'Show leagues pressed before hydration loads the filtered page once, with no console error',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const tenant = await filterTenant();
+      const target = `${tenant.path}?gender=mens`;
+      const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+      const form = page.getByRole('search', { name: 'Filter leagues' });
+      await form.getByText('Filters').click();
+      await form.getByText('Men', { exact: true }).click();
+      const document = await holdDocument(page, target);
+
+      // The held request would otherwise keep the press waiting for the navigation to commit.
+      await form.getByRole('button', { name: 'Show leagues' }).click({ noWaitAfter: true });
+      await expect.poll(document.isRequested).toBe(true);
+      unhydrated.release();
+      await hydrated(consoleGuard, { page });
+      await settle(page);
+
+      expect(page.url()).toBe(`${baseURL}${tenant.path}`);
+      document.release();
+      await expect(page).toHaveURL(`${baseURL}${target}`);
+      await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
+        'Thursday Men 4s',
+      ]);
+      await expect(count(page)).toHaveText('1 of 7 leagues');
+      expect(document.requests).toEqual([target]);
+    },
+  );
+
+  test('Show leagues on a hydrated page navigates in the app with no document request', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await gotoHydrated(page, consoleGuard, tenant.path);
+    const requests = documentRequests(page);
+
+    await (isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page)).click();
+    const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
+    await overlay.getByText('Men', { exact: true }).click();
+    await overlay.getByRole('button', { name: /^Show \d+ leagues?$/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
+    await expect(count(page)).toHaveText('1 of 7 leagues');
+    expect(requests).toEqual([]);
   });
 
   test('the Locations page links keep gender=coed, and a filter change keeps locations=2', async ({

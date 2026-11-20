@@ -31,6 +31,7 @@ import {
   type DivisionFilters,
 } from '../../../convex/lib/leagueFilters';
 import type { Sport, SportCounts } from '../../../convex/lib/sports';
+import { isReplayedEvent } from '../core/replayed-event';
 import { PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
 import {
   CHIP_CHOICE_INPUT_CLASSES,
@@ -371,6 +372,7 @@ export class LeagueFilters {
   }
 
   protected apply(event: SubmitEvent): void {
+    if (isReplayedEvent(event)) return;
     event.preventDefault();
     const filters = filtersFromForm(event.target as HTMLFormElement);
     void this.router.navigate([this.path()], { queryParams: this.queryFor(filters) });
