@@ -1,6 +1,5 @@
 import { EventPhase } from '@angular/core/primitives/event-dispatch';
 
-/** Dispatches a submit on `form`, counting the calls to the event's `preventDefault`. */
 export function dispatchSubmit(
   form: HTMLFormElement,
   { replayed = false }: { replayed?: boolean } = {},
@@ -13,10 +12,6 @@ export function dispatchSubmit(
     calls += 1;
     Event.prototype.preventDefault.call(event);
   };
-  // Stops jsdom from navigating after a submit that no handler prevented.
-  const stopNavigation = () => Event.prototype.preventDefault.call(event);
-  window.addEventListener('submit', stopNavigation, { once: true });
   form.dispatchEvent(event);
-  window.removeEventListener('submit', stopNavigation);
   return { preventDefaultCalls: () => calls };
 }

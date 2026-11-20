@@ -10,10 +10,9 @@ describe('isReplayedEvent', () => {
 
   it('is false for an event the browser dispatched', () => {
     const target = new EventTarget();
-    const phases: number[] = [];
-    target.addEventListener('submit', (event) => phases.push(event.eventPhase));
+    const seen: boolean[] = [];
+    target.addEventListener('submit', (event) => seen.push(isReplayedEvent(event)));
     target.dispatchEvent(new Event('submit'));
-    expect(phases).toEqual([Event.AT_TARGET]);
-    expect(isReplayedEvent(new Event('submit'))).toBe(false);
+    expect(seen).toEqual([false]);
   });
 });
