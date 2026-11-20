@@ -4,6 +4,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { components, internal } from './_generated/api';
 import schema from './schema';
+import { MAX_CAMP_SESSION_PLACES } from './lib/campSessionInput';
 import { modules } from './test.setup';
 
 const TENANT = {
@@ -277,5 +278,138 @@ describe('testing:seedCampRegistration', () => {
     await expect(
       t.mutation(internal.testing.seedCampRegistration, { ...REGISTRATION, campSlug: 'nowhere' }),
     ).rejects.toThrow(/No camp/);
+  });
+});
+
+describe('testing:seedCampRegistrations', () => {
+  const EMAIL = 'guardian@example.test';
+  const TARGET = {
+    organizationSlug: 'e2e-org-c4m9',
+    campSlug: 'junior-beach-volleyball-camp',
+    sessionName: 'Week 1',
+    email: EMAIL,
+  };
+  const minors = (count: number, from = 0) =>
+    Array.from({ length: count }, (_, index) => ({
+      kind: 'minor' as const,
+      minorName: `Child ${String(from + index).padStart(3, '0')}`,
+    }));
+  const MANY = 201;
+
+  async function withSession() {
+    const t = await seeded();
+    betterAuthTest.register(t, 'betterAuth');
+    await t.mutation(internal.testing.seedCamp, CAMP);
+    await t.mutation(internal.testing.seedCampSession, {
+      organizationSlug: CAMP.organizationSlug,
+      campSlug: CAMP.slug,
+      name: 'Week 1',
+      startDate: '2027-07-05',
+      endDate: '2027-07-09',
+      places: MAX_CAMP_SESSION_PLACES,
+      registrationDeadline: '2027-07-01',
+    });
+    await t.run(async (ctx) => {
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name: 'Demo Guardian',
+            email: EMAIL,
+            emailVerified: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      } as never)) as { _id: string };
+      await ctx.db.insert('users', {
+        authUserId: account._id,
+        name: 'Demo Guardian',
+        adultConfirmedAt: 1,
+      });
+    });
+    return t;
+  }
+
+  const registrations = (t: Awaited<ReturnType<typeof withSession>>) =>
+    t.run((ctx) => ctx.db.query('campRegistrations').collect());
+  const registeredCount = (t: Awaited<ReturnType<typeof withSession>>) =>
+    t.run(async (ctx) => (await ctx.db.query('campSessions').first())!.registeredCount);
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    const t = await withSession();
+    vi.stubEnv('IS_TEST', value);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        participants: minors(2),
+      }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await registrations(t)).toEqual([]);
+  });
+
+  test('adds every participant to a session that already has a registration, and counts each place', async () => {
+    const t = await withSession();
+    await t.mutation(internal.testing.seedCampRegistration, {
+      ...TARGET,
+      participant: { kind: 'self' },
+    });
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        participants: minors(MANY),
+      }),
+    ).resolves.toEqual({ count: MANY });
+    const rows = await registrations(t);
+    expect(rows).toHaveLength(MANY + 1);
+    expect(rows.map((row) => row.participantKey).sort()).toEqual(
+      [...minors(MANY).map(({ minorName }) => `minor:${minorName.toLowerCase()}`), 'self'].sort(),
+    );
+    expect(await registeredCount(t)).toBe(MANY + 1);
+  });
+
+  test.each([
+    ['no participants', 0],
+    ['more than a session has places for', MAX_CAMP_SESSION_PLACES + 1],
+  ])('refuses %s and writes nothing', async (_, count) => {
+    const t = await withSession();
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        participants: minors(count),
+      }),
+    ).rejects.toThrow(/participants/);
+    expect(await registrations(t)).toEqual([]);
+    expect(await registeredCount(t)).toBe(0);
+  });
+
+  test('refuses an unknown account, a session the camp does not have, and a camp it does not have', async () => {
+    const t = await withSession();
+    const participants = minors(2);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        email: 'no@example.test',
+        participants,
+      }),
+    ).rejects.toThrow(/No account/);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        sessionName: 'Week 9',
+        participants,
+      }),
+    ).rejects.toThrow(/No session/);
+    await expect(
+      t.mutation(internal.testing.seedCampRegistrations, {
+        ...TARGET,
+        campSlug: 'nowhere',
+        participants,
+      }),
+    ).rejects.toThrow(/No camp/);
+    expect(await registrations(t)).toEqual([]);
   });
 });

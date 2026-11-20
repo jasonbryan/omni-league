@@ -101,7 +101,11 @@ async function seedTashasTeams(user: TestUser) {
   );
   const sharks = await seedTeam(tenant, SUNDAY, 'Sand Sharks', user);
   const aces = await seedTeam(tenant, THURSDAY, 'Pair of Aces', captain);
-  await Promise.all([...mates.map((mate) => addToTeam(sharks, mate)), addToTeam(aces, user)]);
+  // Each add patches the team's `rosterCount`, so the two mates join one after the other.
+  const sharkMates = (async () => {
+    for (const mate of mates) await addToTeam(sharks, mate);
+  })();
+  await Promise.all([sharkMates, addToTeam(aces, user)]);
   return { tenant, sharks, aces };
 }
 
