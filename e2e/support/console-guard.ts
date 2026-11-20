@@ -1,5 +1,10 @@
 import type { ConsoleMessage, Page, Request } from '@playwright/test';
-import { BackendRecorder, type CdpSession } from './backend-recorder';
+import {
+  BackendRecorder,
+  boundedWait,
+  SETTLE_TIMEOUT_MS,
+  type CdpSession,
+} from './backend-recorder';
 import { LOCAL_CONVEX_SITE_URL, remoteBaseUrl } from './env';
 import { allowsLocalBackendError, describeAnswer } from './local-backend-error';
 
@@ -159,8 +164,10 @@ export class ConsoleGuard {
 
   // `problems()` is synchronous, but the browser reports an answer after its console error.
   async settle(): Promise<void> {
-    await Promise.all(this.recorderSetups);
-    await Promise.all([...this.recorders.values()].map((recorder) => recorder.settle()));
+    const setups = Promise.all(this.recorderSetups).then(() =>
+      Promise.all([...this.recorders.values()].map((recorder) => recorder.settle())),
+    );
+    await boundedWait(setups, SETTLE_TIMEOUT_MS);
   }
 
   get localBackendErrors(): readonly string[] {

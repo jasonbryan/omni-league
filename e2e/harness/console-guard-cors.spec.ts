@@ -94,13 +94,13 @@ async function guardedPage(
   { blindToResponses = false } = {},
 ): Promise<{ page: Page; guard: ConsoleGuard }> {
   const context = await browser.newContext();
+  cleanups.push(() => context.close());
   if (blindToResponses) hideResponseEvents(context);
   const page = await context.newPage();
   const guard = new ConsoleGuard({ localBackendOrigin });
   guard.attach(page);
   await guard.settle();
   await page.goto(documentOrigin);
-  cleanups.push(() => context.close());
   return { page, guard };
 }
 

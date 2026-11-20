@@ -47,9 +47,22 @@ interface Entry {
   corsError?: string;
 }
 
-const SETTLE_TIMEOUT_MS = 5_000;
+export const SETTLE_TIMEOUT_MS = 5_000;
 const CORS_HEADER = 'access-control-allow-origin';
 let recorders = 0;
+
+/** A page that a dialog or a busy script blocks never replies; the records so far then decide. */
+export async function boundedWait(work: Promise<unknown>, timeoutMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function headerValue(headers: Record<string, string>, name: string): string | undefined {
   const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name);
@@ -102,17 +115,8 @@ export class BackendRecorder {
     ]);
   }
 
-  /** A page that a dialog or a busy script blocks never replies; the records so far then decide. */
   async settle(): Promise<void> {
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, this.settleTimeoutMs);
-    });
-    try {
-      await Promise.race([this.drain(), timeout]);
-    } finally {
-      clearTimeout(timer);
-    }
+    await boundedWait(this.drain(), this.settleTimeoutMs);
   }
 
   private async drain(): Promise<void> {
