@@ -125,6 +125,39 @@ test.describe('public layout: skip link before hydration', () => {
   });
 });
 
+test.describe('public layout: skip link after hydration', () => {
+  for (const viewport of [
+    { width: 320, height: 800 },
+    { width: 1280, height: 720 },
+  ]) {
+    for (const input of ['keyboard', 'mouse'] as const) {
+      test(`the hydrated skip link focuses the main content and keeps the path by ${input} at ${viewport.width}px`, async ({
+        page,
+        consoleGuard,
+      }) => {
+        const { tenant } = await seed();
+        await page.setViewportSize(viewport);
+        await gotoHydrated(page, consoleGuard, tenant.path);
+        const requests = documentRequests(page);
+
+        const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+        // The link is visually hidden until focused, so the pointer goes to where it shows.
+        await skipLink.focus();
+        if (input === 'keyboard') {
+          await skipLink.press('Enter');
+        } else {
+          const box = (await skipLink.boundingBox())!;
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        }
+
+        await expect(page.locator('main#main')).toBeFocused();
+        expect(page.url()).toBe(`${baseURL}${tenant.path}`);
+        expect(requests).toEqual([]);
+      });
+    }
+  }
+});
+
 test.describe('public layout: signed in', () => {
   test(
     'a signed-in visitor sees the account link in place of "Sign in" on a public page, after hydration',
