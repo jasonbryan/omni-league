@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { dispatchSubmit } from '../core/testing/dispatch-submit';
+import { dispatchSubmit } from '../core/testing/dispatch-event';
 import { TopBarFind } from './top-bar-find';
 
 function open() {

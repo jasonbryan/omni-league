@@ -2,8 +2,9 @@
 // E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { documentRequests, gotoUnhydrated, settle } from './support/early-submit';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -99,6 +100,28 @@ test.describe('public layout: raw server HTML', () => {
     const { paths } = await seed();
     const { html } = await fetchRawHtml(request, `${paths[0]}?ott=SECRET-TOKEN`);
     expect(html).not.toContain('SECRET-TOKEN');
+  });
+});
+
+test.describe('public layout: skip link before hydration', () => {
+  test('the skip link pressed before hydration focuses the main content, with no console error and no page load', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+    const requests = documentRequests(page);
+
+    const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+    await skipLink.focus();
+    await skipLink.press('Enter');
+    unhydrated.release();
+    await hydrated(consoleGuard, { page });
+    await settle(page);
+
+    await expect(page.locator('main#main')).toBeFocused();
+    expect(page.url()).toBe(`${baseURL}${tenant.path}#main`);
+    expect(requests).toEqual([]);
   });
 });
 

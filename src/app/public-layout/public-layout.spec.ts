@@ -6,6 +6,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { dispatchClick } from '../core/testing/dispatch-event';
 import { PublicLayout } from './public-layout';
 
 @Component({
@@ -89,6 +90,45 @@ describe('PublicLayout', () => {
         main.compareDocumentPosition(page.querySelector('footer')!) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+    });
+  });
+
+  describe('skip link', () => {
+    const skipLink = (page: HTMLElement) =>
+      page.querySelector<HTMLAnchorElement>('a[href$="#main"]')!;
+
+    it('does not call preventDefault on a click Angular replays after hydration', async () => {
+      const page = await open();
+
+      const { preventDefaultCalls } = dispatchClick(skipLink(page), { replayed: true });
+
+      expect(preventDefaultCalls()).toBe(0);
+      expect(document.activeElement).not.toBe(page.querySelector('main'));
+    });
+
+    it('calls preventDefault once and focuses main#main on a plain left click', async () => {
+      const page = await open();
+
+      const { preventDefaultCalls } = dispatchClick(skipLink(page));
+
+      expect(preventDefaultCalls()).toBe(1);
+      expect(document.activeElement).toBe(page.querySelector('main#main'));
+    });
+
+    it.each([
+      ['Ctrl', { ctrlKey: true }],
+      ['Meta', { metaKey: true }],
+      ['Shift', { shiftKey: true }],
+      ['Alt', { altKey: true }],
+      ['the middle button', { button: 1 }],
+      ['the right button', { button: 2 }],
+    ])('leaves the click to the browser with %s', async (_modifier, init) => {
+      const page = await open();
+
+      const { preventDefaultCalls } = dispatchClick(skipLink(page), { init });
+
+      expect(preventDefaultCalls()).toBe(0);
+      expect(document.activeElement).not.toBe(page.querySelector('main'));
     });
   });
 

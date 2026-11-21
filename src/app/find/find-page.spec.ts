@@ -8,7 +8,7 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
-import { dispatchSubmit } from '../core/testing/dispatch-submit';
+import { dispatchSubmit } from '../core/testing/dispatch-event';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { FindPage } from './find-page';
