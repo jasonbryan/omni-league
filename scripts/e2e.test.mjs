@@ -155,6 +155,19 @@ describe('a run that records no failed tests', () => {
     assert.equal(read(defaultFile()), EARLIER);
   });
 
+  for (const status of ['interrupted', 'timedout']) {
+    it(`puts the earlier file back when the run is ${status} with no failed tests`, async () => {
+      put(defaultFile(), EARLIER);
+      await run({
+        file: defaultFile(),
+        clear: join(root, 'test-results'),
+        write: JSON.stringify({ status, failedTests: [] }),
+        then: 'fail',
+      });
+      assert.equal(read(defaultFile()), EARLIER);
+    });
+  }
+
   it('names the restored file on stderr', async () => {
     put(defaultFile(), EARLIER);
     await run({
