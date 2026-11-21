@@ -19,7 +19,7 @@ const FAILED_SETUP = JSON.stringify({ status: 'failed', failedTests: [] });
 const PASSED = JSON.stringify({ status: 'passed', failedTests: [] });
 const FAILED_IDS = JSON.stringify({ status: 'failed', failedTests: ['new-1'] });
 
-// What the stand-in playwright step does to the last-run file: Playwright clears `outputDir` in
+// What the stand-in playwright step does to the last-run writesTo: Playwright clears `outputDir` in
 // its first global-setup task, then `LastRunReporter.onEnd` writes the file.
 const STEP = `
   const { rmSync, mkdirSync, writeFileSync } = require('node:fs');
@@ -58,11 +58,7 @@ const put = (file, text) => {
   writeFileSync(file, text);
 };
 
-/**
- * Runs `runE2e` with a stand-in `playwright` step. `file` is where Playwright writes, `clear` the
- * directory it deletes first, `write` what it writes (nothing when undefined), `then` how it ends.
- */
-async function run({ args = [], env = {}, file, clear, write, then = 'exit' }) {
+async function run({ args = [], env = {}, writesTo, clearsDir, writes, ends = 'exit' }) {
   const plan = () => [
     {
       name: 'playwright',
@@ -70,10 +66,10 @@ async function run({ args = [], env = {}, file, clear, write, then = 'exit' }) {
       args: ['-e', STEP],
       env: {
         ...process.env,
-        FILE: file,
-        CLEAR: clear ?? '',
-        THEN: then,
-        ...(write === undefined ? {} : { WRITE: write }),
+        FILE: writesTo,
+        CLEAR: clearsDir ?? '',
+        THEN: ends,
+        ...(writes === undefined ? {} : { WRITE: writes }),
       },
     },
   ];
@@ -86,10 +82,10 @@ describe('a run that records no failed tests', () => {
   it('puts the earlier file back after a failed setup', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(code, 1);
     assert.equal(read(defaultFile()), EARLIER);
@@ -97,10 +93,10 @@ describe('a run that records no failed tests', () => {
 
   it('leaves no file when there was none before', async () => {
     await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(existsSync(defaultFile()), false);
   });
@@ -108,9 +104,9 @@ describe('a run that records no failed tests', () => {
   it('puts the earlier file back when the step exits before Playwright writes one', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      ends: 'fail',
     });
     assert.equal(code, 1);
     assert.equal(read(defaultFile()), EARLIER);
@@ -119,9 +115,9 @@ describe('a run that records no failed tests', () => {
   it('puts the earlier file back when the step is killed before Playwright writes one', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      then: 'kill',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      ends: 'kill',
     });
     assert.equal(code, 128 + 9);
     assert.equal(read(defaultFile()), EARLIER);
@@ -130,26 +126,26 @@ describe('a run that records no failed tests', () => {
   it('puts the earlier file back when the file the step wrote does not parse', async () => {
     put(defaultFile(), EARLIER);
     await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: '{"status":"fai',
-      then: 'kill',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: '{"status":"fai',
+      ends: 'kill',
     });
     assert.equal(read(defaultFile()), EARLIER);
   });
 
   it('removes a file that does not parse when there was no earlier file', async () => {
-    await run({ file: defaultFile(), write: '{"status":"fai', then: 'kill' });
+    await run({ writesTo: defaultFile(), writes: '{"status":"fai', ends: 'kill' });
     assert.equal(existsSync(defaultFile()), false);
   });
 
   it('puts the earlier file back after tests passed and the run still failed', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(code, 1);
     assert.equal(read(defaultFile()), EARLIER);
@@ -159,10 +155,10 @@ describe('a run that records no failed tests', () => {
     it(`puts the earlier file back when the run is ${status} with no failed tests`, async () => {
       put(defaultFile(), EARLIER);
       await run({
-        file: defaultFile(),
-        clear: join(root, 'test-results'),
-        write: JSON.stringify({ status, failedTests: [] }),
-        then: 'fail',
+        writesTo: defaultFile(),
+        clearsDir: join(root, 'test-results'),
+        writes: JSON.stringify({ status, failedTests: [] }),
+        ends: 'fail',
       });
       assert.equal(read(defaultFile()), EARLIER);
     });
@@ -171,10 +167,10 @@ describe('a run that records no failed tests', () => {
   it('names the restored file on stderr', async () => {
     put(defaultFile(), EARLIER);
     await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.match(
       console.error.mock.calls.map((call) => call.arguments.join(' ')).join('\n'),
@@ -186,10 +182,10 @@ describe('a run that records no failed tests', () => {
     put(defaultFile(), EARLIER);
     await run({
       env: { E2E_BASE_URL: 'https://example.netlify.app' },
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(read(defaultFile()), EARLIER);
   });
@@ -199,10 +195,10 @@ describe('a run that records its result', () => {
   it('keeps a passed file as written', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: PASSED,
-      then: 'exit',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: PASSED,
+      ends: 'exit',
     });
     assert.equal(code, 0);
     assert.equal(read(defaultFile()), PASSED);
@@ -211,10 +207,10 @@ describe('a run that records its result', () => {
   it('keeps a file with failed test ids as written', async () => {
     put(defaultFile(), EARLIER);
     const code = await run({
-      file: defaultFile(),
-      clear: join(root, 'test-results'),
-      write: FAILED_IDS,
-      then: 'fail',
+      writesTo: defaultFile(),
+      clearsDir: join(root, 'test-results'),
+      writes: FAILED_IDS,
+      ends: 'fail',
     });
     assert.equal(code, 1);
     assert.equal(read(defaultFile()), FAILED_IDS);
@@ -224,17 +220,24 @@ describe('a run that records its result', () => {
 describe('the last-run file the run reads', () => {
   // Each case clears the file's own directory and fails with no failed tests, so the earlier file
   // survives only when the script read the same path Playwright wrote.
-  async function survives({ args = [], env = {}, file }) {
-    put(file, EARLIER);
-    await run({ args, env, file, clear: dirname(file), write: FAILED_SETUP, then: 'fail' });
-    return read(file) === EARLIER;
+  async function survives({ args = [], env = {}, writesTo }) {
+    put(writesTo, EARLIER);
+    await run({
+      args,
+      env,
+      writesTo,
+      clearsDir: dirname(writesTo),
+      writes: FAILED_SETUP,
+      ends: 'fail',
+    });
+    return read(writesTo) === EARLIER;
   }
 
   it('is --output <dir>, resolved against the cwd', async () => {
     assert.ok(
       await survives({
         args: ['--output', 'out/dir'],
-        file: join(root, 'out', 'dir', '.last-run.json'),
+        writesTo: join(root, 'out', 'dir', '.last-run.json'),
       }),
     );
   });
@@ -243,7 +246,7 @@ describe('the last-run file the run reads', () => {
     assert.ok(
       await survives({
         args: ['--output=out/dir'],
-        file: join(root, 'out', 'dir', '.last-run.json'),
+        writesTo: join(root, 'out', 'dir', '.last-run.json'),
       }),
     );
   });
@@ -252,14 +255,17 @@ describe('the last-run file the run reads', () => {
     assert.ok(
       await survives({
         args: ['--last-failed-file', 'lf/a.json'],
-        file: join(root, 'lf', 'a.json'),
+        writesTo: join(root, 'lf', 'a.json'),
       }),
     );
   });
 
   it('is --last-failed-file=<file>', async () => {
     assert.ok(
-      await survives({ args: ['--last-failed-file=lf/a.json'], file: join(root, 'lf', 'a.json') }),
+      await survives({
+        args: ['--last-failed-file=lf/a.json'],
+        writesTo: join(root, 'lf', 'a.json'),
+      }),
     );
   });
 
@@ -267,20 +273,20 @@ describe('the last-run file the run reads', () => {
     assert.ok(
       await survives({
         env: { PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: 'env/b.json' },
-        file: join(root, 'env', 'b.json'),
+        writesTo: join(root, 'env', 'b.json'),
       }),
     );
   });
 
   it('is test-results/.last-run.json under the root by default', async () => {
-    assert.ok(await survives({ file: defaultFile() }));
+    assert.ok(await survives({ writesTo: defaultFile() }));
   });
 
   it('is test-results/<E2E_RUN_NAME>/.last-run.json under the root for a named run', async () => {
     assert.ok(
       await survives({
         env: { E2E_RUN_NAME: 'production-mobile' },
-        file: join(root, 'test-results', 'production-mobile', '.last-run.json'),
+        writesTo: join(root, 'test-results', 'production-mobile', '.last-run.json'),
       }),
     );
   });
@@ -293,10 +299,10 @@ describe('the last-run file the run reads', () => {
     await run({
       args: ['--output', 'out', '--last-failed-file', 'lf/a.json'],
       env: { PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: 'env.json' },
-      file,
-      clear: dirname(file),
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: file,
+      clearsDir: dirname(file),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(read(file), EARLIER);
   });
@@ -306,7 +312,13 @@ describe('a run whose last-run file the script cannot know', () => {
   // The step leaves the empty file Playwright would write; a restore would replace it.
   async function leavesFile({ args = [], env = {} }) {
     put(defaultFile(), EARLIER);
-    const code = await run({ args, env, file: defaultFile(), write: FAILED_SETUP, then: 'fail' });
+    const code = await run({
+      args,
+      env,
+      writesTo: defaultFile(),
+      writes: FAILED_SETUP,
+      ends: 'fail',
+    });
     assert.equal(code, 1);
     return read(defaultFile()) === FAILED_SETUP;
   }
@@ -327,9 +339,22 @@ describe('a run whose last-run file the script cannot know', () => {
     put(file, EARLIER);
     await run({
       args: ['-c', 'other.config.ts', '--last-failed-file', file],
-      file,
-      write: FAILED_SETUP,
-      then: 'fail',
+      writesTo: file,
+      writes: FAILED_SETUP,
+      ends: 'fail',
+    });
+    assert.equal(read(file), EARLIER);
+  });
+
+  it('still restores with --config when --output names the directory', async () => {
+    const file = join(root, 'out', '.last-run.json');
+    put(file, EARLIER);
+    await run({
+      args: ['-c', 'other.config.ts', '--output', 'out'],
+      writesTo: file,
+      clearsDir: dirname(file),
+      writes: FAILED_SETUP,
+      ends: 'fail',
     });
     assert.equal(read(file), EARLIER);
   });
@@ -348,6 +373,23 @@ describe('lastRunFile', () => {
     assert.equal(
       lastRunFile([], { E2E_RUN_NAME: '' }, bases()),
       '/repo/test-results/.last-run.json',
+    );
+  });
+
+  it('resolves --last-failed-file against the cwd, not the root', () => {
+    assert.equal(lastRunFile(['--last-failed-file', 'lf/a.json'], {}, bases()), '/work/lf/a.json');
+    assert.equal(lastRunFile(['--last-failed-file=lf/a.json'], {}, bases()), '/work/lf/a.json');
+  });
+
+  it('resolves PLAYWRIGHT_LAST_RUN_OUTPUT_FILE against the cwd, not the root', () => {
+    const env = { PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: 'env/b.json' };
+    assert.equal(lastRunFile([], env, bases()), '/work/env/b.json');
+  });
+
+  it('uses --output with --config, which overrides every outputDir', () => {
+    assert.equal(
+      lastRunFile(['-c', 'x', '--output', 'out'], {}, bases()),
+      '/work/out/.last-run.json',
     );
   });
 

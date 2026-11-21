@@ -79,7 +79,7 @@ export async function runE2e(
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
-  // Playwright deletes its outputDir in its first global-setup task, so the file is read before the step starts.
+  // Playwright deletes its outputDir in its first global-setup task, before any test.
   const runPlaywright = async (step) => {
     const lastRun = keepLastRun(lastRunFile(playwrightArgs, env, { root, cwd: process.cwd() }));
     try {

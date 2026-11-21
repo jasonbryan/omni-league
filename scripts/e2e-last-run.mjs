@@ -72,9 +72,8 @@ function readLastRun(file) {
 }
 
 /**
- * Reads the file before Playwright deletes its `outputDir`. `restoreIfNoFailures` runs after the
- * step: every failing test is in `failedTests`, so an empty list on a run that did not pass, or no
- * file at all, records no failure and the earlier file is put back (or removed, if there was none).
+ * Every failing test is in `failedTests`, so an empty list on a run that did not pass, or no file
+ * at all, records no failure.
  * @param {string | undefined} file
  */
 export function keepLastRun(file) {
