@@ -88,7 +88,7 @@ npx playwright install --only-shell chromium   # add: npx playwright install web
 
 **Local run.** `npm run e2e` (`scripts/e2e.mjs`) runs three steps:
 
-1. `node scripts/e2e-convex.mjs push`: `convex dev --once` pushes `convex/` to the anonymous local Convex backend and regenerates `convex/_generated/`.
+1. `node scripts/e2e-convex.mjs push`: it first deletes `convex_local_backend.sqlite3*` and `convex_local_storage/` in `.convex-e2e/.convex/local/default/` and keeps `config.json`, so every run starts from empty data. `convex dev --once` then pushes `convex/` to the anonymous local Convex backend and regenerates `convex/_generated/`.
 2. `npm run build -- --configuration development` with `CONVEX_URL=http://127.0.0.1:3210`, so the bundles name the local backend and the hydration mismatch checks run.
 3. `playwright test`. It starts the backend (`node scripts/e2e-convex.mjs serve`, ready on `http://127.0.0.1:3210/version`) and `npm run serve:ssr` with `PORT=4000`. `globalSetup` then sets `IS_TEST=true`, `SITE_URL=http://localhost:4000`, and a new random `BETTER_AUTH_SECRET` (never stored or printed) on the backend and runs `testing:reset` once. Every test in `e2e/` runs in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects, except raw-HTTP tests and `e2e/convex-backend.spec.ts`, which open no page and run in `chromium-desktop` only.
 
