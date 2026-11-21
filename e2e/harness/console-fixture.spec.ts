@@ -284,6 +284,9 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
       expectedFailedRequests: [{ status: 'net::ERR_FAILED', path: '/probe-aborted' }],
     } as const;
 
+    const WEBKIT_ABORT_NOTE =
+      'WebKit logs a request Playwright aborts as a Web Inspector block (console.info), never as a failed-resource error';
+
     async function abortRequest(page: Page, path: string): Promise<void> {
       await page.route(`**${path}`, (route) => route.abort('failed'));
       await Promise.all([
@@ -299,7 +302,8 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
       ]);
     }
 
-    test('allows the listed net error and path', async ({ browser }) => {
+    test('allows the listed net error and path', async ({ browser, browserName }) => {
+      test.skip(browserName === 'webkit', WEBKIT_ABORT_NOTE);
       const { page, guard, close } = await guardedPage(browser, options);
       await page.goto('/');
       await abortRequest(page, '/probe-aborted');
@@ -307,7 +311,8 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
       await close();
     });
 
-    test('still fails on an aborted request for another path', async ({ browser }) => {
+    test('still fails on an aborted request for another path', async ({ browser, browserName }) => {
+      test.skip(browserName === 'webkit', WEBKIT_ABORT_NOTE);
       const { page, guard, close } = await guardedPage(browser, options);
       await page.goto('/');
       await abortRequest(page, '/probe-aborted');
