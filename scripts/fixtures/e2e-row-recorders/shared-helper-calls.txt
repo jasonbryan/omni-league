@@ -1,0 +1,11 @@
+import {
+  expectNoLineClippedOrSpilled,
+  expectOwnRowGrowsOnce,
+  recordRowFrames,
+  TRAINING_CLASS_ROWS,
+} from './support/registered-rows';
+
+const recorder = await recordRowFrames(page, TRAINING_CLASS_ROWS, ['#classes']);
+held.release();
+const { rows, extras } = await recorder.stop();
+await expectNoLineClippedOrSpilled(page, TRAINING_CLASS_ROWS, classRow(page, 1), 2);

@@ -113,17 +113,91 @@ export async function expectNoLineClippedOrSpilled(
   ).toBeLessThanOrEqual(page.viewportSize()!.width);
 }
 
-interface Change {
+export interface Change {
   index: number;
   top: number;
   height: number;
 }
 
+export interface RowFrames {
+  rows: Change[];
+  extras: Change[][];
+  pageHeights: number[];
+}
+
 interface Recorder {
   stop: boolean;
-  changes: Change[];
-  otherChanges: Change[];
+  rows: Change[];
+  extras: Change[][];
   pageHeights: number[];
+}
+
+export const changesOf = (changes: Change[], index: number) =>
+  changes.filter((change) => change.index === index);
+
+export const heightSteps = (changes: Change[]) =>
+  changes.filter(
+    (change, at) => at > 0 && Math.abs(change.height - changes[at - 1].height) > BOX_TOLERANCE,
+  ).length;
+
+export const topSteps = (changes: Change[]) =>
+  changes.filter(
+    (change, at) => at > 0 && Math.abs(change.top - changes[at - 1].top) > BOX_TOLERANCE,
+  ).length;
+
+export async function recordRowFrames(
+  page: Page,
+  layout: RowLayout,
+  extras: string[] = [],
+): Promise<{ stop(): Promise<RowFrames> }> {
+  await page.evaluate(
+    ({ rowsSelector, extraSelectors, tolerance }) => {
+      const rows = [...document.querySelectorAll(rowsSelector)];
+      const extraElements = extraSelectors.map((selector) => [
+        ...document.querySelectorAll(selector),
+      ]);
+      const state: Recorder = {
+        stop: false,
+        rows: [],
+        extras: extraSelectors.map(() => []),
+        pageHeights: [],
+      };
+      const sample = (elements: Element[], last: (Change | undefined)[], into: Change[]) => {
+        elements.forEach((element, index) => {
+          const box = element.getBoundingClientRect();
+          const now = { index, top: box.top + window.scrollY, height: box.height };
+          const before = last[index];
+          if (
+            !before ||
+            Math.abs(before.top - now.top) > tolerance ||
+            Math.abs(before.height - now.height) > tolerance
+          ) {
+            last[index] = now;
+            into.push(now);
+          }
+        });
+      };
+      const lastRows: (Change | undefined)[] = [];
+      const lastExtras = extraSelectors.map((): (Change | undefined)[] => []);
+      const sampleFrame = () => {
+        sample(rows, lastRows, state.rows);
+        extraElements.forEach((elements, at) => sample(elements, lastExtras[at], state.extras[at]));
+        state.pageHeights.push(document.documentElement.scrollHeight);
+        if (!state.stop) requestAnimationFrame(sampleFrame);
+      };
+      sampleFrame();
+      (window as unknown as { __rowRecorder: Recorder }).__rowRecorder = state;
+    },
+    { rowsSelector: layout.rows, extraSelectors: extras, tolerance: BOX_TOLERANCE },
+  );
+  return {
+    stop: () =>
+      page.evaluate(() => {
+        const state = (window as unknown as { __rowRecorder: Recorder }).__rowRecorder;
+        state.stop = true;
+        return { rows: state.rows, extras: state.extras, pageHeights: state.pageHeights };
+      }),
+  };
 }
 
 /** `otherColumn` must not stretch to the grid row, or a growth in the own row's column resizes it. */
@@ -137,45 +211,17 @@ export async function expectOwnRowGrowsOnce(
   mustGrow: boolean,
   mayGrow = true,
   otherColumn?: string,
+  container?: string,
 ): Promise<void> {
   const held = await holdQueries(page, answers);
   await page.goto(url);
   await expect.poll(() => held.isHolding()).toBe(true);
   await expect(own.locator(`[data-slot="${layout.actions}"]`)).toBeVisible();
   await expect(own.locator(lineSelector(layout))).toHaveCount(0);
-  await page.evaluate(
-    ({ rowsSelector, otherSelector }) => {
-      const rows = [...document.querySelectorAll(rowsSelector)];
-      const others = otherSelector ? [...document.querySelectorAll(otherSelector)] : [];
-      const state: Recorder = { stop: false, changes: [], otherChanges: [], pageHeights: [] };
-      const sample = (elements: Element[], last: (Change | undefined)[], into: Change[]) => {
-        elements.forEach((element, index) => {
-          const box = element.getBoundingClientRect();
-          const now = { index, top: box.top + window.scrollY, height: box.height };
-          const before = last[index];
-          if (
-            !before ||
-            Math.abs(before.top - now.top) > 0.5 ||
-            Math.abs(before.height - now.height) > 0.5
-          ) {
-            last[index] = now;
-            into.push(now);
-          }
-        });
-      };
-      const lastRows: (Change | undefined)[] = [];
-      const lastOthers: (Change | undefined)[] = [];
-      const sampleFrame = () => {
-        sample(rows, lastRows, state.changes);
-        sample(others, lastOthers, state.otherChanges);
-        state.pageHeights.push(document.documentElement.scrollHeight);
-        if (!state.stop) requestAnimationFrame(sampleFrame);
-      };
-      sampleFrame();
-      (window as unknown as { __rowRecorder: Recorder }).__rowRecorder = state;
-    },
-    { rowsSelector: layout.rows, otherSelector: otherColumn },
+  const extraSelectors = [otherColumn, container].filter(
+    (selector): selector is string => selector !== undefined,
   );
+  const recorder = await recordRowFrames(page, layout, extraSelectors);
 
   held.release();
   for (const slot of [layout.registered, layout.waitlist]) {
@@ -184,37 +230,33 @@ export async function expectOwnRowGrowsOnce(
   }
   // A growth that is still coming would show within these frames.
   await page.waitForTimeout(700);
-  const record = await page.evaluate(() => {
-    const state = (window as unknown as { __rowRecorder: Recorder }).__rowRecorder;
-    state.stop = true;
-    return {
-      changes: state.changes,
-      otherChanges: state.otherChanges,
-      pageHeights: state.pageHeights,
-    };
-  });
+  const record = await recorder.stop();
+  const otherChanges = otherColumn === undefined ? [] : record.extras[0];
+  const containerChanges =
+    container === undefined ? [] : record.extras[otherColumn === undefined ? 0 : 1];
   const index = await own.evaluate(
     (li, rowsSelector) => [...document.querySelectorAll(rowsSelector)].indexOf(li),
     layout.rows,
   );
-  const rowCount = new Set(record.changes.map((change) => change.index)).size;
-  const byRow = (at: number) => record.changes.filter((change) => change.index === at);
+  const rowCount = new Set(record.rows.map((change) => change.index)).size;
+  const byRow = (at: number) => changesOf(record.rows, at);
   const baseline = (at: number) => byRow(at)[0];
   const final = (at: number) => byRow(at).at(-1)!;
   expect(rowCount).toBeGreaterThan(index);
 
+  for (let at = 0; at < index; at++) {
+    expect(byRow(at), `row ${at} above the caller's row never moves or resizes`).toHaveLength(1);
+  }
+
   const ownGrowth = final(index).height - baseline(index).height;
-  const ownHeights = byRow(index).filter(
-    (change, at, all) => at > 0 && Math.abs(change.height - all[at - 1].height) > BOX_TOLERANCE,
+  expect(heightSteps(byRow(index)), 'the own row changes height at most once').toBeLessThanOrEqual(
+    1,
   );
-  expect(ownHeights.length, 'the own row changes height at most once').toBeLessThanOrEqual(1);
+  expect(topSteps(byRow(index)), 'the own row stays in place').toBe(0);
   if (mustGrow) expect(ownGrowth, 'the own row grows').toBeGreaterThan(BOX_TOLERANCE);
   if (!mayGrow) expect(ownGrowth, 'the own row does not grow').toBeLessThanOrEqual(BOX_TOLERANCE);
   expect(ownGrowth).toBeGreaterThanOrEqual(-BOX_TOLERANCE);
 
-  for (let at = 0; at < index; at++) {
-    expect(byRow(at), `row ${at} above the caller's row never moves or resizes`).toHaveLength(1);
-  }
   for (let at = index + 1; at < rowCount; at++) {
     const changes = byRow(at);
     expect(changes.length, `row ${at} below moves at most once`).toBeLessThanOrEqual(2);
@@ -238,12 +280,18 @@ export async function expectOwnRowGrowsOnce(
       ownGrowth + BOX_TOLERANCE,
     );
     expect(pageGrowth, 'the page does not shrink').toBeGreaterThanOrEqual(-BOX_TOLERANCE);
-    const others = new Set(record.otherChanges.map((change) => change.index));
+    const others = new Set(otherChanges.map((change) => change.index));
     expect(others.size, `${otherColumn} is on the page`).toBeGreaterThan(0);
+    expect(otherChanges.length, `${otherColumn} in the other column never moves or resizes`).toBe(
+      others.size,
+    );
+  }
+  if (container !== undefined) {
+    expect(containerChanges.length, `${container} is on the page`).toBeGreaterThan(0);
     expect(
-      record.otherChanges.length,
-      `${otherColumn} in the other column never moves or resizes`,
-    ).toBe(others.size);
+      heightSteps(containerChanges),
+      `${container} changes height at most once`,
+    ).toBeLessThanOrEqual(1);
   }
   await expectNoLineClippedOrSpilled(page, layout, own, lines.length);
   await expectAccessible(page);

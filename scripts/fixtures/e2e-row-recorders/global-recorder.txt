@@ -1,0 +1,5 @@
+import { recordRowFrames } from './support/registered-rows';
+
+await page.evaluate(() => {
+  (window as unknown as { __rowRecorder: unknown }).__rowRecorder = { stop: false };
+});
