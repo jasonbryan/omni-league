@@ -1,9 +1,9 @@
-// Test doubles for scripts/host-suspend.mjs: both clocks and the interval, moved by hand.
+// Test doubles for scripts/host-suspend.mjs: both clocks and the interval, moved by hand. The wall
+// clock starts at 01:40:44.
 export const at = (hour, minute, second) => new Date(2026, 10, 20, hour, minute, second).getTime();
 
 const START_PERF_MS = 5_000;
 
-/** The wall clock starts at 01:40:44. */
 export function fakeHost() {
   let perf = START_PERF_MS;
   let wall = at(1, 40, 44);
@@ -20,17 +20,14 @@ export function fakeHost() {
         tick = undefined;
       },
     },
-    /** Time passes and the tick fires once at the end. */
     elapse(ms) {
       this.jump(ms);
       tick?.();
     },
-    /** Time passes and no tick fires. */
     jump(ms) {
       perf += ms;
       wall += ms;
     },
-    /** The wall clock alone moves, as in a clock change, and the tick fires. */
     stepWallClock(ms) {
       wall += ms;
       tick?.();
