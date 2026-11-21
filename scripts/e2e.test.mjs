@@ -19,7 +19,7 @@ const FAILED_SETUP = JSON.stringify({ status: 'failed', failedTests: [] });
 const PASSED = JSON.stringify({ status: 'passed', failedTests: [] });
 const FAILED_IDS = JSON.stringify({ status: 'failed', failedTests: ['new-1'] });
 
-// What the stand-in playwright step does to the last-run writesTo: Playwright clears `outputDir` in
+// What the stand-in playwright step does to the last-run file: Playwright clears `outputDir` in
 // its first global-setup task, then `LastRunReporter.onEnd` writes the file.
 const STEP = `
   const { rmSync, mkdirSync, writeFileSync } = require('node:fs');
