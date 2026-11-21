@@ -477,10 +477,9 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
 
   it('fails a wait that never settles at the deadline, naming its stage and closing its request', async () => {
     let connectionClosed: Promise<void> = Promise.resolve();
-    const stalled = createServer((req, res) => {
-      connectionClosed = new Promise((resolve) => req.socket.once('close', () => resolve()));
-      res.writeHead(200, { 'Content-Length': 1_000 });
-      res.write('partial');
+    const stalled = createServer();
+    stalled.on('connection', (socket) => {
+      connectionClosed = new Promise((resolve) => socket.once('close', () => resolve()));
     });
     await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve));
     try {
@@ -488,7 +487,7 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
       const stalledPort = typeof address === 'object' && address ? address.port : 0;
 
       await expect(fetchOutcome('/stall', createDeadline(300), stalledPort)).rejects.toThrow(
-        /stage "response outcome" was still waiting when the 300 ms deadline passed\nseen: \{"bytes":7,"complete":false,"status":200\}/,
+        /stage "response outcome" was still waiting when the 300 ms deadline passed\nseen: \{"bytes":0,"complete":false\}/,
       );
       await connectionClosed;
     } finally {
