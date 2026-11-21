@@ -116,7 +116,6 @@ describe('runE2e and the playwright step', () => {
   const dirs = [];
   after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-  /** Each stub step appends its name to `order`, and the fake interval appends when it starts and stops. */
   function stubRun(exitCodes = {}) {
     const dir = mkdtempSync(join(tmpdir(), 'host-suspend-'));
     dirs.push(dir);
@@ -171,7 +170,7 @@ describe('runE2e and the playwright step', () => {
     assert.deepEqual(entries(), ['convex push', 'build']);
   });
 
-  it("keeps Playwright's exit code and prints the summary before the failure line", async () => {
+  it("keeps Playwright's exit code and still prints the summary", async () => {
     const { options, lines, host } = stubRun({ playwright: 1 });
     const failed = [];
     const originalError = console.error;

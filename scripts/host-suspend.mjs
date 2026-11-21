@@ -7,19 +7,16 @@ export const SUSPEND_GAP_MS = 10_000;
 
 const toSeconds = (ms) => Math.round(ms / 1000);
 
-/** The local time of day, from `Date.now()`, as hh:mm:ss. */
 export function clockTime(epochMs) {
   return new Date(epochMs).toTimeString().slice(0, 8);
 }
 
 /**
  * @typedef {{ ms: number, from: number, to: number }} Suspension
- *   `ms` is the part of the interval beyond one tick; `from` and `to` are `Date.now()` readings.
  */
 
 /**
- * `awakeNow()` is `performance.now()` less the suspended time. It reads the clock itself, so a
- * suspension that no tick has seen yet still counts.
+ * `awakeNow()` reads the clock itself, so a suspension that no tick has seen yet still counts.
  *
  * @param {{
  *   perfNow?: () => number,
@@ -78,8 +75,6 @@ export function watchSuspension({
 }
 
 /**
- * Runs `run`, printing each suspension at once and a summary after it. The result is `run`'s.
- *
  * @template T
  * @param {() => Promise<T>} run
  * @param {Parameters<typeof watchSuspension>[0] & { error?: (line: string) => void }} [options]

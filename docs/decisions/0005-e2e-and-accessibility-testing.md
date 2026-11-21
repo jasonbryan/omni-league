@@ -385,6 +385,6 @@ The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENT
 
 ## Amendment: backend readiness (#830, 2026-11-20)
 
-`/version` answers before the first `convex dev` push has finished, so `globalSetup` could meet a backend without the functions. The `convex` webServer now sets `wait: { stderr: /Convex functions ready!/ }` and no `url`, so Playwright counts it as started only after that push. CI already waits for the same line. A test in `scripts/` fails when the installed Convex CLI no longer prints the text.
+`/version` answers before the first `convex dev` push has finished, so `globalSetup` could meet a backend without the functions. The `convex` webServer now sets `wait: { stderr: /Convex functions ready!/ }` and no `url`, so Playwright counts it as started only after that push. CI already waits for the same line. A test in `scripts/` fails when the installed Convex CLI no longer contains the text.
 
 `globalSetup` retries each of its four calls for up to 120 s of awake time. A reset that timed out is not retried, because it may still be running in the backend. A local `npm run e2e` reports each host suspension during the Playwright step, because every test in flight at the wake times out at once, and the README and the dev cycle treat such a run as no result.

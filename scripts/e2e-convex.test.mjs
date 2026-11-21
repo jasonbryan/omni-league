@@ -33,6 +33,7 @@ import {
   PROJECT_DIR,
   readLocalDeployment,
   resolveTarget,
+  retryUntilReady,
   ROOT,
   runConvex,
   seedDemoCalls,
@@ -671,7 +672,6 @@ describe('main setup (the wait for each admin call, in awake time)', () => {
   const timeout = { code: null, stdout: '', stderr: '', timedOut: true };
   const callName = (args) => args.slice(0, args[0] === 'env' ? 3 : 2).join(' ');
 
-  /** `reply(call, attempt, host)` is the CLI's answer to the `attempt`-th try of `call`. */
   async function setup(reply, host = fakeHost()) {
     const attempts = new Map();
     const calls = [];
@@ -822,6 +822,35 @@ describe('main setup (the wait for each admin call, in awake time)', () => {
       assert.match(output, /convex env set SITE_URL failed after 120 s/);
       assert.doesNotMatch(output, /host was suspended/);
     });
+  });
+});
+
+describe('retryUntilReady redacts a secret from every failure it throws', () => {
+  const SECRET = 'sentinel-secret-9f3a';
+  const failing = (extra) => async () => {
+    throw Object.assign(new Error(`convex call failed: ${SECRET}`), extra);
+  };
+  const options = { label: 'convex call', redact: SECRET, sleep: async () => {} };
+
+  it('after the deadline', async () => {
+    let time = 0;
+    await assert.rejects(
+      retryUntilReady(failing({}), {
+        ...options,
+        now: () => (time += 60_000),
+      }),
+      (failure) => !failure.message.includes(SECRET) && failure.message.includes('<secret>'),
+    );
+  });
+
+  it('for a timeout that is not retried', async () => {
+    await assert.rejects(
+      retryUntilReady(failing({ timedOut: true }), { ...options, retryTimeouts: false }),
+      (failure) =>
+        !failure.message.includes(SECRET) &&
+        failure.message.includes('<secret>') &&
+        failure.message.includes('not retried'),
+    );
   });
 });
 

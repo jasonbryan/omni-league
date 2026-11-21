@@ -26,7 +26,6 @@ export const DEPLOYMENT_NAME = 'anonymous-agent';
 
 const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
-// Per admin call in `setup`, in awake time (the host's suspended time does not count).
 export const SETUP_READY_TIMEOUT_MS = 120_000;
 const BACKOFF_FIRST_MS = 250;
 const BACKOFF_MAX_MS = 5_000;
@@ -143,9 +142,8 @@ function permanent(message) {
   return Object.assign(new Error(message), { permanent: true });
 }
 
-// A refusal is a failure of `runConvex` that is not a timeout. A refusal means the backend
-// answered with an error or no connection was made, so no call is still running; a timeout leaves
-// that open.
+// A failure that is not a timeout means the backend answered with an error or no connection was
+// made, so no call is still running; a timeout leaves that open.
 export async function retryUntilReady(
   attempt,
   {
@@ -164,6 +162,10 @@ export async function retryUntilReady(
     const ms = suspendedMs() - suspendedAtStart;
     return ms > 0 ? `; the host was suspended for ${Math.round(ms / 1000)} s during the wait` : '';
   };
+  const redacted = (failure) => {
+    const text = failure instanceof Error ? failure.message : String(failure);
+    return redact ? text.split(redact).join('<secret>') : text;
+  };
   let delay = BACKOFF_FIRST_MS;
   for (;;) {
     let failure;
@@ -175,17 +177,15 @@ export async function retryUntilReady(
     if (failure?.permanent) throw failure;
     if (failure?.timedOut && !retryTimeouts) {
       throw new Error(
-        `${failure.message}; not retried, because the call may still be running in the backend${suspension()}`,
+        `${redacted(failure)}; not retried, because the call may still be running in the backend${suspension()}`,
       );
     }
     const remaining = timeoutMs - (now() - start);
     if (remaining <= 0) {
       // No `cause`: only the redacted text may reach the output.
-      const text = failure instanceof Error ? failure.message : String(failure);
-      const last = redact ? text.split(redact).join('<secret>') : text;
       throw new Error(
         `e2e-convex: ${label} failed after ${Math.round(timeoutMs / 1000)} s: the local backend ` +
-          `is not accepting admin requests\nlast error: ${last}${suspension()}`,
+          `is not accepting admin requests\nlast error: ${redacted(failure)}${suspension()}`,
       );
     }
     await sleep(Math.min(delay, remaining));
@@ -496,8 +496,8 @@ export async function main(
           // run's secret encrypted.
           const secret = random(32).toString('hex');
           await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
-          // A reset that timed out may still be deleting rows in the backend, and a second one
-          // would delete what tests seed after it returns, so only a refusal is retried.
+          // A reset that timed out may still be deleting rows, and it would delete what tests seed
+          // after a retry returns, so only a refusal is retried.
           const reset = await retry(() => runConvex(['run', 'testing:reset'], outsideTest), {
             label: 'convex run testing:reset',
             retryTimeouts: false,
