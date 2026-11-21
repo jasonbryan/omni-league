@@ -9,7 +9,7 @@ import {
 } from '../core/data/convex/testing/fake-convex-client';
 import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { LOAD_PAGE } from '../shell/follow-link';
-import { dispatchSubmit } from '../core/testing/dispatch-submit';
+import { dispatchSubmit } from '../core/testing/dispatch-event';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import { SAND, sandResults } from './testing/pages';

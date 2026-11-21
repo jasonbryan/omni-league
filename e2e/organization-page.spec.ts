@@ -7,6 +7,7 @@ import type { ConsoleGuard } from './support/console-guard';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { documentRequests, gotoUnhydrated, settle } from './support/early-submit';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
@@ -946,6 +947,24 @@ test.describe('organization page: Registration open', () => {
     await screenshot(page, testInfo, '243-registration-open');
     await expectAccessible(page);
   });
+
+  test(
+    'browser: Register for a season pressed before hydration jumps to the section, with no console error',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const tenant = await openSeasonsTenant();
+      const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+      const requests = documentRequests(page);
+
+      await page.getByRole('link', { name: 'Register for a season' }).click();
+      unhydrated.release();
+      await hydrated(consoleGuard, { page });
+      await settle(page);
+
+      expect(page.url()).toBe(`${baseURL}${tenant.path}#registration-open`);
+      expect(requests).toEqual([]);
+    },
+  );
 
   test('browser: a Register link opens the season page at its registration card', async ({
     page,

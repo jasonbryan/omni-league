@@ -11,6 +11,7 @@ import {
 import { PRIMARY_OUTLET, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideTrophy } from '@ng-icons/lucide';
+import { isReplayedEvent } from '../core/replayed-event';
 import { MainFocusRecord } from '../core/replaced-focus';
 import { injectCurrentUrl } from '../shell/current-url';
 import { OfflineNote } from '../shell/offline-note';
@@ -164,6 +165,7 @@ export class PublicLayout {
   }
 
   protected skipToMain(event: MouseEvent): void {
+    if (isReplayedEvent(event)) return;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
       return;
     }

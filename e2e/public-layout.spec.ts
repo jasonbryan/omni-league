@@ -2,8 +2,9 @@
 // E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { documentRequests, gotoUnhydrated, settle } from './support/early-submit';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -100,6 +101,61 @@ test.describe('public layout: raw server HTML', () => {
     const { html } = await fetchRawHtml(request, `${paths[0]}?ott=SECRET-TOKEN`);
     expect(html).not.toContain('SECRET-TOKEN');
   });
+});
+
+test.describe('public layout: skip link before hydration', () => {
+  test('the skip link pressed before hydration focuses the main content, with no console error and no page load', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+    const requests = documentRequests(page);
+
+    const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+    await skipLink.focus();
+    await skipLink.press('Enter');
+    unhydrated.release();
+    await hydrated(consoleGuard, { page });
+    await settle(page);
+
+    await expect(page.locator('main#main')).toBeFocused();
+    expect(page.url()).toBe(`${baseURL}${tenant.path}#main`);
+    expect(requests).toEqual([]);
+  });
+});
+
+test.describe('public layout: skip link after hydration', () => {
+  for (const viewport of [
+    { width: 320, height: 800 },
+    { width: 1280, height: 720 },
+  ]) {
+    for (const input of ['keyboard', 'mouse'] as const) {
+      test(`the hydrated skip link focuses the main content and keeps the path by ${input} at ${viewport.width}px`, async ({
+        page,
+        consoleGuard,
+      }) => {
+        const { tenant } = await seed();
+        await page.setViewportSize(viewport);
+        await gotoHydrated(page, consoleGuard, tenant.path);
+        const requests = documentRequests(page);
+
+        const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+        // The link is visually hidden until focused, so the pointer goes to where it shows.
+        await skipLink.focus();
+        if (input === 'keyboard') {
+          await skipLink.press('Enter');
+        } else {
+          const box = (await skipLink.boundingBox())!;
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        }
+
+        await expect(page.locator('main#main')).toBeFocused();
+        expect(page.url()).toBe(`${baseURL}${tenant.path}`);
+        expect(requests).toEqual([]);
+      });
+    }
+  }
 });
 
 test.describe('public layout: signed in', () => {
