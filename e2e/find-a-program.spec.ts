@@ -1754,8 +1754,6 @@ const OVER_50_WOMENS_SOFTBALL = {
   ageGroup: 'over50',
 } as const;
 
-const ENDED_TOURNAMENT_BROWSE = '/programs?type=tournament&sport=softball&gender=womens&age=over50';
-
 interface EndedTournamentSeeded extends Seeded {
   upcomingName: string;
   endedName: string;
@@ -1823,7 +1821,7 @@ test.describe('find a program: ended tournaments', () => {
     page,
     consoleGuard,
   }, testInfo) => {
-    const { id, upcomingName } = await seedWithEndedTournament('Aab ');
+    const { id, upcomingName } = await seedWithEndedTournament();
     await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await expect(results(page)).toContainText(upcomingName);
@@ -1831,11 +1829,11 @@ test.describe('find a program: ended tournaments', () => {
     await expectAccessible(page);
     await screenshot(page, testInfo, '782-programs-ended-tournament-left-out');
 
-    await gotoHydrated(page, consoleGuard, ENDED_TOURNAMENT_BROWSE);
-    await expect(rowNames(page).filter({ hasText: id })).toHaveText([upcomingName]);
-
-    // Tests in parallel add tournaments to the browse as it is scanned, so the axe helper's tab walk runs on a view only this test's tenant fills.
-    await gotoHydrated(page, consoleGuard, `/programs?type=tournament&sport=softball&q=${id}`);
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      `/programs?type=tournament&sport=softball&gender=womens&age=over50&q=${id}`,
+    );
     await expect(rowNames(page)).toHaveText([upcomingName]);
     await expectAccessible(page);
 
@@ -1917,12 +1915,11 @@ test.describe('find a program: type chips in the browser', () => {
     await expect(rowNames(page)).toHaveText([tournamentName(id)]);
   });
 
-  test('the type chips pass the axe helper with the results, the empty type, and the browse, and nothing scrolls sideways at 320px', async ({
+  test('the type chips pass the axe helper with the results, the empty type, and a filtered search, and nothing scrolls sideways at 320px', async ({
     page,
     consoleGuard,
   }, testInfo) => {
     const { id } = await seedWithTournament();
-    const over60 = await seedOver60Tournaments();
     await gotoHydrated(page, consoleGuard, url(id));
     await expect(rowNames(page)).toHaveCount(3);
     await screenshot(page, testInfo, '350-programs-results');
@@ -1933,10 +1930,22 @@ test.describe('find a program: type chips in the browser', () => {
     await screenshot(page, testInfo, '350-programs-other-type');
     await expectAccessible(page);
 
-    await gotoHydrated(page, consoleGuard, OVER_60_BROWSE);
-    await expect(rowNames(page).filter({ hasText: over60.id }).first()).toBeVisible();
-    await screenshot(page, testInfo, '350-programs-browse');
+    await gotoHydrated(
+      page,
+      consoleGuard,
+      `/programs?type=tournament&sport=beach-volleyball&gender=coed&level=bb&q=${id}`,
+    );
+    await expect(rowNames(page)).toHaveText([tournamentName(id)]);
+    const filters = page.getByRole('list', { name: 'Active filters' });
+    await expect(filters.getByRole('link', { name: /^Gender: Coed/ })).toBeVisible();
+    await expect(filters.getByRole('link', { name: /^Level: BB/ })).toBeVisible();
+    await screenshot(page, testInfo, '350-programs-filtered-search');
     await expectAccessible(page);
+
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });
 
   test('no type chip moves while the answer to a type press loads', async ({
