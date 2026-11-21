@@ -8,6 +8,7 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
+import { dispatchSubmit } from '../core/testing/dispatch-submit';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { FindPage } from './find-page';
@@ -566,5 +567,32 @@ describe('FindPage layout', () => {
     ]);
     expect(footerLinks[0]).toEqual(['Find a program', '/programs']);
     expect(host(harness).querySelector('main#main[tabindex="-1"]')).not.toBeNull();
+  });
+});
+
+describe('FindPage form submitted during event replay', () => {
+  it('leaves the search to the browser: no preventDefault and no navigation', async () => {
+    const harness = await open();
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate');
+    input(harness).value = 'coed';
+    input(harness).dispatchEvent(new Event('input', { bubbles: true }));
+    const form = host(harness).querySelector<HTMLFormElement>('main form')!;
+    const { preventDefaultCalls } = dispatchSubmit(form, { replayed: true });
+    await settle(harness);
+    expect(preventDefaultCalls()).toBe(0);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.url).toBe('/programs');
+  });
+
+  it('searches through the router when the submit is not a replay', async () => {
+    const harness = await open();
+    input(harness).value = 'coed';
+    input(harness).dispatchEvent(new Event('input', { bubbles: true }));
+    const form = host(harness).querySelector<HTMLFormElement>('main form')!;
+    const { preventDefaultCalls } = dispatchSubmit(form);
+    await settle(harness);
+    expect(preventDefaultCalls()).toBe(1);
+    expect(TestBed.inject(Router).url).toBe('/programs?q=coed');
   });
 });

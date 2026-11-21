@@ -2,7 +2,9 @@ import type { Page } from '@playwright/test';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { gotoHydrated } from './support/hydrated';
+import { documentRequests, gotoUnhydrated, holdDocument, settle } from './support/early-submit';
+import { holdQueries } from './support/hold-queries';
+import { gotoHydrated, hydrated } from './support/hydrated';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -125,6 +127,66 @@ test.describe('top bar', () => {
 
     const box = await page.locator('header a[href="/"]').boundingBox();
     expect(box?.height).toBeLessThanOrEqual(44);
+  });
+
+  test.describe('a search from the bar on an organization page', () => {
+    const bar = (page: Page) => page.getByRole('banner');
+
+    async function seedFindable() {
+      const tenant = await seedTenant({
+        locations: [{ name: 'Sand Courts', address: '1 Beach Rd, Corpus Christi, TX 78401' }],
+        leagues: [{ name: 'Coed League', sport: 'soccer', locations: ['Sand Courts'] }],
+      });
+      return { tenant, id: tenant.slug.replace(/^e2e-/, '') };
+    }
+
+    test('a search submitted before hydration loads the results once, with no console error', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the bar field shows from 768px');
+      const { tenant, id } = await seedFindable();
+      const target = `/programs?q=${id}`;
+      const searches = await holdQueries(page, ['search:programs']);
+      const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+      const field = bar(page).getByRole('searchbox', { name: 'Find a program' });
+      const document = await holdDocument(page, target);
+
+      await field.fill(id);
+      // The held request would otherwise keep the press waiting for the navigation to commit.
+      await field.press('Enter', { noWaitAfter: true });
+      await expect.poll(document.isRequested).toBe(true);
+      unhydrated.release();
+      await hydrated(consoleGuard, { page });
+      await settle(page);
+
+      expect(page.url()).toBe(`${baseURL}${tenant.path}`);
+      expect(searches.isHolding()).toBe(false);
+      searches.release();
+      document.release();
+      await expect(page).toHaveURL(`${baseURL}${target}`);
+      await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
+      expect(document.requests).toEqual([target]);
+    });
+
+    test('a hydrated bar search navigates in the app with no document request', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'the bar field shows from 768px');
+      const { tenant, id } = await seedFindable();
+      await gotoHydrated(page, consoleGuard, tenant.path);
+      const requests = documentRequests(page);
+
+      const field = bar(page).getByRole('searchbox', { name: 'Find a program' });
+      await field.fill(id);
+      await field.press('Enter');
+      await expect(page).toHaveURL(`${baseURL}/programs?q=${id}`);
+      await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
+      expect(requests).toEqual([]);
+    });
   });
 
   test.describe('signed in', () => {

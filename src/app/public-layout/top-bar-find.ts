@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideSearch } from '@ng-icons/lucide';
+import { isReplayedEvent } from '../core/replayed-event';
 
 const FIND_PATH = '/programs';
 
@@ -54,6 +55,7 @@ export class TopBarFind {
   protected readonly action = FIND_PATH;
 
   protected submit(event: Event, value: string): void {
+    if (isReplayedEvent(event)) return;
     event.preventDefault();
     const q = value.trim();
     void this.router.navigate([FIND_PATH], { queryParams: q === '' ? {} : { q } });

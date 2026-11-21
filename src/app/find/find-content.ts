@@ -27,6 +27,7 @@ import { campAgesLabel } from '../../../convex/lib/campInput';
 import type { ProgramType } from '../../../convex/lib/programs';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { sportName, sportSegment, type Sport } from '../../../convex/lib/sports';
+import { isReplayedEvent } from '../core/replayed-event';
 import { isPlainClick } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import type { LeagueFacet } from '../organizations/division-filters';
@@ -618,6 +619,7 @@ export class FindContent {
   }
 
   protected submit(event: Event): void {
+    if (isReplayedEvent(event)) return;
     event.preventDefault();
     this.pendingFocus.set(null);
     this.searched.emit(parseSearchQuery([this.draft()]));

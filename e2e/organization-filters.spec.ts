@@ -1,15 +1,18 @@
 import type { Page, TestInfo } from '@playwright/test';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, checkReflow, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { answerWithClientShell } from './support/client-shell';
 import type { ConsoleGuard } from './support/console-guard';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { documentRequests, gotoUnhydrated, holdDocument, settle } from './support/early-submit';
 import { holdQueries } from './support/hold-queries';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
   dateFromToday,
   numberedLocations,
@@ -547,6 +550,57 @@ test.describe('organization filters in the browser', () => {
     ]);
   });
 
+  test(
+    'Show leagues pressed before hydration loads the filtered page once, with no console error',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard, browserName }) => {
+      test.skip(
+        browserName === 'webkit',
+        'WebKit does not deliver the click on the Filters summary while the page chunk is held',
+      );
+      const tenant = await filterTenant();
+      const target = `${tenant.path}?gender=mens`;
+      const unhydrated = await gotoUnhydrated(page, consoleGuard, tenant.path, 'OrganizationPage');
+      const form = page.getByRole('search', { name: 'Filter leagues' });
+      await form.getByText('Filters').click();
+      await form.getByText('Men', { exact: true }).click();
+      const document = await holdDocument(page, target);
+
+      // The held request would otherwise keep the press waiting for the navigation to commit.
+      await form.getByRole('button', { name: 'Show leagues' }).click({ noWaitAfter: true });
+      await expect.poll(document.isRequested).toBe(true);
+      unhydrated.release();
+      await hydrated(consoleGuard, { page });
+      await settle(page);
+
+      expect(page.url()).toBe(`${baseURL}${tenant.path}`);
+      document.release();
+      await expect(page).toHaveURL(`${baseURL}${target}`);
+      await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
+        'Thursday Men 4s',
+      ]);
+      await expect(count(page)).toHaveText('1 of 7 leagues');
+      expect(document.requests).toEqual([target]);
+    },
+  );
+
+  test('Show leagues on a hydrated page navigates in the app with no document request', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await gotoHydrated(page, consoleGuard, tenant.path);
+    const requests = documentRequests(page);
+
+    await (isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page)).click();
+    const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
+    await overlay.getByText('Men', { exact: true }).click();
+    await overlay.getByRole('button', { name: /^Show \d+ leagues?$/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
+    await expect(count(page)).toHaveText('1 of 7 leagues');
+    expect(requests).toEqual([]);
+  });
+
   test('the Locations page links keep gender=coed, and a filter change keeps locations=2', async ({
     page,
     consoleGuard,
@@ -580,12 +634,30 @@ test.describe('organization filters in the browser', () => {
       .getByRole('link', { name: 'Next page' })
       .click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await page.clock.fastForward('00:11');
+    await expect(page).toHaveURL(
+      `${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2#leagues`,
+    );
+    // The page-load timer starts in the render that marks the list busy, so the clock moves after it.
+    await expect(page.locator('#leagues ul[aria-busy="true"]')).toBeVisible();
+    await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute(
       'href',
       `${tenant.path}?format=4v4&format=6v6&leagues=2`,
     );
     held.release();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+    ).toHaveCount(0);
+    await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
+      'Wednesday Reverse Coed 4s',
+    ]);
+    await expect(page.locator('#leagues [aria-busy="true"]')).toHaveCount(0);
+    await expect(page).toHaveURL(
+      `${baseURL}${tenant.path}?format=4v4&format=6v6&leagues=2#leagues`,
+    );
   });
 
   test('the filtered page with its filter buttons passes the axe helper', async ({
