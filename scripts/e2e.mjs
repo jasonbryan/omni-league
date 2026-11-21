@@ -5,6 +5,7 @@ import { constants } from 'node:os';
 import { join } from 'node:path';
 import { LOCAL_CONVEX_URL, remoteBaseUrl, ROOT } from './e2e-convex.mjs';
 import { withLock } from './e2e-lock.mjs';
+import { reportSuspensions } from './host-suspend.mjs';
 
 export function e2ePlan({ env }, playwrightArgs) {
   const remote = remoteBaseUrl(env) !== undefined;
@@ -61,11 +62,12 @@ export function needsLock({ env }) {
  *   env?: NodeJS.ProcessEnv,
  *   lock?: Parameters<typeof withLock>[1],
  *   plan?: typeof e2ePlan,
+ *   hostClocks?: Parameters<typeof reportSuspensions>[1],
  * }} [options]
  */
 export async function runE2e(
   playwrightArgs,
-  { env = process.env, lock = {}, plan = e2ePlan } = {},
+  { env = process.env, lock = {}, plan = e2ePlan, hostClocks = {} } = {},
 ) {
   const abort = new AbortController();
   let received;
@@ -78,7 +80,12 @@ export async function runE2e(
   const steps = async () => {
     for (const step of plan({ env }, playwrightArgs)) {
       if (received) break;
-      const code = await runStep(step);
+      // Only this step has tests that time out when the host sleeps: the lock wait, the push, and
+      // the build time out nothing.
+      const code =
+        step.name === 'playwright'
+          ? await reportSuspensions(() => runStep(step), hostClocks)
+          : await runStep(step);
       if (code !== 0) {
         console.error(`e2e: ${step.name} failed (exit ${code})`);
         return code;

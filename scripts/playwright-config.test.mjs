@@ -83,3 +83,80 @@ describe('the Playwright output paths', () => {
     }
   });
 });
+
+describe('the convex webServer', () => {
+  const READY_LINE = '✔ 14:47:03 Convex functions ready! (922.52ms)';
+
+  // The spec imports the config and writes what it holds; a webServer array does not reach a
+  // reporter, and `--list` starts no server.
+  let loaded;
+  function loadedWebServers() {
+    loaded ??= loadWebServers();
+    return loaded;
+  }
+
+  function loadWebServers() {
+    const dir = join(scratch, 'web-servers');
+    cpSync(join(root, 'playwright.config.ts'), join(dir, 'playwright.config.ts'));
+    cpSync(join(root, 'e2e', 'support'), join(dir, 'e2e', 'support'), { recursive: true });
+    cpSync(join(root, 'e2e', 'global-setup.ts'), join(dir, 'e2e', 'global-setup.ts'));
+    symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
+    const dump = join(dir, 'web-servers.json');
+    writeFileSync(
+      join(dir, 'e2e', 'dump.spec.ts'),
+      [
+        "import { test } from '@playwright/test';",
+        "import { writeFileSync } from 'node:fs';",
+        "import config from '../playwright.config';",
+        'const servers = [config.webServer ?? []].flat().map((server) => ({',
+        '  name: server.name,',
+        '  keys: Object.keys(server),',
+        '  readyLineMatches: server.wait?.stderr?.test(process.env.READY_LINE ?? "") ?? false,',
+        '  stdoutMatches: server.wait?.stdout?.test(process.env.READY_LINE ?? "") ?? false,',
+        '}));',
+        'writeFileSync(process.env.DUMP_FILE!, JSON.stringify(servers));',
+        "test('listed', () => {});",
+      ].join('\n'),
+    );
+    const env = { ...process.env, DUMP_FILE: dump, READY_LINE };
+    delete env.E2E_BASE_URL;
+    delete env.E2E_RUN_NAME;
+    const result = spawnSync(
+      process.execPath,
+      [join(root, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--list'],
+      { cwd: dir, env, encoding: 'utf8' },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(readFileSync(dump, 'utf8'));
+  }
+
+  it('is ready at the first `Convex functions ready!` on stderr, with no url and no reuse option', () => {
+    const convex = loadedWebServers().find((server) => server.name === 'convex');
+    assert.ok(convex, 'a convex webServer');
+    assert.ok(convex.keys.includes('wait'), 'it waits for a line');
+    assert.equal(convex.readyLineMatches, true, 'the CLI line on stderr marks it ready');
+    assert.ok(!convex.keys.includes('url'), 'a url would also mark it ready, at /version');
+    assert.ok(
+      !convex.keys.includes('reuseExistingServer'),
+      'the option does nothing without a url',
+    );
+  });
+
+  it('is not ready at the CLI line on stdout', () => {
+    const convex = loadedWebServers().find((server) => server.name === 'convex');
+    assert.equal(convex.stdoutMatches, false);
+  });
+
+  it('is installed with a CLI that still prints the ready line, which the ci workflow also greps', () => {
+    const bundle = readFileSync(
+      join(root, 'node_modules', 'convex', 'dist', 'cli.bundle.cjs'),
+      'utf8',
+    );
+    assert.ok(
+      bundle.includes('Convex functions ready!'),
+      'a Convex CLI that renames the line leaves the convex webServer waiting until its timeout',
+    );
+    const workflow = readFileSync(join(root, '.github', 'workflows', 'e2e.yml'), 'utf8');
+    assert.ok(workflow.includes("grep -q 'Convex functions ready!'"));
+  });
+});

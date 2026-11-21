@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { connect } from 'node:net';
 import { constants, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { watchSuspension } from './host-suspend.mjs';
 
 export const ROOT = join(import.meta.dirname, '..');
 export const PROJECT_DIR = join(ROOT, '.convex-e2e');
@@ -25,7 +26,7 @@ export const DEPLOYMENT_NAME = 'anonymous-agent';
 
 const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
-export const READY_TIMEOUT_MS = 60_000;
+export const SETUP_READY_TIMEOUT_MS = 120_000;
 const BACKOFF_FIRST_MS = 250;
 const BACKOFF_MAX_MS = 5_000;
 // Where an older CLI kept every checkout's anonymous deployments, under the home directory.
@@ -141,11 +142,30 @@ function permanent(message) {
   return Object.assign(new Error(message), { permanent: true });
 }
 
+// A failure that is not a timeout means the backend answered with an error or no connection was
+// made, so no call is still running; a timeout leaves that open.
 export async function retryUntilReady(
   attempt,
-  { label, redact = '', timeoutMs = READY_TIMEOUT_MS, sleep = defaultSleep, now = Date.now },
+  {
+    label,
+    redact = '',
+    timeoutMs = SETUP_READY_TIMEOUT_MS,
+    sleep = defaultSleep,
+    now = () => performance.now(),
+    suspendedMs = () => 0,
+    retryTimeouts = true,
+  },
 ) {
   const start = now();
+  const suspendedAtStart = suspendedMs();
+  const suspension = () => {
+    const ms = suspendedMs() - suspendedAtStart;
+    return ms > 0 ? `; the host was suspended for ${Math.round(ms / 1000)} s during the wait` : '';
+  };
+  const redacted = (failure) => {
+    const text = failure instanceof Error ? failure.message : String(failure);
+    return redact ? text.split(redact).join('<secret>') : text;
+  };
   let delay = BACKOFF_FIRST_MS;
   for (;;) {
     let failure;
@@ -155,14 +175,17 @@ export async function retryUntilReady(
       failure = caught;
     }
     if (failure?.permanent) throw failure;
+    if (failure?.timedOut && !retryTimeouts) {
+      throw new Error(
+        `${redacted(failure)}; not retried, because the call may still be running in the backend${suspension()}`,
+      );
+    }
     const remaining = timeoutMs - (now() - start);
     if (remaining <= 0) {
       // No `cause`: only the redacted text may reach the output.
-      const text = failure instanceof Error ? failure.message : String(failure);
-      const last = redact ? text.split(redact).join('<secret>') : text;
       throw new Error(
         `e2e-convex: ${label} failed after ${Math.round(timeoutMs / 1000)} s: the local backend ` +
-          `is not accepting admin requests\nlast error: ${last}`,
+          `is not accepting admin requests\nlast error: ${redacted(failure)}${suspension()}`,
       );
     }
     await sleep(Math.min(delay, remaining));
@@ -353,9 +376,12 @@ export async function runConvex(
   }
   const call = args.slice(0, 2).join(' ');
   if (result.timedOut) {
-    throw new Error(
-      `e2e-convex: convex ${call} got no answer within ${Math.round(timeoutMs / 1000)} s: the ` +
-        `local backend at ${target.url} (convex-local-backend) may be stalled`,
+    throw Object.assign(
+      new Error(
+        `e2e-convex: convex ${call} got no answer within ${Math.round(timeoutMs / 1000)} s: the ` +
+          `local backend at ${target.url} (convex-local-backend) may be stalled`,
+      ),
+      { timedOut: true },
     );
   }
   if (result.signalled) {
@@ -412,6 +438,7 @@ export async function main(
     instanceName,
     portsFree = assertPortsFree,
     wait = {},
+    hostClocks = {},
     randomBytes: random = randomBytes,
   } = {},
 ) {
@@ -443,29 +470,46 @@ export async function main(
         });
       }
       case 'setup': {
-        // The webServer is up once `/version` answers, but the backend can still refuse admin
-        // requests for a moment, so each `env set` retries until it accepts one.
-        const setEnv = (name, value, { redact = '' } = {}) =>
-          retryUntilReady(() => runConvex(['env', 'set', name, value], outsideTest), {
-            ...wait,
-            label: `convex env set ${name}`,
-            redact,
+        // The webServer is up once the first push has finished, but the backend can still refuse
+        // admin requests for a moment, so each call retries until it accepts one.
+        const watch = watchSuspension(hostClocks);
+        watch.start();
+        try {
+          const retry = (attempt, options) =>
+            retryUntilReady(attempt, {
+              now: watch.awakeNow,
+              suspendedMs: watch.suspendedMs,
+              ...wait,
+              ...options,
+            });
+          const setEnv = (name, value, { redact = '' } = {}) =>
+            retry(() => runConvex(['env', 'set', name, value], outsideTest), {
+              label: `convex env set ${name}`,
+              redact,
+            });
+          await setEnv('IS_TEST', 'true');
+          await setEnv('SITE_URL', E2E_SITE_URL);
+          // A new secret every run, so none is stored anywhere. It is never printed: on failure
+          // only its name is. It is hex (256 bits), never base64url: a base64url value starts with
+          // `-` in 1 run of 64, and `convex env set` reads that as an option.
+          // `testing:reset` then clears the component's `jwks`, whose signing key the previous
+          // run's secret encrypted.
+          const secret = random(32).toString('hex');
+          await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
+          // A reset that timed out may still be deleting rows, and it would delete what tests seed
+          // after a retry returns, so only a refusal is retried.
+          const reset = await retry(() => runConvex(['run', 'testing:reset'], outsideTest), {
+            label: 'convex run testing:reset',
+            retryTimeouts: false,
           });
-        await setEnv('IS_TEST', 'true');
-        await setEnv('SITE_URL', E2E_SITE_URL);
-        // A new secret every run, so none is stored anywhere. It is never printed: on failure only
-        // its name is. It is hex (256 bits), never base64url: a base64url value starts with `-` in 1
-        // run of 64, and `convex env set` reads that as an option.
-        // `testing:reset` then clears the component's `jwks`, whose signing key the previous run's
-        // secret encrypted.
-        const secret = random(32).toString('hex');
-        await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
-        const reset = await runConvex(['run', 'testing:reset'], outsideTest);
-        log(
-          `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +
-            `${LOCAL_CONVEX_URL}; testing:reset deleted ${JSON.stringify(JSON.parse(reset))}`,
-        );
-        return 0;
+          log(
+            `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +
+              `${LOCAL_CONVEX_URL}; testing:reset deleted ${JSON.stringify(JSON.parse(reset))}`,
+          );
+          return 0;
+        } finally {
+          watch.stop();
+        }
       }
       case 'seed-demo': {
         let inserted = '';
