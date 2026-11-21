@@ -7,7 +7,6 @@ import { dirname, join, resolve } from 'node:path';
 // Equal to `RUN_NAME` in e2e/support/env.ts, which an `.mjs` script cannot import.
 const RUN_NAME = /^[a-z0-9][a-z0-9-]*$/;
 
-/** The last value of `--name <value>` or `--name=<value>` before a bare `--`. */
 function lastOption(args, name) {
   let value;
   for (let i = 0; i < args.length; i += 1) {
