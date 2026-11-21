@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,7 @@ import {
   assertNoSharedState,
   assertPortsFree,
   BACKEND,
+  BACKEND_DATA_NAMES,
   captureCli,
   convexCliEnv,
   DEPLOYMENT_NAME,
@@ -863,6 +865,167 @@ describe('main with shared anonymous-agent state in the home directory', () => {
     assert.equal(started.length, 1);
     assert.equal(started[0].options.cwd, dir);
   });
+});
+
+describe('main push deletes the earlier backend data', () => {
+  const KEPT = ['config.json', 'dashboard.json'];
+
+  function projectWithData() {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const local = join(dir, '.convex', 'local', 'default');
+    writeFileSync(join(local, 'dashboard.json'), '{}');
+    for (const name of BACKEND_DATA_NAMES) {
+      if (name === 'convex_local_storage') {
+        mkdirSync(join(local, name, 'files'), { recursive: true });
+        writeFileSync(join(local, name, 'files', 'blob'), 'x');
+      } else {
+        writeFileSync(join(local, name), 'x');
+      }
+    }
+    return { dir, local };
+  }
+
+  function homeWithLegacyState() {
+    const homeDir = mkdtempSync(join(tmpdir(), 'e2e-convex-home-'));
+    temps.push(homeDir);
+    mkdirSync(join(homeDir, ...SHARED_STATE_DIRNAME, DEPLOYMENT_NAME), { recursive: true });
+    return homeDir;
+  }
+
+  function present(local) {
+    return readdirSync(local).sort();
+  }
+
+  const noPortsHeld = async () => {};
+
+  it('removes the data files and keeps the config before the CLI starts', async () => {
+    const { dir, local } = projectWithData();
+    const seenAtStart = [];
+    const code = await main(['push'], {
+      env: {},
+      homeDir: mkdtempSync(join(tmpdir(), 'e2e-convex-home-')),
+      projectDir: dir,
+      portsFree: noPortsHeld,
+      startCli: async () => {
+        seenAtStart.push(present(local));
+        return 0;
+      },
+      log: () => {},
+      error: () => {},
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(seenAtStart, [KEPT]);
+  });
+
+  it('deletes nothing and starts nothing when a port is busy', async () => {
+    const { dir, local } = projectWithData();
+    const before = present(local);
+    const started = [];
+    const code = await main(['push'], {
+      env: {},
+      homeDir: mkdtempSync(join(tmpdir(), 'e2e-convex-home-')),
+      projectDir: dir,
+      portsFree: async () => {
+        throw new Error('port 3210 is in use');
+      },
+      startCli: async (...args) => {
+        started.push(args);
+        return 0;
+      },
+      log: () => {},
+      error: () => {},
+    });
+    assert.equal(code, 1);
+    assert.equal(started.length, 0);
+    assert.deepEqual(present(local), before);
+  });
+
+  it('with the legacy directory and its own config, deletes the data and later runs still pass the check', async () => {
+    const { dir, local } = projectWithData();
+    const homeDir = homeWithLegacyState();
+    const options = {
+      env: {},
+      homeDir,
+      projectDir: dir,
+      portsFree: noPortsHeld,
+      startCli: async () => 0,
+      log: () => {},
+      error: () => {},
+    };
+    assert.equal(await main(['push'], options), 0);
+    assert.deepEqual(present(local), KEPT);
+    assert.equal(await main(['push'], options), 0);
+    assert.equal(await main(['serve'], options), 0);
+  });
+
+  it('with the legacy directory and no config, refuses, deletes nothing, and starts nothing', async () => {
+    const dir = projectDir();
+    const local = join(dir, '.convex', 'local', 'default');
+    mkdirSync(local, { recursive: true });
+    writeFileSync(join(local, 'convex_local_backend.sqlite3'), 'x');
+    const started = [];
+    const code = await main(['push'], {
+      env: {},
+      homeDir: homeWithLegacyState(),
+      projectDir: dir,
+      portsFree: noPortsHeld,
+      startCli: async (...args) => {
+        started.push(args);
+        return 0;
+      },
+      log: () => {},
+      error: () => {},
+    });
+    assert.equal(code, 1);
+    assert.equal(started.length, 0);
+    assert.deepEqual(present(local), ['convex_local_backend.sqlite3']);
+  });
+
+  it('serve deletes nothing', async () => {
+    const { dir, local } = projectWithData();
+    const before = present(local);
+    const code = await main(['serve'], {
+      env: {},
+      homeDir: mkdtempSync(join(tmpdir(), 'e2e-convex-home-')),
+      projectDir: dir,
+      portsFree: noPortsHeld,
+      startCli: async () => 0,
+      log: () => {},
+      error: () => {},
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(present(local), before);
+  });
+
+  it(
+    'fails naming the path and starts nothing when a file cannot be deleted',
+    { skip: process.getuid?.() === 0 && 'root ignores directory permissions' },
+    async (t) => {
+      const { dir, local } = projectWithData();
+      chmodSync(local, 0o500);
+      t.after(() => chmodSync(local, 0o700));
+      const started = [];
+      const errors = [];
+      const code = await main(['push'], {
+        env: {},
+        homeDir: mkdtempSync(join(tmpdir(), 'e2e-convex-home-')),
+        projectDir: dir,
+        portsFree: noPortsHeld,
+        startCli: async (...args) => {
+          started.push(args);
+          return 0;
+        },
+        log: () => {},
+        error: (line) => errors.push(line),
+      });
+      assert.equal(code, 1);
+      assert.equal(started.length, 0);
+      assert.ok(
+        errors.join('\n').includes(join(local, 'convex_local_backend.sqlite3')),
+        errors.join('\n'),
+      );
+    },
+  );
 });
 
 describe('e2ePlan (npm run e2e)', () => {

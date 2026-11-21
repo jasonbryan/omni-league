@@ -115,6 +115,28 @@ export function assertNoSharedState({ homeDir = homedir(), projectDir = PROJECT_
   }
 }
 
+export const BACKEND_DATA_NAMES = Object.freeze([
+  'convex_local_backend.sqlite3',
+  'convex_local_backend.sqlite3-wal',
+  'convex_local_backend.sqlite3-shm',
+  'convex_local_storage',
+]);
+
+// `config.json` and `dashboard.json` stay, so the CLI reuses the deployment, its admin key, and its
+// ports instead of minting a new key, which needs the network.
+export function deleteBackendData(projectDir = PROJECT_DIR) {
+  const dir = join(projectDir, '.convex', 'local', 'default');
+  for (const name of BACKEND_DATA_NAMES) {
+    const path = join(dir, name);
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch (failure) {
+      const reason = failure instanceof Error ? failure.message : String(failure);
+      throw new Error(`e2e-convex: cannot delete ${path}: ${reason}`, { cause: failure });
+    }
+  }
+}
+
 function permanent(message) {
   return Object.assign(new Error(message), { permanent: true });
 }
@@ -409,6 +431,8 @@ export async function main(
         prepareProjectDir(projectDir);
         assertNoSharedState({ homeDir, projectDir });
         await portsFree([BACKEND.cloudPort, BACKEND.sitePort]);
+        // A backend whose ports are free is not running, so its files are safe to delete.
+        if (command === 'push') deleteBackendData(projectDir);
         log(
           `e2e-convex: convex dev${command === 'push' ? ' --once' : ''} on the anonymous local ` +
             `backend ${BACKEND.backendVersion} at ${LOCAL_CONVEX_URL}`,
