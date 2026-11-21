@@ -5,6 +5,7 @@ import {
   type ExpectedFailedRequest,
 } from './console-guard';
 import { remoteBaseUrl } from './env';
+import { LOCAL_BACKEND_ERROR_ANNOTATION } from './local-backend-error';
 import { stubNetlifyDrawer } from './netlify-drawer';
 
 export interface ConsoleFixtureOptions {
@@ -75,6 +76,10 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions & Netlif
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));
       await use(guard);
+      await guard.settle();
+      for (const description of guard.localBackendErrors) {
+        testInfo.annotations.push({ type: LOCAL_BACKEND_ERROR_ANNOTATION, description });
+      }
       // `test.skip()` in the body runs after `test.use()` set the allowances.
       guard.verify({ skipped: testInfo.status === 'skipped' });
     },

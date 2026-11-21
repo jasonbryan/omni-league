@@ -1,4 +1,12 @@
 import type { ConsoleMessage, Page, Request } from '@playwright/test';
+import {
+  BackendRecorder,
+  boundedWait,
+  SETTLE_TIMEOUT_MS,
+  type CdpSession,
+} from './backend-recorder';
+import { LOCAL_CONVEX_SITE_URL, remoteBaseUrl } from './env';
+import { allowsLocalBackendError, describeAnswer } from './local-backend-error';
 
 export type ExpectedDocumentStatus = 404;
 
@@ -18,6 +26,8 @@ export interface ConsoleGuardOptions {
   expectedFailedRequests?: readonly ExpectedFailedRequest[];
   /** `console.warn` messages the test expects: a string matches the start, a RegExp anywhere. */
   expectedConsoleWarnings?: readonly (string | RegExp)[];
+  /** A stub server in the harness stands in for the local backend on another origin. */
+  localBackendOrigin?: string;
 }
 
 export interface VerifyOptions {
@@ -27,6 +37,9 @@ export interface VerifyOptions {
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
 const FAILED_RESOURCE =
   /^Failed to load resource: (?:the server responded with a status of (\d{3})\b|(net::ERR_[A-Z_]+))/;
+const CORS_BLOCK =
+  /^Access to (?:fetch|XMLHttpRequest) at '([^']+)' from origin '[^']*' has been blocked by CORS policy/;
+const NETWORK_ERROR = /^Failed to load resource: net::ERR_[A-Z_]+/;
 const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
 /**
  * WebKit logs an auth fetch it cancels for a leaving document as an access-control failure, which
@@ -35,6 +48,13 @@ const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
  */
 const CANCELLED_AUTH_FETCH =
   /^Fetch API cannot load https?:\/\/[^/\s]+\/api\/auth\/(?:convex\/token|get-session) due to access control checks\.$/;
+
+/** Judged when the problems are read, because the browser reports the answer after the console error. */
+interface DeferredFailure {
+  line: string;
+  url: string;
+  recorder: BackendRecorder;
+}
 
 function withoutFragment(url: string): string {
   const hash = url.indexOf('#');
@@ -50,7 +70,11 @@ function withoutFragment(url: string): string {
  * not failed for unused allowances of any kind.
  */
 export class ConsoleGuard {
-  private readonly failures: string[] = [];
+  private readonly failures: (string | DeferredFailure)[] = [];
+  private readonly recorders = new Map<Page, BackendRecorder>();
+  private readonly recorderSetups: Promise<void>[] = [];
+  private readonly allowedBackendErrors = new Map<string, string>();
+  private readonly localBackendOrigin: string;
   private readonly logs: string[] = [];
   private readonly usedConvexAllowances = new Set<string>();
   private readonly expectedConvexErrors: readonly string[];
@@ -71,9 +95,11 @@ export class ConsoleGuard {
     this.expectedConvexErrors = options.expectedConvexErrors ?? [];
     this.expectedFailedRequests = options.expectedFailedRequests ?? [];
     this.expectedConsoleWarnings = options.expectedConsoleWarnings ?? [];
+    this.localBackendOrigin = options.localBackendOrigin ?? LOCAL_CONVEX_SITE_URL;
   }
 
   attach(page: Page): void {
+    if (remoteBaseUrl === undefined) this.recorderSetups.push(this.startRecorder(page));
     const leaving = this.trackLeaving(page);
     page.on('pageerror', (error) => {
       // Playwright's WebKit backend keeps the logged text only as the stack's first line.
@@ -91,6 +117,21 @@ export class ConsoleGuard {
         });
       }
     });
+  }
+
+  /** Chromium only: another engine has no session, and its backend errors then fail the test. */
+  private async startRecorder(page: Page): Promise<void> {
+    try {
+      const session = await page.context().newCDPSession(page);
+      const recorder = new BackendRecorder(
+        session as unknown as CdpSession,
+        this.localBackendOrigin,
+      );
+      this.recorders.set(page, recorder);
+      await recorder.ready;
+    } catch {
+      this.recorders.delete(page);
+    }
   }
 
   /**
@@ -121,6 +162,19 @@ export class ConsoleGuard {
     return () => pending !== null;
   }
 
+  // `problems()` is synchronous, but the browser reports an answer after its console error.
+  async settle(): Promise<void> {
+    const setups = Promise.all(this.recorderSetups).then(() =>
+      Promise.all([...this.recorders.values()].map((recorder) => recorder.settle())),
+    );
+    await boundedWait(setups, SETTLE_TIMEOUT_MS);
+  }
+
+  get localBackendErrors(): readonly string[] {
+    this.resolveFailures();
+    return [...this.allowedBackendErrors.values()];
+  }
+
   get logMessages(): readonly string[] {
     return this.logs;
   }
@@ -139,7 +193,7 @@ export class ConsoleGuard {
    * console failures still are.
    */
   problems({ skipped = false }: VerifyOptions = {}): string[] {
-    if (skipped) return [...this.failures];
+    if (skipped) return this.resolveFailures();
     const unusedConvex = this.expectedConvexErrors
       .filter((name) => !this.usedConvexAllowances.has(name))
       .map(
@@ -163,7 +217,28 @@ export class ConsoleGuard {
           : `expectedConsoleWarnings entry ${String(entry)} was not used: no console.warn ` +
             `matched it; remove the stale entry`,
       );
-    return [...this.failures, ...unusedConvex, ...unusedRequests, ...unusedWarnings];
+    return [...this.resolveFailures(), ...unusedConvex, ...unusedRequests, ...unusedWarnings];
+  }
+
+  private resolveFailures(): string[] {
+    const lines: string[] = [];
+    for (const failure of this.failures) {
+      const line = typeof failure === 'string' ? failure : this.resolveDeferred(failure);
+      if (line !== null) lines.push(line);
+    }
+    return lines;
+  }
+
+  /** convex-local-backend answers some auth requests itself, with no CORS headers; the app never does. */
+  private resolveDeferred({ line, url, recorder }: DeferredFailure): string | null {
+    const answers = recorder.failedAnswers(url);
+    const context = { origin: this.localBackendOrigin, remote: remoteBaseUrl !== undefined };
+    if (answers.length > 0 && answers.every((answer) => allowsLocalBackendError(answer, context))) {
+      for (const answer of answers)
+        this.allowedBackendErrors.set(answer.id, describeAnswer(answer));
+      return null;
+    }
+    return answers.length === 0 ? line : `${line} [${answers.map(describeAnswer).join('; ')}]`;
   }
 
   verify(options: VerifyOptions = {}): void {
@@ -194,7 +269,22 @@ export class ConsoleGuard {
     if (this.isExpectedDocument404(page, message, text)) return;
     if (this.matchConvexAllowance(text)) return;
     if (this.matchRequestAllowance(text, url)) return;
-    this.failures.push(`console.error: ${text}${at}`);
+    const line = `console.error: ${text}${at}`;
+    const backendUrl = this.localBackendRequestUrl(text, url);
+    const recorder = this.recorders.get(page);
+    this.failures.push(
+      backendUrl !== undefined && recorder ? { line, url: backendUrl, recorder } : line,
+    );
+  }
+
+  private localBackendRequestUrl(text: string, locationUrl: string): string | undefined {
+    const url = CORS_BLOCK.exec(text)?.[1] ?? (NETWORK_ERROR.test(text) ? locationUrl : undefined);
+    if (url === undefined) return undefined;
+    try {
+      return new URL(url).origin === new URL(this.localBackendOrigin).origin ? url : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private matchWarningAllowance(text: string): boolean {
