@@ -2,7 +2,6 @@ import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 import {
   baseURL,
   LOCAL_BASE_URL,
-  LOCAL_CONVEX_URL,
   LOCAL_PORT,
   remoteBaseUrl,
   runOutput,
@@ -74,10 +73,10 @@ export default defineConfig({
         {
           name: 'convex',
           command: 'node scripts/e2e-convex.mjs serve',
-          url: `${LOCAL_CONVEX_URL}/version`,
-          // Never reuse a backend that is already running: it may be another session's, and
-          // globalSetup resets the backend it targets. A busy port fails the run instead.
-          reuseExistingServer: false,
+          // Not `url`: `/version` answers before the first push ends, and the setup calls that
+          // follow would then meet a backend without the functions. A busy port makes `serve` exit
+          // 1, which Playwright reports as a failed start.
+          wait: { stderr: /Convex functions ready!/ },
           // The first start in a fresh checkout or runner downloads the pinned backend (63.7 MB).
           timeout: 120_000,
           gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },

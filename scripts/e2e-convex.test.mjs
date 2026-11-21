@@ -40,6 +40,7 @@ import {
   TIMEOUTS,
 } from './e2e-convex.mjs';
 import { e2ePlan } from './e2e.mjs';
+import { fakeHost } from './host-suspend-fake.mjs';
 
 const ADMIN_KEY = 'anonymous-agent|sentinel-admin-key-0c5d';
 const CLOUD_ENV_LOCAL =
@@ -579,14 +580,14 @@ describe('main setup (globalSetup)', () => {
     const { code, calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET', clock });
     assert.equal(code, 1);
     assert.match(output, /convex env set BETTER_AUTH_SECRET failed/);
-    assert.match(output, /after 60 s/);
+    assert.match(output, /after 120 s/);
     assert.match(output, /not accepting admin requests/);
     const attempts = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET');
     assert.ok(attempts.length > 2, 'it retried');
     assert.equal(
       clock.sleeps.reduce((sum, ms) => sum + ms, 0),
-      60_000,
-      'it waits the full 60 s',
+      120_000,
+      'it waits the full 120 s',
     );
     assert.ok(Math.max(...clock.sleeps) <= 5_000, 'no single wait is longer than 5 s');
     assert.ok(!output.includes(attempts[0][3]), 'the secret is printed');
@@ -655,6 +656,172 @@ describe('main setup (globalSetup)', () => {
     });
     assert.equal(code, 0, lines.join('\n'));
     assert.equal(clock.sleeps.length, 3);
+  });
+});
+
+describe('main setup (the wait for each admin call, in awake time)', () => {
+  const SUSPENDED_MS = 901_000;
+  const TICK = 1_000;
+  const ok = (args) => ({
+    code: 0,
+    stdout: args[0] === 'run' ? '{"documents":0}' : '',
+    stderr: '',
+  });
+  const refusal = { code: 1, stdout: '', stderr: 'backend is starting', timedOut: false };
+  const timeout = { code: null, stdout: '', stderr: '', timedOut: true };
+  const callName = (args) => args.slice(0, args[0] === 'env' ? 3 : 2).join(' ');
+
+  /** `reply(call, attempt, host)` is the CLI's answer to the `attempt`-th try of `call`. */
+  async function setup(reply, host = fakeHost()) {
+    const attempts = new Map();
+    const calls = [];
+    const sleeps = [];
+    const lines = [];
+    const code = await main(['setup'], {
+      env: {},
+      projectDir: projectDir({ config: LOCAL_CONFIG }),
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) => {
+        const call = callName(args);
+        const attempt = (attempts.get(call) ?? 0) + 1;
+        attempts.set(call, attempt);
+        calls.push(call);
+        return reply(call, attempt, host, args) ?? ok(args);
+      },
+      hostClocks: host.clocks,
+      wait: {
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          host.elapse(ms);
+        },
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    return { code, calls, sleeps, output: lines.join('\n'), host };
+  }
+
+  it('retries `env set` after a timeout: times out once, then answers', async () => {
+    const { code, calls, output } = await setup((call, attempt) =>
+      call === 'env set IS_TEST' && attempt === 1 ? timeout : undefined,
+    );
+    assert.equal(code, 0, output);
+    assert.equal(calls.filter((call) => call === 'env set IS_TEST').length, 2);
+  });
+
+  it('passes when `env set` is refused until 119 s of awake time', async () => {
+    const { code, output } = await setup((call, _attempt, host) =>
+      call === 'env set SITE_URL' && host.elapsedMs < 119_000 ? refusal : undefined,
+    );
+    assert.equal(code, 0, output);
+  });
+
+  it('fails past 120 s of awake time and names the call', async () => {
+    const { code, calls, sleeps, output } = await setup((call) =>
+      call === 'env set SITE_URL' ? refusal : undefined,
+    );
+    assert.equal(code, 1);
+    assert.match(output, /convex env set SITE_URL failed after 120 s/);
+    assert.match(output, /last error:[\s\S]*backend is starting/);
+    assert.equal(
+      sleeps.reduce((sum, ms) => sum + ms, 0),
+      120_000,
+    );
+    assert.equal(calls.at(-1), 'env set SITE_URL', 'the reset never runs');
+  });
+
+  it('gives each call its own 120 s, counted from its first attempt', async () => {
+    const started = new Map();
+    const { code, output, host } = await setup((call, _attempt, host) => {
+      if (call === 'run testing:reset') return undefined;
+      started.set(call, started.get(call) ?? host.elapsedMs);
+      return host.elapsedMs - started.get(call) < 100_000 ? refusal : undefined;
+    });
+    assert.equal(code, 0, output);
+    assert.ok(host.elapsedMs > 300_000, 'three calls waited 100 s each, more than one deadline');
+  });
+
+  it('retries `testing:reset` after a refusal: refused once, then answers', async () => {
+    const { code, calls, output } = await setup((call, attempt) =>
+      call === 'run testing:reset' && attempt === 1 ? refusal : undefined,
+    );
+    assert.equal(code, 0, output);
+    assert.equal(calls.filter((call) => call === 'run testing:reset').length, 2);
+  });
+
+  it('fails `testing:reset` past 120 s of refusals', async () => {
+    const { code, output } = await setup((call) =>
+      call === 'run testing:reset' ? refusal : undefined,
+    );
+    assert.equal(code, 1);
+    assert.match(output, /convex run testing:reset failed after 120 s/);
+  });
+
+  it('does not retry `testing:reset` after a timeout: one attempt, then it names the call', async () => {
+    const { code, calls, sleeps, output } = await setup((call) =>
+      call === 'run testing:reset' ? timeout : undefined,
+    );
+    assert.equal(code, 1);
+    assert.equal(calls.filter((call) => call === 'run testing:reset').length, 1);
+    assert.match(output, /convex run testing:reset got no answer within 60 s/);
+    assert.match(output, /not retried/);
+    assert.deepEqual(sleeps, []);
+    assert.doesNotMatch(output, /host was suspended/);
+  });
+
+  describe('when the host is suspended during the wait', () => {
+    const suspend = (host) => host.elapse(TICK + SUSPENDED_MS);
+
+    it('keeps the deadline at 120 s of awake time and ends the message with the suspension', async () => {
+      const { code, sleeps, output } = await setup((call, attempt, host) => {
+        if (call !== 'env set IS_TEST') return undefined;
+        if (attempt === 3) suspend(host);
+        return refusal;
+      });
+      assert.equal(code, 1);
+      assert.match(output, /convex env set IS_TEST failed after 120 s/);
+      assert.match(output, /; the host was suspended for 901 s during the wait$/);
+      const awakeWaited = sleeps.reduce((sum, ms) => sum + ms, 0);
+      assert.ok(
+        Math.abs(awakeWaited - (120_000 - TICK)) <= TICK,
+        `waited ${awakeWaited} ms awake, not ${120_000 - TICK} ms (120 s less the tick that saw the gap)`,
+      );
+    });
+
+    it('passes when a call times out across the suspension and then answers', async () => {
+      const { code, output } = await setup((call, attempt, host) => {
+        if (call !== 'env set BETTER_AUTH_SECRET' || attempt > 1) return undefined;
+        suspend(host);
+        return timeout;
+      });
+      assert.equal(code, 0, output);
+    });
+
+    it('fails a reset that timed out in the suspension at once, with the suspension in the message', async () => {
+      const { code, calls, sleeps, output } = await setup((call, _attempt, host) => {
+        if (call !== 'run testing:reset') return undefined;
+        suspend(host);
+        return timeout;
+      });
+      assert.equal(code, 1);
+      assert.equal(calls.filter((call) => call === 'run testing:reset').length, 1);
+      assert.deepEqual(sleeps, []);
+      assert.match(output, /convex run testing:reset got no answer/);
+      assert.match(output, /; the host was suspended for 901 s during the wait$/);
+    });
+
+    it('counts only the suspension inside the failing call', async () => {
+      const { code, output } = await setup((call, attempt, host) => {
+        if (call === 'env set IS_TEST' && attempt === 1) {
+          suspend(host);
+          return undefined;
+        }
+        return call === 'env set SITE_URL' ? refusal : undefined;
+      });
+      assert.equal(code, 1);
+      assert.match(output, /convex env set SITE_URL failed after 120 s/);
+      assert.doesNotMatch(output, /host was suspended/);
+    });
   });
 });
 

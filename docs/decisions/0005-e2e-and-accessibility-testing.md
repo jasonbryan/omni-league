@@ -9,6 +9,7 @@
 - **Amended:** by #178: `workers: 2` in CI, not 1 (ADR 0009, "Amendment: e2e workers and job timeout"). Where the sections below say `workers: 1`, the amendment applies.
 - **Amended:** by #125 (PR #189): a worker fixture may seed users and tenants that read-only tests share, under the rules in "Amendment: worker-scoped tenants for read-only tests (#125)" at the end. Where "Per test: a Playwright fixture creates the test's own tenant" says otherwise, the amendment applies.
 - **Amended:** by #269: comments that excuse an exclusion, a disabled axe rule, or an `expectedConsoleWarnings` entry give a one-line why, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say a comment links an issue, the amendment applies.
+- **Amended:** by #830: the `convex` webServer is ready at the first `Convex functions ready!`, not when `/version` responds. See "Amendment: backend readiness (#830)" at the end. Where "E2E backend" step 4 says otherwise, the amendment applies.
 
 ## Context
 
@@ -143,7 +144,7 @@ Rejected. It does not meet the angular.md rule that every user-facing acceptance
   1. `actions/cache` restores `~/.cache/convex`, keyed on the pinned backend version (on a miss the CLI downloads it from GitHub releases, 63.7 MB).
   2. `CONVEX_AGENT_MODE=anonymous npx convex dev --once --local-backend-version <pinned> --local-cloud-port 3210` pushes functions and runs codegen.
   3. The Angular app is built in the e2e build configuration (below) with `CONVEX_URL=http://127.0.0.1:3210` (ADR 0006 wrapper: `node scripts/ng-convex.mjs build --configuration development`). Server renders then fetch from the local backend over HTTP, and browsers subscribe to it over WebSocket.
-  4. Playwright `webServer` starts two servers. The first is `npx convex dev --tail-logs disable` with the same flags, ready when `http://127.0.0.1:3210/version` responds. The second is the Node SSR server (below). When `E2E_BASE_URL` is set, neither server starts (#13, #15).
+  4. Playwright `webServer` starts two servers. The first is `npx convex dev --tail-logs disable` with the same flags, ready at the first `Convex functions ready!` that `convex dev` prints (amended by #830). The second is the Node SSR server (below). When `E2E_BASE_URL` is set, neither server starts (#13, #15).
      The pinned backend version lives in one place (an npm script or the Playwright config), and bumping it is a patch-level change with no gate. Locally, contributors run the same script. The e2e script always selects the anonymous local deployment and never targets a cloud dev deployment.
 - **Seeding and reset:**
   - Test-only functions live in `convex/testing.ts` as internal functions (`internalMutation`, `internalQuery`, or `internalAction` where a function must call the auth component's HTTP-level API, as seeding a password user does), so no client can call them. Each one starts with a shared guard that throws unless `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment (`npx convex env set IS_TEST true` in Playwright `globalSetup`) and never on cloud dev, preview, or production. Feature crons skip work when `IS_TEST` is set.
@@ -381,3 +382,9 @@ The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENT
 | An `expectedConsoleWarnings` entry (amendment "console warnings (#94)") | "Each entry carries a comment linking the issue that removes the warning" | Each entry carries a one-line comment giving the why. The issue that removes the warning stays open, and the PR that adds the entry links it      |
 
 **Why.** A link in code goes stale when the issue closes. The allowance still cannot outlive its warning: an entry that matches nothing fails the test at teardown, and the open issue records what removes it.
+
+## Amendment: backend readiness (#830, 2026-11-20)
+
+`/version` answers before the first `convex dev` push has finished, so `globalSetup` could meet a backend without the functions. The `convex` webServer now sets `wait: { stderr: /Convex functions ready!/ }` and no `url`, so Playwright counts it as started only after that push. CI already waits for the same line. A test in `scripts/` fails when the installed Convex CLI no longer prints the text.
+
+`globalSetup` retries each of its four calls for up to 120 s of awake time. A reset that timed out is not retried, because it may still be running in the backend. A local `npm run e2e` reports each host suspension during the Playwright step, because every test in flight at the wake times out at once, and the README and the dev cycle treat such a run as no result.
