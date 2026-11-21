@@ -88,6 +88,7 @@ import {
   tournamentTeams,
 } from './lib/tournamentBracket';
 import { CAMP_SESSIONS_LIMIT, findCampBySlugs } from './lib/campLookup';
+import { MAX_CAMP_SESSION_PLACES } from './lib/campSessionInput';
 import { insertCampRegistration } from './lib/campRegistrationWrites';
 import { insertCampWaitlistEntry } from './lib/campWaitlistWrites';
 import { insertTrainingWaitlistEntry } from './lib/trainingWaitlistWrites';
@@ -564,19 +565,41 @@ export const seedCampRegistration = internalMutation({
   returns: v.null(),
   handler: async (ctx, { organizationSlug, campSlug, sessionName, email, participant }) => {
     assertTestDeployment();
-    const organization = await organizationBySlug(ctx, organizationSlug);
-    const found = await findCampBySlugs(ctx, organization, campSlug);
-    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
-    const session = (
-      await ctx.db
-        .query('campSessions')
-        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
-        .take(CAMP_SESSIONS_LIMIT)
-    ).find((row) => row.name === sessionName);
-    if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
+    const session = await campSessionByName(ctx, organizationSlug, campSlug, sessionName);
     const user = await userByEmail(ctx, email);
     await insertCampRegistration(ctx, session, { userId: user._id, participant });
     return null;
+  },
+});
+
+/** Skips the rules `seedCampRegistration` skips, for many participants in one transaction so their writes to the session's count cannot conflict. */
+export const seedCampRegistrations = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    campSlug: v.string(),
+    sessionName: v.string(),
+    email: v.string(),
+    participants: v.array(participantValidator),
+  },
+  returns: v.object({ count: v.number() }),
+  handler: async (ctx, { organizationSlug, campSlug, sessionName, email, participants }) => {
+    assertTestDeployment();
+    if (participants.length === 0 || participants.length > MAX_CAMP_SESSION_PLACES) {
+      throw new Error(`A seed adds from 1 to ${MAX_CAMP_SESSION_PLACES} participants per call`);
+    }
+    const { _id: sessionId } = await campSessionByName(
+      ctx,
+      organizationSlug,
+      campSlug,
+      sessionName,
+    );
+    const user = await userByEmail(ctx, email);
+    for (const participant of participants) {
+      // The helper adds 1 to the count of the document it is given, so a document read before an earlier insert is stale.
+      const session = await ctx.db.get('campSessions', sessionId);
+      await insertCampRegistration(ctx, session!, { userId: user._id, participant });
+    }
+    return { count: participants.length };
   },
 });
 
@@ -592,16 +615,7 @@ export const seedCampWaitlistEntry = internalMutation({
   returns: v.null(),
   handler: async (ctx, { organizationSlug, campSlug, sessionName, email, participant }) => {
     assertTestDeployment();
-    const organization = await organizationBySlug(ctx, organizationSlug);
-    const found = await findCampBySlugs(ctx, organization, campSlug);
-    if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
-    const session = (
-      await ctx.db
-        .query('campSessions')
-        .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
-        .take(CAMP_SESSIONS_LIMIT)
-    ).find((row) => row.name === sessionName);
-    if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
+    const session = await campSessionByName(ctx, organizationSlug, campSlug, sessionName);
     const user = await userByEmail(ctx, email);
     await insertCampWaitlistEntry(ctx, session._id, { userId: user._id, participant });
     return null;
@@ -1741,6 +1755,25 @@ async function seasonBySlugs(
     : null;
   if (!season) throw new Error(`No season has the slug ${JSON.stringify(seasonSlug)}`);
   return season;
+}
+
+async function campSessionByName(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationSlug: string,
+  campSlug: string,
+  sessionName: string,
+): Promise<Doc<'campSessions'>> {
+  const organization = await organizationBySlug(ctx, organizationSlug);
+  const found = await findCampBySlugs(ctx, organization, campSlug);
+  if (!found) throw new Error(`No camp has the web address ${JSON.stringify(campSlug)}`);
+  const session = (
+    await ctx.db
+      .query('campSessions')
+      .withIndex('by_campId_and_startDate', (q) => q.eq('campId', found.camp._id))
+      .take(CAMP_SESSIONS_LIMIT)
+  ).find((row) => row.name === sessionName);
+  if (!session) throw new Error(`No session is named ${JSON.stringify(sessionName)}`);
+  return session;
 }
 
 async function userByEmail(ctx: MutationCtx, email: string): Promise<Doc<'users'>> {

@@ -428,22 +428,30 @@ async function seed(members: Member[], seasons: Record<string, SeasonSeed[]> = {
     locations: LOCATIONS,
     leagues: LEAGUES,
   });
-  const memberships = members.map(({ user: { email }, role, assigned = [] }) =>
-    role === 'orgAdmin'
-      ? convexRun('testing:addMembership', { organizationSlug: tenant.slug, email, role })
-      : convexRun('testing:addLeagueOrganizer', {
-          organizationSlug: tenant.slug,
-          email,
-          leagueSlugs: assigned,
-        }),
-  );
+  // Memberships all patch `organizations.staffCount`, and `addLeagueOrganizer` reads the leagues that
+  // `seedSeasons` writes, so each call finishes before the next starts.
+  for (const {
+    user: { email },
+    role,
+    assigned = [],
+  } of members) {
+    if (role === 'orgAdmin') {
+      await convexRun('testing:addMembership', { organizationSlug: tenant.slug, email, role });
+    } else {
+      await convexRun('testing:addLeagueOrganizer', {
+        organizationSlug: tenant.slug,
+        email,
+        leagueSlugs: assigned,
+      });
+    }
+  }
   // One mutation per league: concurrent `testing:seedSeason` calls for one league all write its
   // `publishedSeasonCount` and conflict on a slow runner. The list orders seasons by start date, so
   // the insert order does not matter.
   const rows = Object.entries(seasons).map(([leagueSlug, list]) =>
     convexRun('testing:seedSeasons', { organizationSlug: tenant.slug, leagueSlug, seasons: list }),
   );
-  await Promise.all([...memberships, ...rows]);
+  await Promise.all(rows);
   return tenant;
 }
 

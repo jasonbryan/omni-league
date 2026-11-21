@@ -3,7 +3,11 @@ import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { seedCamp, seedCampSession, seedPublishedCamp } from './support/camp';
-import { seedCampRegistration, seedCampWaitlistEntry } from './support/camp-registrations';
+import {
+  seedCampRegistration,
+  seedCampRegistrations,
+  seedCampWaitlistEntry,
+} from './support/camp-registrations';
 import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { MAX_CAMP_SESSION_NAME_LENGTH } from '../convex/lib/campSessionInput';
@@ -1198,24 +1202,14 @@ test.describe('Camp sessions: who registered', () => {
   test(`a session with ${MANY} registered shows a skeleton row for each, and the list takes their room`, async ({
     page,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(60_000);
     const { tenant, camp } = await sessionWith(page, 500);
     const guardian = await seedUser(newUser('Guardian'));
-    const names = Array.from(
-      { length: MANY },
-      (_, index) => `Child ${String(index).padStart(3, '0')}`,
-    );
-    const BATCH = 8;
-    for (let from = 0; from < names.length; from += BATCH) {
-      await Promise.all(
-        names.slice(from, from + BATCH).map((minorName) =>
-          seedCampRegistration(tenant, JUNIOR.slug, 'Week 1', guardian, {
-            kind: 'minor',
-            minorName,
-          }),
-        ),
-      );
-    }
+    const participants = Array.from({ length: MANY }, (_, index) => ({
+      kind: 'minor' as const,
+      minorName: `Child ${String(index).padStart(3, '0')}`,
+    }));
+    await seedCampRegistrations(tenant, JUNIOR.slug, 'Week 1', guardian, participants);
     const held = await holdQueries(page, ['campRegistrations:listForSession'], {
       watchFromStart: false,
     });

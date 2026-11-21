@@ -21,6 +21,23 @@ export async function seedCampRegistration(
   });
 }
 
+/** One transaction for all participants, so a big session does not conflict with itself. Local runs only. `user` must already have an account (`seedUser`). */
+export async function seedCampRegistrations(
+  tenant: Tenant,
+  campSlug: string,
+  sessionName: string,
+  user: TestUser,
+  participants: CampParticipant[],
+): Promise<void> {
+  await convexRun('testing:seedCampRegistrations', {
+    organizationSlug: tenant.slug,
+    campSlug,
+    sessionName,
+    email: user.email,
+    participants,
+  });
+}
+
 /** Skips the rules of joining, the places included. Local runs only. `user` must already have an account (`seedUser`). */
 export async function seedCampWaitlistEntry(
   tenant: Tenant,
