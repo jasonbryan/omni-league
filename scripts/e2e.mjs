@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:os';
 import { join } from 'node:path';
 import { LOCAL_CONVEX_URL, remoteBaseUrl, ROOT } from './e2e-convex.mjs';
+import { keepLastRun, lastRunFile } from './e2e-last-run.mjs';
 import { withLock } from './e2e-lock.mjs';
 import { reportSuspensions } from './host-suspend.mjs';
 
@@ -63,11 +64,12 @@ export function needsLock({ env }) {
  *   lock?: Parameters<typeof withLock>[1],
  *   plan?: typeof e2ePlan,
  *   hostClocks?: Parameters<typeof reportSuspensions>[1],
+ *   root?: string,
  * }} [options]
  */
 export async function runE2e(
   playwrightArgs,
-  { env = process.env, lock = {}, plan = e2ePlan, hostClocks = {} } = {},
+  { env = process.env, lock = {}, plan = e2ePlan, hostClocks = {}, root = ROOT } = {},
 ) {
   const abort = new AbortController();
   let received;
@@ -77,15 +79,21 @@ export async function runE2e(
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  // Playwright deletes its outputDir in its first global-setup task, before any test.
+  const runPlaywright = async (step) => {
+    const lastRun = keepLastRun(lastRunFile(playwrightArgs, env, { root, cwd: process.cwd() }));
+    try {
+      return await reportSuspensions(() => runStep(step), hostClocks);
+    } finally {
+      lastRun.restoreIfNoFailures();
+    }
+  };
   const steps = async () => {
     for (const step of plan({ env }, playwrightArgs)) {
       if (received) break;
       // Only this step has tests that time out when the host sleeps: the lock wait, the push, and
       // the build time out nothing.
-      const code =
-        step.name === 'playwright'
-          ? await reportSuspensions(() => runStep(step), hostClocks)
-          : await runStep(step);
+      const code = step.name === 'playwright' ? await runPlaywright(step) : await runStep(step);
       if (code !== 0) {
         console.error(`e2e: ${step.name} failed (exit ${code})`);
         return code;
