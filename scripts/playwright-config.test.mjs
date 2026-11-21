@@ -13,6 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { lastRunFile } from './e2e-last-run.mjs';
 
 const root = join(import.meta.dirname, '..');
 // Playwright reports real paths; macOS's tmpdir is behind a symlink.
@@ -73,6 +74,26 @@ describe('the Playwright output paths', () => {
     assert.ok(!existsSync(join(dir, 'test-results', 'results.json')), 'no shared JSON report');
     assert.ok(!existsSync(join(dir, 'playwright-report', 'index.html')), 'no shared HTML report');
     assert.deepEqual(outputDirs(json), new Set([join(dir, 'test-results', 'production-mobile')]));
+  });
+
+  it('puts the last-run file where scripts/e2e-last-run.mjs reads it, with and without E2E_RUN_NAME', () => {
+    for (const [name, runName] of [
+      ['last-run-unset', undefined],
+      ['last-run-named', 'production-mobile'],
+    ]) {
+      const { dir, result } = listIn(name, { E2E_RUN_NAME: runName });
+      assert.equal(result.status, 0, result.stderr);
+      const json = join(dir, 'test-results', ...(runName ? [runName] : []), 'results.json');
+      const [outputDir] = outputDirs(json);
+      assert.equal(
+        lastRunFile([], runName === undefined ? {} : { E2E_RUN_NAME: runName }, {
+          root: dir,
+          cwd: dir,
+        }),
+        join(outputDir, '.last-run.json'),
+        runName ?? 'unset',
+      );
+    }
   });
 
   it('refuses a run name that is not one path segment of lowercase letters, digits, and hyphens', () => {
