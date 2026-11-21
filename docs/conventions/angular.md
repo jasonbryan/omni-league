@@ -120,7 +120,7 @@ Server routes:
 
 Prerender routes must not read Convex data: they render during `ng build`, which has no Convex URL in CI.
 
-A template listener on server-rendered markup that calls `preventDefault` or `composedPath` returns first when `isReplayedEvent(event)` (`src/app/core/replayed-event.ts`). Angular replays a click or submit made before hydration with those two methods made to throw, and the browser has already acted on the event. `dispatchClick` and `dispatchSubmit` in `src/app/core/testing/dispatch-event.ts` dispatch a replayed event in a unit spec.
+A template listener on server-rendered markup that calls `preventDefault` or `composedPath` returns first when `isReplayedEvent(event)` (`src/app/core/replayed-event.ts`). Angular replays any event made before hydration (a click, a submit, a keydown) with those two methods made to throw, and the browser has already acted on the event. `dispatchClick` and `dispatchSubmit` in `src/app/core/testing/dispatch-event.ts` dispatch a replayed event in a unit spec.
 
 Hydration uses `provideClientHydration()` with the v22 defaults. Hydration mismatch checks run only in development builds; a production build logs nothing. Text differences and an `@if` that takes a different branch on server and browser are replaced silently in both modes, so a test that deliberately causes a mismatch must use a structural one (for example `<table><tr>` with no `<tbody>`).
 
