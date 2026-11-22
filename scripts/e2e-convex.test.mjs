@@ -26,6 +26,8 @@ import {
   DEPLOYMENT_NAME,
   devArgs,
   E2E_SITE_URL,
+  fetchInstanceName,
+  INSTANCE_NAME_TIMEOUT_MS,
   isListening,
   LOCAL_CONVEX_URL,
   main,
@@ -187,6 +189,94 @@ describe('resolveTarget', () => {
         instanceName: answering('anonymous-omni-league'),
       }),
       /refused.*anonymous-omni-league/,
+    );
+  });
+});
+
+describe('fetchInstanceName', () => {
+  const servers = [];
+  after(() => {
+    for (const server of servers) server.close();
+  });
+
+  async function listen(onConnection) {
+    const server = createServer(onConnection);
+    servers.push(server);
+    server.unref();
+    await new Promise((resolvePromise) => server.listen(0, '127.0.0.1', resolvePromise));
+    return { server, url: `http://127.0.0.1:${server.address().port}` };
+  }
+
+  const silentServer = () => listen(() => {});
+
+  it('names the limit when the backend accepts the connection and never answers', async () => {
+    const { url } = await silentServer();
+    await assert.rejects(
+      fetchInstanceName(url, { timeoutMs: 200 }),
+      new Error(
+        `e2e-convex: the backend at ${url} timed out after 0.2 s on /instance_name (listening but slow, as under host load)`,
+      ),
+    );
+  });
+
+  it('names the 5 s limit when called with no timeoutMs', async () => {
+    assert.equal(INSTANCE_NAME_TIMEOUT_MS, 5_000);
+    const { url } = await silentServer();
+    await assert.rejects(fetchInstanceName(url), /timed out after 5 s on \/instance_name/);
+  });
+
+  it('says the connection was refused when nothing listens on the port', async () => {
+    const { server, url } = await silentServer();
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+    await assert.rejects(
+      fetchInstanceName(url),
+      new Error(`e2e-convex: connection refused at ${url}: no backend is listening`),
+    );
+  });
+
+  it('names the error code when the connection is reset', async () => {
+    const { url } = await listen((socket) => {
+      socket.once('data', () => socket.resetAndDestroy());
+      socket.on('error', () => {});
+    });
+    await assert.rejects(
+      fetchInstanceName(url),
+      new Error(`e2e-convex: no answer from ${url}/instance_name: ECONNRESET`),
+    );
+  });
+
+  it('reports the timeout, not the raw abort text, when the body stalls', async () => {
+    const { url } = await listen((socket) => {
+      socket.once('data', () =>
+        socket.write('HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\n\r\n'),
+      );
+      socket.on('error', () => {});
+    });
+    await assert.rejects(
+      fetchInstanceName(url, { timeoutMs: 200 }),
+      new Error(
+        `e2e-convex: the backend at ${url} timed out after 0.2 s on /instance_name (listening but slow, as under host load)`,
+      ),
+    );
+  });
+
+  it('is neither permanent nor timed out, so retryUntilReady retries it', async () => {
+    const { url } = await silentServer();
+    const failure = await fetchInstanceName(url, { timeoutMs: 100 }).catch((error) => error);
+    assert.ok(failure instanceof Error);
+    assert.ok(!failure.permanent && !failure.timedOut);
+  });
+
+  it('keeps the status message for a response that is not OK', async () => {
+    const { url } = await listen((socket) => {
+      socket.once('data', () =>
+        socket.end('HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n'),
+      );
+      socket.on('error', () => {});
+    });
+    await assert.rejects(
+      fetchInstanceName(url),
+      new Error(`e2e-convex: ${url}/instance_name returned 503`),
     );
   });
 });
