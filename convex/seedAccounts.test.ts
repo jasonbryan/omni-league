@@ -44,7 +44,24 @@ const GULF_COAST = 'gulf-coast-sport-social';
 const PORT_ARANSAS = 'port-aransas-beach-volleyball-club';
 const SAGUARO = 'saguaro-valley-softball';
 const ROCKPORT = 'rockport-sand-volleyball';
-const SLOW = 120_000;
+const TIMEOUT = 15_000;
+
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
+const CHEAP_SCRYPT_N = 2 ** 4;
+
+// Pure-JavaScript scrypt at the app's cost takes about a quarter of a second a hash, and a test that
+// times out cannot cancel the hashing it started, so the cost is cut here; password.test.ts keeps the real one.
+vi.mock('@noble/hashes/scrypt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@noble/hashes/scrypt.js')>();
+  return {
+    ...actual,
+    scryptAsync: (...[password, salt, options]: Parameters<typeof actual.scryptAsync>) => {
+      scryptCalls.count += 1;
+      return actual.scryptAsync(password, salt, { ...options, N: CHEAP_SCRYPT_N });
+    },
+  };
+});
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -332,7 +349,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(users).toHaveLength(USERS);
       for (const user of users) expect(user.adultConfirmedAt).toBeGreaterThan(0);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -384,7 +401,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(invites[0]?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
       expect(invites[0]?.expiresAt).toBeGreaterThan(Date.now());
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -409,7 +426,7 @@ describe('seed:demo accounts: a new deployment', () => {
       ).map((league) => league.divisionLabel);
       expect(labels).toContain('Men · 10v10 · D (Rec)');
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -547,7 +564,7 @@ describe('seed:demo accounts: a new deployment', () => {
         expect(await refused(query)).toBe(true);
       }
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -632,7 +649,7 @@ describe('seed:demo accounts: the demo teams', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -682,7 +699,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await run(t);
       expect((await tournamentTeams()).teamCount).toBe(4);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -704,7 +721,7 @@ describe('seed:demo accounts: the demo teams', () => {
       const organizer = await as(t, EMAILS.organizer);
       await expect(organizer.query(api.waitlist.listForTournament, slugs)).rejects.toThrow();
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -721,7 +738,7 @@ describe('seed:demo accounts: the demo teams', () => {
       expect((await run(t)).teams).toBe(0);
       expect(Object.keys((await demoTeams(t)).teams)).toHaveLength(4);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -743,7 +760,7 @@ describe('seed:demo accounts: the demo teams', () => {
         { status: 'accepted' },
       ]);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -767,7 +784,7 @@ describe('seed:demo accounts: the demo teams', () => {
         ],
       });
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -796,7 +813,7 @@ describe('seed:demo accounts: the demo teams', () => {
       expect(removed?.removedAt).toEqual(expect.any(Number));
       expect((await signIn(t, REMOVED_PLAYER)).status).toBe(401);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -835,7 +852,7 @@ describe('seed:demo accounts: the demo teams', () => {
       expect((await run(t)).teamInvites).toBe(0);
       expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(5);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -871,7 +888,7 @@ describe('seed:demo accounts: the demo teams', () => {
       expect(theo).toHaveLength(1);
       expect(theo[0]).not.toHaveProperty('seasonId');
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -888,7 +905,7 @@ describe('seed:demo accounts: the demo teams', () => {
         'Net Results',
       ]);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -932,7 +949,7 @@ describe('seed:demo accounts: the demo guardian', () => {
       expect(JSON.stringify(opponent)).not.toContain('Lane');
       expect(JSON.stringify(opponent)).not.toContain('Demo Guardian');
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -990,7 +1007,7 @@ describe('seed:demo accounts: the demo free agents', () => {
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1057,7 +1074,7 @@ describe('seed:demo accounts: camp registration', () => {
       expect((await run(t)).campRegistrations).toBe(0);
       expect(await t.run((ctx) => ctx.db.query('campRegistrations').collect())).toHaveLength(3);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -1101,7 +1118,7 @@ describe('seed:demo accounts: camp registration', () => {
       expect((await run(t)).campWaitlistEntries).toBe(0);
       expect(await t.run((ctx) => ctx.db.query('campWaitlistEntries').collect())).toHaveLength(1);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1158,7 +1175,7 @@ describe('seed:demo accounts: training registration', () => {
       expect((await run(t)).trainingRegistrations).toBe(0);
       expect(await t.run((ctx) => ctx.db.query('trainingRegistrations').collect())).toHaveLength(2);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1250,7 +1267,7 @@ describe('seed:demo accounts: training waitlist', () => {
         2,
       );
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1276,7 +1293,7 @@ describe('seed:demo accounts: the class waitlist on a deployment seeded before i
         2,
       );
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1327,7 +1344,7 @@ describe('seed:demo accounts: a second run', () => {
       expect(pwned.mock.calls.length).toBe(calls);
       expect(await t.run((ctx) => ctx.db.query('signInFailures').collect())).toEqual([]);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -1349,7 +1366,7 @@ describe('seed:demo accounts: a second run', () => {
       );
       expect({ ...after, memberships: [] }).toEqual({ ...before, memberships: [] });
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1381,7 +1398,7 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect((await signIn(t, EMAILS.organizer, PASSWORD)).status).toBe(401);
       expect(result.memberships).toBe(4);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -1420,7 +1437,7 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect(await authRows(t, 'session')).toHaveLength(20);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1454,7 +1471,7 @@ describe('seed:demo accounts: the password', () => {
       expect((await appRows(t)).memberships).toEqual([]);
       expect(pwned).not.toHaveBeenCalled();
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -1477,7 +1494,7 @@ describe('seed:demo accounts: the password', () => {
       }).toEqual(before);
       expect((await signIn(t, EMAILS.admin)).status).toBe(200);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   const breached = async () => {
@@ -1530,7 +1547,7 @@ describe('seed:demo accounts: the password', () => {
       expect(await authRows(t, 'account')).toEqual([]);
       expect((await appRows(t)).memberships).toEqual([]);
     },
-    SLOW,
+    TIMEOUT,
   );
 
   test(
@@ -1547,7 +1564,7 @@ describe('seed:demo accounts: the password', () => {
       expect(failure).toBeInstanceOf(Error);
       expect(String(failure)).not.toContain(PASSWORD);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1625,7 +1642,7 @@ describe('seed:demo accounts: two runs at once', () => {
       expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
       expect(await membershipsOf(t, EMAILS.organizer)).toHaveLength(1);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1712,7 +1729,7 @@ describe('seed:demo accounts: the password never leaks', () => {
         expect(text).not.toContain(SENTINEL.slice(0, 10));
       }
     },
-    SLOW * 2,
+    TIMEOUT,
   );
 
   test('the password is read once, through env, and is no argument to another function', () => {
@@ -1778,7 +1795,7 @@ describe('seed:demo accounts: the seeded invite', () => {
       expect(after.memberships).toHaveLength(memberships);
       expect(await membershipsOf(t, INVITED)).toEqual([]);
     },
-    SLOW,
+    TIMEOUT,
   );
 });
 
@@ -1810,6 +1827,19 @@ describe('seed:demo accounts: three runs at once', () => {
       expect(rows.memberships).toHaveLength(5);
       expect(rows.invites).toHaveLength(1);
     },
-    SLOW * 2,
+    TIMEOUT,
+  );
+});
+
+describe('seed:demo accounts: the password hash cost', () => {
+  test(
+    'every hash the seed makes goes through the cheap scrypt wrapper',
+    async () => {
+      const t = setup();
+      const before = scryptCalls.count;
+      await run(t);
+      expect(scryptCalls.count).toBeGreaterThan(before);
+    },
+    TIMEOUT,
   );
 });
