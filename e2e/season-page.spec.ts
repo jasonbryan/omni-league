@@ -16,8 +16,8 @@ import {
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import {
-  leaguePageSavedKeys,
   expectSavedCopies,
+  leaguePageSavedKeys,
   missingSavedCopies,
   seasonPageSavedKeys,
 } from './support/saved-copies';
@@ -727,6 +727,9 @@ test.describe('public season page in the browser', () => {
   });
 });
 
+// Below the test timeout, so a hung step fails while the page is still open to dump.
+const STEP_TIMEOUT = 10_000;
+
 test.describe('public season page offline', () => {
   test('offline: a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
     page,
@@ -760,35 +763,36 @@ test.describe('public season page offline', () => {
     const leagueKeys = leaguePageSavedKeys(tenant.slug, 'offline-league');
     const requiredKeys = [...winterKeys, ...leagueKeys];
 
-    // A step's dump is attached whether it passes or fails, so a failure names the step and the page state it ended in.
-    const step = async (label: string, run: (details: Record<string, unknown>) => Promise<void>) =>
-      test.step(label, async () => {
-        const details: Record<string, unknown> = {};
-        const attachDump = async () =>
-          testInfo.attach(label, {
-            body: JSON.stringify({
-              ...details,
-              url: page.url(),
-              h1: await h1.allInnerTexts(),
-              notes: await note.count(),
-              notSaved: await notSaved.count(),
-              busy: await page.locator('[aria-busy="true"]').count(),
-              missingSavedCopies: await missingSavedCopies(page, requiredKeys),
-            }),
-            contentType: 'application/json',
-          });
-        try {
-          await run(details);
-        } catch (error) {
-          await attachDump().catch(() => undefined);
-          throw error;
-        }
-        await attachDump();
-      });
+    const stepWithDump = async (
+      label: string,
+      run: (details: Record<string, unknown>) => Promise<void>,
+    ) => {
+      const details: Record<string, unknown> = {};
+      const attachDump = async () =>
+        testInfo.attach(label, {
+          body: JSON.stringify({
+            ...details,
+            url: page.url(),
+            h1: await h1.allInnerTexts(),
+            notes: await note.count(),
+            notSaved: await notSaved.count(),
+            busy: await page.locator('[aria-busy="true"]').count(),
+            missingSavedCopies: await missingSavedCopies(page, requiredKeys),
+          }),
+          contentType: 'application/json',
+        });
+      try {
+        await test.step(label, () => run(details), { timeout: STEP_TIMEOUT });
+      } catch (error) {
+        await attachDump().catch(() => undefined);
+        throw error;
+      }
+      await attachDump();
+    };
 
     await watchSkeleton(page);
 
-    await step('winter-online', async () => {
+    await stepWithDump('winter-online', async () => {
       await gotoHydrated(page, consoleGuard, leaguePath);
       await page
         .getByRole('main')
@@ -798,17 +802,17 @@ test.describe('public season page offline', () => {
       await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
       await expect(note).toHaveCount(0);
     });
-    await step('league-online', async () => {
+    await stepWithDump('league-online', async () => {
       await crumbs.getByRole('link', { name: 'Offline League' }).click();
       await expect(h1).toHaveText('Offline League');
       await expectSavedCopies(page, requiredKeys);
     });
 
-    await step('offline-note', async () => {
+    await stepWithDump('offline-note', async () => {
       await context.setOffline(true);
       await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     });
-    await step('winter-offline', async () => {
+    await stepWithDump('winter-offline', async () => {
       await page
         .getByRole('main')
         .getByRole('link', { name: 'Winter 2027-28', exact: true })
@@ -820,11 +824,11 @@ test.describe('public season page offline', () => {
       await expect(page.locator('main section#teams')).toContainText('No teams yet');
       await expect(notSaved).toHaveCount(0);
     });
-    await step('league-offline', async () => {
+    await stepWithDump('league-offline', async () => {
       await crumbs.getByRole('link', { name: 'Offline League' }).click();
       await expect(h1).toHaveText('Offline League');
     });
-    await step('spring-offline', async (details) => {
+    await stepWithDump('spring-offline', async (details) => {
       // Winter's online navigation showed the skeleton, so the flag restarts here.
       expect(await skeletonSeen(page, { reset: true })).toBe(false);
       const clickedAt = Date.now();
@@ -837,7 +841,7 @@ test.describe('public season page offline', () => {
       await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', springPath);
     });
 
-    await step('back-online', async () => {
+    await stepWithDump('back-online', async () => {
       await context.setOffline(false);
       await page.goto(winterPath);
       await expect(h1).toHaveText('Offline League · Winter 2027-28');
@@ -872,7 +876,6 @@ interface Watched {
   sameH1: boolean;
 }
 
-/** The flag `watchSkeleton` sets: `undefined` when no observer is installed. */
 async function skeletonSeen(page: Page, { reset = false } = {}): Promise<boolean | undefined> {
   return page.evaluate((clear) => {
     const watch = window as Window & { e2eSkeletonSeen?: boolean };

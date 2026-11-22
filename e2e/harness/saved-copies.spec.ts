@@ -4,12 +4,12 @@ import { holdQueries } from '../support/hold-queries';
 import { gotoHydrated } from '../support/hydrated';
 import {
   expectSavedCopies,
+  leaguePageSavedKeys,
   organizationCampSavedKeys,
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
   organizationTournamentSavedKeys,
   organizationTrainingSavedKeys,
-  leaguePageSavedKeys,
   seasonPageSavedKeys,
 } from '../support/saved-copies';
 import { seedTenant } from '../support/tenant';
