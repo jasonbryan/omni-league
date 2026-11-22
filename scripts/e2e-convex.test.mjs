@@ -207,7 +207,7 @@ describe('fetchInstanceName', () => {
     return { server, url: `http://127.0.0.1:${server.address().port}` };
   }
 
-  const silentServer = () => listen(() => {});
+  const silentServer = () => listen((socket) => socket.resume());
 
   it('names the limit when the backend accepts the connection and never answers', async () => {
     const { url } = await silentServer();
@@ -268,11 +268,20 @@ describe('fetchInstanceName', () => {
     );
   });
 
-  it('is neither permanent nor timed out, so retryUntilReady retries it', async () => {
-    const { url } = await silentServer();
-    const failure = await fetchInstanceName(url, { timeoutMs: 100 }).catch((error) => error);
-    assert.ok(failure instanceof Error);
-    assert.ok(!failure.permanent && !failure.timedOut);
+  it('is retried by retryUntilReady, so a backend that is not up yet is waited for', async () => {
+    const { server, url } = await silentServer();
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+    let attempts = 0;
+    const result = await retryUntilReady(
+      async () => {
+        attempts += 1;
+        if (attempts === 1) return fetchInstanceName(url);
+        return 'anonymous-agent';
+      },
+      { label: 'instance name', sleep: async () => {} },
+    );
+    assert.equal(result, 'anonymous-agent');
+    assert.equal(attempts, 2);
   });
 
   it('keeps the status message for a response that is not OK', async () => {
