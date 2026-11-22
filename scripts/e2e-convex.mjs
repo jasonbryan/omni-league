@@ -244,15 +244,35 @@ export function readLocalDeployment(projectDir) {
   };
 }
 
-async function fetchInstanceName(url) {
-  let response;
-  try {
-    response = await fetch(`${url}/instance_name`, { signal: AbortSignal.timeout(5_000) });
-  } catch {
-    throw new Error(`e2e-convex: no backend answers at ${url}`);
-  }
+export const INSTANCE_NAME_TIMEOUT_MS = 5_000;
+
+export async function fetchInstanceName(url, { timeoutMs = INSTANCE_NAME_TIMEOUT_MS } = {}) {
+  const describeFailure = (error) => instanceNameFailure(error, url, timeoutMs);
+  const response = await fetch(`${url}/instance_name`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch((error) => {
+    throw describeFailure(error);
+  });
   if (!response.ok) throw new Error(`e2e-convex: ${url}/instance_name returned ${response.status}`);
-  return (await response.text()).trim();
+  const body = await response.text().catch((error) => {
+    throw describeFailure(error);
+  });
+  return body.trim();
+}
+
+function instanceNameFailure(error, url, timeoutMs) {
+  if (error?.name === 'TimeoutError') {
+    return new Error(
+      `e2e-convex: the backend at ${url} timed out after ${timeoutMs / 1000} s on /instance_name ` +
+        '(listening but slow, as under host load)',
+    );
+  }
+  // `error.code` is the DOMException's own number; the network code is on the cause.
+  const code = error?.cause?.code;
+  if (code === 'ECONNREFUSED') {
+    return new Error(`e2e-convex: connection refused at ${url}: no backend is listening`);
+  }
+  return new Error(`e2e-convex: no answer from ${url}/instance_name: ${code ?? error?.message}`);
 }
 
 export async function resolveTarget({
