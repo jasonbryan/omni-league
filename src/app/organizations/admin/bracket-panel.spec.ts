@@ -515,6 +515,46 @@ describe('BracketPanel', () => {
     });
   });
 
+  describe('holds Create and Recreate while a move is pending', () => {
+    it('with a bracket: Recreate is aria-disabled and a press opens no dialog and sends no call, until the move answers', async () => {
+      await open({ ...CLOSED, bracketCreated: true }, setupOf(THREE, { bracket: BRACKET }));
+      moveButton('Bravo', 'up').click();
+      await o.flush();
+      expect(createButton()!.getAttribute('aria-disabled')).toBe('true');
+      expect(createButton()!.classList.contains('opacity-50')).toBe(false);
+      createButton()!.click();
+      await o.flush();
+      expect(dialog()).toBeNull();
+      expect(calls()).toEqual([[MOVE, expect.anything()]]);
+
+      o.convex.calls[0].resolve({ seed: 1, seedCount: 3 });
+      await o.flush();
+      expect(seedStatus()).toBe('Bravo moved up to seed 1 of 3.');
+      expect(createButton()!.hasAttribute('aria-disabled')).toBe(false);
+      createButton()!.click();
+      await o.flush();
+      expect(text(dialog()!.querySelector('h2'))).toBe('Recreate the bracket?');
+      expect(document.activeElement).toBe(dialogButton('Cancel'));
+    });
+
+    it('without a bracket: Create is aria-disabled and a press sends no createBracket, until the move answers', async () => {
+      await open(CLOSED, setupOf(THREE));
+      moveButton('Bravo', 'up').click();
+      await o.flush();
+      expect(createButton()!.getAttribute('aria-disabled')).toBe('true');
+      createButton()!.click();
+      await o.flush();
+      expect(calls()).toEqual([[MOVE, expect.anything()]]);
+
+      o.convex.calls[0].resolve({ seed: 1, seedCount: 3 });
+      await o.flush();
+      expect(createButton()!.hasAttribute('aria-disabled')).toBe(false);
+      createButton()!.click();
+      await o.flush();
+      expect(calls()[1]).toEqual([CREATE, { tournamentId: 'tn_winter' }]);
+    });
+  });
+
   describe('recreating the bracket', () => {
     beforeEach(() =>
       open({ ...CLOSED, bracketCreated: true }, setupOf(THREE, { bracket: BRACKET })),

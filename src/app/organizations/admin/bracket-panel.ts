@@ -239,7 +239,7 @@ interface SeedRow {
                   data-slot="button"
                   [class]="primaryButton"
                   [class.opacity-50]="!online() && !creating()"
-                  [attr.aria-disabled]="creating() || !online() ? 'true' : null"
+                  [attr.aria-disabled]="busy() || !online() ? 'true' : null"
                   (click)="create()"
                 >
                   @if (creating()) {
