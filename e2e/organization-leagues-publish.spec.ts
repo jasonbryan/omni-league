@@ -47,6 +47,16 @@ async function orgAdmin(page: Page, seed: TenantSeed = { locations: LOCATIONS, l
   return { user, tenant, base: `/app/organizations/${tenant.slug}` };
 }
 
+const GET_SESSION = '/api/auth/get-session';
+
+function sessionRequests(page: Page): string[] {
+  const seen: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === GET_SESSION) seen.push(request.url());
+  });
+  return seen;
+}
+
 const main = (page: Page) => page.getByRole('main');
 const rows = (page: Page) => page.locator('#leagues-list > li');
 const row = (page: Page, league: string) => rows(page).filter({ hasText: league });
@@ -192,22 +202,22 @@ test.describe('Leagues: publishing a draft', () => {
     await page.goto(`${base}/leagues`);
     await publishButton(page, 'Sunday Reverse Coed 4s').click();
     await expect(dialog(page)).toBeVisible();
+    const sessionRequestsWhileOffline = sessionRequests(page);
+    // Stays offline: the online event makes Better Auth refetch the session, which can fail as the
+    // network returns and trips the console guard.
     await page.context().setOffline(true);
-    try {
-      const confirm = dialog(page).getByRole('button', { name: 'Publish league' });
-      await expect(confirm).toHaveAttribute('aria-disabled', 'true');
-      // Playwright treats aria-disabled as not actionable; the press must still be answered.
-      await confirm.click({ force: true });
-      const alert = dialog(page).locator('[data-slot="alert"]');
-      await expect(alert).toContainText("You're offline. Nothing was sent.");
-      await expect(alert).toBeFocused();
-      await screenshot(page, testInfo, '69-publish-error');
-      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
-    } finally {
-      await page.context().setOffline(false);
-    }
+    const confirm = dialog(page).getByRole('button', { name: 'Publish league' });
+    await expect(confirm).toHaveAttribute('aria-disabled', 'true');
+    // Playwright treats aria-disabled as not actionable; the press must still be answered.
+    await confirm.click({ force: true });
+    const alert = dialog(page).locator('[data-slot="alert"]');
+    await expect(alert).toContainText("You're offline. Nothing was sent.");
+    await expect(alert).toBeFocused();
+    await screenshot(page, testInfo, '69-publish-error');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await dialog(page).getByRole('button', { name: 'Cancel' }).click();
     await expect(status(page, 'Sunday Reverse Coed 4s')).toHaveText('Draft');
+    expect(sessionRequestsWhileOffline).toEqual([]);
   });
 
   test('publishing the first league hides "Get set up" on the Overview and lists the league as having no season', async ({
