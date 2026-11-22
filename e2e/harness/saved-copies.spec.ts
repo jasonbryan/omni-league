@@ -4,11 +4,13 @@ import { holdQueries } from '../support/hold-queries';
 import { gotoHydrated } from '../support/hydrated';
 import {
   expectSavedCopies,
+  leaguePageSavedKeys,
   organizationCampSavedKeys,
   organizationHeaderSavedKey,
   organizationPageSavedKeys,
   organizationTournamentSavedKeys,
   organizationTrainingSavedKeys,
+  seasonPageSavedKeys,
 } from '../support/saved-copies';
 import { seedTenant } from '../support/tenant';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
@@ -83,6 +85,25 @@ test.describe('organization page training saved-copy keys', VIEWPORT_AGNOSTIC, (
   test('a sport view adds the sport to the key', () => {
     expect(organizationTrainingSavedKeys('gulf-coast', 'soccer')).toEqual([
       'cvx-saved:trainings:listPublic:{"organizationSlug":"gulf-coast","page":1,"sport":"soccer"}',
+    ]);
+  });
+});
+
+test.describe('league page saved-copy keys', VIEWPORT_AGNOSTIC, () => {
+  test('the keys are the organization header, the league, and its seasons on page 1', () => {
+    expect(leaguePageSavedKeys('gulf-coast', 'sand-league')).toEqual([
+      'cvx-saved:organizations:getPublicPage:{"slug":"gulf-coast"}',
+      'cvx-saved:leagues:getPublicPage:{"leagueSlug":"sand-league","orgSlug":"gulf-coast"}',
+      'cvx-saved:seasons:listPublic:{"leagueSlug":"sand-league","orgSlug":"gulf-coast","page":1}',
+    ]);
+  });
+});
+
+test.describe('season page saved-copy keys', VIEWPORT_AGNOSTIC, () => {
+  test('the keys are the season and its teams on page 1', () => {
+    expect(seasonPageSavedKeys('gulf-coast', 'sand-league', 'winter-2027-28')).toEqual([
+      'cvx-saved:seasons:getPublicPage:{"leagueSlug":"sand-league","orgSlug":"gulf-coast","seasonSlug":"winter-2027-28"}',
+      'cvx-saved:teams:listPublic:{"leagueSlug":"sand-league","orgSlug":"gulf-coast","page":1,"seasonSlug":"winter-2027-28"}',
     ]);
   });
 });

@@ -42,7 +42,28 @@ export function organizationTrainingSavedKeys(slug: string, sport?: string): str
   return [savedCopyKey(api.trainings.listPublic, { organizationSlug: slug, page: 1, ...sportArg })];
 }
 
-function missingSavedCopies(page: Page, keys: readonly string[]): Promise<string[]> {
+/** The league page opens offline only when the organization header, the league, and its seasons list are all saved. */
+export function leaguePageSavedKeys(orgSlug: string, leagueSlug: string): string[] {
+  return [
+    organizationHeaderSavedKey(orgSlug),
+    savedCopyKey(api.leagues.getPublicPage, { orgSlug, leagueSlug }),
+    savedCopyKey(api.seasons.listPublic, { orgSlug, leagueSlug, page: 1 }),
+  ];
+}
+
+/** The season page opens offline only when both the season and its teams list are saved. */
+export function seasonPageSavedKeys(
+  orgSlug: string,
+  leagueSlug: string,
+  seasonSlug: string,
+): string[] {
+  return [
+    savedCopyKey(api.seasons.getPublicPage, { orgSlug, leagueSlug, seasonSlug }),
+    savedCopyKey(api.teams.listPublic, { orgSlug, leagueSlug, seasonSlug, page: 1 }),
+  ];
+}
+
+export function missingSavedCopies(page: Page, keys: readonly string[]): Promise<string[]> {
   return page.evaluate((all) => all.filter((key) => localStorage.getItem(key) === null), keys);
 }
 
