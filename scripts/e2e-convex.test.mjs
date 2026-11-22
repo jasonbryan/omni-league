@@ -245,6 +245,14 @@ describe('fetchInstanceName', () => {
     );
   });
 
+  it('names the error message when the failure carries no cause code', async () => {
+    // A scheme fetch does not serve rejects without a network code on the cause.
+    await assert.rejects(
+      fetchInstanceName('ftp://127.0.0.1:1'),
+      new Error('e2e-convex: no answer from ftp://127.0.0.1:1/instance_name: fetch failed'),
+    );
+  });
+
   it('reports the timeout, not the raw abort text, when the body stalls', async () => {
     const { url } = await listen((socket) => {
       socket.once('data', () =>
