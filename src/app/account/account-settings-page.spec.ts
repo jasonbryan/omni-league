@@ -1,12 +1,20 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  Router,
+  provideRouter,
+} from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { filter, firstValueFrom } from 'rxjs';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { BAR_TITLE_PROVIDER, expectBar } from '../shell/testing/bar-title';
+import { appRouteTitle } from '../shell/testing/app-route-title';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { expectBareCard } from '../ui/testing/card';
 import { allRadiusClasses } from '../ui/testing/radius-classes';
@@ -20,6 +28,7 @@ describe('AccountSettingsPage', () => {
   let auth: FakeAuthClient;
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
+  let navigationOver: Promise<unknown>;
 
   async function open() {
     auth = new FakeAuthClient();
@@ -32,7 +41,7 @@ describe('AccountSettingsPage', () => {
         provideRouter([
           {
             path: 'app/account',
-            title: 'Account settings | Omni League',
+            title: appRouteTitle('account'),
             component: AccountSettingsPage,
           },
           { path: '', component: Home },
@@ -41,6 +50,16 @@ describe('AccountSettingsPage', () => {
     });
     auth.emitSession({ id: 's1' });
     harness = await RouterTestingHarness.create('/app/account');
+    navigationOver = firstValueFrom(
+      TestBed.inject(Router).events.pipe(
+        filter(
+          (event) =>
+            event instanceof NavigationEnd ||
+            event instanceof NavigationCancel ||
+            event instanceof NavigationError,
+        ),
+      ),
+    );
     return harness.routeNativeElement!;
   }
 
@@ -55,8 +74,7 @@ describe('AccountSettingsPage', () => {
     TestBed.tick();
   };
   const settle = async () => {
-    await harness.fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await navigationOver;
     await harness.fixture.whenStable();
   };
 
@@ -200,6 +218,7 @@ describe('AccountSettingsPage', () => {
     const button = signOutButton(page)!;
     button.click();
     button.click();
+    await auth.signOutHeld();
     await harness.fixture.whenStable();
     expect(button.textContent?.trim()).toBe('Signing out…');
     expect(button.getAttribute('aria-disabled')).toBe('true');
@@ -207,6 +226,21 @@ describe('AccountSettingsPage', () => {
 
     auth.releaseSignOut();
     await settle();
+    expect(TestBed.inject(Router).url).toBe('/');
+  });
+
+  it('goes to / when the sign-out answers after one macrotask', async () => {
+    const page = await open();
+    accepted();
+    emitMe({ name: 'Maya Okafor' });
+    await harness.fixture.whenStable();
+
+    auth.holdSignOut = true;
+    signOutButton(page)!.click();
+    await auth.signOutHeld();
+    setTimeout(() => auth.releaseSignOut(), 10);
+    await settle();
+
     expect(TestBed.inject(Router).url).toBe('/');
   });
 
@@ -236,7 +270,7 @@ describe('AccountSettingsPage', () => {
   it('names the page in the slim bar from its route title, as the tab title does', async () => {
     const page = await open();
     accepted();
-    await settle();
+    await harness.fixture.whenStable();
     expectBar(page, 'Account settings');
   });
 });
