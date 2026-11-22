@@ -20,3 +20,6 @@ export const REGISTRATION_CARD_CLASS = {
   full: `min-h-66 sm:min-h-58 ${REGISTRATION_CARD}`,
   closed: `min-h-47 md:min-h-49 ${REGISTRATION_CARD}`,
 } as const;
+
+/** `visibility` animates, so a button's `transition-all` would keep it visible for 150 ms; `**:transition-none` hides the buttons in the frame of the swap. */
+export const SIGNED_OUT_CARD_BEHIND_TEAM = 'invisible **:transition-none';

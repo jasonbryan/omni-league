@@ -45,6 +45,7 @@ import {
   REGISTRATION_CARD_CLASS,
   SEASON_CRUMB_LINK,
   SEASON_HEADING,
+  SIGNED_OUT_CARD_BEHIND_TEAM,
 } from '../public-league/public-season-header-classes';
 import {
   registrationCard,
@@ -145,7 +146,7 @@ const FACT_ICON =
               <div class="grid grid-cols-1">
                 <div
                   class="col-start-1 row-start-1"
-                  [class.invisible]="!!team()"
+                  [class]="team() ? signedOutCardBehindTeam : ''"
                   [attr.inert]="team() ? '' : null"
                   [attr.aria-hidden]="team() ? 'true' : null"
                 >
@@ -429,6 +430,7 @@ export class PublicSeasonContent {
   protected readonly lines = registrationLines;
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
+  protected readonly signedOutCardBehindTeam = SIGNED_OUT_CARD_BEHIND_TEAM;
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
   protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly crumbLink = SEASON_CRUMB_LINK;
