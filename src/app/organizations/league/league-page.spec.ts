@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
+import { LOAD_SHELL_SHEET } from '../../shell/shell';
+import * as shellSheet from '../../shell/shell-sheet';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { forbiddenError, ME, openAdmin, text } from '../admin/testing/admin-harness';
 import {
@@ -724,9 +726,17 @@ describe('LeaguePage', () => {
       };
       for (const [name, choose] of Object.entries(choices)) {
         it(`${name} before the rows arrive leaves focus where the user put it`, async () => {
+          // The lazy import settles mid-test in a warm worker but not a cold one, so the press resolves it at once.
+          TestBed.overrideProvider(LOAD_SHELL_SHEET, {
+            useValue: () => Promise.resolve(shellSheet),
+          });
           await pressWhileLoading();
           choose();
+          await o.flush();
           const focused = document.activeElement;
+          if (name === 'pressing a control') {
+            expect(focused).toBe(document.querySelector('button[aria-label="Close navigation"]'));
+          }
           scrolled.mockClear();
           await arrive();
           expect(document.activeElement).toBe(focused);
