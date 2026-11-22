@@ -50,7 +50,10 @@ const SHARKS = { teamId: 'team_sharks', name: 'Sand Sharks', isCaptain: true, ro
 
 let client: FakeConvexClient;
 
-async function open(url = PATH): Promise<RouterTestingHarness> {
+async function open(
+  url = PATH,
+  season: Partial<typeof SUMMER_2027> & { isFull?: boolean; maxTeams?: number } = {},
+): Promise<RouterTestingHarness> {
   client = new FakeConvexClient();
   TestBed.configureTestingModule({
     providers: [
@@ -66,7 +69,10 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
   });
   const harness = await RouterTestingHarness.create(url);
   await settle(harness);
-  for (const [name, value] of Object.entries(seasonQueryResults())) subscription(name).emit(value);
+  for (const [name, value] of Object.entries(
+    seasonQueryResults({ season: { ...SUMMER_2027, ...season } }),
+  ))
+    subscription(name).emit(value);
   await settle(harness);
   return harness;
 }
@@ -110,8 +116,11 @@ const links = (harness: RouterTestingHarness) =>
     link.getAttribute('href'),
   ]);
 
-async function showTeam(team: unknown): Promise<RouterTestingHarness> {
-  const harness = await open();
+async function showTeam(
+  team: unknown,
+  season?: Parameters<typeof open>[1],
+): Promise<RouterTestingHarness> {
+  const harness = await open(PATH, season);
   await signIn(harness);
   subscription(REGISTRATION).emit(answer(team));
   await settle(harness);
@@ -137,6 +146,8 @@ describe("PublicSeasonPage the viewer's team", () => {
     const harness = await open();
     expect(registrations()).toHaveLength(0);
     expect(links(harness)).toEqual(REGISTER_LINKS);
+    expect(fullCard(harness)?.querySelector('.invisible')).toBeNull();
+    expect(fullCard(harness)?.querySelector('[class~="**:transition-none"]')).toBeNull();
   });
 
   it("asks once Convex has accepted the sign-in, with the route's slugs only", async () => {
@@ -192,19 +203,33 @@ describe("PublicSeasonPage the viewer's team", () => {
     );
   });
 
-  it('keeps the signed-out card behind the team card, inert and hidden from assistive technology, so the card keeps the taller height', async () => {
+  it.each([
+    ['open', undefined, '2027-05-01'],
+    ['full', { isFull: true, maxTeams: 2 }, '2027-05-01'],
+    ['closed', undefined, '2027-05-30'],
+  ] as const)(
+    'keeps the %s signed-out card behind the team card, inert, hidden from assistive technology, and with no transitions, so the card keeps the taller height',
+    async (_kind, season, today) => {
+      vi.setSystemTime(at(today));
+      const harness = await showTeam(SHARKS, season);
+      const behind = fullCard(harness)?.querySelector('[inert]');
+      expect(behind?.getAttribute('aria-hidden')).toBe('true');
+      expect(behind?.classList.contains('invisible')).toBe(true);
+      expect(behind?.classList.contains('**:transition-none')).toBe(true);
+      expect(behind?.parentElement?.children).toHaveLength(2);
+    },
+  );
+
+  it('keeps the register links in the inert card for an open season', async () => {
     const harness = await showTeam(SHARKS);
-    const behind = fullCard(harness)?.querySelector('[inert]');
-    expect(spaced(behind)).toContain('Register a team');
-    expect(behind?.getAttribute('aria-hidden')).toBe('true');
-    expect(behind?.classList.contains('invisible')).toBe(true);
-    expect(behind?.parentElement?.children).toHaveLength(2);
+    expect(spaced(fullCard(harness)?.querySelector('[inert]'))).toContain('Register a team');
   });
 
-  it('marks nothing inert while the visitor has no team', async () => {
+  it('marks nothing inert and keeps the button transitions while the visitor has no team', async () => {
     const harness = await showTeam(null);
     expect(fullCard(harness)?.querySelector('[inert]')).toBeNull();
     expect(fullCard(harness)?.querySelector('.invisible')).toBeNull();
+    expect(fullCard(harness)?.querySelector('[class~="**:transition-none"]')).toBeNull();
   });
 
   it('goes back to the register actions on sign-out, and closes the subscription', async () => {
@@ -213,6 +238,8 @@ describe("PublicSeasonPage the viewer's team", () => {
     await settle(harness);
     expect(registrations()).toHaveLength(0);
     expect(links(harness)).toEqual(REGISTER_LINKS);
+    expect(fullCard(harness)?.querySelector('.invisible')).toBeNull();
+    expect(fullCard(harness)?.querySelector('[class~="**:transition-none"]')).toBeNull();
   });
 
   it('keeps the register actions when the answer fails, and the rest of the page shows', async () => {

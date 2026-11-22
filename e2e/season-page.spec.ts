@@ -1736,6 +1736,55 @@ test.describe('public season page: signed in and on a team', () => {
     expect(await card.evaluate((el) => el.contains(document.activeElement))).toBe(false);
   });
 
+  test('the register buttons are hidden in every frame that shows the team card, and no visibility transition runs', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed(await captainOfSandSharks(page));
+    const held = await holdQueries(page, [REGISTRATION]);
+    await gotoHydrated(page, consoleGuard, OPEN_PATH(tenant));
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const sampled = page.evaluate(
+      () =>
+        new Promise<{ frames: string[][]; visibilityTransitions: number }>((resolve) => {
+          const SAMPLE_MS = 300;
+          const registration = document.querySelector('#registration')!;
+          const frames: string[][] = [];
+          let visibilityTransitions = 0;
+          registration.addEventListener('transitionrun', (event) => {
+            if ((event as TransitionEvent).propertyName === 'visibility') visibilityTransitions++;
+          });
+          let firstTeamFrame: number | undefined;
+          const sample = (now: number) => {
+            if (registration.textContent?.includes("You're registered")) {
+              firstTeamFrame ??= now;
+              const signedOut = registration.querySelector('.grid > div:first-child');
+              frames.push(
+                [...(signedOut?.querySelectorAll('a[data-slot="button"]') ?? [])].map(
+                  (button) => getComputedStyle(button).visibility,
+                ),
+              );
+            }
+            if (firstTeamFrame !== undefined && now - firstTeamFrame > SAMPLE_MS) {
+              resolve({ frames, visibilityTransitions });
+              return;
+            }
+            requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+
+    held.release();
+    const { frames, visibilityTransitions } = await sampled;
+    expect(frames.length).toBeGreaterThan(1);
+    for (const [index, buttons] of frames.entries()) {
+      expect(buttons.length, `buttons in frame ${index}`).toBeGreaterThan(1);
+      expect(buttons, `frame ${index}`).toEqual(buttons.map(() => 'hidden'));
+    }
+    expect(visibilityTransitions).toBe(0);
+  });
+
   test('a signed-in visitor on no team keeps the register actions', async ({
     page,
     consoleGuard,
