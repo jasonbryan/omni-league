@@ -238,6 +238,8 @@ describe("PublicSeasonPage the viewer's team", () => {
     await settle(harness);
     expect(registrations()).toHaveLength(0);
     expect(links(harness)).toEqual(REGISTER_LINKS);
+    expect(fullCard(harness)?.querySelector('.invisible')).toBeNull();
+    expect(fullCard(harness)?.querySelector('[class~="**:transition-none"]')).toBeNull();
   });
 
   it('keeps the register actions when the answer fails, and the rest of the page shows', async () => {
