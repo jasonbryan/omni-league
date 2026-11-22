@@ -1,0 +1,3 @@
+import { expectOwnRowGrowsOnce } from './support/registered-rows';
+
+await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));

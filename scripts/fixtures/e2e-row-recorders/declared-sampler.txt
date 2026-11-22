@@ -1,0 +1,10 @@
+import { expectOwnRowGrowsOnce } from './support/registered-rows';
+
+await page.evaluate(() => {
+  const frames: number[] = [];
+  function sample() {
+    frames.push(document.documentElement.scrollHeight);
+    requestAnimationFrame(sample);
+  }
+  sample();
+});

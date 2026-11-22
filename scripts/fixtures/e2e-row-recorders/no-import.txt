@@ -1,0 +1,9 @@
+import { expect, test } from './support/fixtures';
+
+await page.evaluate(() => {
+  const sample = () => {
+    requestAnimationFrame(sample);
+  };
+  sample();
+  (window as unknown as { __recorder: unknown }).__recorder = {};
+});
