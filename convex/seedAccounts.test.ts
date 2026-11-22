@@ -46,6 +46,8 @@ const SAGUARO = 'saguaro-valley-softball';
 const ROCKPORT = 'rockport-sand-volleyball';
 const SLOW = 120_000;
 
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
 function setup() {
   const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
@@ -1811,5 +1813,18 @@ describe('seed:demo accounts: three runs at once', () => {
       expect(rows.invites).toHaveLength(1);
     },
     SLOW * 2,
+  );
+});
+
+describe('seed:demo accounts: the password hash cost', () => {
+  test(
+    'every hash the seed makes goes through the cheap scrypt wrapper',
+    async () => {
+      const t = setup();
+      const before = scryptCalls.count;
+      await run(t);
+      expect(scryptCalls.count).toBeGreaterThan(before);
+    },
+    SLOW,
   );
 });
