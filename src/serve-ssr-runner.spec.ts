@@ -8,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { request as httpRequest } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,10 +62,19 @@ let runner: ChildProcess;
 let port: number;
 let output = '';
 
-function get(path: string, options: { host?: string; headers?: Record<string, string> } = {}) {
+function get(
+  path: string,
+  options: { host?: string; headers?: Record<string, string>; signal?: AbortSignal } = {},
+) {
   return new Promise<Reply>((resolve, reject) => {
     const req = httpRequest(
-      { host: options.host ?? '127.0.0.1', port, path, headers: options.headers },
+      {
+        host: options.host ?? '127.0.0.1',
+        port,
+        path,
+        headers: options.headers,
+        signal: options.signal,
+      },
       (res) => {
         let body = '';
         res.setEncoding('utf8');
@@ -98,6 +107,8 @@ const BIG_FILE_BYTES = 32 * 1024 * 1024;
 // eio-mid.bin is larger than one read chunk (64 KiB), so the first chunk is sent before the failure.
 const EIO_MID_BYTES = 8 * 1024 * 1024 + 1;
 const EIO_FIRST_BYTES = 65_537;
+// Under the 15 s test timeout, with room for the 200 ms garbage-collection sleep.
+const READ_ERROR_DEADLINE_MS = 12_000;
 
 /**
  * Preload that makes `FileHandle.prototype.read` reject with `EIO` for the two eio fixtures: on
@@ -130,23 +141,64 @@ interface Outcome {
   error?: string;
 }
 
-function fetchOutcome(path: string) {
-  return new Promise<Outcome>((resolve) => {
-    const outcome: Outcome = { bytes: 0, complete: false };
-    const fail = (error: NodeJS.ErrnoException) => (outcome.error ??= error.code ?? error.message);
-    const req = httpRequest({ host: '127.0.0.1', port, path }, (res) => {
-      outcome.status = res.statusCode;
-      res.on('data', (chunk: Buffer) => (outcome.bytes += chunk.length));
-      res.on('end', () => (outcome.complete = true));
-      res.on('error', fail);
-      res.on('close', () => resolve(outcome));
-    });
-    req.on('error', (error) => {
-      fail(error);
-      resolve(outcome);
-    });
-    req.end();
+function createDeadline(budgetMs: number) {
+  const end = Date.now() + budgetMs;
+  return { budgetMs, remainingMs: () => Math.max(0, end - Date.now()) };
+}
+type Deadline = ReturnType<typeof createDeadline>;
+
+async function atStage<T>(
+  stage: string,
+  deadline: Deadline,
+  start: (signal: AbortSignal) => Promise<T>,
+  seen: () => string,
+) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new Error(
+          `stage "${stage}" was still waiting when the ${deadline.budgetMs} ms deadline passed` +
+            `\nseen: ${seen()}\nrunner output:\n${output}`,
+        ),
+      );
+    }, deadline.remainingMs());
   });
+  try {
+    return await Promise.race([start(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fetchOutcome(path: string, deadline: Deadline, targetPort = port) {
+  const outcome: Outcome = { bytes: 0, complete: false };
+  return atStage(
+    'response outcome',
+    deadline,
+    (signal) =>
+      new Promise<Outcome>((resolve) => {
+        const fail = (error: NodeJS.ErrnoException) =>
+          (outcome.error ??= error.code ?? error.message);
+        const req = httpRequest({ host: '127.0.0.1', port: targetPort, path, signal }, (res) => {
+          outcome.status = res.statusCode;
+          res.on('data', (chunk: Buffer) => (outcome.bytes += chunk.length));
+          res.on('end', () => (outcome.complete = true));
+          res.on('error', fail);
+          res.on('close', () => resolve(outcome));
+        });
+        req.on('error', (error) => {
+          fail(error);
+          resolve(outcome);
+        });
+        // Node closes an aborted request before its response reports the error and close.
+        req.on('close', () => setImmediate(() => resolve(outcome)));
+        req.end();
+      }),
+    () => JSON.stringify(outcome),
+  );
 }
 
 function outputLines(text: string) {
@@ -174,12 +226,31 @@ function disconnect(
 }
 
 /** The log arrives on the runner's stderr, which is not ordered with the HTTP reply: poll for it. */
-async function waitForOutput(text: string, timeoutMs = 5_000) {
+async function waitForOutput(text: string, timeoutMs = 5_000, signal?: AbortSignal) {
   const deadline = Date.now() + timeoutMs;
   while (!output.includes(text)) {
+    signal?.throwIfAborted();
     if (Date.now() > deadline) throw new Error(`no "${text}" in the runner output:\n${output}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+}
+
+function waitForLogLine(text: string, deadline: Deadline) {
+  return atStage(
+    'log line',
+    deadline,
+    (signal) => waitForOutput(text, Infinity, signal),
+    () => `no "${text}" yet`,
+  );
+}
+
+function getWithin(path: string, deadline: Deadline) {
+  return atStage(
+    `final GET ${path}`,
+    deadline,
+    (signal) => get(path, { signal }),
+    () => 'no reply yet',
+  );
 }
 
 describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
@@ -387,11 +458,12 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
   });
 
   it('logs a read error after the headers are sent, once and without the query', async () => {
-    const outcome = await fetchOutcome('/eio-mid.bin?ott=SECRET');
+    const deadline = createDeadline(READ_ERROR_DEADLINE_MS);
+    const outcome = await fetchOutcome('/eio-mid.bin?ott=SECRET', deadline);
 
     expect(outcome.complete).toBe(false);
     expect(outcome.bytes).toBeLessThan(EIO_MID_BYTES);
-    await waitForOutput('error handling GET /eio-mid.bin:');
+    await waitForLogLine('error handling GET /eio-mid.bin:', deadline);
     const lines = outputLines('/eio-mid.bin');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('GET');
@@ -400,21 +472,43 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     // Long enough for the runner's garbage collection (every 25 ms) to find a leaked handle.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(runner.exitCode).toBeNull();
-    expect((await get('/')).status).toBe(200);
+    expect((await getWithin('/', deadline)).status).toBe(200);
   }, 15_000);
 
+  it('fails a wait that never settles at the deadline, naming its stage and closing its request', async () => {
+    let connectionClosed: Promise<void> = Promise.resolve();
+    const stalled = createServer();
+    stalled.on('connection', (socket) => {
+      connectionClosed = new Promise((resolve) => socket.once('close', () => resolve()));
+    });
+    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = stalled.address();
+      const stalledPort = typeof address === 'object' && address ? address.port : 0;
+
+      await expect(fetchOutcome('/stall', createDeadline(300), stalledPort)).rejects.toThrow(
+        /stage "response outcome" was still waiting when the 300 ms deadline passed\nseen: \{"bytes":0,"complete":false\}/,
+      );
+      await connectionClosed;
+    } finally {
+      stalled.closeAllConnections();
+      await new Promise((resolve) => stalled.close(resolve));
+    }
+  });
+
   it('resets the connection and logs once when the first read of a static file fails', async () => {
-    const outcome = await fetchOutcome('/eio-first.bin');
+    const deadline = createDeadline(READ_ERROR_DEADLINE_MS);
+    const outcome = await fetchOutcome('/eio-first.bin', deadline);
 
     expect(outcome.complete).toBe(false);
     expect(outcome.error).toMatch(/ECONNRESET|aborted/);
-    await waitForOutput('error handling GET /eio-first.bin:');
+    await waitForLogLine('error handling GET /eio-first.bin:', deadline);
     const lines = outputLines('/eio-first.bin');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('EIO');
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(runner.exitCode).toBeNull();
-    expect((await get('/')).status).toBe(200);
+    expect((await getWithin('/', deadline)).status).toBe(200);
   }, 15_000);
 
   it('logs the redacted cause of a handler error', async () => {
