@@ -253,8 +253,26 @@ test.describe('query strings and the CDN', () => {
     'the find page without a search: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
     RAW_HTTP,
     async () => {
-      const first = await rawGet('/programs');
-      expect(first.status).toBe(200);
+      // The list holds every organization with a published league, whatever else has run, so the
+      // test seeds enough for a page 2. `seed:demo` lists 6 (7 organizations, one without a league)
+      // and the page holds 5.
+      if (remoteBaseUrl === undefined) {
+        for (let i = 1; i <= 6; i++) {
+          await seedTenant({
+            name: 'E2E Cache Key Find',
+            locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+            leagues: [{ name: 'Find League', sport: 'soccer', locations: ['Alpha Field'] }],
+          });
+        }
+      }
+      // The canonical falls back to page 1 when the render has no result, so a body with no list
+      // would pass.
+      const listsOrganizations = (body: string) => /\d+–\d+ of \d+/.test(body);
+
+      const second = await rawGet('/programs?page=2');
+      expect(second.status).toBe(200);
+      expect(canonicalOf(second.body)).toBe(`${ORIGIN}/programs?page=2`);
+
       for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
         const token = canary();
         const response = await rawGet(`/programs${sample(token)}`);
@@ -264,11 +282,8 @@ test.describe('query strings and the CDN', () => {
         expect(response.headers.location, sample(token)).toBeUndefined();
         expect(response.headers['netlify-vary'], sample(token)).toBe('query');
         expect(sharedCacheable(response.headers['cache-control']), sample(token)).toBe(true);
-        const names = (body: string) =>
-          [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
-            name.trim(),
-          );
-        expect(names(response.body), sample(token)).toEqual(names(first.body));
+        expect(listsOrganizations(response.body), sample(token)).toBe(true);
+        expect(canonicalOf(response.body), sample(token)).toBe(`${ORIGIN}/programs`);
       }
     },
   );
