@@ -6,6 +6,9 @@ const NOTE_CLASSES = 'text-foreground text-sm font-normal flex items-start gap-1
 const tokens = (value: string) => value.split(/\s+/).filter(Boolean).sort();
 
 describe('the field note and the web address status', () => {
+  // TestBed removes only roots whose id starts with `root`, and the status host replaces that id.
+  afterEach(() => document.querySelector('#slug-availability')?.remove());
+
   it('draws the field note paragraph with the note class set and its text', () => {
     const fixture = TestBed.createComponent(FieldNoteText);
     fixture.componentRef.setInput('id', 'name-note');
@@ -42,5 +45,9 @@ describe('the field note and the web address status', () => {
     const status = fixture.nativeElement as HTMLElement;
     expect(tokens(status.className)).toEqual(['sr-only']);
     expect(status.textContent).toContain('Available');
+  });
+
+  it('leaves no web address status in the page for the spec files after it', () => {
+    expect(document.querySelector('#slug-availability')).toBeNull();
   });
 });
