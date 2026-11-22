@@ -1332,6 +1332,62 @@ test.describe('public season page: the names a link carried in the skeleton', ()
     expectLanded(followed, ALL_PARTS, { cardHeight: true });
   });
 
+  test.describe('the loaded long-named season’s breadcrumb at phone widths', () => {
+    const LONG = NAMED_SEASONS[2];
+
+    async function openLongSeason(page: Page, consoleGuard: ConsoleGuard): Promise<void> {
+      const tenant = await seedNamedSeasons('open');
+      await gotoHydrated(
+        page,
+        consoleGuard,
+        `${tenant.path}/leagues/${LONG.leagueSlug}/seasons/${LONG.seasonSlug}`,
+      );
+      await expect(page.getByRole('heading', { level: 1, name: LONG.season })).toBeVisible();
+    }
+
+    async function expectWrappedTrail(page: Page, width: number): Promise<void> {
+      const crumbs = breadcrumbLinksAndText(page);
+      const [first, last] = await Promise.all([
+        crumbs.first().boundingBox(),
+        crumbs.last().boundingBox(),
+      ]);
+      expect(first, 'the first crumb is drawn').not.toBeNull();
+      expect(last, 'the last crumb is drawn').not.toBeNull();
+      expect(
+        last!.y,
+        `at ${width}px the trail wraps: the last crumb sits below the first`,
+      ).toBeGreaterThan(first!.y);
+    }
+
+    test('under a mouse at 320px and 360px, the trail wraps and the page has no axe violation', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'one Chromium project per pointer');
+      await page.setViewportSize({ width: 320, height: 800 });
+      await openLongSeason(page, consoleGuard);
+      expect(await page.evaluate(() => matchMedia('(pointer: fine)').matches)).toBe(true);
+
+      for (const width of [320, 360]) {
+        await page.setViewportSize({ width, height: 800 });
+        await expectWrappedTrail(page, width);
+        await expectAccessible(page);
+      }
+    });
+
+    test('under a touch screen at 320px, the page has no axe violation', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-mobile', 'one Chromium project per pointer');
+      await page.setViewportSize({ width: 320, height: 800 });
+      await openLongSeason(page, consoleGuard);
+      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+
+      await expectAccessible(page);
+    });
+  });
+
   for (const { width, project } of [NAMED_WIDTHS[0], NAMED_WIDTHS[1]]) {
     test(`at ${width}px the held skeleton with registration dates has no link and no heading, is heard as Loading the season. only, keeps focus on main, and passes the axe helper and the reflow check`, async ({
       page,
