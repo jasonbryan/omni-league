@@ -3,6 +3,7 @@ import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { holdQueries } from './support/hold-queries';
 import { expectLinkHeights, pointerOf } from './support/link-heights';
 import { BRACKET_MESSAGES } from '../convex/lib/bracket';
@@ -137,6 +138,7 @@ test.describe('Tournaments: seeds and the bracket', () => {
     await expectAccessible(page);
 
     await move(page, 'Echo', 'up').click();
+    await expect(seedStatus(page)).toHaveText('Echo moved up to seed 4 of 5.');
     await expect(seedNames(page)).toHaveText(['Alpha', 'Bravo', 'Charlie', 'Echo', 'Delta']);
     await expect(panel(page).locator('[data-slot="seed-note"]')).toHaveText(
       'The bracket keeps the seeds it was created with. Recreate it to use this order.',
@@ -160,6 +162,26 @@ test.describe('Tournaments: seeds and the bracket', () => {
     ).toBeVisible();
     await expect(gameLabels(page).nth(1)).toHaveText('Game 2: Echo v Delta');
     await expect(createButton(page)).toBeFocused();
+  });
+
+  test('holds Create and Recreate while a seed move is pending: they are aria-disabled, a press opens no dialog, and after the move lands a press opens it', async ({
+    page,
+  }) => {
+    const held = await holdMutations(page);
+    const { managePath } = await adminOf(page, { teams: full(NAMES), registration: 'closed' });
+    await page.goto(managePath);
+    await createBracket(page);
+    held.hold();
+    await move(page, 'Echo', 'up').click();
+    await expect(createButton(page)).toHaveAttribute('aria-disabled', 'true');
+    await createButton(page).click({ force: true });
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+
+    held.release();
+    await expect(seedStatus(page)).toHaveText('Echo moved up to seed 4 of 5.');
+    await expect(createButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+    await createButton(page).click();
+    await expect(page.getByRole('alertdialog', { name: 'Recreate the bracket?' })).toBeVisible();
   });
 
   test('once the bracket is created, Sets per game is text with the reason', async ({
@@ -1885,6 +1907,7 @@ test.describe('Tournaments: double elimination, beyond the criteria', () => {
     await chooseAndSave(page, ['bracket-type-double']);
     await createBracket(page);
     await move(page, 'Foxtrot', 'up').click();
+    await expect(seedStatus(page)).toHaveText('Foxtrot moved up to seed 5 of 6.');
     await createButton(page).click();
     await page
       .getByRole('alertdialog', { name: 'Recreate the bracket?' })
