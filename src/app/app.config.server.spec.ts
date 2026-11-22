@@ -6,8 +6,7 @@ import { ConvexServerQueryLoader } from './core/data/convex/server-query-loader'
 const serverModeOnLoad = globalThis.ngServerMode;
 
 describe('server config', () => {
-  // Loading the config runs provideServerRendering, which sets ngServerMode and never clears it,
-  // and spec files in one worker share a global, so every later file would see server mode.
+  // provideServerRendering sets ngServerMode and never clears it, and spec files share one global.
   afterEach(() => {
     globalThis.ngServerMode = serverModeOnLoad;
   });
