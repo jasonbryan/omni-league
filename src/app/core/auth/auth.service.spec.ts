@@ -1193,8 +1193,14 @@ describe('AuthService', () => {
         expect(navigate).not.toHaveBeenCalled();
       });
 
-      it('a check that never reached the server leaves a signed-in tab where it is', async () => {
+      it('a check that never reached the server leaves a tab that signed in through the form where it is', async () => {
         const { router, auth, navigate } = await signedInOn('/app/account');
+        client.emitSession(null);
+        await vi.waitFor(() => expect(router.url).toBe('/sign-in?returnTo=%2Fapp%2Faccount'));
+        await auth.authenticate(requestSignIn, INPUT);
+        await router.navigateByUrl('/app/account');
+        navigate.mockClear();
+
         client.emitChecking();
         client.emitError(new TypeError('Failed to fetch'));
         await loaded();
@@ -1310,6 +1316,21 @@ describe('AuthService', () => {
 
           client.emitSession({ id: 's3' }, 'u2');
           expect(auth.authEpoch()).toBe(1);
+        });
+
+        it('a failed check after the form carries the replaced user’s kept data, so the form’s own answer is no account change', async () => {
+          const { router, auth, navigate } = await signedInOn('/app/account', 'u1');
+          await auth.authenticate(requestSignIn, INPUT);
+          expect(auth.authEpoch()).toBe(1);
+
+          client.emitChecking();
+          client.emitError({ status: 503, statusText: 'Service Unavailable' });
+          client.emitChecking();
+          client.emitSession({ id: 's2' }, 'u2');
+          await loaded();
+          expect(auth.authEpoch()).toBe(1);
+          expect(navigate).not.toHaveBeenCalled();
+          expect(router.url).toBe('/app/account');
         });
 
         it('once the form’s answer has set the user, another user’s session is an account change', async () => {

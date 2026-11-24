@@ -138,7 +138,8 @@ export class AuthService implements ConvexAuthSource {
     if (!refetching) this.settleCheck();
     this.endGuardOnFreshAnswer(refetching, value.error);
     if (value.data?.session) {
-      if (this.signOutGuard === 'off') this.confirmSession(refetching ? null : value.data.user.id);
+      if (this.signOutGuard === 'off')
+        this.confirmSession(refetching || value.error ? null : value.data.user.id);
       return;
     }
     if (refetching) return;
@@ -152,7 +153,7 @@ export class AuthService implements ConvexAuthSource {
     if (this.signOutGuard === 'awaiting-fresh-answer' && freshAnswer) this.signOutGuard = 'off';
   }
 
-  /** `userId` is `null` for the emission that starts a check, which carries the previous answer's session. */
+  /** `userId` is `null` unless the emission is an answer with no error: one that starts a check, or a failed one, carries the previous answer's session. */
   private confirmSession(userId: string | null): void {
     const previous = this.session();
     const askAgain = previous === 'kept' && this.tokenWithheld;
@@ -179,7 +180,7 @@ export class AuthService implements ConvexAuthSource {
     return previous !== null && previous !== userId;
   }
 
-  /** The Convex client keeps `convexAuthenticated` true across a new `setAuth`, so it is lowered here until the new token is accepted. */
+  /** Convex's `setConfig` calls no `onChange(false)`, so `convexAuthenticated` is lowered here until the new token is accepted. */
   private followAccountChange(): void {
     this.forgetToken();
     this.convexAuth.set(false);
