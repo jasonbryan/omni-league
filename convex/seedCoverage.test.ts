@@ -32,6 +32,25 @@ export function missingSeedTables(
 
 const TABLES = Object.keys(schema.tables);
 
+const TIMEOUT = 15_000;
+
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
+const CHEAP_SCRYPT_N = 2 ** 4;
+
+// Pure-JavaScript scrypt at the app's cost takes about a quarter of a second a hash, and a test that
+// times out cannot cancel the hashing it started, so the cost is cut here; password.test.ts keeps the real one.
+vi.mock('@noble/hashes/scrypt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@noble/hashes/scrypt.js')>();
+  return {
+    ...actual,
+    scryptAsync: (...[password, salt, options]: Parameters<typeof actual.scryptAsync>) => {
+      scryptCalls.count += 1;
+      return actual.scryptAsync(password, salt, { ...options, N: CHEAP_SCRYPT_N });
+    },
+  };
+});
+
 function setup() {
   const t = convexTest(schema, modules);
   // The demo accounts are made through Better Auth's sign-up, so the component is registered.
@@ -79,40 +98,60 @@ afterEach(() => {
 });
 
 describe('seed:demo coverage', () => {
-  // The seed signs up three demo accounts, each hashed with scrypt, so a run takes seconds.
-  vi.setConfig({ testTimeout: 120_000 });
+  test(
+    'on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale or on a seeded table',
+    async () => {
+      const t = setup();
+      await t.action(internal.seed.demo, {});
+      expect(missingSeedTables(TABLES, SEED_EXCEPTIONS, rowCounts(await ids(t)))).toEqual({
+        empty: [],
+        staleExceptions: [],
+        seededExceptions: [],
+      });
+    },
+    TIMEOUT,
+  );
 
-  test('on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale or on a seeded table', async () => {
-    const t = setup();
-    await t.action(internal.seed.demo, {});
-    expect(missingSeedTables(TABLES, SEED_EXCEPTIONS, rowCounts(await ids(t)))).toEqual({
-      empty: [],
-      staleExceptions: [],
-      seededExceptions: [],
-    });
-  });
+  test(
+    'an exception on a table the seed fills fails the check',
+    async () => {
+      const t = setup();
+      await t.action(internal.seed.demo, {});
+      expect(
+        missingSeedTables(
+          TABLES,
+          { ...SEED_EXCEPTIONS, organizations: 'left over' },
+          rowCounts(await ids(t)),
+        ),
+      ).toEqual({ empty: [], staleExceptions: [], seededExceptions: ['organizations'] });
+    },
+    TIMEOUT,
+  );
 
-  test('an exception on a table the seed fills fails the check', async () => {
-    const t = setup();
-    await t.action(internal.seed.demo, {});
-    expect(
-      missingSeedTables(
-        TABLES,
-        { ...SEED_EXCEPTIONS, organizations: 'left over' },
-        rowCounts(await ids(t)),
-      ),
-    ).toEqual({ empty: [], staleExceptions: [], seededExceptions: ['organizations'] });
-  });
+  test(
+    'a second run leaves every schema table with the same row count and the same _ids',
+    async () => {
+      const t = setup();
+      await t.action(internal.seed.demo, {});
+      const before = await ids(t);
+      await t.action(internal.seed.demo, {});
+      const after = await ids(t);
+      expect(rowCounts(after)).toEqual(rowCounts(before));
+      expect(after).toEqual(before);
+    },
+    TIMEOUT,
+  );
 
-  test('a second run leaves every schema table with the same row count and the same _ids', async () => {
-    const t = setup();
-    await t.action(internal.seed.demo, {});
-    const before = await ids(t);
-    await t.action(internal.seed.demo, {});
-    const after = await ids(t);
-    expect(rowCounts(after)).toEqual(rowCounts(before));
-    expect(after).toEqual(before);
-  });
+  test(
+    'every hash the seed makes goes through the cheap scrypt wrapper',
+    async () => {
+      const t = setup();
+      const before = scryptCalls.count;
+      await t.action(internal.seed.demo, {});
+      expect(scryptCalls.count).toBeGreaterThan(before);
+    },
+    TIMEOUT,
+  );
 
   test('the real table names plus a made-up table with no rows and no exception return that table', () => {
     const counts = Object.fromEntries(TABLES.map((table) => [table, 1]));

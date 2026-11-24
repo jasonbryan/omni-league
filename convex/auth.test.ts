@@ -22,6 +22,25 @@ vi.mock('./lib/users', async (importOriginal) => {
   };
 });
 
+const TIMEOUT = 15_000;
+
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
+const CHEAP_SCRYPT_N = 2 ** 4;
+
+// Pure-JavaScript scrypt at the app's cost takes about a quarter of a second a hash, and a test that
+// times out cannot cancel the hashing it started, so the cost is cut here; password.test.ts keeps the real one.
+vi.mock('@noble/hashes/scrypt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@noble/hashes/scrypt.js')>();
+  return {
+    ...actual,
+    scryptAsync: (...[password, salt, options]: Parameters<typeof actual.scryptAsync>) => {
+      scryptCalls.count += 1;
+      return actual.scryptAsync(password, salt, { ...options, N: CHEAP_SCRYPT_N });
+    },
+  };
+});
+
 const SITE_URL = 'http://localhost:4000';
 const PREVIEW = 'https://deploy-preview-62--charming-longma-28c00d.netlify.app';
 const PASSWORD = 'sandbar sunset spike 2026';
@@ -133,26 +152,30 @@ afterEach(() => {
 });
 
 describe('sign-up', () => {
-  test('creates the auth user and a users row with adultConfirmedAt', async () => {
-    const t = setup();
-    const before = Date.now();
-    const { status, json } = await signUp(t, valid());
-    expect(status, JSON.stringify(json)).toBe(200);
-    expect(json['token']).toEqual(expect.any(String));
+  test(
+    'creates the auth user and a users row with adultConfirmedAt',
+    async () => {
+      const t = setup();
+      const before = Date.now();
+      const { status, json } = await signUp(t, valid());
+      expect(status, JSON.stringify(json)).toBe(200);
+      expect(json['token']).toEqual(expect.any(String));
 
-    const { authUsers, accounts, users } = await stored(t);
-    expect(authUsers).toHaveLength(1);
-    const [authUser] = authUsers;
-    expect(authUser).toMatchObject({ email: 'maya.okafor@example.com', name: 'Maya Okafor' });
-    expect(accounts).toHaveLength(1);
-    expect(accounts[0]).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
-    expect(accounts[0]?.['password']).toMatch(/^scrypt\$15\$8\$3\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
+      const { authUsers, accounts, users } = await stored(t);
+      expect(authUsers).toHaveLength(1);
+      const [authUser] = authUsers;
+      expect(authUser).toMatchObject({ email: 'maya.okafor@example.com', name: 'Maya Okafor' });
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0]).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
+      expect(accounts[0]?.['password']).toMatch(/^scrypt\$15\$8\$3\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
 
-    expect(users).toHaveLength(1);
-    expect(users[0]).toMatchObject({ authUserId: authUser?.['_id'], name: 'Maya Okafor' });
-    expect(users[0]?.adultConfirmedAt).toBeGreaterThanOrEqual(before);
-    expect(users[0]?.adultConfirmedAt).toBeLessThanOrEqual(Date.now());
-  }, 30_000);
+      expect(users).toHaveLength(1);
+      expect(users[0]).toMatchObject({ authUserId: authUser?.['_id'], name: 'Maya Okafor' });
+      expect(users[0]?.adultConfirmedAt).toBeGreaterThanOrEqual(before);
+      expect(users[0]?.adultConfirmedAt).toBeLessThanOrEqual(Date.now());
+    },
+    TIMEOUT,
+  );
 
   test.each([
     ['missing', undefined],
@@ -174,31 +197,39 @@ describe('sign-up', () => {
     },
   );
 
-  test('when the user.onCreate trigger throws, no auth user remains', async () => {
-    const t = setup();
-    failures.userRecord = true;
-    const { status } = await signUp(t, valid());
-    expect(status).toBeGreaterThanOrEqual(400);
-    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  test(
+    'when the user.onCreate trigger throws, no auth user remains',
+    async () => {
+      const t = setup();
+      failures.userRecord = true;
+      const { status } = await signUp(t, valid());
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
 
-    failures.userRecord = false;
-    expect((await signUp(t, valid())).status).toBe(200);
-    expect((await stored(t)).users).toHaveLength(1);
-  }, 30_000);
+      failures.userRecord = false;
+      expect((await signUp(t, valid())).status).toBe(200);
+      expect((await stored(t)).users).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
 
-  test('an existing email gets 422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL', async () => {
-    const t = setup();
-    expect((await signUp(t, valid())).status).toBe(200);
-    const { status, json } = await signUp(t, {
-      ...valid('Maya.Okafor@Example.com'),
-      password: 'a different long passphrase',
-    });
-    expect(status).toBe(422);
-    expect(json['code']).toBe('USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL');
-    const { authUsers, users } = await stored(t);
-    expect(authUsers).toHaveLength(1);
-    expect(users).toHaveLength(1);
-  }, 30_000);
+  test(
+    'an existing email gets 422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL',
+    async () => {
+      const t = setup();
+      expect((await signUp(t, valid())).status).toBe(200);
+      const { status, json } = await signUp(t, {
+        ...valid('Maya.Okafor@Example.com'),
+        password: 'a different long passphrase',
+      });
+      expect(status).toBe(422);
+      expect(json['code']).toBe('USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL');
+      const { authUsers, users } = await stored(t);
+      expect(authUsers).toHaveLength(1);
+      expect(users).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
 
   test.each([
     ['14 characters', 'a'.repeat(14), 'PASSWORD_TOO_SHORT'],
@@ -212,6 +243,32 @@ describe('sign-up', () => {
   });
 });
 
+describe('password hash cost', () => {
+  test(
+    'sign-up and sign-in hash through the cheap scrypt wrapper',
+    async () => {
+      const t = setup();
+      const beforeSignUp = scryptCalls.count;
+      const { status, json } = await signUp(t, valid());
+      expect(status, JSON.stringify(json)).toBe(200);
+      const afterSignUp = scryptCalls.count;
+      expect(afterSignUp).toBeGreaterThan(beforeSignUp);
+      const signIn = await t.fetch('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: SITE_URL,
+          'cf-connecting-ip': freshAddress(),
+        },
+        body: JSON.stringify({ email: 'maya.okafor@example.com', password: PASSWORD }),
+      });
+      expect(signIn.status).toBe(200);
+      expect(scryptCalls.count).toBeGreaterThan(afterSignUp);
+    },
+    TIMEOUT,
+  );
+});
+
 describe('trusted origins over HTTP', () => {
   test('without PREVIEW_ORIGIN_PATTERN (production), a preview origin is refused', async () => {
     const t = setup();
@@ -221,14 +278,18 @@ describe('trusted origins over HTTP', () => {
     expect((await stored(t)).authUsers).toEqual([]);
   });
 
-  test('with PREVIEW_ORIGIN_PATTERN set to the constant, a preview origin signs up', async () => {
-    vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
-    const t = setup();
-    const { status, headers } = await signUp(t, valid(), { origin: PREVIEW });
-    expect(status).toBe(200);
-    expect(headers.get('access-control-allow-origin')).toBe(PREVIEW);
-    expect((await stored(t)).users).toHaveLength(1);
-  }, 30_000);
+  test(
+    'with PREVIEW_ORIGIN_PATTERN set to the constant, a preview origin signs up',
+    async () => {
+      vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
+      const t = setup();
+      const { status, headers } = await signUp(t, valid(), { origin: PREVIEW });
+      expect(status).toBe(200);
+      expect(headers.get('access-control-allow-origin')).toBe(PREVIEW);
+      expect((await stored(t)).users).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
 
   test('with PREVIEW_ORIGIN_PATTERN set, a non-matching origin is still refused', async () => {
     vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
@@ -283,19 +344,27 @@ describe('breached-password check (Pwned Passwords, mocked fetch)', () => {
     expect((await stored(t)).authUsers).toEqual([]);
   });
 
-  test('a password not in the range response signs up', async () => {
-    const t = setup();
-    expect((await signUp(t, valid())).status).toBe(200);
-    expect(pwned).toHaveBeenCalledOnce();
-  }, 30_000);
+  test(
+    'a password not in the range response signs up',
+    async () => {
+      const t = setup();
+      expect((await signUp(t, valid())).status).toBe(200);
+      expect(pwned).toHaveBeenCalledOnce();
+    },
+    TIMEOUT,
+  );
 
-  test('under IS_TEST the check is off and makes no outside call', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    pwned.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
-    expect((await signUp(t, valid())).status).toBe(200);
-    expect(pwned).not.toHaveBeenCalled();
-  }, 30_000);
+  test(
+    'under IS_TEST the check is off and makes no outside call',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      pwned.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
+      expect((await signUp(t, valid())).status).toBe(200);
+      expect(pwned).not.toHaveBeenCalled();
+    },
+    TIMEOUT,
+  );
 });
 
 // Better Auth skips the origin check by default when NODE_ENV is "test" or TEST is set.
@@ -352,42 +421,49 @@ describe('origin check under a test environment', () => {
 });
 
 describe('the password is never echoed or logged', () => {
-  test('across success and every refusal path', async () => {
-    const secret = 'unique tester passphrase 7f3a9c';
-    const logged: string[] = [];
-    for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
-      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        logged.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
-      });
-    }
-    const t = setup();
-    const outputs: string[] = [];
-    const record = async (body: SignUpBody, opts?: { origin?: string | null }): Promise<number> => {
-      const { status, json, headers } = await signUp(t, body, opts);
-      outputs.push(JSON.stringify(json), JSON.stringify([...headers.entries()]));
-      return status;
-    };
-    expect(await record({ ...valid(), password: secret })).toBe(200);
-    expect(await record({ ...valid(), password: secret })).toBe(422);
-    expect(await record({ ...valid('b@example.com'), password: secret.slice(0, 14) })).toBe(400);
-    expect(
-      await record(
-        { ...valid('c@example.com'), password: secret },
-        { origin: 'https://evil.example' },
-      ),
-    ).toBe(403);
-    pwned.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
-    expect(await record({ ...valid('d@example.com'), password: secret })).toBe(500);
-    const hash = await sha1Hex(secret);
-    pwned.mockImplementation(() => Promise.resolve(rangeResponse(hash.slice(5))));
-    expect(await record({ ...valid('e@example.com'), password: secret })).toBe(400);
+  test(
+    'across success and every refusal path',
+    async () => {
+      const secret = 'unique tester passphrase 7f3a9c';
+      const logged: string[] = [];
+      for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+        vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+          logged.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
+        });
+      }
+      const t = setup();
+      const outputs: string[] = [];
+      const record = async (
+        body: SignUpBody,
+        opts?: { origin?: string | null },
+      ): Promise<number> => {
+        const { status, json, headers } = await signUp(t, body, opts);
+        outputs.push(JSON.stringify(json), JSON.stringify([...headers.entries()]));
+        return status;
+      };
+      expect(await record({ ...valid(), password: secret })).toBe(200);
+      expect(await record({ ...valid(), password: secret })).toBe(422);
+      expect(await record({ ...valid('b@example.com'), password: secret.slice(0, 14) })).toBe(400);
+      expect(
+        await record(
+          { ...valid('c@example.com'), password: secret },
+          { origin: 'https://evil.example' },
+        ),
+      ).toBe(403);
+      pwned.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
+      expect(await record({ ...valid('d@example.com'), password: secret })).toBe(500);
+      const hash = await sha1Hex(secret);
+      pwned.mockImplementation(() => Promise.resolve(rangeResponse(hash.slice(5))));
+      expect(await record({ ...valid('e@example.com'), password: secret })).toBe(400);
 
-    for (const text of [...outputs, ...logged]) {
-      expect(text).not.toContain(secret);
-      expect(text).not.toContain(secret.slice(0, 14));
-    }
-    vi.restoreAllMocks();
-  }, 60_000);
+      for (const text of [...outputs, ...logged]) {
+        expect(text).not.toContain(secret);
+        expect(text).not.toContain(secret.slice(0, 14));
+      }
+      vi.restoreAllMocks();
+    },
+    TIMEOUT,
+  );
 });
 
 describe('body validation messages the client maps', () => {
@@ -543,13 +619,17 @@ describe('auth not configured', () => {
     });
   });
 
-  test('is read on every call: setting the secret afterwards turns auth on again', async () => {
-    vi.stubEnv('BETTER_AUTH_SECRET', undefined);
-    const t = setup();
-    expect((await signUp(t, valid())).status).toBe(503);
-    vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
-    expect((await signUp(t, valid())).status).toBe(200);
-  }, 30_000);
+  test(
+    'is read on every call: setting the secret afterwards turns auth on again',
+    async () => {
+      vi.stubEnv('BETTER_AUTH_SECRET', undefined);
+      const t = setup();
+      expect((await signUp(t, valid())).status).toBe(503);
+      vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
+      expect((await signUp(t, valid())).status).toBe(200);
+    },
+    TIMEOUT,
+  );
 
   test('never falls back to the default secret: two unset instances sign differently', async () => {
     vi.stubEnv('BETTER_AUTH_SECRET', undefined);
@@ -596,16 +676,20 @@ describe('name bounds', () => {
       expect(authUsers[0]?.['name']).toBe('x'.repeat(100));
       expect(users[0]?.name).toBe('x'.repeat(100));
     },
-    30_000,
+    TIMEOUT,
   );
 
-  test('a direct POST with "  Ada  " stores "Ada" in the auth user and the users row', async () => {
-    const t = setup();
-    expect((await signUp(t, { ...valid(), name: '  Ada  ' })).status).toBe(200);
-    const { authUsers, users } = await stored(t);
-    expect(authUsers[0]?.['name']).toBe('Ada');
-    expect(users[0]?.name).toBe('Ada');
-  }, 30_000);
+  test(
+    'a direct POST with "  Ada  " stores "Ada" in the auth user and the users row',
+    async () => {
+      const t = setup();
+      expect((await signUp(t, { ...valid(), name: '  Ada  ' })).status).toBe(200);
+      const { authUsers, users } = await stored(t);
+      expect(authUsers[0]?.['name']).toBe('Ada');
+      expect(users[0]?.name).toBe('Ada');
+    },
+    TIMEOUT,
+  );
 
   test('an over-long name is NAME_INVALID even with adultConfirmed, and a valid name without it is still ADULT_CONFIRMATION_REQUIRED', async () => {
     const t = setup();
@@ -637,47 +721,63 @@ describe('name bounds and refusal, edge cases', () => {
     expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
   });
 
-  test('the length is String.length after trim(): 50 emoji pass, 51 do not', async () => {
-    const t = setup();
-    const ok = await signUp(t, { ...valid(), name: '\u{1F3D0}'.repeat(50) });
-    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
-    const long = await signUp(t, { ...valid('b@example.com'), name: '\u{1F3D0}'.repeat(51) });
-    expect(long.status).toBe(400);
-    expect(long.json['code']).toBe('NAME_INVALID');
-  }, 30_000);
-
-  test('the length is String.length after trim(): 100 accented letters or 98 letters and an emoji between Unicode spaces pass; 101 accented letters or 100 letters and an emoji do not', async () => {
-    const t = setup();
-    const accented = await signUp(t, { ...valid(), name: 'é'.repeat(100) });
-    expect(accented.status, JSON.stringify(accented.json)).toBe(200);
-    const edge = await signUp(t, {
-      ...valid('b@example.com'),
-      name: `\u3000${'x'.repeat(98)}\u{1F3D0}\t`,
-    });
-    expect(edge.status, JSON.stringify(edge.json)).toBe(200);
-    for (const name of ['é'.repeat(101), `${'x'.repeat(100)}\u{1F3D0}`]) {
-      const long = await signUp(t, { ...valid('c@example.com'), name });
+  test(
+    'the length is String.length after trim(): 50 emoji pass, 51 do not',
+    async () => {
+      const t = setup();
+      const ok = await signUp(t, { ...valid(), name: '\u{1F3D0}'.repeat(50) });
+      expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+      const long = await signUp(t, { ...valid('b@example.com'), name: '\u{1F3D0}'.repeat(51) });
       expect(long.status).toBe(400);
       expect(long.json['code']).toBe('NAME_INVALID');
-    }
-  }, 30_000);
+    },
+    TIMEOUT,
+  );
 
-  test('trimming keeps inner whitespace', async () => {
-    const t = setup();
-    expect((await signUp(t, { ...valid(), name: ' \tAda  Lovelace\n ' })).status).toBe(200);
-    expect((await stored(t)).authUsers[0]?.['name']).toBe('Ada  Lovelace');
-  }, 30_000);
+  test(
+    'the length is String.length after trim(): 100 accented letters or 98 letters and an emoji between Unicode spaces pass; 101 accented letters or 100 letters and an emoji do not',
+    async () => {
+      const t = setup();
+      const accented = await signUp(t, { ...valid(), name: 'é'.repeat(100) });
+      expect(accented.status, JSON.stringify(accented.json)).toBe(200);
+      const edge = await signUp(t, {
+        ...valid('b@example.com'),
+        name: `\u3000${'x'.repeat(98)}\u{1F3D0}\t`,
+      });
+      expect(edge.status, JSON.stringify(edge.json)).toBe(200);
+      for (const name of ['é'.repeat(101), `${'x'.repeat(100)}\u{1F3D0}`]) {
+        const long = await signUp(t, { ...valid('c@example.com'), name });
+        expect(long.status).toBe(400);
+        expect(long.json['code']).toBe('NAME_INVALID');
+      }
+    },
+    TIMEOUT,
+  );
 
-  test('two concurrent sign-ups with untrimmed names store trimmed names', async () => {
-    const t = setup();
-    const [a, b] = await Promise.all([
-      signUp(t, { ...valid('a@example.com'), name: '  Ada ' }),
-      signUp(t, { ...valid('b@example.com'), name: ' Grace  ' }),
-    ]);
-    expect([a.status, b.status]).toEqual([200, 200]);
-    const names = (await stored(t)).authUsers.map((user) => user['name']).sort();
-    expect(names).toEqual(['Ada', 'Grace']);
-  }, 30_000);
+  test(
+    'trimming keeps inner whitespace',
+    async () => {
+      const t = setup();
+      expect((await signUp(t, { ...valid(), name: ' \tAda  Lovelace\n ' })).status).toBe(200);
+      expect((await stored(t)).authUsers[0]?.['name']).toBe('Ada  Lovelace');
+    },
+    TIMEOUT,
+  );
+
+  test(
+    'two concurrent sign-ups with untrimmed names store trimmed names',
+    async () => {
+      const t = setup();
+      const [a, b] = await Promise.all([
+        signUp(t, { ...valid('a@example.com'), name: '  Ada ' }),
+        signUp(t, { ...valid('b@example.com'), name: ' Grace  ' }),
+      ]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      const names = (await stored(t)).authUsers.map((user) => user['name']).sort();
+      expect(names).toEqual(['Ada', 'Grace']);
+    },
+    TIMEOUT,
+  );
 
   test('a bad email with a valid name is still the VALIDATION_ERROR the client maps to the email field', async () => {
     const t = setup();
