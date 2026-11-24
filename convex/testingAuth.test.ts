@@ -17,6 +17,25 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
+const TIMEOUT = 15_000;
+
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
+const CHEAP_SCRYPT_N = 2 ** 4;
+
+// Pure-JavaScript scrypt at the app's cost takes about a quarter of a second a hash, and a test that
+// times out cannot cancel the hashing it started, so the cost is cut here; password.test.ts keeps the real one.
+vi.mock('@noble/hashes/scrypt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@noble/hashes/scrypt.js')>();
+  return {
+    ...actual,
+    scryptAsync: (...[password, salt, options]: Parameters<typeof actual.scryptAsync>) => {
+      scryptCalls.count += 1;
+      return actual.scryptAsync(password, salt, { ...options, N: CHEAP_SCRYPT_N });
+    },
+  };
+});
+
 const SITE_URL = 'http://localhost:4000';
 const TENANT = {
   organization: { name: 'E2E Org c3d4', slug: 'e2e-org-c3d4' },
@@ -158,25 +177,29 @@ describe('IS_TEST guard on the auth additions', () => {
 });
 
 describe('testing:seedLeague with users', () => {
-  test('signs each user up through Better Auth, with a real hash and a users row', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await expect(
-      t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] }),
-    ).resolves.toEqual({ slug: TENANT.organization.slug });
+  test(
+    'signs each user up through Better Auth, with a real hash and a users row',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await expect(
+        t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] }),
+      ).resolves.toEqual({ slug: TENANT.organization.slug });
 
-    const [authUser, ...others] = await authDocs(t, 'user');
-    expect(others).toEqual([]);
-    expect(authUser).toMatchObject({ email: USER.email, name: USER.name });
-    const [account] = await authDocs(t, 'account');
-    expect(account).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
-    expect(account?.['password']).toMatch(/^scrypt\$15\$8\$3\$/);
-    const users = await t.run((ctx) => ctx.db.query('users').collect());
-    expect(users).toEqual([
-      expect.objectContaining({ authUserId: authUser?.['_id'], name: USER.name }),
-    ]);
-    expect(await appCounts(t)).toEqual({ users: 1, organizations: 1 });
-  }, 30_000);
+      const [authUser, ...others] = await authDocs(t, 'user');
+      expect(others).toEqual([]);
+      expect(authUser).toMatchObject({ email: USER.email, name: USER.name });
+      const [account] = await authDocs(t, 'account');
+      expect(account).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
+      expect(account?.['password']).toMatch(/^scrypt\$15\$8\$3\$/);
+      const users = await t.run((ctx) => ctx.db.query('users').collect());
+      expect(users).toEqual([
+        expect.objectContaining({ authUserId: authUser?.['_id'], name: USER.name }),
+      ]);
+      expect(await appCounts(t)).toEqual({ users: 1, organizations: 1 });
+    },
+    TIMEOUT,
+  );
 
   test('without users, creates only the tenant', async () => {
     vi.stubEnv('IS_TEST', 'true');
@@ -187,28 +210,55 @@ describe('testing:seedLeague with users', () => {
   });
 });
 
+describe('password hash cost', () => {
+  test(
+    'seeding a user and signing in hash through the cheap scrypt wrapper',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      const beforeSeed = scryptCalls.count;
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      const afterSeed = scryptCalls.count;
+      expect(afterSeed).toBeGreaterThan(beforeSeed);
+      const signIn = await t.fetch('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: SITE_URL },
+        body: JSON.stringify({ email: USER.email, password: USER.password }),
+      });
+      expect(signIn.status).toBe(200);
+      expect(scryptCalls.count).toBeGreaterThan(afterSeed);
+    },
+    TIMEOUT,
+  );
+});
+
 describe('testing:reset and the auth component', () => {
-  test('clears every auth table, jwks included, and the users rows', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    await createSigningKey(t);
-    await seedAuthDocs(t);
-    await seedSignInFailure(t);
-    expect(await authDocs(t, 'jwks')).toHaveLength(2);
-    let before = 0;
-    for (const model of AUTH_COMPONENT_TABLES) before += (await authDocs(t, model)).length;
-    expect(before).toBeGreaterThanOrEqual(8);
+  test(
+    'clears every auth table, jwks included, and the users rows',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      await createSigningKey(t);
+      await seedAuthDocs(t);
+      await seedSignInFailure(t);
+      expect(await authDocs(t, 'jwks')).toHaveLength(2);
+      let before = 0;
+      for (const model of AUTH_COMPONENT_TABLES) before += (await authDocs(t, model)).length;
+      expect(before).toBeGreaterThanOrEqual(8);
 
-    const result = await t.action(internal.testing.reset, {});
-    expect(result).toMatchObject({ documents: 3, authDocuments: before });
-    expect(await signInFailureCount(t)).toBe(0);
-    for (const model of AUTH_COMPONENT_TABLES) expect(await authDocs(t, model), model).toEqual([]);
-    expect(await appCounts(t)).toEqual({ users: 0, organizations: 0 });
+      const result = await t.action(internal.testing.reset, {});
+      expect(result).toMatchObject({ documents: 3, authDocuments: before });
+      expect(await signInFailureCount(t)).toBe(0);
+      for (const model of AUTH_COMPONENT_TABLES)
+        expect(await authDocs(t, model), model).toEqual([]);
+      expect(await appCounts(t)).toEqual({ users: 0, organizations: 0 });
 
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    expect(await authDocs(t, 'user')).toHaveLength(1);
-  }, 30_000);
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      expect(await authDocs(t, 'user')).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
 });
 
 describe('testing:seedSignInFailures reaches the hard limit without 100 attempts', () => {
@@ -256,24 +306,28 @@ describe('testing:accountByEmail', () => {
     );
   });
 
-  test("returns the users row's name and adultConfirmedAt, and the live session count", async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await expect(
-      t.query(internal.testing.accountByEmail, { email: USER.email }),
-    ).resolves.toBeNull();
-    const before = Date.now();
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    const account = await t.query(internal.testing.accountByEmail, {
-      email: USER.email.toUpperCase(),
-    });
-    expect(account).toEqual({
-      name: USER.name,
-      adultConfirmedAt: expect.any(Number) as number,
-      sessions: 1,
-    });
-    expect(account?.adultConfirmedAt).toBeGreaterThanOrEqual(before);
-  }, 30_000);
+  test(
+    "returns the users row's name and adultConfirmedAt, and the live session count",
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await expect(
+        t.query(internal.testing.accountByEmail, { email: USER.email }),
+      ).resolves.toBeNull();
+      const before = Date.now();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      const account = await t.query(internal.testing.accountByEmail, {
+        email: USER.email.toUpperCase(),
+      });
+      expect(account).toEqual({
+        name: USER.name,
+        adultConfirmedAt: expect.any(Number) as number,
+        sessions: 1,
+      });
+      expect(account?.adultConfirmedAt).toBeGreaterThanOrEqual(before);
+    },
+    TIMEOUT,
+  );
 });
 
 describe('testing:addMembership', () => {
@@ -303,54 +357,66 @@ describe('testing:addMembership', () => {
       ).rejects.toThrow(/IS_TEST/);
       expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
     },
-    30_000,
+    TIMEOUT,
   );
 
-  test('makes the seeded user a league organizer of the seeded organization, once', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    await t.mutation(internal.testing.addMembership, {
-      ...MEMBER,
-      email: USER.email.toUpperCase(),
-      role: 'leagueOrganizer',
-    });
-    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
-    expect(memberships).toHaveLength(1);
-    expect(memberships[0]).toMatchObject({ role: 'leagueOrganizer', leagueIds: [] });
-    await expect(
-      t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
-    ).rejects.toThrow(/already/);
-  }, 30_000);
-
-  test('makes the seeded user an org admin', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    await t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' });
-    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
-    expect(memberships.map((m) => m.role)).toEqual(['orgAdmin']);
-  }, 30_000);
-
-  test('throws for an unknown organization or user', async () => {
-    vi.stubEnv('IS_TEST', 'true');
-    const t = setup();
-    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
-    await expect(
-      t.mutation(internal.testing.addMembership, {
+  test(
+    'makes the seeded user a league organizer of the seeded organization, once',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      await t.mutation(internal.testing.addMembership, {
         ...MEMBER,
-        organizationSlug: 'no-such-org',
-        role: 'orgAdmin',
-      }),
-    ).rejects.toThrow(/No organization/);
-    await expect(
-      t.mutation(internal.testing.addMembership, {
-        ...MEMBER,
-        email: 'nobody@example.test',
-        role: 'orgAdmin',
-      }),
-    ).rejects.toThrow(/No account/);
-  }, 30_000);
+        email: USER.email.toUpperCase(),
+        role: 'leagueOrganizer',
+      });
+      const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+      expect(memberships).toHaveLength(1);
+      expect(memberships[0]).toMatchObject({ role: 'leagueOrganizer', leagueIds: [] });
+      await expect(
+        t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
+      ).rejects.toThrow(/already/);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    'makes the seeded user an org admin',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      await t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' });
+      const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+      expect(memberships.map((m) => m.role)).toEqual(['orgAdmin']);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    'throws for an unknown organization or user',
+    async () => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      await expect(
+        t.mutation(internal.testing.addMembership, {
+          ...MEMBER,
+          organizationSlug: 'no-such-org',
+          role: 'orgAdmin',
+        }),
+      ).rejects.toThrow(/No organization/);
+      await expect(
+        t.mutation(internal.testing.addMembership, {
+          ...MEMBER,
+          email: 'nobody@example.test',
+          role: 'orgAdmin',
+        }),
+      ).rejects.toThrow(/No account/);
+    },
+    TIMEOUT,
+  );
 });
 
 describe('testing:seedStaff', () => {
@@ -380,47 +446,55 @@ describe('testing:seedStaff', () => {
       expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
       expect(await appCounts(t)).toEqual(before);
     },
-    30_000,
+    TIMEOUT,
   );
 
-  test('writes league organizer memberships for distinct accounts, and the counter equals a recount', async () => {
-    const t = await seededTenant();
-    const before = await appCounts(t);
-    await t.mutation(internal.testing.seedStaff, SEED);
-    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
-    expect(memberships).toHaveLength(3);
-    expect(memberships.every((m) => m.role === 'leagueOrganizer' && m.leagueIds.length === 0)).toBe(
-      true,
-    );
-    expect(new Set(memberships.map((m) => m.userId)).size).toBe(3);
-    const names = await t.run(async (ctx) =>
-      Promise.all(memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name)),
-    );
-    expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003']);
-    const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
-    expect(emails).toEqual(
-      expect.arrayContaining(['staff-001@example.test', 'staff-003@example.test']),
-    );
-    expect((await appCounts(t)).users).toBe(before.users + 3);
-    const row = await organization(t);
-    expect(row.staffCount).toBe(3);
-    expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(3);
-  }, 30_000);
+  test(
+    'writes league organizer memberships for distinct accounts, and the counter equals a recount',
+    async () => {
+      const t = await seededTenant();
+      const before = await appCounts(t);
+      await t.mutation(internal.testing.seedStaff, SEED);
+      const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+      expect(memberships).toHaveLength(3);
+      expect(
+        memberships.every((m) => m.role === 'leagueOrganizer' && m.leagueIds.length === 0),
+      ).toBe(true);
+      expect(new Set(memberships.map((m) => m.userId)).size).toBe(3);
+      const names = await t.run(async (ctx) =>
+        Promise.all(memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name)),
+      );
+      expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003']);
+      const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
+      expect(emails).toEqual(
+        expect.arrayContaining(['staff-001@example.test', 'staff-003@example.test']),
+      );
+      expect((await appCounts(t)).users).toBe(before.users + 3);
+      const row = await organization(t);
+      expect(row.staffCount).toBe(3);
+      expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(3);
+    },
+    TIMEOUT,
+  );
 
   const membershipCount = (t: T) =>
     t.run(async (ctx) => (await ctx.db.query('memberships').collect()).length);
 
-  test('a count above the per-call limit throws and writes nothing, and the limit itself succeeds', async () => {
-    const t = await seededTenant();
-    const before = await appCounts(t);
-    await expect(
-      t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL + 1 }),
-    ).rejects.toThrow(/at most 25/);
-    expect(await membershipCount(t)).toBe(0);
-    expect(await appCounts(t)).toEqual(before);
-    await t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL });
-    expect(await membershipCount(t)).toBe(ACCOUNTS_PER_SEED_CALL);
-  }, 30_000);
+  test(
+    'a count above the per-call limit throws and writes nothing, and the limit itself succeeds',
+    async () => {
+      const t = await seededTenant();
+      const before = await appCounts(t);
+      await expect(
+        t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL + 1 }),
+      ).rejects.toThrow(/at most 25/);
+      expect(await membershipCount(t)).toBe(0);
+      expect(await appCounts(t)).toEqual(before);
+      await t.mutation(internal.testing.seedStaff, { ...SEED, count: ACCOUNTS_PER_SEED_CALL });
+      expect(await membershipCount(t)).toBe(ACCOUNTS_PER_SEED_CALL);
+    },
+    TIMEOUT,
+  );
 
   test.each([
     ['from 0', { from: 0, count: 1 }],
@@ -439,42 +513,56 @@ describe('testing:seedStaff', () => {
       expect(await membershipCount(t)).toBe(0);
       expect(await appCounts(t)).toEqual(before);
     },
-    30_000,
+    TIMEOUT,
   );
 
-  test('two calls number the staff on from one another, and the counter equals a recount', async () => {
-    const t = await seededTenant();
-    for (const from of [1, 3]) {
-      await t.mutation(internal.testing.seedStaff, { ...SEED, from, count: 2 });
-    }
-    const names = await t.run(async (ctx) => {
-      const memberships = await ctx.db.query('memberships').collect();
-      return Promise.all(memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name));
-    });
-    expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003', 'Staff 004']);
-    const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
-    expect(emails).toEqual(
-      expect.arrayContaining(['staff-001@example.test', 'staff-004@example.test']),
-    );
-    const row = await organization(t);
-    expect(row.staffCount).toBe(4);
-    expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(4);
-  }, 30_000);
+  test(
+    'two calls number the staff on from one another, and the counter equals a recount',
+    async () => {
+      const t = await seededTenant();
+      for (const from of [1, 3]) {
+        await t.mutation(internal.testing.seedStaff, { ...SEED, from, count: 2 });
+      }
+      const names = await t.run(async (ctx) => {
+        const memberships = await ctx.db.query('memberships').collect();
+        return Promise.all(
+          memberships.map(async (m) => (await ctx.db.get('users', m.userId))!.name),
+        );
+      });
+      expect(names).toEqual(['Staff 001', 'Staff 002', 'Staff 003', 'Staff 004']);
+      const emails = (await authDocs(t, 'user')).map((doc) => doc['email']);
+      expect(emails).toEqual(
+        expect.arrayContaining(['staff-001@example.test', 'staff-004@example.test']),
+      );
+      const row = await organization(t);
+      expect(row.staffCount).toBe(4);
+      expect(await t.run((ctx) => recountMemberships(ctx, row._id))).toBe(4);
+    },
+    TIMEOUT,
+  );
 
-  test('every seeded user is an account with no credential', async () => {
-    const t = await seededTenant();
-    const before = await authDocs(t, 'account');
-    await t.mutation(internal.testing.seedStaff, SEED);
-    expect(await authDocs(t, 'account')).toEqual(before);
-  }, 30_000);
+  test(
+    'every seeded user is an account with no credential',
+    async () => {
+      const t = await seededTenant();
+      const before = await authDocs(t, 'account');
+      await t.mutation(internal.testing.seedStaff, SEED);
+      expect(await authDocs(t, 'account')).toEqual(before);
+    },
+    TIMEOUT,
+  );
 
-  test('refuses an unknown organization slug and writes nothing', async () => {
-    const t = await seededTenant();
-    const before = await appCounts(t);
-    await expect(
-      t.mutation(internal.testing.seedStaff, { ...SEED, organizationSlug: 'no-such-org' }),
-    ).rejects.toThrow(/No organization/);
-    expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
-    expect(await appCounts(t)).toEqual(before);
-  }, 30_000);
+  test(
+    'refuses an unknown organization slug and writes nothing',
+    async () => {
+      const t = await seededTenant();
+      const before = await appCounts(t);
+      await expect(
+        t.mutation(internal.testing.seedStaff, { ...SEED, organizationSlug: 'no-such-org' }),
+      ).rejects.toThrow(/No organization/);
+      expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
+      expect(await appCounts(t)).toEqual(before);
+    },
+    TIMEOUT,
+  );
 });

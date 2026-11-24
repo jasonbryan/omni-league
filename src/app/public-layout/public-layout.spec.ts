@@ -350,5 +350,22 @@ describe('PublicLayout', () => {
       );
       expect(link?.getAttribute('href')).toBe(`/sign-in?returnTo=${returnTo}`);
     });
+
+    it.each([
+      ['/sign-up', true],
+      ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', true],
+      ['/sign-in', true],
+      ['/', false],
+      ['/organizations/gulf-coast', false],
+    ])('on %s "Sign in to manage" replaces the history entry: %s', async (url, replaceUrl) => {
+      const page = await open(url);
+      const link = [...page.querySelectorAll('footer nav a')].find(
+        (a) => a.textContent.trim() === 'Sign in to manage',
+      )!;
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      dispatchClick(link);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate.mock.calls[0][1]?.replaceUrl ?? false).toBe(replaceUrl);
+    });
   });
 });
