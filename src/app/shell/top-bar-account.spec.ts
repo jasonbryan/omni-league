@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { dispatchClick } from '../core/testing/dispatch-event';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { PublicTopBarTestPage } from './testing/test-pages';
 
@@ -73,6 +74,20 @@ describe('Top bar account area', () => {
     ])('on /sign-up an off-site returnTo %j is dropped', async (raw) => {
       const page = await open(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
       expect(signInLink(page)?.getAttribute('href')).toBe('/sign-in?returnTo=%2Fapp');
+    });
+
+    it.each([
+      ['/sign-up', true],
+      ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', true],
+      ['/', false],
+      ['/organizations/gulf-coast', false],
+      ['/sign-up-help', false],
+    ])('on %s the Sign in link replaces the history entry: %s', async (url, replaceUrl) => {
+      const page = await open(url);
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      dispatchClick(signInLink(page)!);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate.mock.calls[0][1]?.replaceUrl ?? false).toBe(replaceUrl);
     });
 
     it('is absent on /sign-in, whatever its query string', async () => {

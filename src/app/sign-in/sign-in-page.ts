@@ -238,6 +238,7 @@ type FormAlert = { title: string; description: string } | 'offline';
             <a
               routerLink="/sign-up"
               [queryParams]="{ returnTo: signUpReturnTo }"
+              [replaceUrl]="true"
               class="font-medium text-primary underline underline-offset-4"
               >Create an account</a
             >

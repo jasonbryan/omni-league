@@ -7,6 +7,7 @@ import { injectCurrentUrl } from './current-url';
 export interface SignInReturnTo {
   returnTo: string;
   onSignInPage: boolean;
+  onAuthPage: boolean;
 }
 
 /**
@@ -21,14 +22,19 @@ export function injectSignInReturnTo(): Signal<SignInReturnTo> {
     const tree = router.parseUrl(url());
     const path = (tree.root.children[PRIMARY_OUTLET]?.segments ?? []).map((s) => s.path).join('/');
     const onSignInPage = path === 'sign-in';
-    if (onSignInPage || path === 'sign-up') {
+    const onAuthPage = onSignInPage || path === 'sign-up';
+    if (onAuthPage) {
       const own: unknown = tree.queryParams['returnTo'];
-      return { onSignInPage, returnTo: returnToOrApp(typeof own === 'string' ? own : null) };
+      return {
+        onSignInPage,
+        onAuthPage,
+        returnTo: returnToOrApp(typeof own === 'string' ? own : null),
+      };
     }
     if (onServer) {
       tree.queryParams = {};
       tree.fragment = null;
     }
-    return { onSignInPage, returnTo: safeReturnTo(router.serializeUrl(tree)) };
+    return { onSignInPage, onAuthPage, returnTo: safeReturnTo(router.serializeUrl(tree)) };
   });
 }
