@@ -32,6 +32,8 @@ export function missingSeedTables(
 
 const TABLES = Object.keys(schema.tables);
 
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
 function setup() {
   const t = convexTest(schema, modules);
   // The demo accounts are made through Better Auth's sign-up, so the component is registered.
@@ -112,6 +114,13 @@ describe('seed:demo coverage', () => {
     const after = await ids(t);
     expect(rowCounts(after)).toEqual(rowCounts(before));
     expect(after).toEqual(before);
+  });
+
+  test('every hash the seed makes goes through the cheap scrypt wrapper', async () => {
+    const t = setup();
+    const before = scryptCalls.count;
+    await t.action(internal.seed.demo, {});
+    expect(scryptCalls.count).toBeGreaterThan(before);
   });
 
   test('the real table names plus a made-up table with no rows and no exception return that table', () => {

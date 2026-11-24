@@ -22,6 +22,8 @@ vi.mock('./lib/users', async (importOriginal) => {
   };
 });
 
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
 const SITE_URL = 'http://localhost:4000';
 const PREVIEW = 'https://deploy-preview-62--charming-longma-28c00d.netlify.app';
 const PASSWORD = 'sandbar sunset spike 2026';
@@ -210,6 +212,28 @@ describe('sign-up', () => {
     expect(json['code']).toBe(code);
     expect((await stored(t)).authUsers).toEqual([]);
   });
+});
+
+describe('password hash cost', () => {
+  test('sign-up and sign-in hash through the cheap scrypt wrapper', async () => {
+    const t = setup();
+    const beforeSignUp = scryptCalls.count;
+    const { status, json } = await signUp(t, valid());
+    expect(status, JSON.stringify(json)).toBe(200);
+    const afterSignUp = scryptCalls.count;
+    expect(afterSignUp).toBeGreaterThan(beforeSignUp);
+    const signIn = await t.fetch('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: SITE_URL,
+        'cf-connecting-ip': freshAddress(),
+      },
+      body: JSON.stringify({ email: 'maya.okafor@example.com', password: PASSWORD }),
+    });
+    expect(signIn.status).toBe(200);
+    expect(scryptCalls.count).toBeGreaterThan(afterSignUp);
+  }, 30_000);
 });
 
 describe('trusted origins over HTTP', () => {

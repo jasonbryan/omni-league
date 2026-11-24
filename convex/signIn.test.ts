@@ -11,6 +11,8 @@ import { HARD_LIMIT } from './lib/signInThrottle';
 import schema from './schema';
 import { modules } from './test.setup';
 
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
 const SITE_URL = 'http://localhost:4000';
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
@@ -622,4 +624,16 @@ describe('per-IP limiter', () => {
       expect((await post(t, 'sign-out', {}, ADDRESS)).status).not.toBe(429);
     expect((await limitRows(t)).map((row) => row.key)).toEqual(['203.0.113.9|/sign-in/social']);
   }, 60_000);
+});
+
+describe('password hash cost', () => {
+  test('sign-up and sign-in hash through the cheap scrypt wrapper', async () => {
+    const t = setup();
+    const beforeSignUp = scryptCalls.count;
+    await signUp(t);
+    const afterSignUp = scryptCalls.count;
+    expect(afterSignUp).toBeGreaterThan(beforeSignUp);
+    expect((await signIn(t, EMAIL, PASSWORD)).status).toBe(200);
+    expect(scryptCalls.count).toBeGreaterThan(afterSignUp);
+  }, 30_000);
 });

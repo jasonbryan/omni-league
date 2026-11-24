@@ -17,6 +17,8 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
 const SITE_URL = 'http://localhost:4000';
 const TENANT = {
   organization: { name: 'E2E Org c3d4', slug: 'e2e-org-c3d4' },
@@ -185,6 +187,24 @@ describe('testing:seedLeague with users', () => {
     expect(await authDocs(t, 'user')).toEqual([]);
     expect(await appCounts(t)).toEqual({ users: 0, organizations: 1 });
   });
+});
+
+describe('password hash cost', () => {
+  test('seeding a user and signing in hash through the cheap scrypt wrapper', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    const beforeSeed = scryptCalls.count;
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    const afterSeed = scryptCalls.count;
+    expect(afterSeed).toBeGreaterThan(beforeSeed);
+    const signIn = await t.fetch('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: SITE_URL },
+      body: JSON.stringify({ email: USER.email, password: USER.password }),
+    });
+    expect(signIn.status).toBe(200);
+    expect(scryptCalls.count).toBeGreaterThan(afterSeed);
+  }, 30_000);
 });
 
 describe('testing:reset and the auth component', () => {
