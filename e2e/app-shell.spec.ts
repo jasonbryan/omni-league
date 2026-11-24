@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { TOKEN_PATH, tokensSettled } from './support/auth-tokens';
 import { seedPublishedCamp } from './support/camp';
+import { seedCampRegistration } from './support/camp-registrations';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { failFirstAnswer } from './support/fail-first-answer';
@@ -562,6 +563,129 @@ test.describe('the app shell', () => {
         });
       });
     });
+
+    test.describe('a second tab', () => {
+      const CAMP_SLUG = 'junior-beach-volleyball-camp';
+      const NEW_USER_SUBTITLE = 'Your teams and registrations will show here.';
+
+      /** A holds a camp registration, so A's home is not the new-user home, and B has none. */
+      async function seedAAndB() {
+        const [a, b] = await Promise.all([
+          seedUser(newUser('Camper')),
+          seedUser(newUser('Second')),
+        ]);
+        const tenant = await seedTenant({
+          name: 'E2E Two Tabs',
+          locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+          leagues: [
+            {
+              name: 'Sunday Reverse Coed 4s',
+              sport: 'beachVolleyball',
+              locations: ['Alpha Beach'],
+            },
+          ],
+        });
+        await seedPublishedCamp(tenant, {
+          name: 'Junior Beach Volleyball Camp',
+          slug: CAMP_SLUG,
+          locations: ['Alpha Beach'],
+          minimumAge: 9,
+          maximumAge: 99,
+          sessions: [
+            {
+              name: 'Week 1',
+              startDate: dateFromToday(14),
+              endDate: dateFromToday(18),
+              registrationDeadline: dateFromToday(7),
+            },
+          ],
+        });
+        await seedCampRegistration(tenant, CAMP_SLUG, 'Week 1', a, { kind: 'self' });
+        return { a, b, tenant };
+      }
+
+      async function signInWithForm(page: Page, user: TestUser) {
+        const tokens = tokensSettled(page);
+        await page.goto('/sign-in');
+        await page.locator('#email').fill(user.email);
+        await page.locator('#password').fill(user.password);
+        await page.getByRole('button', { name: 'Sign in' }).click();
+        await expect(page).toHaveURL(`${baseURL}/app`);
+        await tokens;
+      }
+
+      test('on /app follows the sign-out to sign-in without showing the new-user home, and shows the next user after a reload', async ({
+        page,
+        isMobile,
+      }) => {
+        const { a, b } = await seedAAndB();
+        await signInWithForm(page, a);
+
+        const second = await page.context().newPage();
+        const secondTokens = tokensSettled(second);
+        await second.goto('/app');
+        await expect(homeHeading(second)).toBeVisible();
+        await expect(
+          second.getByRole('region', { name: 'Camps and training' }).getByRole('listitem'),
+        ).toHaveCount(1);
+        await secondTokens;
+
+        // Client-side navigation keeps this document, so the observer sees every state the page shows after the sign-out.
+        await second.evaluate((subtitle) => {
+          const win = window as Window & { newUserHomeShown?: boolean };
+          win.newUserHomeShown = false;
+          new MutationObserver(() => {
+            const shown =
+              document.querySelector('app-home-new-user') !== null ||
+              (document.body.textContent ?? '').includes(subtitle);
+            if (shown) win.newUserHomeShown = true;
+          }).observe(document.body, { childList: true, subtree: true, characterData: true });
+        }, NEW_USER_SUBTITLE);
+
+        await page.goto('/app/account');
+        await page.getByRole('button', { name: 'Sign out' }).click();
+        await expect(page).toHaveURL(`${baseURL}/`);
+
+        await expect(second).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
+        await expect(second.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+        expect(
+          await second.evaluate(
+            () => (window as Window & { newUserHomeShown?: boolean }).newUserHomeShown,
+          ),
+        ).toBe(false);
+
+        await signInWithForm(page, b);
+        const reloadTokens = tokensSettled(second);
+        await second.reload();
+        await expect(second).toHaveURL(`${baseURL}/app`);
+        await expectAccountRowOf(second, b, isMobile);
+        await reloadTokens;
+        await expect(second.locator('body')).not.toContainText(a.name);
+        await expect(second.locator('body')).not.toContainText(a.email);
+      });
+
+      test('on a public page stays there after the sign-out, and its top bar shows Sign in', async ({
+        page,
+      }) => {
+        const { a, tenant } = await seedAAndB();
+        await signInWithForm(page, a);
+
+        const second = await page.context().newPage();
+        const secondTokens = tokensSettled(second);
+        await second.goto(tenant.path);
+        await expect(
+          second.locator('header').getByRole('link', { name: `Account: ${a.name}` }),
+        ).toBeVisible();
+        await secondTokens;
+
+        await page.goto('/app/account');
+        await page.getByRole('button', { name: 'Sign out' }).click();
+        await expect(page).toHaveURL(`${baseURL}/`);
+
+        await expect(second.locator('header a[href^="/sign-in"]')).toBeVisible();
+        await expect(second).toHaveURL(`${baseURL}${tenant.path}`);
+      });
+    });
   });
 
   test.describe('loading and offline', () => {
@@ -773,8 +897,13 @@ test.describe('the app shell', () => {
       await page.clock.fastForward(5_000);
       await expectNoteBox(page, isMobile);
       socket.refuse = false;
+      // The socket coming back starts a session check, which the console guard would report as a failed request if the context went offline under it.
+      const sessionChecked = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/api/auth/get-session',
+      );
       await page.clock.fastForward(10_000);
       await expect(homeHeading(page)).toBeVisible();
+      await sessionChecked;
       await context.setOffline(true);
       await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
       await expectNoteBox(page, isMobile);

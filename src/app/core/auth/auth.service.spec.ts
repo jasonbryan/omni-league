@@ -541,6 +541,126 @@ describe('AuthService', () => {
         });
       });
 
+      describe('another tab signs out or changes the account', () => {
+        const TOKEN_URL = 'https://happy-otter-123.convex.site/api/auth/convex/token';
+        const BROADCAST_KEY = 'better-auth.message';
+        const NOORS_SESSION = {
+          session: { id: 's2', token: 't2', expiresAt: new Date(Date.now() + HOUR).toISOString() },
+          user: { id: 'u2', name: 'Noor Haddad' },
+        };
+
+        const ROUTES: Routes = [
+          { path: 'sign-in', component: Page },
+          {
+            path: 'app',
+            children: [
+              { path: '', component: Page, canActivate: [requireSignedIn] },
+              { path: 'account', component: Page, canActivate: [requireSignedIn] },
+            ],
+          },
+        ];
+
+        async function confirmedAsU1On(url: string) {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          TestBed.configureTestingModule({ providers: [provideRouter(ROUTES)] });
+          let session: () => Promise<Response> = () => Promise.resolve(json(SESSION));
+          const real = await configureReal(unexpired(), (requested) =>
+            Promise.resolve(requested === TOKEN_URL ? json({ token: 'jwt' }) : undefined).then(
+              (token) => token ?? session(),
+            ),
+          );
+          const router = TestBed.inject(Router);
+          await router.navigateByUrl(url);
+          await expect(real.auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          real.auth.onChange(true);
+          const sessionChecks = () =>
+            real.requests().filter((requested) => requested === SESSION_URL);
+          return {
+            ...real,
+            router,
+            sessionChecks,
+            answerWith: (next: () => Promise<Response>) => (session = next),
+          };
+        }
+
+        const otherTabSignsOut = () =>
+          window.dispatchEvent(
+            new StorageEvent('storage', {
+              key: BROADCAST_KEY,
+              newValue: JSON.stringify({ event: 'session', data: { trigger: 'signout' } }),
+            }),
+          );
+
+        afterEach(() => {
+          // Better Auth's online manager is one object for every client, so a test that took it offline puts it back.
+          window.dispatchEvent(new Event('online'));
+        });
+
+        it('offline at the sign-out broadcast, makes no request, and the online event then redirects on a null answer', async () => {
+          const tab = await confirmedAsU1On('/app/account');
+          expect(tab.sessionChecks()).toHaveLength(1);
+
+          online.mockReturnValue(false);
+          window.dispatchEvent(new Event('offline'));
+          otherTabSignsOut();
+          await loaded();
+          expect(tab.sessionChecks()).toHaveLength(1);
+          expect(tab.auth.signedIn()).toBe(true);
+          expect(tab.router.url).toBe('/app/account');
+
+          tab.answerWith(() => Promise.resolve(json(null)));
+          online.mockReturnValue(true);
+          vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+          window.dispatchEvent(new Event('online'));
+          await vi.waitFor(() => expect(tab.router.url).toBe('/sign-in?returnTo=%2Fapp%2Faccount'));
+          expect(tab.auth.signedIn()).toBe(false);
+          expect(tab.auth.convexAuthenticated()).toBe(false);
+        });
+
+        it("offline at the sign-out broadcast, with another account's session when it comes online, is an account change", async () => {
+          const tab = await confirmedAsU1On('/app/account');
+          online.mockReturnValue(false);
+          window.dispatchEvent(new Event('offline'));
+          otherTabSignsOut();
+          await loaded();
+
+          localStorage.setItem(KEY, entry('t2', new Date(Date.now() + HOUR).toISOString()));
+          tab.answerWith(() => Promise.resolve(json(NOORS_SESSION)));
+          online.mockReturnValue(true);
+          vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+          window.dispatchEvent(new Event('online'));
+
+          await vi.waitFor(() => expect(tab.router.url).toBe('/app'));
+          expect(tab.auth.signedIn()).toBe(true);
+          expect(tab.auth.authEpoch()).toBe(1);
+          expect(tab.auth.convexAuthenticated()).toBe(false);
+          await expect(tab.auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          expect(tab.requests().filter((requested) => requested === TOKEN_URL)).toHaveLength(2);
+          tab.auth.onChange(true);
+          expect(tab.auth.convexAuthenticated()).toBe(true);
+        });
+
+        it('on field wifi, a check that rejects leaves the tab signed in, and onOnline after the limit asks again and redirects on a null answer', async () => {
+          const tab = await confirmedAsU1On('/app/account');
+          tab.answerWith(() => Promise.reject(new TypeError('Failed to fetch')));
+          otherTabSignsOut();
+          await vi.waitFor(() => expect(tab.sessionChecks()).toHaveLength(2));
+          await loaded();
+          expect(tab.auth.signedIn()).toBe(true);
+          expect(tab.router.url).toBe('/app/account');
+
+          tab.answerWith(() => Promise.resolve(json(null)));
+          tab.auth.onOnline();
+          expect(tab.sessionChecks()).toHaveLength(2);
+
+          vi.setSystemTime(Date.now() + SESSION_CHECK_LIMIT_MS);
+          tab.auth.onOnline();
+          await vi.waitFor(() => expect(tab.router.url).toBe('/sign-in?returnTo=%2Fapp%2Faccount'));
+          expect(tab.sessionChecks()).toHaveLength(3);
+          expect(tab.auth.signedIn()).toBe(false);
+        });
+      });
+
       it.each([
         ['an unexpired token', entry('t', new Date(Date.now() + HOUR).toISOString())],
         ['a token with no expiry (a session cookie)', entry('t', null)],
@@ -768,14 +888,11 @@ describe('AuthService', () => {
         expect(client.refetches).toBe(1);
       });
 
-      it.each([
-        ['signed in', () => client.emitSession({ id: 's1' })],
-        ['signed out', () => client.emitSession(null)],
-      ])('does nothing while %s', async (_, answer) => {
+      it('does nothing while signed out', async () => {
         vi.useFakeTimers();
         const auth = configure();
         await vi.advanceTimersByTimeAsync(0);
-        answer();
+        client.emitSession(null);
         await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
         auth.onOnline();
         await vi.advanceTimersByTimeAsync(10 * RECHECK_EVERY_MS);
@@ -1019,6 +1136,246 @@ describe('AuthService', () => {
         afterCheckLimit();
         auth.onOnline();
         expect(client.refetches).toBe(0);
+      });
+    });
+
+    describe('a session that another tab ended or changed', () => {
+      const ROUTES: Routes = [
+        { path: 'sign-in', component: Page },
+        { path: 'organizations/x', component: Page },
+        {
+          path: 'app',
+          children: [
+            { path: '', component: Page, canActivate: [requireSignedIn] },
+            { path: 'account', component: Page, canActivate: [requireSignedIn] },
+          ],
+        },
+      ];
+
+      async function signedInOn(url: string, userId = 'u1') {
+        TestBed.configureTestingModule({
+          providers: [provideFakeAuthClient(client), provideRouter(ROUTES)],
+        });
+        const router = TestBed.inject(Router);
+        const auth = TestBed.inject(AuthService);
+        await router.navigateByUrl(url);
+        await loaded();
+        client.emitSession({ id: 's1' }, userId);
+        expect(auth.signedIn()).toBe(true);
+        return { router, auth, navigate: vi.spyOn(router, 'navigate') };
+      }
+
+      it('on a guarded route, a check with no session goes to sign-in with returnTo, replacing the entry', async () => {
+        const { router, navigate } = await signedInOn('/app/account');
+        client.emitSession(null);
+        await vi.waitFor(() => expect(router.url).toBe('/sign-in?returnTo=%2Fapp%2Faccount'));
+        expect(navigate).toHaveBeenCalledWith(['/sign-in'], {
+          queryParams: { returnTo: '/app/account' },
+          replaceUrl: true,
+        });
+      });
+
+      it('on a public page, a check with no session navigates nowhere', async () => {
+        const { router, auth, navigate } = await signedInOn('/organizations/x');
+        client.emitSession(null);
+        await loaded();
+        expect(auth.signedIn()).toBe(false);
+        expect(router.url).toBe('/organizations/x');
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it("this tab's own sign-out runs no redirect from the service", async () => {
+        const { router, auth, navigate } = await signedInOn('/app/account');
+        await auth.signOut();
+        await loaded();
+        expect(auth.signedIn()).toBe(false);
+        expect(router.url).toBe('/app/account');
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('a check that never reached the server leaves a signed-in tab where it is', async () => {
+        const { router, auth, navigate } = await signedInOn('/app/account');
+        client.emitChecking();
+        client.emitError(new TypeError('Failed to fetch'));
+        await loaded();
+        expect(auth.signedIn()).toBe(true);
+        expect(navigate).not.toHaveBeenCalled();
+        expect(router.url).toBe('/app/account');
+      });
+
+      describe('convexAuthenticated', () => {
+        it('turns false when a check answers with no session, and a later onChange(true) leaves it false', async () => {
+          const { auth } = await signedInOn('/app');
+          auth.onChange(true);
+          expect(auth.convexAuthenticated()).toBe(true);
+          client.emitSession(null);
+          expect(auth.convexAuthenticated()).toBe(false);
+          auth.onChange(true);
+          expect(auth.convexAuthenticated()).toBe(false);
+        });
+
+        it('turns true again at the onChange(true) of the next sign-in', async () => {
+          const { auth } = await signedInOn('/app');
+          auth.onChange(true);
+          client.emitSession(null);
+          await auth.authenticate(requestSignIn, INPUT);
+          auth.onChange(true);
+          expect(auth.convexAuthenticated()).toBe(true);
+        });
+      });
+
+      describe('an account change', () => {
+        it('turns convexAuthenticated false at once, asks for a new token, advances authEpoch once, goes to /app, and turns it true at the next onChange(true)', async () => {
+          const { router, auth, navigate } = await signedInOn('/app/account', 'u1');
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          auth.onChange(true);
+          expect(client.tokenRequests).toBe(1);
+
+          client.emitSession({ id: 's2' }, 'u2');
+          expect(auth.convexAuthenticated()).toBe(false);
+          expect(auth.authEpoch()).toBe(1);
+          await vi.waitFor(() => expect(router.url).toBe('/app'));
+          expect(navigate).toHaveBeenCalledWith(['/app'], { replaceUrl: true });
+          await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt');
+          expect(client.tokenRequests).toBe(2);
+          expect(auth.convexAuthenticated()).toBe(false);
+
+          auth.onChange(true);
+          expect(auth.convexAuthenticated()).toBe(true);
+          expect(auth.authEpoch()).toBe(1);
+        });
+
+        it('on a public page, forgets the token and advances authEpoch but navigates nowhere', async () => {
+          const { router, auth, navigate } = await signedInOn('/organizations/x', 'u1');
+          auth.onChange(true);
+          client.emitSession({ id: 's2' }, 'u2');
+          await loaded();
+          expect(auth.convexAuthenticated()).toBe(false);
+          expect(auth.authEpoch()).toBe(1);
+          expect(router.url).toBe('/organizations/x');
+          expect(navigate).not.toHaveBeenCalled();
+        });
+
+        it('a new session id for the same user changes nothing', async () => {
+          const { router, auth, navigate } = await signedInOn('/app/account', 'u1');
+          await auth.fetchToken({ forceRefreshToken: false });
+          auth.onChange(true);
+          client.emitSession({ id: 's2' }, 'u1');
+          await loaded();
+          expect(auth.convexAuthenticated()).toBe(true);
+          expect(auth.authEpoch()).toBe(0);
+          await auth.fetchToken({ forceRefreshToken: false });
+          expect(client.tokenRequests).toBe(1);
+          expect(router.url).toBe('/app/account');
+          expect(navigate).not.toHaveBeenCalled();
+        });
+
+        it("a check that confirms the same user's session again, with an error that kept the data, changes nothing", async () => {
+          const { auth } = await signedInOn('/app/account', 'u1');
+          auth.onChange(true);
+          client.emitChecking();
+          client.emitError({ status: 503, statusText: 'Service Unavailable' });
+          expect(auth.authEpoch()).toBe(0);
+          expect(auth.convexAuthenticated()).toBe(true);
+        });
+      });
+
+      describe('the confirmed user across this tab’s own sign-in and a sign-out', () => {
+        it("this tab's sign-in as another user over a confirmed session advances authEpoch only once and starts no navigation", async () => {
+          const { router, auth, navigate } = await signedInOn('/app/account', 'u1');
+          await expect(auth.authenticate(requestSignIn, INPUT)).resolves.toEqual({ ok: true });
+          expect(auth.authEpoch()).toBe(1);
+          client.emitSession({ id: 's2' }, 'u2');
+          await loaded();
+          expect(auth.authEpoch()).toBe(1);
+          expect(navigate).not.toHaveBeenCalled();
+          expect(router.url).toBe('/app/account');
+          client.emitSession({ id: 's2' }, 'u2');
+          expect(auth.authEpoch()).toBe(1);
+        });
+
+        it('an answer for the replaced user that was in flight when the form signed in is not the form’s own, so the form’s answer is no account change', async () => {
+          const { router, auth, navigate } = await signedInOn('/app/account', 'u1');
+          client.emitChecking();
+          await expect(auth.authenticate(requestSignIn, INPUT)).resolves.toEqual({ ok: true });
+          expect(auth.authEpoch()).toBe(1);
+
+          client.emitSession({ id: 's1' }, 'u1');
+          client.emitChecking();
+          client.emitSession({ id: 's2' }, 'u2');
+          await loaded();
+          expect(auth.authEpoch()).toBe(1);
+          expect(navigate).not.toHaveBeenCalled();
+          expect(router.url).toBe('/app/account');
+
+          client.emitSession({ id: 's3' }, 'u2');
+          expect(auth.authEpoch()).toBe(1);
+        });
+
+        it('once the form’s answer has set the user, another user’s session is an account change', async () => {
+          const { router, auth } = await signedInOn('/app/account', 'u1');
+          await auth.authenticate(requestSignIn, INPUT);
+          client.emitSession({ id: 's2' }, 'u2');
+          client.emitSession({ id: 's3' }, 'u3');
+          expect(auth.authEpoch()).toBe(2);
+          await vi.waitFor(() => expect(router.url).toBe('/app'));
+        });
+
+        it('after a sign-out elsewhere, a check that confirms another user is no account change', async () => {
+          const { router, auth, navigate } = await signedInOn('/organizations/x', 'u1');
+          client.emitSession(null);
+          client.emitSession({ id: 's2' }, 'u2');
+          await loaded();
+          expect(auth.signedIn()).toBe(true);
+          expect(auth.authEpoch()).toBe(0);
+          expect(router.url).toBe('/organizations/x');
+          expect(navigate).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('onOnline while signed in', () => {
+        it('refetches once the last check started at least the limit ago, and not within it', async () => {
+          vi.useFakeTimers();
+          TestBed.configureTestingModule({ providers: [provideFakeAuthClient(client)] });
+          const auth = TestBed.inject(AuthService);
+          await vi.advanceTimersByTimeAsync(0);
+          client.emitSession({ id: 's1' });
+          expect(auth.signedIn()).toBe(true);
+
+          await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS - 1);
+          auth.onOnline();
+          expect(client.refetches).toBe(0);
+          await vi.advanceTimersByTimeAsync(1);
+          auth.onOnline();
+          expect(client.refetches).toBe(1);
+          auth.onOnline();
+          expect(client.refetches).toBe(1);
+        });
+
+        it('starts no re-check timers, which stay with a kept session', async () => {
+          vi.useFakeTimers();
+          TestBed.configureTestingModule({ providers: [provideFakeAuthClient(client)] });
+          const auth = TestBed.inject(AuthService);
+          await vi.advanceTimersByTimeAsync(0);
+          client.emitSession({ id: 's1' });
+          await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+          auth.onOnline();
+          client.emitSession({ id: 's1' });
+          await vi.advanceTimersByTimeAsync(10 * RECHECK_EVERY_MS);
+          expect(client.refetches).toBe(1);
+        });
+
+        it('refetches nothing while the browser reports no network', async () => {
+          vi.useFakeTimers();
+          TestBed.configureTestingModule({ providers: [provideFakeAuthClient(client)] });
+          const auth = TestBed.inject(AuthService);
+          await vi.advanceTimersByTimeAsync(0);
+          client.emitSession({ id: 's1' });
+          setBrowserOnline(false);
+          await vi.advanceTimersByTimeAsync(SESSION_CHECK_LIMIT_MS);
+          auth.onOnline();
+          expect(client.refetches).toBe(0);
+        });
       });
     });
 
