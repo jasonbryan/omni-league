@@ -11,6 +11,25 @@ import { HARD_LIMIT } from './lib/signInThrottle';
 import schema from './schema';
 import { modules } from './test.setup';
 
+const TIMEOUT = 15_000;
+
+const scryptCalls = vi.hoisted(() => ({ count: 0 }));
+
+const CHEAP_SCRYPT_N = 2 ** 4;
+
+// Pure-JavaScript scrypt at the app's cost takes about a quarter of a second a hash, and a test that
+// times out cannot cancel the hashing it started, so the cost is cut here; password.test.ts keeps the real one.
+vi.mock('@noble/hashes/scrypt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@noble/hashes/scrypt.js')>();
+  return {
+    ...actual,
+    scryptAsync: (...[password, salt, options]: Parameters<typeof actual.scryptAsync>) => {
+      scryptCalls.count += 1;
+      return actual.scryptAsync(password, salt, { ...options, N: CHEAP_SCRYPT_N });
+    },
+  };
+});
+
 const SITE_URL = 'http://localhost:4000';
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
@@ -115,172 +134,216 @@ afterEach(() => {
 });
 
 describe('sign-in', () => {
-  test('a seeded user signs in with the right password and gets a session and a token', async () => {
-    const t = setup();
-    await signUp(t);
-    const before = await sessionCount(t);
-    const { status, json, headers } = await signIn(t, EMAIL, PASSWORD);
-    expect(status, JSON.stringify(json)).toBe(200);
-    expect(json['token']).toEqual(expect.any(String));
-    expect(headers.get('set-better-auth-cookie') ?? headers.get('set-cookie')).toBeTruthy();
-    expect(await sessionCount(t)).toBe(before + 1);
-    expect(await rows(t)).toEqual([]);
-  }, 30_000);
+  test(
+    'a seeded user signs in with the right password and gets a session and a token',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const before = await sessionCount(t);
+      const { status, json, headers } = await signIn(t, EMAIL, PASSWORD);
+      expect(status, JSON.stringify(json)).toBe(200);
+      expect(json['token']).toEqual(expect.any(String));
+      expect(headers.get('set-better-auth-cookie') ?? headers.get('set-cookie')).toBeTruthy();
+      expect(await sessionCount(t)).toBe(before + 1);
+      expect(await rows(t)).toEqual([]);
+    },
+    TIMEOUT,
+  );
 
-  test('the address matches in any letter case', async () => {
-    const t = setup();
-    await signUp(t);
-    expect((await signIn(t, 'Maya.Okafor@EXAMPLE.com', PASSWORD)).status).toBe(200);
-  }, 30_000);
+  test(
+    'the address matches in any letter case',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      expect((await signIn(t, 'Maya.Okafor@EXAMPLE.com', PASSWORD)).status).toBe(200);
+    },
+    TIMEOUT,
+  );
 
-  test('a wrong password and an unknown email get the same status and body', async () => {
-    const t = setup();
-    await signUp(t);
-    const wrong = await signIn(t, EMAIL, WRONG);
-    const unknown = await signIn(t, UNKNOWN, WRONG);
-    expect(wrong.status).toBe(401);
-    expect(unknown.status).toBe(401);
-    expect(wrong.json).toEqual(unknown.json);
-    expect(wrong.json).toMatchObject({
-      code: 'INVALID_EMAIL_OR_PASSWORD',
-      message: 'Invalid email or password',
-    });
-  }, 30_000);
+  test(
+    'a wrong password and an unknown email get the same status and body',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const wrong = await signIn(t, EMAIL, WRONG);
+      const unknown = await signIn(t, UNKNOWN, WRONG);
+      expect(wrong.status).toBe(401);
+      expect(unknown.status).toBe(401);
+      expect(wrong.json).toEqual(unknown.json);
+      expect(wrong.json).toMatchObject({
+        code: 'INVALID_EMAIL_OR_PASSWORD',
+        message: 'Invalid email or password',
+      });
+    },
+    TIMEOUT,
+  );
 
-  test('a 129-character password gets the same 400 PASSWORD_TOO_LONG for a known and an unknown address, and each attempt is counted', async () => {
-    const t = setup();
-    await signUp(t);
-    const overLength = 'p'.repeat(129);
-    const known = await signIn(t, EMAIL, overLength);
-    const unknown = await signIn(t, UNKNOWN, overLength);
-    expect(known.status, JSON.stringify(known.json)).toBe(400);
-    expect(known.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
-    expect(unknown.status).toBe(400);
-    expect(unknown.json).toEqual(known.json);
-    expect((await rows(t)).map((row) => [row.email, row.failures]).sort()).toEqual(
-      [
-        [EMAIL, 1],
-        [UNKNOWN, 1],
-      ].sort(),
-    );
-  }, 30_000);
+  test(
+    'a 129-character password gets the same 400 PASSWORD_TOO_LONG for a known and an unknown address, and each attempt is counted',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const overLength = 'p'.repeat(129);
+      const known = await signIn(t, EMAIL, overLength);
+      const unknown = await signIn(t, UNKNOWN, overLength);
+      expect(known.status, JSON.stringify(known.json)).toBe(400);
+      expect(known.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
+      expect(unknown.status).toBe(400);
+      expect(unknown.json).toEqual(known.json);
+      expect((await rows(t)).map((row) => [row.email, row.failures]).sort()).toEqual(
+        [
+          [EMAIL, 1],
+          [UNKNOWN, 1],
+        ].sort(),
+      );
+    },
+    TIMEOUT,
+  );
 
-  test('a 128-character password signs in, and the same password with one more character gets 400 PASSWORD_TOO_LONG', async () => {
-    const t = setup();
-    const longest = 'q'.repeat(128);
-    const signUpAnswer = await post(t, 'sign-up/email', {
-      name: 'Maya Okafor',
-      email: EMAIL,
-      password: longest,
-      adultConfirmed: true,
-    });
-    expect(signUpAnswer.status, JSON.stringify(signUpAnswer.json)).toBe(200);
-    const atLimit = await signIn(t, EMAIL, longest);
-    expect(atLimit.status, JSON.stringify(atLimit.json)).toBe(200);
-    const overLimit = await signIn(t, EMAIL, `${longest}q`);
-    expect(overLimit.status).toBe(400);
-    expect(overLimit.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
-  }, 30_000);
+  test(
+    'a 128-character password signs in, and the same password with one more character gets 400 PASSWORD_TOO_LONG',
+    async () => {
+      const t = setup();
+      const longest = 'q'.repeat(128);
+      const signUpAnswer = await post(t, 'sign-up/email', {
+        name: 'Maya Okafor',
+        email: EMAIL,
+        password: longest,
+        adultConfirmed: true,
+      });
+      expect(signUpAnswer.status, JSON.stringify(signUpAnswer.json)).toBe(200);
+      const atLimit = await signIn(t, EMAIL, longest);
+      expect(atLimit.status, JSON.stringify(atLimit.json)).toBe(200);
+      const overLimit = await signIn(t, EMAIL, `${longest}q`);
+      expect(overLimit.status).toBe(400);
+      expect(overLimit.json).toMatchObject({ code: 'PASSWORD_TOO_LONG' });
+    },
+    TIMEOUT,
+  );
 });
 
 describe('per-address throttle', () => {
-  test('after 5 failures, a sixth attempt with the correct password gets 429 and the wait', async () => {
-    const t = setup();
-    await signUp(t);
-    const sessions = await sessionCount(t);
-    await fail(t, EMAIL, 5);
+  test(
+    'after 5 failures, a sixth attempt with the correct password gets 429 and the wait',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const sessions = await sessionCount(t);
+      await fail(t, EMAIL, 5);
 
-    const sixth = await signIn(t, EMAIL, PASSWORD);
-    expect(sixth.status).toBe(429);
-    expect(sixth.json).toEqual({
-      code: 'TOO_MANY_ATTEMPTS',
-      message: 'Too many attempts. Try again in 1 minute.',
-      retryAfterSeconds: 60,
-    });
-    expect(sixth.headers.get('retry-after')).toBe('60');
-    expect(await sessionCount(t)).toBe(sessions);
-    vi.setSystemTime(new Date((await storedBlockedUntil(t)) - 30_000));
-    const waiting = await signIn(t, EMAIL, PASSWORD);
-    expect(waiting.status).toBe(429);
-    expect(waiting.json['retryAfterSeconds']).toBe(30);
-    expect(waiting.json['message']).toBe('Too many attempts. Try again in 1 minute.');
-  }, 60_000);
+      const sixth = await signIn(t, EMAIL, PASSWORD);
+      expect(sixth.status).toBe(429);
+      expect(sixth.json).toEqual({
+        code: 'TOO_MANY_ATTEMPTS',
+        message: 'Too many attempts. Try again in 1 minute.',
+        retryAfterSeconds: 60,
+      });
+      expect(sixth.headers.get('retry-after')).toBe('60');
+      expect(await sessionCount(t)).toBe(sessions);
+      vi.setSystemTime(new Date((await storedBlockedUntil(t)) - 30_000));
+      const waiting = await signIn(t, EMAIL, PASSWORD);
+      expect(waiting.status).toBe(429);
+      expect(waiting.json['retryAfterSeconds']).toBe(30);
+      expect(waiting.json['message']).toBe('Too many attempts. Try again in 1 minute.');
+    },
+    TIMEOUT,
+  );
 
-  test('the wait ends after a minute, doubles with each failure, and a success clears the row', async () => {
-    const t = setup();
-    await signUp(t);
-    const failingFrom = Date.now();
-    await fail(t, EMAIL, 5);
-    const firstWait = (await storedBlockedUntil(t)) - failingFrom;
-    expect(firstWait).toBeGreaterThanOrEqual(MINUTE);
-    expect(firstWait).toBeLessThan(MINUTE + 1000);
+  test(
+    'the wait ends after a minute, doubles with each failure, and a success clears the row',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const failingFrom = Date.now();
+      await fail(t, EMAIL, 5);
+      const firstWait = (await storedBlockedUntil(t)) - failingFrom;
+      expect(firstWait).toBeGreaterThanOrEqual(MINUTE);
+      expect(firstWait).toBeLessThan(MINUTE + 1000);
 
-    vi.setSystemTime(new Date(await storedBlockedUntil(t)));
-    await fail(t, EMAIL, 1);
-    const afterSix = await signIn(t, EMAIL, PASSWORD);
-    expect(afterSix.status).toBe(429);
-    expect(afterSix.json).toMatchObject({
-      message: 'Too many attempts. Try again in 2 minutes.',
-      retryAfterSeconds: 120,
-    });
+      vi.setSystemTime(new Date(await storedBlockedUntil(t)));
+      await fail(t, EMAIL, 1);
+      const afterSix = await signIn(t, EMAIL, PASSWORD);
+      expect(afterSix.status).toBe(429);
+      expect(afterSix.json).toMatchObject({
+        message: 'Too many attempts. Try again in 2 minutes.',
+        retryAfterSeconds: 120,
+      });
 
-    vi.setSystemTime(new Date(await storedBlockedUntil(t)));
-    const ok = await signIn(t, EMAIL, PASSWORD);
-    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
-    expect(await rows(t)).toEqual([]);
-    await fail(t, EMAIL, 1);
-    expect((await rows(t)).map((row) => row.failures)).toEqual([1]);
-  }, 60_000);
+      vi.setSystemTime(new Date(await storedBlockedUntil(t)));
+      const ok = await signIn(t, EMAIL, PASSWORD);
+      expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+      expect(await rows(t)).toEqual([]);
+      await fail(t, EMAIL, 1);
+      expect((await rows(t)).map((row) => row.failures)).toEqual([1]);
+    },
+    TIMEOUT,
+  );
 
-  test('after 5 failures, a 129-character password gets the same 429 and wait as the correct password', async () => {
-    const t = setup();
-    await signUp(t);
-    await fail(t, EMAIL, 5);
-    const correct = await signIn(t, EMAIL, PASSWORD);
-    const overLength = await signIn(t, EMAIL, 'p'.repeat(129));
-    expect(correct.status).toBe(429);
-    expect(overLength.status).toBe(429);
-    expect(overLength.json).toEqual(correct.json);
-  }, 60_000);
+  test(
+    'after 5 failures, a 129-character password gets the same 429 and wait as the correct password',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      await fail(t, EMAIL, 5);
+      const correct = await signIn(t, EMAIL, PASSWORD);
+      const overLength = await signIn(t, EMAIL, 'p'.repeat(129));
+      expect(correct.status).toBe(429);
+      expect(overLength.status).toBe(429);
+      expect(overLength.json).toEqual(correct.json);
+    },
+    TIMEOUT,
+  );
 
-  test('an unknown address gets the identical sequence: five 401s, then 429', async () => {
-    const t = setup();
-    await signUp(t);
-    const known = await fail(t, EMAIL, 5);
-    const unknown = await fail(t, UNKNOWN, 5);
-    expect(unknown.map((a) => a.json)).toEqual(known.map((a) => a.json));
+  test(
+    'an unknown address gets the identical sequence: five 401s, then 429',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const known = await fail(t, EMAIL, 5);
+      const unknown = await fail(t, UNKNOWN, 5);
+      expect(unknown.map((a) => a.json)).toEqual(known.map((a) => a.json));
 
-    const knownSixth = await signIn(t, EMAIL, PASSWORD);
-    const unknownSixth = await signIn(t, UNKNOWN, PASSWORD);
-    expect(unknownSixth.status).toBe(429);
-    expect(unknownSixth.json).toEqual(knownSixth.json);
-    expect(unknownSixth.headers.get('retry-after')).toBe(knownSixth.headers.get('retry-after'));
+      const knownSixth = await signIn(t, EMAIL, PASSWORD);
+      const unknownSixth = await signIn(t, UNKNOWN, PASSWORD);
+      expect(unknownSixth.status).toBe(429);
+      expect(unknownSixth.json).toEqual(knownSixth.json);
+      expect(unknownSixth.headers.get('retry-after')).toBe(knownSixth.headers.get('retry-after'));
 
-    advance(MINUTE);
-    const knownNext = await signIn(t, EMAIL, WRONG);
-    const unknownNext = await signIn(t, UNKNOWN, WRONG);
-    expect(unknownNext.status).toBe(knownNext.status);
-    expect(unknownNext.json).toEqual(knownNext.json);
-  }, 120_000);
+      advance(MINUTE);
+      const knownNext = await signIn(t, EMAIL, WRONG);
+      const unknownNext = await signIn(t, UNKNOWN, WRONG);
+      expect(unknownNext.status).toBe(knownNext.status);
+      expect(unknownNext.json).toEqual(knownNext.json);
+    },
+    TIMEOUT,
+  );
 
-  test('every spelling of one address shares one row', async () => {
-    const t = setup();
-    await signUp(t);
-    await fail(t, 'Maya.Okafor@Example.com', 3);
-    await fail(t, EMAIL, 2);
-    expect(await rows(t)).toMatchObject([{ email: EMAIL, failures: 5 }]);
-    expect((await signIn(t, 'MAYA.OKAFOR@example.com', PASSWORD)).status).toBe(429);
-  }, 60_000);
+  test(
+    'every spelling of one address shares one row',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      await fail(t, 'Maya.Okafor@Example.com', 3);
+      await fail(t, EMAIL, 2);
+      expect(await rows(t)).toMatchObject([{ email: EMAIL, failures: 5 }]);
+      expect((await signIn(t, 'MAYA.OKAFOR@example.com', PASSWORD)).status).toBe(429);
+    },
+    TIMEOUT,
+  );
 
-  test('parallel guesses are counted before they are checked: at most 5 reach the password', async () => {
-    const t = setup();
-    await signUp(t);
-    const answers = await Promise.all(Array.from({ length: 9 }, () => signIn(t, EMAIL, WRONG)));
-    const statuses = answers.map((a) => a.status).sort();
-    expect(statuses.filter((s) => s === 401)).toHaveLength(5);
-    expect(statuses.filter((s) => s === 429)).toHaveLength(4);
-    expect(await rows(t)).toMatchObject([{ failures: 5 }]);
-  }, 120_000);
+  test(
+    'parallel guesses are counted before they are checked: at most 5 reach the password',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const answers = await Promise.all(Array.from({ length: 9 }, () => signIn(t, EMAIL, WRONG)));
+      const statuses = answers.map((a) => a.status).sort();
+      expect(statuses.filter((s) => s === 401)).toHaveLength(5);
+      expect(statuses.filter((s) => s === 429)).toHaveLength(4);
+      expect(await rows(t)).toMatchObject([{ failures: 5 }]);
+    },
+    TIMEOUT,
+  );
 
   test('a body that is not a sign-in (no string email) is refused by Better Auth and counted nowhere', async () => {
     const t = setup();
@@ -291,13 +354,17 @@ describe('per-address throttle', () => {
     expect(await rows(t)).toEqual([]);
   });
 
-  test('an address of 300 characters is throttled under a short digest key', async () => {
-    const t = setup();
-    const long = `${'a'.repeat(300)}@example.com`;
-    await fail(t, long, 1);
-    const [row] = await rows(t);
-    expect(row?.email).toMatch(/^sha256:[0-9a-f]{64}$/);
-  }, 30_000);
+  test(
+    'an address of 300 characters is throttled under a short digest key',
+    async () => {
+      const t = setup();
+      const long = `${'a'.repeat(300)}@example.com`;
+      await fail(t, long, 1);
+      const [row] = await rows(t);
+      expect(row?.email).toMatch(/^sha256:[0-9a-f]{64}$/);
+    },
+    TIMEOUT,
+  );
 });
 
 describe('hard limit', () => {
@@ -306,47 +373,59 @@ describe('hard limit', () => {
       ctx.db.insert('signInFailures', { email, failures, blockedUntil: Date.now() - 1 }),
     );
 
-  test('after 100 consecutive failures the correct password is refused, after any wait', async () => {
-    const t = setup();
-    await signUp(t);
-    expect(HARD_LIMIT).toBe(100);
-    await seedFailures(t, EMAIL, HARD_LIMIT - 1);
-    await fail(t, EMAIL, 1);
+  test(
+    'after 100 consecutive failures the correct password is refused, after any wait',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      expect(HARD_LIMIT).toBe(100);
+      await seedFailures(t, EMAIL, HARD_LIMIT - 1);
+      await fail(t, EMAIL, 1);
 
-    for (const wait of [0, 61 * MINUTE, 24 * 60 * MINUTE, 400 * 24 * 60 * MINUTE]) {
-      advance(wait);
-      const { status, json } = await signIn(t, EMAIL, PASSWORD);
-      expect(status, `after ${wait}`).toBe(429);
-      expect(json).toEqual({
-        code: 'SIGN_IN_LOCKED',
-        message: 'Password sign-in is locked for this email address.',
-      });
-    }
-    expect(await rows(t)).toMatchObject([{ email: EMAIL, failures: HARD_LIMIT }]);
-  }, 60_000);
+      for (const wait of [0, 61 * MINUTE, 24 * 60 * MINUTE, 400 * 24 * 60 * MINUTE]) {
+        advance(wait);
+        const { status, json } = await signIn(t, EMAIL, PASSWORD);
+        expect(status, `after ${wait}`).toBe(429);
+        expect(json).toEqual({
+          code: 'SIGN_IN_LOCKED',
+          message: 'Password sign-in is locked for this email address.',
+        });
+      }
+      expect(await rows(t)).toMatchObject([{ email: EMAIL, failures: HARD_LIMIT }]);
+    },
+    TIMEOUT,
+  );
 
-  test('an unknown address gets the same refusal after the same sequence', async () => {
-    const t = setup();
-    await signUp(t);
-    for (const email of [EMAIL, UNKNOWN]) {
-      await seedFailures(t, email, HARD_LIMIT - 1);
-      await fail(t, email, 1);
-    }
-    advance(3 * 60 * MINUTE);
-    const known = await signIn(t, EMAIL, PASSWORD);
-    const unknown = await signIn(t, UNKNOWN, PASSWORD);
-    expect(unknown.status).toBe(429);
-    expect(unknown.json).toEqual(known.json);
-    expect(unknown.json['code']).toBe('SIGN_IN_LOCKED');
-  }, 60_000);
+  test(
+    'an unknown address gets the same refusal after the same sequence',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      for (const email of [EMAIL, UNKNOWN]) {
+        await seedFailures(t, email, HARD_LIMIT - 1);
+        await fail(t, email, 1);
+      }
+      advance(3 * 60 * MINUTE);
+      const known = await signIn(t, EMAIL, PASSWORD);
+      const unknown = await signIn(t, UNKNOWN, PASSWORD);
+      expect(unknown.status).toBe(429);
+      expect(unknown.json).toEqual(known.json);
+      expect(unknown.json['code']).toBe('SIGN_IN_LOCKED');
+    },
+    TIMEOUT,
+  );
 
-  test('the 100th attempt, if correct, still signs in and clears the row', async () => {
-    const t = setup();
-    await signUp(t);
-    await seedFailures(t, EMAIL, HARD_LIMIT - 1);
-    expect((await signIn(t, EMAIL, PASSWORD)).status).toBe(200);
-    expect(await rows(t)).toEqual([]);
-  }, 30_000);
+  test(
+    'the 100th attempt, if correct, still signs in and clears the row',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      await seedFailures(t, EMAIL, HARD_LIMIT - 1);
+      expect((await signIn(t, EMAIL, PASSWORD)).status).toBe(200);
+      expect(await rows(t)).toEqual([]);
+    },
+    TIMEOUT,
+  );
 });
 
 describe('only internal functions read or write signInFailures', () => {
@@ -442,133 +521,165 @@ describe('per-IP limiter', () => {
     expect(createAuth({} as GenericCtx<DataModel>).options.rateLimit?.enabled).toBe(false);
   });
 
-  test('the 4th sign-in from one address within 10 s gets 429 with the wait; another address still signs in', async () => {
-    const t = setup();
-    await signUp(t);
-    for (let i = 0; i < 3; i++) {
-      const answer = await signIn(t, EMAIL, PASSWORD, ADDRESS);
-      expect(answer.status, `sign-in ${i + 1}`).toBe(200);
-      advance(2 * SECOND);
-    }
-    const fourth = await signIn(t, EMAIL, PASSWORD, ADDRESS);
-    expect(fourth.status).toBe(429);
-    expect(fourth.json).toEqual({ message: 'Too many requests. Please try again later.' });
-    const retryAfter = Number(fourth.headers.get('x-retry-after'));
-    expect(retryAfter).toBeGreaterThanOrEqual(1);
-    expect(retryAfter).toBeLessThanOrEqual(10);
-    expect(fourth.headers.get('access-control-allow-origin')).toBe(SITE_URL);
-    expect((await signIn(t, EMAIL, PASSWORD, OTHER)).status).toBe(200);
-  }, 60_000);
+  test(
+    'the 4th sign-in from one address within 10 s gets 429 with the wait; another address still signs in',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      for (let i = 0; i < 3; i++) {
+        const answer = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+        expect(answer.status, `sign-in ${i + 1}`).toBe(200);
+        advance(2 * SECOND);
+      }
+      const fourth = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+      expect(fourth.status).toBe(429);
+      expect(fourth.json).toEqual({ message: 'Too many requests. Please try again later.' });
+      const retryAfter = Number(fourth.headers.get('x-retry-after'));
+      expect(retryAfter).toBeGreaterThanOrEqual(1);
+      expect(retryAfter).toBeLessThanOrEqual(10);
+      expect(fourth.headers.get('access-control-allow-origin')).toBe(SITE_URL);
+      expect((await signIn(t, EMAIL, PASSWORD, OTHER)).status).toBe(200);
+    },
+    TIMEOUT,
+  );
 
-  test('the 4th sign-up from one address within 10 s gets 429 and creates no user', async () => {
-    const t = setup();
-    for (let i = 1; i <= 3; i++) {
-      const answer = await signUpAs(t, `new${i}@example.com`, ADDRESS);
-      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    }
-    const fourth = await signUpAs(t, 'new4@example.com', ADDRESS);
-    expect(fourth.status).toBe(429);
-    expect(await authUserEmails(t)).toEqual([
-      'new1@example.com',
-      'new2@example.com',
-      'new3@example.com',
-    ]);
-    expect(
-      await t.run((ctx) => ctx.db.query('users').collect()).then((users) => users.length),
-    ).toBe(3);
-  }, 60_000);
+  test(
+    'the 4th sign-up from one address within 10 s gets 429 and creates no user',
+    async () => {
+      const t = setup();
+      for (let i = 1; i <= 3; i++) {
+        const answer = await signUpAs(t, `new${i}@example.com`, ADDRESS);
+        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      }
+      const fourth = await signUpAs(t, 'new4@example.com', ADDRESS);
+      expect(fourth.status).toBe(429);
+      expect(await authUserEmails(t)).toEqual([
+        'new1@example.com',
+        'new2@example.com',
+        'new3@example.com',
+      ]);
+      expect(
+        await t.run((ctx) => ctx.db.query('users').collect()).then((users) => users.length),
+      ).toBe(3);
+    },
+    TIMEOUT,
+  );
 
-  test('9 sign-ins at once from one address: at most 3 get their normal answer, the rest 429', async () => {
-    const t = setup();
-    await signUp(t);
-    const answers = await Promise.all(
-      Array.from({ length: 9 }, () => signIn(t, EMAIL, PASSWORD, ADDRESS)),
-    );
-    const statuses = answers.map((a) => a.status);
-    expect(statuses.filter((s) => s === 200).length).toBeLessThanOrEqual(3);
-    expect(statuses.filter((s) => s !== 200).every((s) => s === 429)).toBe(true);
-    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(6);
-    const row = (await limitRows(t)).find((r) => r.key === '203.0.113.9|/sign-in/email');
-    expect(row?.count).toBe(3);
-  }, 120_000);
+  test(
+    '9 sign-ins at once from one address: at most 3 get their normal answer, the rest 429',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const answers = await Promise.all(
+        Array.from({ length: 9 }, () => signIn(t, EMAIL, PASSWORD, ADDRESS)),
+      );
+      const statuses = answers.map((a) => a.status);
+      expect(statuses.filter((s) => s === 200).length).toBeLessThanOrEqual(3);
+      expect(statuses.filter((s) => s !== 200).every((s) => s === 429)).toBe(true);
+      expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(6);
+      const row = (await limitRows(t)).find((r) => r.key === '203.0.113.9|/sign-in/email');
+      expect(row?.count).toBe(3);
+    },
+    TIMEOUT,
+  );
 
-  test('refused at +5 s, +9 s and exactly +10 s after the 3rd sign-in, then allowed at +10.001 s', async () => {
-    const t = setup();
-    await signUp(t);
-    for (let i = 0; i < 3; i++)
+  test(
+    'refused at +5 s, +9 s and exactly +10 s after the 3rd sign-in, then allowed at +10.001 s',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      for (let i = 0; i < 3; i++)
+        expect((await signIn(t, EMAIL, PASSWORD, ADDRESS)).status).toBe(200);
+      const start = await windowStart(t, '203.0.113.9|/sign-in/email');
+      for (const ms of [5 * SECOND, 9 * SECOND, 10 * SECOND]) {
+        vi.setSystemTime(new Date(start + ms));
+        const refused = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+        expect(refused.status, `at +${ms} ms`).toBe(429);
+        expect(refused.headers.get('x-retry-after')).toBe(String(10 - ms / SECOND));
+      }
+      expect(await windowStart(t, '203.0.113.9|/sign-in/email')).toBe(start);
+      vi.setSystemTime(new Date(start + 10 * SECOND + 1));
       expect((await signIn(t, EMAIL, PASSWORD, ADDRESS)).status).toBe(200);
-    const start = await windowStart(t, '203.0.113.9|/sign-in/email');
-    for (const ms of [5 * SECOND, 9 * SECOND, 10 * SECOND]) {
-      vi.setSystemTime(new Date(start + ms));
-      const refused = await signIn(t, EMAIL, PASSWORD, ADDRESS);
-      expect(refused.status, `at +${ms} ms`).toBe(429);
-      expect(refused.headers.get('x-retry-after')).toBe(String(10 - ms / SECOND));
-    }
-    expect(await windowStart(t, '203.0.113.9|/sign-in/email')).toBe(start);
-    vi.setSystemTime(new Date(start + 10 * SECOND + 1));
-    expect((await signIn(t, EMAIL, PASSWORD, ADDRESS)).status).toBe(200);
-  }, 60_000);
+    },
+    TIMEOUT,
+  );
 
-  test('101 /get-session and 101 /convex/token requests from one address in 10 s all get their normal answer', async () => {
-    const t = setup();
-    for (const path of ['get-session', 'convex/token']) {
-      const first = await get(t, path, ADDRESS);
-      expect(first, path).not.toBe(429);
-      for (let i = 1; i < 101; i++)
-        expect(await get(t, path, ADDRESS), `${path} ${i + 1}`).toBe(first);
-    }
-    expect(await limitRows(t)).toEqual([]);
-  }, 120_000);
+  test(
+    '101 /get-session and 101 /convex/token requests from one address in 10 s all get their normal answer',
+    async () => {
+      const t = setup();
+      for (const path of ['get-session', 'convex/token']) {
+        const first = await get(t, path, ADDRESS);
+        expect(first, path).not.toBe(429);
+        for (let i = 1; i < 101; i++)
+          expect(await get(t, path, ADDRESS), `${path} ${i + 1}`).toBe(first);
+      }
+      expect(await limitRows(t)).toEqual([]);
+    },
+    TIMEOUT,
+  );
 
-  test('a sign-in the per-IP limit refuses leaves the sign-in throttle row unchanged', async () => {
-    const t = setup();
-    await signUp(t);
-    for (let i = 0; i < 3; i++) expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(401);
-    const before = await rows(t);
-    expect(before).toMatchObject([{ email: EMAIL, failures: 3 }]);
-    expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(429);
-    expect(await rows(t)).toEqual(before);
-  }, 60_000);
+  test(
+    'a sign-in the per-IP limit refuses leaves the sign-in throttle row unchanged',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      for (let i = 0; i < 3; i++) expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(401);
+      const before = await rows(t);
+      expect(before).toMatchObject([{ email: EMAIL, failures: 3 }]);
+      expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(429);
+      expect(await rows(t)).toEqual(before);
+    },
+    TIMEOUT,
+  );
 
-  test('a missing, malformed, or comma-separated cf-connecting-ip shares one bucket', async () => {
-    const t = setup();
-    await signUp(t);
-    const headers: Record<string, string>[] = [
-      {},
-      { 'cf-connecting-ip': 'not-an-ip' },
-      { 'cf-connecting-ip': '203.0.113.9, 198.51.100.7' },
-    ];
-    for (const [i, h] of headers.entries()) {
-      expect((await signIn(t, EMAIL, PASSWORD, h)).status, `request ${i + 1}`).toBe(200);
-    }
-    expect((await signIn(t, EMAIL, PASSWORD, {})).status).toBe(429);
-    // Better Auth keys a request with no usable address as 127.0.0.1 when NODE_ENV is "test" (Vitest)
-    // or "development", and as `no-trusted-ip` on a deployment.
-    const signInKeys = (await limitRows(t))
-      .map((row) => row.key)
-      .filter((key) => key.endsWith('/sign-in/email'));
-    expect(signInKeys).toEqual(['127.0.0.1|/sign-in/email']);
-  }, 60_000);
+  test(
+    'a missing, malformed, or comma-separated cf-connecting-ip shares one bucket',
+    async () => {
+      const t = setup();
+      await signUp(t);
+      const headers: Record<string, string>[] = [
+        {},
+        { 'cf-connecting-ip': 'not-an-ip' },
+        { 'cf-connecting-ip': '203.0.113.9, 198.51.100.7' },
+      ];
+      for (const [i, h] of headers.entries()) {
+        expect((await signIn(t, EMAIL, PASSWORD, h)).status, `request ${i + 1}`).toBe(200);
+      }
+      expect((await signIn(t, EMAIL, PASSWORD, {})).status).toBe(429);
+      // Better Auth keys a request with no usable address as 127.0.0.1 when NODE_ENV is "test" (Vitest)
+      // or "development", and as `no-trusted-ip` on a deployment.
+      const signInKeys = (await limitRows(t))
+        .map((row) => row.key)
+        .filter((key) => key.endsWith('/sign-in/email'));
+      expect(signInKeys).toEqual(['127.0.0.1|/sign-in/email']);
+    },
+    TIMEOUT,
+  );
 
-  test('when the count cannot be stored, the request gets 429 and the error is logged', async () => {
-    const t = setup();
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    // The store refuses a key over 300 characters, as it would any failed write.
-    const answer = await post(
-      t,
-      `sign-in/${'x'.repeat(300)}`,
-      { email: EMAIL, password: PASSWORD },
-      ADDRESS,
-    );
-    expect(answer.status).toBe(429);
-    expect(answer.headers.get('x-retry-after')).toBe('10');
-    expect(answer.headers.get('access-control-allow-origin')).toBe(SITE_URL);
-    expect(errors).toHaveBeenCalledWith(
-      'The per-IP limit could not be counted, so the request is refused',
-      expect.any(Error),
-    );
-    expect(await limitRows(t)).toEqual([]);
-  }, 30_000);
+  test(
+    'when the count cannot be stored, the request gets 429 and the error is logged',
+    async () => {
+      const t = setup();
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      // The store refuses a key over 300 characters, as it would any failed write.
+      const answer = await post(
+        t,
+        `sign-in/${'x'.repeat(300)}`,
+        { email: EMAIL, password: PASSWORD },
+        ADDRESS,
+      );
+      expect(answer.status).toBe(429);
+      expect(answer.headers.get('x-retry-after')).toBe('10');
+      expect(answer.headers.get('access-control-allow-origin')).toBe(SITE_URL);
+      expect(errors).toHaveBeenCalledWith(
+        'The per-IP limit could not be counted, so the request is refused',
+        expect.any(Error),
+      );
+      expect(await limitRows(t)).toEqual([]);
+    },
+    TIMEOUT,
+  );
 
   // Two rows for one key make the store's `unique()` read throw on the real sign-in and sign-up paths.
   test.each([
@@ -608,18 +719,38 @@ describe('per-IP limiter', () => {
       expect(await rows(t)).toEqual([]);
       expect(await sessionCount(t)).toBe(path === 'sign-in/email' ? 1 : 0);
     },
-    60_000,
+    TIMEOUT,
   );
 
-  test('/sign-in/social shares the sign-in rule, and /sign-out is not limited', async () => {
-    const t = setup();
-    for (let i = 0; i < 3; i++) {
-      const answer = await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS);
-      expect(answer.status, `social ${i + 1}`).not.toBe(429);
-    }
-    expect((await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS)).status).toBe(429);
-    for (let i = 0; i < 5; i++)
-      expect((await post(t, 'sign-out', {}, ADDRESS)).status).not.toBe(429);
-    expect((await limitRows(t)).map((row) => row.key)).toEqual(['203.0.113.9|/sign-in/social']);
-  }, 60_000);
+  test(
+    '/sign-in/social shares the sign-in rule, and /sign-out is not limited',
+    async () => {
+      const t = setup();
+      for (let i = 0; i < 3; i++) {
+        const answer = await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS);
+        expect(answer.status, `social ${i + 1}`).not.toBe(429);
+      }
+      expect((await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS)).status).toBe(429);
+      for (let i = 0; i < 5; i++)
+        expect((await post(t, 'sign-out', {}, ADDRESS)).status).not.toBe(429);
+      expect((await limitRows(t)).map((row) => row.key)).toEqual(['203.0.113.9|/sign-in/social']);
+    },
+    TIMEOUT,
+  );
+});
+
+describe('password hash cost', () => {
+  test(
+    'sign-up and sign-in hash through the cheap scrypt wrapper',
+    async () => {
+      const t = setup();
+      const beforeSignUp = scryptCalls.count;
+      await signUp(t);
+      const afterSignUp = scryptCalls.count;
+      expect(afterSignUp).toBeGreaterThan(beforeSignUp);
+      expect((await signIn(t, EMAIL, PASSWORD)).status).toBe(200);
+      expect(scryptCalls.count).toBeGreaterThan(afterSignUp);
+    },
+    TIMEOUT,
+  );
 });
