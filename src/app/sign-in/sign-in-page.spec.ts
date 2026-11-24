@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, type Routes } from '@angular/router';
@@ -13,6 +14,7 @@ import { expectAlertClasses, expectAlertSlots } from '../ui/testing/alert';
 import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { MESSAGES, SignInPage } from './sign-in-page';
+import { dispatchClick } from '../core/testing/dispatch-event';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
@@ -234,6 +236,19 @@ describe('SignInPage', () => {
     ])('from %s goes to %s: an unsafe returnTo is dropped', async (from, href) => {
       await open(from);
       expect(createAccount()?.getAttribute('href')).toBe(href);
+    });
+
+    it('replaces the history entry, so Back returns to the page before the flow', async () => {
+      await open('/leagues/x/register');
+      await harness.navigateByUrl('/sign-in?returnTo=%2Fapp');
+      page = harness.routeNativeElement!;
+      TestBed.inject(Router).initialNavigation();
+      dispatchClick(createAccount()!);
+      await harness.fixture.whenStable();
+      expect(url()).toBe('/sign-up?returnTo=%2Fapp');
+      TestBed.inject(Location).back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(url()).toBe('/leagues/x/register');
     });
   });
 

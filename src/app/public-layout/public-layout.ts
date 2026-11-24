@@ -117,6 +117,7 @@ const FOOTER_LINK_CLASSES =
                     <a
                       routerLink="/sign-in"
                       [queryParams]="{ returnTo: signIn().returnTo }"
+                      [replaceUrl]="signIn().onAuthPage"
                       [class]="footerLink"
                       >Sign in to manage</a
                     >

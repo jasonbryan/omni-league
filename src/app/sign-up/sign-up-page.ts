@@ -226,6 +226,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
                         <a
                           routerLink="/sign-in"
                           [queryParams]="{ returnTo: signInReturnTo }"
+                          [replaceUrl]="true"
                           class="font-medium whitespace-nowrap underline underline-offset-4"
                           >Sign in instead</a
                         >.
@@ -359,6 +360,7 @@ type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline'
             <a
               routerLink="/sign-in"
               [queryParams]="{ returnTo: signInReturnTo }"
+              [replaceUrl]="true"
               class="font-medium text-primary underline underline-offset-4"
               >Sign in</a
             >

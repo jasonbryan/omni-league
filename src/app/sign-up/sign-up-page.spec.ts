@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, type Routes } from '@angular/router';
@@ -14,6 +15,7 @@ import { expectBareCard } from '../ui/testing/card';
 import { fieldShape, formShapes, inputShape, shapeOf } from '../ui/testing/form-shapes';
 import { HomeShape } from '../account/home-shape';
 import { MESSAGES, SignUpPage } from './sign-up-page';
+import { dispatchClick } from '../core/testing/dispatch-event';
 import { expectPendingSpinner } from '../ui/testing/spinner';
 
 @Component({ template: 'elsewhere' })
@@ -264,6 +266,39 @@ describe('SignUpPage', () => {
     ])('from %s the footer link goes to %s', async (from, href) => {
       await open(from);
       expect(page.querySelector('main form ~ p a')?.getAttribute('href')).toBe(href);
+    });
+
+    async function expectBackReturnsToThePageBeforeTheFlow(link: HTMLAnchorElement) {
+      dispatchClick(link);
+      await harness.fixture.whenStable();
+      expect(url()).toBe('/sign-in?returnTo=%2Fapp');
+      TestBed.inject(Location).back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(url()).toBe('/leagues/x/register');
+    }
+
+    async function openAfter(earlier: string) {
+      await open(earlier);
+      await harness.navigateByUrl('/sign-up');
+      page = harness.routeNativeElement!;
+      TestBed.inject(Router).initialNavigation();
+    }
+
+    it('replaces the history entry for the form link, so Back returns to the page before the flow', async () => {
+      await openAfter('/leagues/x/register');
+      await expectBackReturnsToThePageBeforeTheFlow(
+        page.querySelector<HTMLAnchorElement>('main form ~ p a')!,
+      );
+    });
+
+    it('replaces the history entry for Sign in instead, so Back returns to the page before the flow', async () => {
+      await openAfter('/leagues/x/register');
+      await fill();
+      client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' };
+      await submit();
+      await expectBackReturnsToThePageBeforeTheFlow(
+        page.querySelector<HTMLAnchorElement>('#email-error a')!,
+      );
     });
   });
 
