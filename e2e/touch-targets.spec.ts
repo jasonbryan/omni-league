@@ -207,8 +207,6 @@ async function signUpAsOrgAdmin(
 }
 
 test.describe('touch screens: every control is at least 44 by 44 CSS px', () => {
-  test.describe.configure({ mode: 'parallel' });
-
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === DESKTOP_PROJECT, 'the touch projects measure touch sizes');
     await page.goto('/sign-in');

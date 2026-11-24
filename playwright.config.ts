@@ -47,6 +47,9 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   forbidOnly: ci,
+  // Per-test groups: a shard is cut by test count, and whole-file groups left one shard with the
+  // slowest specs. A describe that needs its order sets `mode: 'serial'`.
+  fullyParallel: true,
   // 2 on CI: one worker ran the ~500 tests past the 25-minute job timeout. Specs share one local
   // Convex backend and SSR server and each seeds its own uniquely named data, so they are
   // independent of order and of each other.
