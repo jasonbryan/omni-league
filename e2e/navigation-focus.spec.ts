@@ -234,6 +234,63 @@ test.describe('Back skips a finished form', () => {
     );
   });
 
+  test.describe('the top bar Sign in link', () => {
+    const topBarSignIn = (page: Page) => page.locator('header a[href^="/sign-in"]');
+
+    test('from another page pushes an entry, so Back shows that page and Forward shows sign-in', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const { tenant } = await seed();
+      await gotoHydrated(page, consoleGuard, '/');
+      await gotoHydrated(page, consoleGuard, tenant.path);
+      await topBarSignIn(page).click();
+      await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
+      await page.goBack();
+      await expectOrganizationPage(page, tenant);
+      await page.goForward();
+      await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
+      await page.goBack();
+      await expectOrganizationPage(page, tenant);
+    });
+
+    test('from the sign-up form replaces the entry, so Back after signing in shows the page before /sign-up', async ({
+      page,
+    }) => {
+      const user = await seedUser();
+      const { tenant } = await seed();
+      await page.goto(tenant.path);
+      await page.goto('/sign-up');
+      await topBarSignIn(page).click();
+      await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
+      await page.locator('#email').fill(user.email);
+      await page.locator('#password').fill(user.password);
+      await page.getByRole('button', { name: /^Sign in/ }).click();
+      await expect(page).toHaveURL(`${baseURL}/app`, { timeout: 20_000 });
+      await page.goBack();
+      await expectOrganizationPage(page, tenant);
+    });
+  });
+
+  test(
+    'Forward after Back from sign-up reached from the sign-in form shows sign-up, not sign-in',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tenant, leaguePath } = await seed();
+      await page.goto(tenant.path);
+      await page.goto(`/sign-in?returnTo=${encodeURIComponent(leaguePath)}`);
+      await page.getByRole('link', { name: 'Create an account' }).click();
+      await expect(page).toHaveURL(/\/sign-up\?returnTo=/);
+      await page.goBack();
+      await expectOrganizationPage(page, tenant);
+      await page.goForward();
+      await expect(page).toHaveURL(/\/sign-up\?returnTo=/);
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Create your account' }),
+      ).toBeVisible();
+    },
+  );
+
   test(
     'after creating an organization, Back from its Overview shows the page before the form',
     VIEWPORT_AGNOSTIC,
