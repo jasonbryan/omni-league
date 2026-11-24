@@ -897,13 +897,10 @@ test.describe('the app shell', () => {
       await page.clock.fastForward(5_000);
       await expectNoteBox(page, isMobile);
       socket.refuse = false;
-      // The socket coming back starts a session check, which the console guard would report as a failed request if the context went offline under it.
-      const sessionChecked = page.waitForResponse(
-        (response) => new URL(response.url()).pathname === '/api/auth/get-session',
-      );
       await page.clock.fastForward(10_000);
       await expect(homeHeading(page)).toBeVisible();
-      await sessionChecked;
+      // The socket coming back starts a session check and a token request, which the console guard would report as failed requests if the context went offline under them.
+      await page.waitForLoadState('networkidle');
       await context.setOffline(true);
       await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
       await expectNoteBox(page, isMobile);
