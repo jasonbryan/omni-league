@@ -23,6 +23,7 @@ import type { ConvexAuthSource } from '../data/convex';
 import { OFFLINE_SIGNAL_DELAY_MS } from '../data/convex/connection';
 import { AUTH_CLIENT, type AuthClientLike } from './auth-client';
 import { SIGN_IN_PATH, redirectSignedIn, requireSignedIn } from './guards';
+import { AFTER_AUTH_DEFAULT } from './return-to';
 import type {
   SignInInput,
   SignInResult,
@@ -84,6 +85,8 @@ export class AuthService implements ConvexAuthSource {
   private checkInFlight = false;
   private readonly checkWaiters = new Set<() => void>();
   private tokenWithheld = false;
+  private confirmedUserId: string | null = null;
+  private userReplacedByForm: string | null = null;
   private recheckTimer: ReturnType<typeof setTimeout> | undefined;
   private rechecks = 0;
   private resolveKnown: () => void = () => undefined;
@@ -135,11 +138,12 @@ export class AuthService implements ConvexAuthSource {
     if (!refetching) this.settleCheck();
     this.endGuardOnFreshAnswer(refetching, value.error);
     if (value.data?.session) {
-      if (this.signOutGuard === 'off') this.confirmSession();
+      if (this.signOutGuard === 'off')
+        this.confirmSession(refetching || value.error ? null : value.data.user.id);
       return;
     }
     if (refetching) return;
-    if (this.session() === 'kept' && neverReachedServer(value.error)) return;
+    if (this.signedIn() && neverReachedServer(value.error)) return;
     this.refuseSession(client, value.error);
   }
 
@@ -149,14 +153,39 @@ export class AuthService implements ConvexAuthSource {
     if (this.signOutGuard === 'awaiting-fresh-answer' && freshAnswer) this.signOutGuard = 'off';
   }
 
-  private confirmSession(): void {
+  /** `userId` is `null` unless the emission is an answer with no error: one that starts a check, or a failed one, carries the previous answer's session. */
+  private confirmSession(userId: string | null): void {
     const previous = this.session();
     const askAgain = previous === 'kept' && this.tokenWithheld;
+    const accountChanged = this.recordConfirmedUser(userId);
     this.setSession('signed-in');
     if (previous === 'signed-out') this.checkSignedIn.next();
+    if (accountChanged) {
+      this.followAccountChange();
+      return;
+    }
     if (!askAgain) return;
     this.forgetToken();
     this.epoch.update((epoch) => epoch + 1);
+  }
+
+  /** The user the form replaced is the one an answer sent before the form may still carry, so that answer is not the form's own. */
+  private recordConfirmedUser(userId: string | null): boolean {
+    if (userId === null) return false;
+    const replaced = this.userReplacedByForm;
+    this.userReplacedByForm = null;
+    if (replaced === userId) return false;
+    const previous = this.confirmedUserId;
+    this.confirmedUserId = userId;
+    return previous !== null && previous !== userId;
+  }
+
+  /** Convex's `setConfig` calls no `onChange(false)`, so `convexAuthenticated` is lowered here until the new token is accepted. */
+  private followAccountChange(): void {
+    this.forgetToken();
+    this.convexAuth.set(false);
+    this.epoch.update((epoch) => epoch + 1);
+    this.afterNavigation((router) => this.goHomeFromGuardedRoute(router));
   }
 
   /**
@@ -164,19 +193,19 @@ export class AuthService implements ConvexAuthSource {
    * a sign-out, so it runs only while a token is still stored.
    */
   private refuseSession(client: AuthClientLike, error: unknown): void {
-    const wasKept = this.session() === 'kept';
+    const hadSession = this.signedIn();
     this.setSession('signed-out');
     if (this.endingSession) return;
     if (httpStatusOf(error) === 401 && hasStoredSession(client)) {
       void client.signOut().catch(() => undefined);
     }
-    if (wasKept) this.redirectRefusedSession();
+    if (hadSession) this.afterNavigation((router) => this.redirectFromGuardedRoute(router));
   }
 
-  private redirectRefusedSession(): void {
+  private afterNavigation(action: (router: Router) => void): void {
     const router = this.injector.get(Router);
     if (!router.currentNavigation()) {
-      this.redirectFromGuardedRoute(router);
+      action(router);
       return;
     }
     router.events
@@ -191,7 +220,7 @@ export class AuthService implements ConvexAuthSource {
         take(1),
       )
       .subscribe((event) => {
-        if (event instanceof NavigationEnd) this.redirectFromGuardedRoute(router);
+        if (event instanceof NavigationEnd) action(router);
       });
   }
 
@@ -204,11 +233,23 @@ export class AuthService implements ConvexAuthSource {
     });
   }
 
+  private goHomeFromGuardedRoute(router: Router): void {
+    if (
+      !this.signedIn() ||
+      !routeChainHasGuard(router.routerState.snapshot.root, requireSignedIn)
+    ) {
+      return;
+    }
+    void router.navigate([AFTER_AUTH_DEFAULT], { replaceUrl: true });
+  }
+
   readonly onOnline = (): void => {
     if (!this.browserOnline()) return;
     if (this.session() === 'kept') {
       this.rechecks = 0;
       this.checkKeptSession();
+    } else if (this.session() === 'signed-in') {
+      this.refetchUnlessCheckedRecently();
     } else if (this.refusedWithTokenStored() && this.onSignedOutOnlyRoute()) {
       this.refetchUnlessCheckedRecently();
     }
@@ -344,6 +385,8 @@ export class AuthService implements ConvexAuthSource {
   }
 
   readonly onChange = (isAuthenticated: boolean): void => {
+    // A token accepted after the session ended must not reopen queries that need an identity.
+    if (isAuthenticated && this.session() === 'signed-out') return;
     this.convexAuth.set(isAuthenticated);
     if (isAuthenticated) void this.loadPushLifecycle().then((lifecycle) => lifecycle?.check());
   };
@@ -385,6 +428,8 @@ export class AuthService implements ConvexAuthSource {
   /** The Convex client calls `setAuth` again only when `signedIn` turns true or `authEpoch` advances, so a new session over a confirmed one advances it. */
   private startFormSession(client: AuthClientLike): void {
     const replacesSignedInSession = this.signedIn();
+    this.userReplacedByForm = this.refetching ? this.confirmedUserId : null;
+    this.confirmedUserId = null;
     this.signOutGuard = 'off';
     this.forgetToken();
     this.setSession('signed-in');
@@ -431,7 +476,12 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private setSession(state: Exclude<SessionState, 'unknown'>): void {
-    if (state === 'signed-out') this.forgetToken();
+    if (state === 'signed-out') {
+      this.forgetToken();
+      this.confirmedUserId = null;
+      this.userReplacedByForm = null;
+      this.convexAuth.set(false);
+    }
     if (state !== 'kept') {
       this.stopRechecks();
       this.tokenWithheld = false;

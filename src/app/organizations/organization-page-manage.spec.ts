@@ -3,6 +3,7 @@ import { getFunctionName } from 'convex/server';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { AuthService } from '../core/auth/auth.service';
+import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import {
   FakeConvexClient,
@@ -29,6 +30,7 @@ async function open(url = ORG): Promise<RouterTestingHarness> {
         { path: '**', component: PlainTestPage },
       ]),
       { provide: CONVEX_CLIENT, useValue: client },
+      provideFakeAuthClient(new FakeAuthClient()),
     ],
   });
   const harness = await RouterTestingHarness.create(url);

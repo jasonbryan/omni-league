@@ -62,10 +62,10 @@ export class FakeAuthClient {
     return this.listeners.size;
   }
 
-  emitSession(session: { id: string } | null): void {
+  emitSession(session: { id: string } | null, userId = 'u1'): void {
     this.set({
       ...this.value,
-      data: session ? { session, user: { id: 'u1', name: 'Maya Okafor' } } : null,
+      data: session ? { session, user: { id: userId, name: 'Maya Okafor' } } : null,
       error: null,
       isPending: false,
       isRefetching: false,
