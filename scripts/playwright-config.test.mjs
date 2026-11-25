@@ -183,7 +183,7 @@ describe('the convex webServer', () => {
 });
 
 describe('the test split', () => {
-  // The config is read by a spec in a copy of it, as for the webServer.
+  // Only Playwright's loader reads the TypeScript config, so a spec in a copy writes its values out.
   let split;
   function loadSplit() {
     split ??= readSplit();
