@@ -31,6 +31,9 @@ const BACKOFF_FIRST_MS = 250;
 const BACKOFF_MAX_MS = 5_000;
 // Where an older CLI kept every checkout's anonymous deployments, under the home directory.
 export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
+const ADMIN_KEY_PLACEHOLDER = '<admin key>';
+const REMOTE_REFUSAL =
+  'e2e-convex: refused: E2E_BASE_URL is set, so this run starts no Convex backend and makes no Convex CLI call';
 const USAGE =
   'usage: node scripts/e2e-convex.mjs <push|serve|setup|seed-demo|run <function> [json-args]>';
 
@@ -410,10 +413,67 @@ export async function runConvex(
     });
   }
   if (result.code !== 0) {
-    const detail = result.stderr.split(target.adminKey).join('<admin key>').trim();
+    const detail = result.stderr.split(target.adminKey).join(ADMIN_KEY_PLACEHOLDER).trim();
     throw new Error(`e2e-convex: convex ${call} failed:\n${detail}`);
   }
   return result.stdout;
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+// Node's `fetch`, never a Playwright `request`: traces record that fixture's request headers, and
+// the headers hold the admin key. For the same reason no error has a `cause`.
+export async function runFunction(
+  name,
+  args,
+  {
+    projectDir = PROJECT_DIR,
+    expectedProjectDir = PROJECT_DIR,
+    instanceName = fetchInstanceName,
+    fetch: send = globalThis.fetch,
+    env = process.env,
+    timeoutMs = TIMEOUTS.testCallTimeoutMs,
+  } = {},
+) {
+  if (remoteBaseUrl(env) !== undefined) throw permanent(REMOTE_REFUSAL);
+  const target = await resolveTarget({ projectDir, expectedProjectDir, instanceName });
+  const hideKey = (text) => text.split(target.adminKey).join(ADMIN_KEY_PLACEHOLDER);
+  const fail = (what) => new Error(hideKey(`e2e-convex: run ${name} ${what}`));
+  const signal = AbortSignal.timeout(timeoutMs);
+  const noAnswer = (failure) => {
+    if (failure?.name === 'TimeoutError') {
+      return fail(
+        `got no answer within ${Math.round(timeoutMs / 1000)} s: the local backend at ` +
+          `${target.url} (convex-local-backend) may be stalled`,
+      );
+    }
+    const reason = failure?.cause?.code ?? (failure instanceof Error ? failure.message : failure);
+    return fail(`got no answer from ${target.url}/api/function: ${reason}`);
+  };
+  let response;
+  let text;
+  try {
+    response = await send(`${target.url}/api/function`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Convex ${target.adminKey}` },
+      body: JSON.stringify({ path: name, args, format: 'convex_encoded_json' }),
+      signal,
+    });
+    text = await response.text();
+  } catch (failure) {
+    throw noAnswer(failure);
+  }
+  const body = parseJson(text);
+  if (body?.status === 'error') throw fail(`failed: ${body.errorMessage}`);
+  if (!response.ok) throw fail(`failed with HTTP ${response.status}: ${text}`);
+  if (body?.status !== 'success') throw fail(`got an answer that is not a result: ${text}`);
+  return body.value;
 }
 
 export function isListening(port) {
@@ -460,15 +520,14 @@ export async function main(
     wait = {},
     hostClocks = {},
     randomBytes: random = randomBytes,
+    fetch: send = globalThis.fetch,
   } = {},
 ) {
   const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
   const outsideTest = { ...target, timeoutMs: TIMEOUTS.setupCallTimeoutMs };
   const [command, ...rest] = argv;
   if (remoteBaseUrl(env) !== undefined) {
-    error(
-      'e2e-convex: refused: E2E_BASE_URL is set, so this run starts no Convex backend and makes no Convex CLI call',
-    );
+    error(REMOTE_REFUSAL);
     return 1;
   }
   try {
@@ -556,7 +615,12 @@ export async function main(
           error(USAGE);
           return 2;
         }
-        log((await runConvex(['run', name, ...(json ? [json] : [])], target)).trim());
+        const args = json ? parseJson(json) : {};
+        if (args === undefined) {
+          error('e2e-convex: the arguments are not JSON');
+          return 1;
+        }
+        log(JSON.stringify(await runFunction(name, args, { ...target, fetch: send })));
         return 0;
       }
       default:

@@ -1525,8 +1525,8 @@ function batchOrganizationSlug({
 
 const batchResultValidator = v.object({ slug: v.string(), teamIds: v.array(v.id('teams')) });
 
-// A test's whole seed in one CLI call, since each call starts a CLI process. `users` sign up
-// through Better Auth's own sign-up, so each password gets a real hash; `accounts` store none.
+// A test's whole seed in one call. `users` sign up through Better Auth's own sign-up, so each
+// password gets a real hash; `accounts` store none.
 export const seedBatch = internalAction({
   args: { ...batchRowsFields, users: v.optional(v.array(seedUserValidator)) },
   returns: batchResultValidator,

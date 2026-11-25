@@ -39,7 +39,7 @@ export interface FullSeasonTenant {
   searchWord: string;
 }
 
-/** One `testing:seedBatch` call, since each `convexRun` starts a CLI process. Local runs only. */
+/** One `testing:seedBatch` call. Local runs only. */
 export async function seedFullSeasonTenant(): Promise<FullSeasonTenant> {
   const { tenant, args } = newTenant({
     name: 'E2E Full Season',

@@ -10,6 +10,7 @@
 - **Amended:** by #125 (PR #189): a worker fixture may seed users and tenants that read-only tests share, under the rules in "Amendment: worker-scoped tenants for read-only tests (#125)" at the end. Where "Per test: a Playwright fixture creates the test's own tenant" says otherwise, the amendment applies.
 - **Amended:** by #269: comments that excuse an exclusion, a disabled axe rule, or an `expectedConsoleWarnings` entry give a one-line why, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say a comment links an issue, the amendment applies.
 - **Amended:** by #830: the `convex` webServer is ready at the first `Convex functions ready!`, not when `/version` responds. See "Amendment: backend readiness (#830)" at the end. Where "E2E backend" step 4 says otherwise, the amendment applies.
+- **Amended:** by #870: a call from a test, and `node scripts/e2e-convex.mjs run`, is one HTTP request to the local backend, not a `convex run` CLI process. See "Amendment: seed calls over HTTP (#870)" at the end. Where "Seeding and reset" says "Per test: … through `npx convex run`", or gives "about 1 s per CLI call", the amendment applies.
 
 ## Context
 
@@ -310,6 +311,7 @@ Further accepted gaps: no screen-reader testing with real assistive technology (
 
 - **Artifact storage (500 MB on Free):** screenshots, traces, and reports upload with a short `retention-days` (7 suggested); traces only on retry or failure.
 - **Ongoing risk:** anonymous local deployments and the hidden pinning flags are beta. A CLI upgrade that breaks them fails the e2e job visibly. The fallback is to download the pinned binary from GitHub releases in CI and point the CLI at it with `--url` and `--admin-key`, which would amend this ADR.
+- **Ongoing risk (seed calls over HTTP, #870):** the admin-key endpoint is `@internal` in the `convex` client. See "Amendment: seed calls over HTTP (#870)" at the end.
 - **Harder:** time-dependent behaviour (deadlines, scheduled reminders) cannot be controlled in e2e and is covered by Convex function tests (#3). True iOS Safari and screen-reader behaviour remain manual or untested.
 
 ## Amendment: CI usage (ADR 0009, 2026-10-07)
@@ -388,3 +390,25 @@ The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENT
 `/version` answers before the first `convex dev` push has finished, so `globalSetup` could meet a backend without the functions. The `convex` webServer now sets `wait: { stderr: /Convex functions ready!/ }` and no `url`, so Playwright counts it as started only after that push. CI already waits for the same line. A test in `scripts/` fails when the installed Convex CLI no longer contains the text.
 
 `globalSetup` retries each of its four calls for up to 120 s of awake time. A reset that timed out is not retried, because it may still be running in the backend. A local `npm run e2e` reports each host suspension during the Playwright step, because every test in flight at the wake times out at once, and the README and the dev cycle treat such a run as no result.
+
+## Amendment: seed calls over HTTP (#870, 2026-11-25)
+
+**Decision.** `convexRun` and `node scripts/e2e-convex.mjs run` make one `POST <url>/api/function` from the Node process that calls them, with `Authorization: Convex <adminKey>` and the body `{ "path": name, "args": args, "format": "convex_encoded_json" }`, and no longer start `convex run`. The result is the response's `value`, which is what the CLI printed. This replaces "Per test: … through `npx convex run`" and its "about 1 s per CLI call" under "Seeding and reset".
+
+**Why.** In the 16 reports of run 45556668352, the `convexRun <name>` steps held 8,336 of the 17,421 test-seconds (48%), in 12,994 calls at a median of 536 ms (minimum 352 ms), whatever the function did. That is the cost of starting `node scripts/e2e-convex.mjs run`, which writes a `target-*.env` file and starts the CLI, which makes the one request. A request costs about 100 to 200 ms.
+
+**What does not change.**
+
+- The target check of "E2E backend" runs before every call: `.convex-e2e/` names the anonymous deployment on `http://127.0.0.1:3210`, the backend on that port reports that name, and `E2E_BASE_URL` is unset. A refusal sends nothing.
+- `setup` and `seed-demo` keep the CLI: `env set` has no HTTP path, and `testing:reset` and `seed:demo` run once a run, under their own retry and timeout rules (#830).
+- Each call is a `convexRun <name>` step in the JSON report.
+- The admin key is the one in `.convex-e2e/.convex/local/default/config.json`. No package, service, or tool is added: the request is the one `ConvexHttpClient.function` makes in the accepted `convex` package.
+
+**What changes.**
+
+- The name is sent as given, so it is `module:function`. The CLI's `api.` and `internal.` prefixes and file extensions stop working.
+- The request is Node's `fetch`, never a Playwright `request` fixture, whose request headers are recorded in traces. Every error message has the key replaced with `<admin key>`, and no error has a `cause`.
+- A request with no answer within `testCallTimeoutMs` (20 s) is aborted and fails naming `http://127.0.0.1:3210` and `convex-local-backend`. No process is left to need a backstop, so `backstopGraceMs` and the 10 s wait of `convexRun` are removed.
+- `e2e/support/convex.ts` loads the script with one cached `import()` per worker. A static `import` fails under Playwright (`Cannot use 'import.meta' outside a module`), and `require` fails on the script's top-level `await`.
+
+**Ongoing risk.** The `convex` client marks admin authentication as `@internal` (`setAdminAuth`), and `/api/function` with an admin key is not a documented interface. A bump of the pinned backend (`e2e/support/convex-backend.json`, which needs no gate) or of `convex` could change the endpoint or its authentication. If it does, `e2e/convex-backend.spec.ts` (`testing:ping` returns `ok`) fails visibly, and the fallback is the CLI path this amendment replaces: `runConvex` still runs `convex run` for `setup` and `seed-demo`. The risk is in addition to the one under "Consequences".

@@ -1,5 +1,4 @@
 {
   "testCallTimeoutMs": 20000,
-  "setupCallTimeoutMs": 60000,
-  "backstopGraceMs": 10000
+  "setupCallTimeoutMs": 60000
 }
