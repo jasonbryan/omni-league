@@ -969,6 +969,33 @@ describe('the sharded nightly in the docs', () => {
     assert.ok(ci.includes('`run error: Timed out waiting`'), 'the line the trigger reads');
   });
 
+  it('amends the CI pipeline decision for the per-test split, with the run and what changes in e2e-production', () => {
+    const title = 'Amendment: per-test split and 16 shards';
+    assert.match(adr, new RegExp(`^- \\*\\*Amended:\\*\\* 2026-11-24 \\(#866\\).*"${title}`, 'm'));
+    const section = adr.split(`## ${title} (2026-11-24)\n`)[1];
+    assert.ok(section, 'the amendment section');
+    for (const needle of [
+      'fullyParallel',
+      '`e2e-production` is unchanged',
+      'actions/runs/45325585295',
+    ]) {
+      assert.ok(section.includes(needle), needle);
+    }
+    assert.match(section, /26 tests/, 'what fullyParallel changes in e2e-production');
+  });
+
+  it('records the 16-shard run in ci.md and names no other shard count outside the past runs', () => {
+    assert.ok(ci.split('\n').some((line) => line.startsWith(`**${SHARDS} shards `)));
+    assert.ok(ci.includes('fullyParallel'));
+    const pastRuns = ['**10 shards**', 'The union of the 10 JSON reports'];
+    const stale = [...ci.split('\n'), ...read('docs', 'glossary.md').split('\n')].filter(
+      (line) =>
+        /\/10\b|10 shards|10 legs|of 10\b/.test(line) &&
+        !pastRuns.some((start) => line.startsWith(start)),
+    );
+    assert.deepEqual(stale, []);
+  });
+
   it('gives the batch run fallback the measured nightly runner minutes, not the one-job 25 minutes', () => {
     const measured =
       /^\| Nightly full run on `main`, sharded, measured .*?\*\*(\d+) minutes\*\*/m.exec(ci)?.[1];
