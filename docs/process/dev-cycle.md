@@ -258,6 +258,77 @@ Merges continue while a run is in progress; a PR merged during the run belongs t
 - It dispatches `implementer` for a fix-forward PR. If that PR's first tester round returns `FAIL`, it dispatches `implementer` for a `git revert` PR of the causing squash commit instead.
 - The own specs of the fix or revert PR include the failing specs.
 
+## Nightly run
+
+The orchestrator reads the per-leg times of the scheduled `E2E` run, so a leg that nears the 30 minute global timeout gets a plan before it fails a night. The rule is 24.0 minutes of Playwright time, 80% of the global timeout ([CI, Re-shard trigger](ci.md#sharded-runs-measured)). The orchestrator runs the step itself, at every Sync ([skill, step 1](../../.claude/skills/dev-cycle/SKILL.md)), and writes no code. `<id>` below is a run id, and `<n>` a leg number.
+
+**When.** The step takes the newest completed scheduled run on `main` whose `e2e (<n>)` jobs ran. A run still in progress is not read, because its unfinished legs would show as `no report`. One scheduled run starts a day, and the artifacts expire after 7 days (`retention-days: 7` in `e2e.yml`), so the list holds 7 runs:
+
+```sh
+gh run list --workflow e2e.yml --event schedule --branch main --status completed --limit 7 --json databaseId,headSha,createdAt,conclusion
+```
+
+The step goes down the list from the newest run. It skips a run whose `e2e (<n>)` jobs were all skipped by `nightly-gate` (main had not moved since the last green night). `gh run view <id> --json jobs` shows them with `conclusion` `skipped`, and the screen below prints no leg for such a run. It stops at the first run that has legs, and does nothing when that run is 7 days old or more, because its artifacts are gone.
+
+**Once per run id.** The step skips a run whose id already appears in the title or a comment of any issue whose title starts `ci(e2e): leg `, open or closed, or in a comment on [#871](https://github.com/jasonbryan/omni-league/issues/871). The search finds those issues, and the filter keeps the two kinds; it prints nothing for a run not yet handled:
+
+```sh
+gh issue list --state all --search "<id> in:title,comments" --json number,title \
+  --jq '.[] | select((.title | startswith("ci(e2e): leg ")) or .number == 871) | .number'
+```
+
+The same rule applies to the timed-out trigger below. #871 stays in the filter because it is the log of reads where every leg was under the line (see Read, under the line). It is a closed issue on purpose: its comments are records for the search, not reopened work, so it stays out of the open issue list that Sync and Choose work read. A later reader takes a comment there as "this run was read and needed no plan".
+
+**Screen first.** One API call gives each leg's `e2e` step time, the `completedAt` minus the `startedAt` of the step named `e2e` in each `e2e (<n>)` job, in minutes:
+
+```sh
+gh run view <id> --json jobs --jq '
+  .jobs[] | select(.name | test("^e2e \\([0-9]+\\)$")) | select(.conclusion != "skipped")
+  | {leg: (.name | capture("\\((?<n>[0-9]+)\\)").n | tonumber),
+     step: ([.steps[] | select(.name == "e2e")][0])}
+  | [.leg, (if .step and .step.completedAt and .step.startedAt
+            then (((.step.completedAt | fromdateiso8601) - (.step.startedAt | fromdateiso8601)) / 60 * 10 | round) / 10
+            else "no e2e step" end)]
+  | @tsv'
+```
+
+The step includes the push and the build, so it is an upper bound on Playwright time: leg 6 of run 45556668352 took 16.2 minutes against 15.9 of Playwright time. A leg with no `e2e` step has no time to screen. The step stops here, with no download and no post, when:
+
+- every `e2e` step is 24.0 minutes or less, and
+- no `Nightly e2e failed on main` issue, open or closed, has a `run error: Timed out waiting` line in its body or in a comment for that run id. A non-empty output means the trigger holds (the line sits in the text that holds the run's URL):
+
+  ```sh
+  gh issue list --state all --search "<id> in:title,body,comments" --json title,body,comments \
+    --jq '.[] | select(.title == "Nightly e2e failed on main") | [.body, .comments[].body][]
+          | select(contains("actions/runs/<id>") and contains("run error: Timed out waiting"))'
+  ```
+
+The screen is one API call, so repeating it at each Sync needs no record.
+
+**Read.** The step reads only when the screen did not stop it. It downloads the reports of all legs into a new empty directory (about 450 MB for 16 legs), then prints each leg's `stats.duration` from `e2e-report-<n>/test-results/results.json` in minutes. A leg with no report prints `no report`:
+
+```sh
+dir="$(mktemp -d)" && gh run download <id> -p 'e2e-report-*' -D "$dir"
+legs="$(gh run view <id> --json jobs --jq '[.jobs[] | select(.name | test("^e2e \\([0-9]+\\)$")) | .name | capture("\\((?<n>[0-9]+)\\)").n | tonumber] | sort | join(" ")')"
+node -e '
+  const [dir, ...legs] = process.argv.slice(1);
+  for (const n of legs) {
+    let minutes = "no report";
+    try {
+      const report = JSON.parse(require("fs").readFileSync(`${dir}/e2e-report-${n}/test-results/results.json`, "utf8"));
+      minutes = (report.stats.duration / 60000).toFixed(1);
+    } catch {}
+    console.log(`${n}\t${minutes}`);
+  }' "$dir" $legs
+```
+
+**Act.** The step acts when a leg's Playwright time is over 24.0 minutes, or when the timed-out trigger holds. It looks for an open plan issue first: `gh issue list --state open --search '"ci(e2e): leg " in:title' --json number,title --jq '.[] | select(.title | startswith("ci(e2e): leg "))'`.
+
+- With none open, it opens a `type:chore`, `area:infra`, `status:planning` issue titled `ci(e2e): leg <n> of nightly run <id> took <m> min of Playwright time`. `<n>` and `<m>` are the slowest leg and its minutes; a leg that hit the global timeout counts as the slowest. The body links the run and holds every leg's Playwright minutes and `e2e` step minutes in a collapsed Evidence block. The orchestrator then dispatches `planner` on that issue ([skill, step 3](../../.claude/skills/dev-cycle/SKILL.md)), so it does not sit in `status:planning`, which Choose work never picks.
+- With one open, it comments the run id and the slowest leg there.
+
+**Read, under the line.** When the read finds no leg over 24.0 minutes and the timed-out trigger does not hold, the orchestrator comments one line on #871: `Nightly leg times: run <id> read, slowest leg <n> at <m> min, under 24`. That comment is the record that stops a second download of the same run. It happens only when an `e2e` step is over 24.0 minutes while its Playwright time is not, a gap of the push and the build, so these comments are rare.
+
 ## Who merges
 
 The owner merges only:
