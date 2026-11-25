@@ -9,7 +9,7 @@ import { PROBLEMS_FILE, PRODUCTION_RUNS } from './e2e-production-check.mjs';
 
 const PRODUCTION_OTHER_SETUP_MINUTES = 4;
 const SPARE_MINUTES = 1;
-const SHARDS = 14;
+const SHARDS = 16;
 const SHARD_NUMBERS = Array.from({ length: SHARDS }, (_, index) => index + 1);
 const GLOBAL_TIMEOUT_MS = 1_800_000;
 const E2E_OTHER_SETUP_MINUTES = 3;
@@ -719,9 +719,9 @@ describe('the nightly issue step', () => {
       const calls = runIssueStep(legs);
       assert.equal(calls.match(/^- `chromium-mobile: /gm)?.length, 30);
       const total = SHARDS * 5 + (SHARDS * 30 - 30);
-      assert.equal(total, 460);
+      assert.equal(total, 530);
       assert.equal(calls.match(/^- `and \d+ more`\]?$/gm)?.length, 1);
-      assert.match(calls, /^- `and 460 more`\]?$/m);
+      assert.match(calls, /^- `and 530 more`\]?$/m);
     },
   );
 
