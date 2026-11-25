@@ -395,7 +395,7 @@ The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENT
 
 **Decision.** `convexRun` and `node scripts/e2e-convex.mjs run` make one `POST <url>/api/function` from the Node process that calls them, with `Authorization: Convex <adminKey>` and the body `{ "path": name, "args": args, "format": "convex_encoded_json" }`, and no longer start `convex run`. The result is the response's `value`, which is what the CLI printed. This replaces "Per test: … through `npx convex run`" and its "about 1 s per CLI call" under "Seeding and reset".
 
-**Why.** In the 16 reports of run 45556668352, the `convexRun <name>` steps held 8,336 of the 17,421 test-seconds (48%), in 12,994 calls at a median of 536 ms (minimum 352 ms), whatever the function did. That is the cost of starting `node scripts/e2e-convex.mjs run`, which writes a `target-*.env` file and starts the CLI, which makes the one request. A request costs about 100 to 200 ms.
+**Why.** In the 16 reports of run 45556668352, the `convexRun <name>` steps held 8,336 of the 17,421 test-seconds (48%), in 12,994 calls at a median of 536 ms (minimum 352 ms), whatever the function did. That is the cost of starting `node scripts/e2e-convex.mjs run`, which writes a `target-*.env` file and starts the CLI, which makes the one request. A request costs 47 to 48 ms at the median (runs 45676694352 and 45678910180, 12,994 calls each).
 
 **What does not change.**
 
