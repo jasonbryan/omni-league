@@ -982,11 +982,17 @@ describe('the sharded nightly in the docs', () => {
       assert.ok(section.includes(needle), needle);
     }
     assert.match(section, /26 tests/, 'what fullyParallel changes in e2e-production');
+    for (const needle of ['actions/runs/45544854602', 'actions/runs/45548287230', '24 minutes']) {
+      assert.ok(section.includes(needle), needle);
+    }
   });
 
   it('records the 16-shard run in ci.md and names no other shard count outside the past runs', () => {
     assert.ok(ci.split('\n').some((line) => line.startsWith(`**${SHARDS} shards `)));
     assert.ok(ci.includes('fullyParallel'));
+    for (const needle of ['actions/runs/45544854602', 'actions/runs/45548287230', '24 minutes']) {
+      assert.ok(ci.includes(needle), needle);
+    }
     const pastRuns = ['**10 shards**', 'The union of the 10 JSON reports'];
     const stale = [...ci.split('\n'), ...read('docs', 'glossary.md').split('\n')].filter(
       (line) =>
