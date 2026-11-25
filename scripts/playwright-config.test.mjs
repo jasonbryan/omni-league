@@ -181,3 +181,53 @@ describe('the convex webServer', () => {
     assert.ok(workflow.includes("grep -q 'Convex functions ready!'"));
   });
 });
+
+describe('the test split', () => {
+  // Only Playwright's loader reads the TypeScript config, so a spec in a copy writes its values out.
+  let split;
+  function loadSplit() {
+    split ??= readSplit();
+    return split;
+  }
+
+  function readSplit() {
+    const dir = join(scratch, 'split');
+    cpSync(join(root, 'playwright.config.ts'), join(dir, 'playwright.config.ts'));
+    cpSync(join(root, 'e2e', 'support'), join(dir, 'e2e', 'support'), { recursive: true });
+    cpSync(join(root, 'e2e', 'global-setup.ts'), join(dir, 'e2e', 'global-setup.ts'));
+    symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
+    const dump = join(dir, 'split.json');
+    writeFileSync(
+      join(dir, 'e2e', 'dump.spec.ts'),
+      [
+        "import { test } from '@playwright/test';",
+        "import { writeFileSync } from 'node:fs';",
+        "import config from '../playwright.config';",
+        'const { fullyParallel, workers, retries } = config;',
+        'writeFileSync(process.env.DUMP_FILE!, JSON.stringify({ fullyParallel, workers, retries }));',
+        "test('listed', () => {});",
+      ].join('\n'),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [join(root, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--list'],
+      {
+        cwd: dir,
+        env: { ...process.env, CI: '1', DUMP_FILE: dump, E2E_BASE_URL: 'http://localhost:4000' },
+        encoding: 'utf8',
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(readFileSync(dump, 'utf8'));
+  }
+
+  it('splits every test into its own group, so a shard is cut by test and not by spec file', () => {
+    assert.equal(loadSplit().fullyParallel, true);
+  });
+
+  it('keeps 2 workers and one retry on CI', () => {
+    const { workers, retries } = loadSplit();
+    assert.equal(workers, 2);
+    assert.equal(retries, 1);
+  });
+});

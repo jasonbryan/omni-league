@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     # A matrix combines its legs' outputs under one name and the last leg to finish wins, so each
     # leg writes only the outputs named for its own shard.
     outputs:
@@ -67,6 +67,12 @@ jobs:
       e2e_failures_8: ${{ matrix.shard == 8 && steps.failures.outputs.failures || '' }}
       e2e_failures_9: ${{ matrix.shard == 9 && steps.failures.outputs.failures || '' }}
       e2e_failures_10: ${{ matrix.shard == 10 && steps.failures.outputs.failures || '' }}
+      e2e_failures_11: ${{ matrix.shard == 11 && steps.failures.outputs.failures || '' }}
+      e2e_failures_12: ${{ matrix.shard == 12 && steps.failures.outputs.failures || '' }}
+      e2e_failures_13: ${{ matrix.shard == 13 && steps.failures.outputs.failures || '' }}
+      e2e_failures_14: ${{ matrix.shard == 14 && steps.failures.outputs.failures || '' }}
+      e2e_failures_15: ${{ matrix.shard == 15 && steps.failures.outputs.failures || '' }}
+      e2e_failures_16: ${{ matrix.shard == 16 && steps.failures.outputs.failures || '' }}
       e2e_done_1: ${{ matrix.shard == 1 && steps.done.outputs.done || '' }}
       e2e_done_2: ${{ matrix.shard == 2 && steps.done.outputs.done || '' }}
       e2e_done_3: ${{ matrix.shard == 3 && steps.done.outputs.done || '' }}
@@ -77,6 +83,12 @@ jobs:
       e2e_done_8: ${{ matrix.shard == 8 && steps.done.outputs.done || '' }}
       e2e_done_9: ${{ matrix.shard == 9 && steps.done.outputs.done || '' }}
       e2e_done_10: ${{ matrix.shard == 10 && steps.done.outputs.done || '' }}
+      e2e_done_11: ${{ matrix.shard == 11 && steps.done.outputs.done || '' }}
+      e2e_done_12: ${{ matrix.shard == 12 && steps.done.outputs.done || '' }}
+      e2e_done_13: ${{ matrix.shard == 13 && steps.done.outputs.done || '' }}
+      e2e_done_14: ${{ matrix.shard == 14 && steps.done.outputs.done || '' }}
+      e2e_done_15: ${{ matrix.shard == 15 && steps.done.outputs.done || '' }}
+      e2e_done_16: ${{ matrix.shard == 16 && steps.done.outputs.done || '' }}
     env:
       E2E_WEBKIT: ${{ inputs.webkit == true && '1' || '0' }}
     steps:
@@ -121,9 +133,9 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           if [ "$E2E_WEBKIT" = "1" ]; then
-            npm run e2e -- --project=webkit-mobile --shard="$SHARD/10" --global-timeout=1800000
+            npm run e2e -- --project=webkit-mobile --shard="$SHARD/16" --global-timeout=1800000
           else
-            npm run e2e -- --shard="$SHARD/10" --global-timeout=1800000
+            npm run e2e -- --shard="$SHARD/16" --global-timeout=1800000
           fi
       - name: e2e failures
         id: failures
@@ -271,7 +283,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       E2E_RESULT: ${{ needs.e2e.result }}
       PRODUCTION_RESULT: ${{ needs.e2e-production.result }}
-      E2E_SHARDS: 10
+      E2E_SHARDS: 16
       E2E_FAILURES_1: ${{ needs.e2e.outputs.e2e_failures_1 }}
       E2E_FAILURES_2: ${{ needs.e2e.outputs.e2e_failures_2 }}
       E2E_FAILURES_3: ${{ needs.e2e.outputs.e2e_failures_3 }}
@@ -282,6 +294,12 @@ jobs:
       E2E_FAILURES_8: ${{ needs.e2e.outputs.e2e_failures_8 }}
       E2E_FAILURES_9: ${{ needs.e2e.outputs.e2e_failures_9 }}
       E2E_FAILURES_10: ${{ needs.e2e.outputs.e2e_failures_10 }}
+      E2E_FAILURES_11: ${{ needs.e2e.outputs.e2e_failures_11 }}
+      E2E_FAILURES_12: ${{ needs.e2e.outputs.e2e_failures_12 }}
+      E2E_FAILURES_13: ${{ needs.e2e.outputs.e2e_failures_13 }}
+      E2E_FAILURES_14: ${{ needs.e2e.outputs.e2e_failures_14 }}
+      E2E_FAILURES_15: ${{ needs.e2e.outputs.e2e_failures_15 }}
+      E2E_FAILURES_16: ${{ needs.e2e.outputs.e2e_failures_16 }}
       E2E_DONE_1: ${{ needs.e2e.outputs.e2e_done_1 }}
       E2E_DONE_2: ${{ needs.e2e.outputs.e2e_done_2 }}
       E2E_DONE_3: ${{ needs.e2e.outputs.e2e_done_3 }}
@@ -292,6 +310,12 @@ jobs:
       E2E_DONE_8: ${{ needs.e2e.outputs.e2e_done_8 }}
       E2E_DONE_9: ${{ needs.e2e.outputs.e2e_done_9 }}
       E2E_DONE_10: ${{ needs.e2e.outputs.e2e_done_10 }}
+      E2E_DONE_11: ${{ needs.e2e.outputs.e2e_done_11 }}
+      E2E_DONE_12: ${{ needs.e2e.outputs.e2e_done_12 }}
+      E2E_DONE_13: ${{ needs.e2e.outputs.e2e_done_13 }}
+      E2E_DONE_14: ${{ needs.e2e.outputs.e2e_done_14 }}
+      E2E_DONE_15: ${{ needs.e2e.outputs.e2e_done_15 }}
+      E2E_DONE_16: ${{ needs.e2e.outputs.e2e_done_16 }}
       PRODUCTION_FAILURES: ${{ needs.e2e-production.outputs.e2e_failures }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       COMMIT: ${{ github.sha }}
