@@ -56,10 +56,7 @@ function mergeBatches(...parts: SeedBatch[]): SeedBatch {
   return merged;
 }
 
-/**
- * One `testing:seedBatch` call: each `convexRun` starts a CLI process, so a test seeds in one call
- * rather than a chain. Returns the teams' ids in the order listed. Local runs only.
- */
+/** Returns the teams' ids in the order listed. Local runs only. */
 export async function seedBatch(...parts: SeedBatch[]): Promise<{ teamIds: string[] }> {
   const batch = mergeBatches(...parts);
   const { teamIds } = (await convexRun('testing:seedBatch', {

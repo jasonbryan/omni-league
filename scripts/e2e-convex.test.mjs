@@ -14,7 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 import {
   assertLocalTarget,
   assertNoSharedState,
@@ -38,6 +38,7 @@ import {
   retryUntilReady,
   ROOT,
   runConvex,
+  runFunction,
   seedDemoCalls,
   SHARED_STATE_DIRNAME,
   TIMEOUTS,
@@ -423,6 +424,401 @@ describe('runConvex', () => {
       /only `env set` and `run`/,
     );
     assert.equal(calls.length, 0);
+  });
+});
+
+describe('runFunction (a call from a test, over HTTP)', () => {
+  const dirWithConfig = (config = LOCAL_CONFIG) =>
+    projectDir({ config, envLocal: CLOUD_ENV_LOCAL });
+
+  function backend(respond) {
+    const requests = [];
+    const fetch = async (url, init) => {
+      requests.push({ url, init, body: JSON.parse(init.body) });
+      return respond({ url, init });
+    };
+    return { requests, fetch };
+  }
+
+  const answer = (status, body) =>
+    new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+  const success = (value) => answer(200, { status: 'success', value, logLines: [] });
+
+  function call(dir, fetch, name = 'testing:ping', args = {}, extra = {}) {
+    return runFunction(name, args, {
+      projectDir: dir,
+      expectedProjectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      fetch,
+      env: {},
+      ...extra,
+    });
+  }
+
+  const targetFiles = (dir) => readdirSync(dir).filter((name) => name.startsWith('target-'));
+
+  it('makes one POST to /api/function with the admin key, and the exact body', async () => {
+    const dir = dirWithConfig();
+    const { requests, fetch } = backend(() => success('ok'));
+    const args = { teamId: 'a1', nested: { count: 2 } };
+    assert.equal(await call(dir, fetch, 'testing:seedLeague', args), 'ok');
+    assert.equal(requests.length, 1);
+    const [{ url, init, body }] = requests;
+    assert.equal(url, `${LOCAL_CONVEX_URL}/api/function`);
+    assert.equal(init.method, 'POST');
+    assert.equal(init.headers['Authorization'], `Convex ${ADMIN_KEY}`);
+    assert.equal(init.headers['Content-Type'], 'application/json');
+    assert.deepEqual(body, { path: 'testing:seedLeague', args, format: 'convex_encoded_json' });
+    assert.deepEqual(Object.keys(body), ['path', 'args', 'format']);
+  });
+
+  it('writes no target file and leaves .env.local alone', async () => {
+    const dir = dirWithConfig();
+    const { fetch } = backend(() => success(1));
+    await call(dir, fetch);
+    assert.deepEqual(targetFiles(dir), []);
+    assert.equal(readFileSync(join(dir, '.env.local'), 'utf8'), CLOUD_ENV_LOCAL);
+  });
+
+  it('returns the response value as it is, with no decoding', async () => {
+    const dir = dirWithConfig();
+    for (const value of [
+      null,
+      'ok',
+      0,
+      false,
+      { id: 'k1', created: { $integer: 'AQAAAAAAAAA=' } },
+      [],
+    ]) {
+      const { fetch } = backend(() => success(value));
+      assert.deepEqual(await call(dir, fetch), value);
+    }
+  });
+
+  it('sends the name as given: the CLI name forms are not rewritten', async () => {
+    const dir = dirWithConfig();
+    const { requests, fetch } = backend(() => success(null));
+    for (const name of ['api.testing.ping', 'internal.testing.ping', 'testing.ts:ping']) {
+      await call(dir, fetch, name);
+    }
+    assert.deepEqual(
+      requests.map(({ body }) => body.path),
+      ['api.testing.ping', 'internal.testing.ping', 'testing.ts:ping'],
+    );
+  });
+
+  it('lets parallel calls each make their own request', async () => {
+    const dir = dirWithConfig();
+    const { requests, fetch } = backend(({ init }) => success(JSON.parse(init.body).args.index));
+    const values = await Promise.all(
+      Array.from({ length: 8 }, (_, index) => call(dir, fetch, 'testing:ping', { index })),
+    );
+    assert.deepEqual(values, [0, 1, 2, 3, 4, 5, 6, 7]);
+    assert.equal(requests.length, 8);
+  });
+
+  describe('the target check', () => {
+    async function refused(dir, options, expected) {
+      const { requests, fetch } = backend(() => success('sent'));
+      await assert.rejects(call(dir, fetch, 'testing:ping', {}, options), expected);
+      assert.equal(requests.length, 0, 'nothing is sent to /api/function');
+    }
+
+    it('refuses another port', async () => {
+      const dir = dirWithConfig({ ...LOCAL_CONFIG, ports: { cloud: 3999, site: 3998 } });
+      await refused(dir, {}, /^Error: e2e-convex: refused: URL http:\/\/127\.0\.0\.1:3999 is not /);
+    });
+
+    it('refuses another deployment name in the config', async () => {
+      const dir = dirWithConfig({ ...LOCAL_CONFIG, deploymentName: 'fake-cloud-123' });
+      await refused(
+        dir,
+        { instanceName: async () => 'fake-cloud-123' },
+        /refused: deployment fake-cloud-123/,
+      );
+    });
+
+    it('refuses another project directory', async () => {
+      const dir = dirWithConfig();
+      await refused(
+        dir,
+        { expectedProjectDir: join(dir, 'elsewhere') },
+        /refused: project directory/,
+      );
+    });
+
+    it('refuses a backend that is another deployment than the config names', async () => {
+      const dir = dirWithConfig();
+      await refused(
+        dir,
+        { instanceName: async () => 'someone-elses-deployment' },
+        /refused: the backend at http:\/\/127\.0\.0\.1:3210 is someone-elses-deployment/,
+      );
+    });
+
+    it('refuses with E2E_BASE_URL set', async () => {
+      const dir = dirWithConfig();
+      await refused(
+        dir,
+        { env: { E2E_BASE_URL: 'https://example.netlify.app' } },
+        /e2e-convex: refused: E2E_BASE_URL is set/,
+      );
+    });
+
+    it('refuses when there is no local deployment', async () => {
+      await refused(projectDir(), {}, /no local deployment/);
+    });
+  });
+
+  describe('failures', () => {
+    const rejection = (dir, fetch, ...patterns) =>
+      assert.rejects(call(dir, fetch, 'testing:seedCamp'), (failure) => {
+        assert.ok(failure instanceof Error);
+        for (const pattern of patterns) assert.match(failure.message, pattern);
+        assert.equal(failure.message.includes(ADMIN_KEY), false);
+        assert.equal(failure.cause, undefined);
+        return true;
+      });
+
+    it('a function that threw (HTTP 560, status error) names the function and the errorMessage', async () => {
+      const { fetch } = backend(() =>
+        answer(560, {
+          status: 'error',
+          errorMessage: 'Uncaught Error: league is full',
+          errorData: null,
+        }),
+      );
+      await rejection(dirWithConfig(), fetch, /testing:seedCamp/, /league is full/);
+    });
+
+    it('a 200 with status error names the function and the errorMessage', async () => {
+      const { fetch } = backend(() => answer(200, { status: 'error', errorMessage: 'boom' }));
+      await rejection(dirWithConfig(), fetch, /testing:seedCamp/, /boom/);
+    });
+
+    for (const [status, body] of [
+      [401, 'BadAdminKey: the admin key is not valid for this deployment'],
+      [400, '{"code":"BadJsonBody","message":"args must be an object"}'],
+      [500, 'Internal Server Error'],
+    ]) {
+      it(`HTTP ${status} names the function, the status, and the body`, async () => {
+        const { fetch } = backend(() => answer(status, body));
+        await rejection(
+          dirWithConfig(),
+          fetch,
+          /testing:seedCamp/,
+          new RegExp(`\\b${status}\\b`),
+          new RegExp(body.slice(0, 20).replace(/[{}"]/g, '.')),
+        );
+      });
+    }
+
+    it('a 560 with a body that is not a function error names the status and the body', async () => {
+      const { fetch } = backend(() => answer(560, 'gateway says no'));
+      await rejection(dirWithConfig(), fetch, /testing:seedCamp/, /560/, /gateway says no/);
+    });
+
+    it('a 200 with an unknown status names the function and the body', async () => {
+      const { fetch } = backend(() => answer(200, { status: 'pending', value: 5 }));
+      await rejection(dirWithConfig(), fetch, /testing:seedCamp/, /"status":"pending"/);
+    });
+
+    it('a 200 with a body that is not JSON names the function and the body', async () => {
+      const { fetch } = backend(() => answer(200, '<html>login</html>'));
+      await rejection(dirWithConfig(), fetch, /testing:seedCamp/, /<html>login<\/html>/);
+    });
+
+    it('a refused connection names the function and the URL, with no cause', async () => {
+      const refusal = Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+      });
+      await rejection(
+        dirWithConfig(),
+        async () => {
+          throw refusal;
+        },
+        /testing:seedCamp/,
+        /ECONNREFUSED/,
+        /http:\/\/127\.0\.0\.1:3210/,
+      );
+    });
+  });
+
+  describe('the admin key stays out of every error', () => {
+    const echoes = [
+      [
+        'errorMessage of a thrown function',
+        () => answer(560, { status: 'error', errorMessage: `bad ${ADMIN_KEY} here` }),
+      ],
+      [
+        'errorMessage of a 200',
+        () => answer(200, { status: 'error', errorMessage: `bad ${ADMIN_KEY} here` }),
+      ],
+      ['the body of a 401', () => answer(401, `BadAdminKey ${ADMIN_KEY} ${ADMIN_KEY}`)],
+      ['the body of a 200 with an unknown status', () => answer(200, { status: ADMIN_KEY })],
+      ['the body of a 200 that is not JSON', () => answer(200, `not json ${ADMIN_KEY}`)],
+    ];
+    for (const [where, respond] of echoes) {
+      it(`replaces the key echoed in ${where}`, async () => {
+        const { fetch } = backend(respond);
+        await assert.rejects(call(dirWithConfig(), fetch), (failure) => {
+          assert.equal(failure.message.includes(ADMIN_KEY), false);
+          assert.match(failure.message, /<admin key>/);
+          assert.equal(failure.cause, undefined);
+          return true;
+        });
+      });
+    }
+
+    it('replaces the key in a fetch failure and attaches no cause', async () => {
+      const failure = Object.assign(new TypeError(`fetch failed for ${ADMIN_KEY}`), {
+        cause: { code: 'ECONNRESET', request: { headers: { Authorization: ADMIN_KEY } } },
+      });
+      await assert.rejects(
+        call(dirWithConfig(), async () => {
+          throw failure;
+        }),
+        (rejected) => {
+          assert.equal(rejected.message.includes(ADMIN_KEY), false);
+          assert.equal(rejected.cause, undefined);
+          return true;
+        },
+      );
+    });
+
+    it('prints the key nowhere when the value comes back', async () => {
+      const { fetch } = backend(() => success('ok'));
+      const printed = [];
+      const log = mock.method(console, 'log', (...line) => printed.push(line));
+      const warn = mock.method(console, 'error', (...line) => printed.push(line));
+      try {
+        await call(dirWithConfig(), fetch);
+      } finally {
+        log.mock.restore();
+        warn.mock.restore();
+      }
+      assert.deepEqual(printed, []);
+    });
+  });
+
+  describe('the timeout', () => {
+    const neverAnswers = (_url, { signal }) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+
+    it('aborts a request nobody answers, naming the URL and convex-local-backend', async () => {
+      const started = Date.now();
+      await assert.rejects(
+        call(dirWithConfig(), neverAnswers, 'testing:seedLeague', {}, { timeoutMs: 150 }),
+        (failure) => {
+          assert.match(failure.message, /testing:seedLeague/);
+          assert.ok(failure.message.includes(LOCAL_CONVEX_URL));
+          assert.ok(failure.message.includes('convex-local-backend'));
+          assert.equal(failure.message.includes(ADMIN_KEY), false);
+          assert.equal(failure.cause, undefined);
+          return true;
+        },
+      );
+      assert.ok(Date.now() - started < 5_000);
+    });
+
+    it('also aborts when the answer starts and its body stalls', async () => {
+      const stalls = (_url, { signal }) => {
+        const body = new ReadableStream({
+          start(controller) {
+            signal.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      };
+      await assert.rejects(
+        call(dirWithConfig(), stalls, 'testing:seedLeague', {}, { timeoutMs: 150 }),
+        (failure) =>
+          /testing:seedLeague/.test(failure.message) &&
+          failure.message.includes('convex-local-backend'),
+      );
+    });
+
+    it('uses the call timeout from convex-timeouts.json by default', async () => {
+      const abort = mock.method(AbortSignal, 'timeout');
+      try {
+        await call(dirWithConfig(), async () => success(null));
+      } finally {
+        abort.mock.restore();
+      }
+      assert.deepEqual(
+        abort.mock.calls.map((recorded) => recorded.arguments),
+        [[TIMEOUTS.testCallTimeoutMs]],
+      );
+    });
+  });
+});
+
+describe('main run (a call from a test, over HTTP)', () => {
+  function runMain(extra = {}) {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const lines = [];
+    const requests = [];
+    const spawned = [];
+    const options = {
+      env: {},
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      fetch: async (url, init) => {
+        requests.push({ url, body: JSON.parse(init.body) });
+        return new Response(JSON.stringify({ status: 'success', value: { n: 1 } }), {
+          status: 200,
+        });
+      },
+      spawnCli: async (args) => {
+        spawned.push(args);
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+      ...extra,
+    };
+    return { dir, lines, requests, spawned, options };
+  }
+
+  it('prints the value as JSON and starts no CLI', async () => {
+    const { dir, lines, requests, spawned, options } = runMain();
+    assert.equal(await main(['run', 'testing:ping', '{"a":1}'], options), 0);
+    assert.deepEqual(lines, ['{"n":1}']);
+    assert.deepEqual(requests, [
+      {
+        url: `${LOCAL_CONVEX_URL}/api/function`,
+        body: { path: 'testing:ping', args: { a: 1 }, format: 'convex_encoded_json' },
+      },
+    ]);
+    assert.deepEqual(spawned, []);
+    assert.deepEqual(
+      readdirSync(dir).filter((name) => name.startsWith('target-')),
+      [],
+    );
+  });
+
+  it('sends empty args when none are given', async () => {
+    const { requests, options } = runMain();
+    assert.equal(await main(['run', 'testing:ping'], options), 0);
+    assert.deepEqual(requests[0].body.args, {});
+  });
+
+  it('exits 1 with the redacted message when the call fails', async () => {
+    const { lines, options } = runMain({
+      fetch: async () => new Response(`BadAdminKey ${ADMIN_KEY}`, { status: 401 }),
+    });
+    assert.equal(await main(['run', 'testing:ping'], options), 1);
+    assert.match(lines.join('\n'), /401/);
+    assert.equal(lines.join('\n').includes(ADMIN_KEY), false);
+  });
+
+  it('exits 1 on arguments that are not JSON, sending nothing', async () => {
+    const { lines, requests, options } = runMain();
+    assert.equal(await main(['run', 'testing:ping', '{not json'], options), 1);
+    assert.equal(requests.length, 0);
+    assert.match(lines.join('\n'), /JSON/);
   });
 });
 
@@ -1497,19 +1893,14 @@ describe('timeouts on Convex CLI calls', () => {
     assert.match(errors.join('\n'), /stopped by SIGINT/);
   });
 
-  it('times out a call from a test before convexRun gives up on the script', () => {
+  it('keeps convexRun free of any backstop timeout, and a test call below a setup call', () => {
     const source = readFileSync(join(ROOT, 'e2e', 'support', 'convex.ts'), 'utf8');
-    assert.match(source, /timeouts\.testCallTimeoutMs \+ timeouts\.backstopGraceMs/);
-    assert.match(source, /timeout: CONVEX_RUN_TIMEOUT_MS/);
-    assert.ok(TIMEOUTS.backstopGraceMs > 0);
+    assert.doesNotMatch(source, /backstop|CONVEX_RUN_TIMEOUT_MS|execFile/);
+    assert.equal('backstopGraceMs' in TIMEOUTS, false);
+    assert.ok(TIMEOUTS.testCallTimeoutMs < TIMEOUTS.setupCallTimeoutMs);
   });
 
-  it('keeps a stalled call inside the 90 s bound, and setup calls above a test call', () => {
-    assert.ok(TIMEOUTS.testCallTimeoutMs + TIMEOUTS.backstopGraceMs <= 45_000);
-    assert.ok(TIMEOUTS.setupCallTimeoutMs > TIMEOUTS.testCallTimeoutMs);
-  });
-
-  it('gives run the call timeout, and setup and seed-demo the setup timeout', async () => {
+  it('gives setup and seed-demo the setup timeout on the CLI', async () => {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const timeouts = [];
     const spawnCli = async (args, options) => {
@@ -1525,14 +1916,42 @@ describe('timeouts on Convex CLI calls', () => {
       error: () => {},
       wait: {},
     };
-    assert.equal(await main(['run', 'testing:ping'], options), 0);
     assert.equal(await main(['setup'], options), 0);
     assert.equal(await main(['seed-demo'], options), 0);
     const byCall = new Set(timeouts.map((t) => `${t.call}=${t.timeoutMs}`));
-    assert.ok(byCall.has(`run testing:ping=${TIMEOUTS.testCallTimeoutMs}`));
     assert.ok(byCall.has(`run testing:reset=${TIMEOUTS.setupCallTimeoutMs}`));
     assert.ok(byCall.has(`env set=${TIMEOUTS.setupCallTimeoutMs}`));
     assert.ok(byCall.has(`run seed:demo=${TIMEOUTS.setupCallTimeoutMs}`));
-    assert.equal(timeouts.filter((t) => t.timeoutMs === TIMEOUTS.testCallTimeoutMs).length, 1);
+    assert.equal(timeouts.filter((t) => t.timeoutMs !== TIMEOUTS.setupCallTimeoutMs).length, 0);
+  });
+});
+
+describe('e2e/support/convex.ts (the call from a test)', () => {
+  const source = readFileSync(join(ROOT, 'e2e', 'support', 'convex.ts'), 'utf8');
+
+  it('loads the script with a dynamic import(), never a static import', () => {
+    assert.match(source, /\bimport\(/);
+    assert.doesNotMatch(source, /^import[^;]*e2e-convex\.mjs/m);
+    assert.doesNotMatch(source, /^import[^;]*from\s+['"][^'"]*scripts\//m);
+    assert.doesNotMatch(source, /\brequire\(/);
+  });
+
+  it('loads the script once per worker, in a module-level promise', () => {
+    assert.match(source, /^let \w+: Promise<[^>]*> \| undefined/m);
+    assert.equal(source.match(/\bimport\(/g).length, 1);
+  });
+
+  it('never uses Playwright request fixtures, whose traces record headers', () => {
+    assert.doesNotMatch(source, /\brequest\./);
+    assert.doesNotMatch(source, /APIRequestContext/);
+    assert.doesNotMatch(source, /\brequest\b.*from '@playwright\/test'/);
+  });
+
+  it('keeps the convexRun step title in the report', () => {
+    assert.match(source, /test\.step\(`convexRun \$\{name\}`/);
+  });
+
+  it('puts no key in a step title or a log line', () => {
+    assert.doesNotMatch(source, /adminKey|admin key|console\./i);
   });
 });
