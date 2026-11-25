@@ -9,11 +9,11 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 ## Steps
 
-1. **Sync.** `git fetch` and fast-forward `main`. List open issues with their labels (`gh issue list --state open --json number,title,labels`) and open PRs (`gh pr list --json number,title,labels,headRefName`). Check which gate PRs the owner has merged since the last run, and move their issues to `status:ready`.
+1. **Sync.** `git fetch` and fast-forward `main`. List open issues with their labels (`gh issue list --state open --json number,title,labels`) and open PRs (`gh pr list --json number,title,labels,headRefName`). Check which gate PRs the owner has merged since the last run, and move their issues to `status:ready`. Then run the nightly read: take the newest completed scheduled `E2E` run, screen each leg's `e2e` step time, and open a plan issue when a leg is over 24 minutes (`docs/process/dev-cycle.md`, Nightly run).
 
 2. **Choose work.** If the owner gave a new requirement, start at step 3. If the owner named an issue, work that issue. Otherwise pick the **frontier**: `status:ready` issues with no open `Blocked by` issue, oldest first. Run independent frontier issues in parallel, but only one issue at a time that touches `convex/schema.ts` or shared design tokens. Start no new frontier issue while 5 or more non-Dependabot PRs are open: first move each open PR to its next phase. Not counted: PRs labelled `gate:*` or carrying `Needs owner: merge`, and PRs whose linked issue is labelled `status:blocked`. Exempt: the fix-forward or revert issue during a batch-run regression, and work the owner names in chat. Count with `gh pr list --state open --json number,author,labels`, excluding author `app/dependabot` and those PRs (process doc, Parallel work).
 
-3. **Plan.** Dispatch `planner` with the requirement. Then, for each new issue, dispatch `plan-reviewer`. On `CHANGES`, send the edits back to `planner`; after two rounds without `APPROVE`, label `status:blocked` and add the issue to the owner report.
+3. **Plan.** Dispatch `planner` with the requirement. Also dispatch `planner` on the `ci(e2e): leg ` issue the nightly read opens, so it does not sit in `status:planning`, which step 2 never picks. Then, for each new issue, dispatch `plan-reviewer`. On `CHANGES`, send the edits back to `planner`; after two rounds without `APPROVE`, label `status:blocked` and add the issue to the owner report.
 
 4. **Gates.** For an approved issue with gate labels, set `status:needs-approval` and dispatch `planner` for an ADR (`gate:technology`). The issue now waits for the owner; move on to other work. With no gates, set `status:ready`. New screens and visible changes need no gate; dispatch `designer` only when the owner asks for a mockup.
 
