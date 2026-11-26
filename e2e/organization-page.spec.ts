@@ -1880,7 +1880,7 @@ test.describe('organization page: Tournaments, raw server HTML', () => {
 
       const tournaments = sectionWithId(html, 'tournaments');
       expect(plainText(tournaments)).toMatch(
-        /^Tournaments Gulf Coast Beach Open Coed · 2v2 · Open Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Gulf Coast Beach Open$/,
+        /^Tournaments Gulf Coast Beach Open Coed · 2v2 · Open Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2}(?:, \d{4})? – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Gulf Coast Beach Open$/,
       );
       const path = `${tenant.path}/tournaments/gulf-coast-beach-open`;
       expect(tournaments).toMatch(
@@ -2191,6 +2191,11 @@ function monthDayPattern(daysFromToday: number): RegExp {
   return new RegExp(`${monthDay(daysFromToday)}(?!\\d)`);
 }
 
+/** The start carries its year when the range crosses a year, as in `Dec 30, 2026 – Jan 3, 2027`. */
+function monthDayRangePattern(startDays: number, endDays: number): RegExp {
+  return new RegExp(`${monthDay(startDays)}(?:, \\d{4})? – ${monthDay(endDays)}(?!\\d)`);
+}
+
 function campTenant(camps: CampPageSeed[], name = 'E2E Camps'): Promise<Tenant> {
   return seedTenantWithCamps(
     {
@@ -2228,7 +2233,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
 
       const camps = sectionWithId(html, 'camps');
       expect(plainText(camps)).toMatch(
-        /^Camps Junior Beach Volleyball Camp Ages 9 to 14 Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Junior Beach Volleyball Camp$/,
+        /^Camps Junior Beach Volleyball Camp Ages 9 to 14 Beach volleyball · North Beach Sand Courts Registration open [A-Z][a-z]{2} \d{1,2}(?:, \d{4})? – [A-Z][a-z]{2} \d{1,2}, \d{4} · closes [A-Z][a-z]{2} \d{1,2} Register for Junior Beach Volleyball Camp$/,
       );
       const path = `${tenant.path}/camps/junior-beach-volleyball-camp`;
       expect(camps).toMatch(
@@ -2498,11 +2503,11 @@ test.describe('organization page: Camps in the browser', () => {
     await gotoHydrated(page, consoleGuard, tenant.path);
     const row = page.locator('#camps li', { hasText: 'Clock Camp' });
     await expect(row).toContainText('Registration closed');
-    await expect(row).toContainText(new RegExp(`${monthDay(2)} – ${monthDay(6)}(?!\\d)`));
+    await expect(row).toContainText(monthDayRangePattern(2, 6));
     await expect(row.getByRole('link', { name: /^Register/ })).toHaveCount(0);
 
     await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);
-    await expect(row).toContainText(new RegExp(`${monthDay(20)} – ${monthDay(24)}(?!\\d)`));
+    await expect(row).toContainText(monthDayRangePattern(20, 24));
     await expect(row).not.toContainText(monthDayPattern(2));
     await expect(row).toContainText('Registration closed');
   });
