@@ -767,6 +767,13 @@ test.describe('organization filters in the browser', () => {
 
       await filters.click();
       await expect(sheetContent(page)).toBeVisible();
+      await sheetContent(page).evaluate((element) =>
+        Promise.all(element.getAnimations().map((animation) => animation.finished)),
+      );
+      const box = await sheetContent(page).boundingBox();
+      expect((box?.y ?? Number.NaN) + (box?.height ?? Number.NaN)).toBe(
+        await page.evaluate(() => window.innerHeight),
+      );
       // The modal hides the page from the accessibility tree, so the button is found by its markup.
       await expect(
         page.locator('[data-filter-buttons] button', { hasText: 'Filters' }),

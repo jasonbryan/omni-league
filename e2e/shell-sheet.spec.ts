@@ -65,9 +65,16 @@ test.describe('the phone sheet on the admin area', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await openAdminOverview(page);
     await activate(page, menuButton(page));
-    await expect(dialogOf(page).locator('[data-slot="sheet-content"]')).toBeVisible();
+    const sheet = dialogOf(page).locator('[data-slot="sheet-content"]');
+    await expect(sheet).toBeVisible();
     expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
     await expect(dialogOf(page).getByRole('button', { name: 'Close navigation' })).toBeFocused();
+    await sheet.evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+    const box = await sheet.boundingBox();
+    expect(box?.x).toBe(0);
+    expect(box?.height).toBe(await page.evaluate(() => window.innerHeight));
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
   });
 
