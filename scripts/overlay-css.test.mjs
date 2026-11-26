@@ -47,7 +47,6 @@ describe('the vendored spartan preset', () => {
 describe('the CDK overlay styles the app leaves out of its stylesheet', () => {
   it('are still added by createOverlayRef and getContainerElement, with every prebuilt rule', async () => {
     const inputs = await readCdkInputs(ROOT);
-    assert.ok(inputs.chunk, 'the chunk that holds the loader was found');
     assert.deepEqual(cdkOverlayProblems(inputs), []);
   });
 
@@ -103,7 +102,22 @@ describe('the CDK overlay styles the app leaves out of its stylesheet', () => {
       'this._styleLoader.load(Other);',
     );
     assert.notEqual(chunk, inputs.chunk);
-    assert.equal(loaderCalls(chunk).getContainerElement, false);
+    const problems = cdkOverlayProblems({ ...inputs, chunk });
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], new RegExp(`@angular/cdk ${inputs.version}`));
+    assert.match(problems[0], /getContainerElement/);
+  });
+
+  it('fails and names the CDK version and the restore step when the loader class is renamed', async () => {
+    const inputs = await readCdkInputs(ROOT);
+    const chunk = inputs.chunk.replaceAll('_CdkOverlayStyleLoader', '_CdkOverlayStyles');
+    assert.notEqual(chunk, inputs.chunk);
+    const problems = cdkOverlayProblems({ ...inputs, chunk });
+    assert.equal(problems.length, 3);
+    for (const problem of problems) {
+      assert.match(problem, new RegExp(`@angular/cdk ${inputs.version}`));
+      assert.match(problem, /restore the overlay-prebuilt\.css import/);
+    }
   });
 
   it('fails and names the CDK version for a prebuilt rule that the loader styles lack', async () => {

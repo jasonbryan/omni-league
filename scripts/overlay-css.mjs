@@ -138,7 +138,7 @@ export async function readCdkInputs(root) {
   let chunk = '';
   for (const name of (await readdir(chunks)).filter((file) => file.endsWith('.mjs'))) {
     const text = await readFile(join(chunks, name), 'utf8');
-    if (text.includes(`class ${LOADER_CLASS} `)) chunk = text;
+    if (text.includes('function createOverlayRef(')) chunk = text;
   }
   return {
     version,
