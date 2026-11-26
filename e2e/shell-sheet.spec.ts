@@ -5,6 +5,11 @@ import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { overlayPanes } from './support/overlay';
+import {
+  overlayStyles,
+  SHEET_OVERLAY_STYLES,
+  stylesheetsHaveOverlayRules,
+} from './support/overlay-styles';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser } from './support/users';
@@ -58,6 +63,23 @@ const menuButton = (page: Page) => page.getByRole('button', { name: 'Open naviga
 
 test.describe('the phone sheet on the admin area', () => {
   test.skip(({ isMobile }) => !isMobile, 'the phone sheet runs at phone widths only');
+
+  test('no stylesheet holds an overlay rule until the sheet opens', async ({ page }) => {
+    await openAdminOverview(page);
+    expect(await stylesheetsHaveOverlayRules(page)).toBe(false);
+    await activate(page, menuButton(page));
+    await expect(dialogOf(page).locator('[data-slot="sheet-content"]')).toBeVisible();
+    expect(await stylesheetsHaveOverlayRules(page)).toBe(true);
+  });
+
+  test('the open sheet container, pane, and backdrop keep their position, layer, and dimming', async ({
+    page,
+  }) => {
+    await openAdminOverview(page);
+    await activate(page, menuButton(page));
+    await expect(dialogOf(page).locator('[data-slot="sheet-content"]')).toBeVisible();
+    expect(await overlayStyles(page)).toEqual(SHEET_OVERLAY_STYLES);
+  });
 
   test('320: the first press on the loaded page opens it in the overlay container, not the popover top layer, with no console warning', async ({
     page,

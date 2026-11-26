@@ -84,12 +84,18 @@ describe('the two stylesheets that import the base file', () => {
     });
   }
 
-  it('src/styles.css imports Tailwind with source(.), the tokens, brain preset, and Inter', async () => {
+  it('src/styles.css imports Tailwind with source(.), the tokens, the vendored preset, and Inter', async () => {
     const css = withoutComments(await read('src', 'styles.css'));
     assert.match(css, /@import\s+'tailwindcss'\s+source\('\.'\)\s*;/);
     assert.match(css, /@import\s+'\.\/styles\/tokens\.css'\s*;/);
-    assert.match(css, /@import\s+'@spartan-ng\/brain\/hlm-tailwind-preset\.css'\s*;/);
+    assert.match(css, /@import\s+'\.\/styles\/spartan-preset\.css'\s*;/);
+    assert.doesNotMatch(css, /hlm-tailwind-preset|overlay-prebuilt/);
     assert.match(css, /@import\s+'@fontsource-variable\/inter\/wght\.css'\s*;/);
+  });
+
+  it('design/mockup-kit/mockup-kit.css keeps the brain preset, which has the CDK overlay rules a static mockup needs', async () => {
+    const css = withoutComments(await read('design', 'mockup-kit', 'mockup-kit.css'));
+    assert.match(css, /@import\s+'@spartan-ng\/brain\/hlm-tailwind-preset\.css'\s*;/);
   });
 
   // @ng-icons/core puts its host `color: var(--ng-icon__color, currentColor)` in `@layer ng-icon`,
@@ -145,6 +151,12 @@ describe('colour literals in src/', () => {
   // colour. A hex literal is not followed by a hyphen either, so the fragment `#add-location` (the
   // jump link to the add form) is not one.
   const COLOUR = /#[0-9a-fA-F]{3,8}(?![\w-])|rgba?\(|hsla?\(|oklch\(/;
+  // tokens.css defines the colours. The preset's black stops are alpha masks for `mask-image`, and its
+  // shimmer colours derive from the text colour.
+  const COLOUR_EXEMPT_FILES = new Set([
+    join('src', 'styles', 'tokens.css'),
+    join('src', 'styles', 'spartan-preset.css'),
+  ]);
   // The install colours cannot be tokens: the theme-color meta and the manifest are read by
   // the browser and the operating system, which know no CSS variable. These four lines are the only
   // ones allowed. Each entry is an exact file and full trimmed line, allowed at most once.
@@ -179,9 +191,9 @@ describe('colour literals in src/', () => {
     return matches;
   }
 
-  it('finds nothing in .css, .ts, and .html files except src/styles/tokens.css and the four allowed lines', async () => {
+  it('finds nothing in .css, .ts, and .html files except src/styles/tokens.css, the vendored preset, and the four allowed lines', async () => {
     const files = (await filesUnder(join(root, 'src'), ['.css', '.ts', '.html'])).filter(
-      (file) => file !== join('src', 'styles', 'tokens.css'),
+      (file) => !COLOUR_EXEMPT_FILES.has(file),
     );
     assert.ok(files.length > 10, 'the source files were actually listed');
     const sources = {};

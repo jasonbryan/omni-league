@@ -9,6 +9,12 @@ import { documentRequests, gotoUnhydrated, holdDocument, settle } from './suppor
 import { holdQueries } from './support/hold-queries';
 import { gotoHydrated, hydrated } from './support/hydrated';
 import { overlayPanes } from './support/overlay';
+import {
+  overlayStyles,
+  POPOVER_OVERLAY_STYLES,
+  SHEET_OVERLAY_STYLES,
+  stylesheetsHaveOverlayRules,
+} from './support/overlay-styles';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -751,8 +757,36 @@ test.describe('organization filters in the browser', () => {
     expect(await pageState()).toEqual(before);
   });
 
+  test('no stylesheet holds an overlay rule until a filter button is pressed', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await gotoHydrated(page, consoleGuard, tenant.path);
+    expect(await stylesheetsHaveOverlayRules(page)).toBe(false);
+    if (isDesktop(testInfo)) {
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+    } else {
+      await filtersButton(page).click();
+      await expect(sheetContent(page)).toBeVisible();
+    }
+    expect(await stylesheetsHaveOverlayRules(page)).toBe(true);
+  });
+
   test.describe('the phone sheet', () => {
     test.skip(({ isMobile }) => !isMobile, 'the sheet runs at phone widths only');
+
+    test('the open sheet container, pane, and backdrop keep their position, layer, and dimming', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await gotoHydrated(page, consoleGuard, tenant.path);
+      await filtersButton(page).click();
+      await expect(sheetContent(page)).toBeVisible();
+      expect(await overlayStyles(page)).toEqual(SHEET_OVERLAY_STYLES);
+    });
 
     test('a modal Filters dialog whose live count applies Coed and 4v4 without a page load, with focus back on Filters', async ({
       page,
@@ -908,6 +942,17 @@ test.describe('organization filters in the browser', () => {
 
   test.describe('the desktop popovers', () => {
     test.skip(({ isMobile }) => isMobile, 'the popovers run from 768px');
+
+    test('the open Level popover container and pane keep their position and layer', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await gotoHydrated(page, consoleGuard, tenant.path);
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+      expect(await overlayStyles(page)).toEqual(POPOVER_OVERLAY_STYLES);
+    });
 
     test('the Level popover sits in the overlay container, and Escape and a click outside each close it with focus back on Level', async ({
       page,
