@@ -121,6 +121,8 @@ describe('the helm variant exclusion in src/styles.css', () => {
       ['a static side of top', '<hlm-sheet side="top"></hlm-sheet>'],
       ['a hlmSheetTrigger with side top', '<button hlmSheetTrigger side="top"></button>'],
       ['a brnSheetTrigger with a bound side', '<button brnSheetTrigger [side]="x"></button>'],
+      ['a side read from a signal', '<hlm-sheet [side]="side()"></hlm-sheet>'],
+      ['an interpolated side', '<hlm-sheet side="{{ side }}"></hlm-sheet>'],
       [
         'a side that holds a right literal',
         `<hlm-sheet [side]="x ? 'left' : 'right'"></hlm-sheet>`,
@@ -288,6 +290,8 @@ describe('the helm variant exclusion in src/styles.css', () => {
       '<button hlmBtn size="icon-{{ s }}">x</button>',
       '<button hlmBtn [size]="`icon-${s}`">x</button>',
       '<button hlmBtn [size]="big ? \'lg\' : `${s}`">x</button>',
+      `<button hlmBtn [attr.size]="'sm'">x</button>`,
+      '<a hlmBtn size=sm>x</a>',
     ]) {
       it(`fails on ${template}`, () => {
         const found = problems({ 'src/app/a.ts': component(template) });
@@ -316,6 +320,15 @@ describe('the helm variant exclusion in src/styles.css', () => {
         assert.match(found[0], /small helm buttons/);
       });
     }
+
+    it('fails on a small size set on a later line of a multi-line call', () => {
+      const found = problems({
+        'src/app/a.ts': "const x = buttonVariants({\n  variant: 'ghost',\n  size: 'sm',\n});",
+      });
+      assert.equal(found.length, 1);
+      assert.match(found[0], /src\/app\/a\.ts:1/);
+      assert.match(found[0], /small helm buttons/);
+    });
 
     it('passes calls that set no small size', () => {
       assert.deepEqual(
@@ -368,6 +381,21 @@ describe('the helm variant exclusion in src/styles.css', () => {
         problems({ [BUTTON]: `${HELM_FILES[BUTTON]}\nbuttonVariants({ size: this.other() })` })
           .length,
         1,
+      );
+    });
+  });
+
+  describe('an external template', () => {
+    it('is read for every rule, and each message names the .html file and its line', () => {
+      const found = problems({
+        'src/app/a.html':
+          '<hlm-sheet (closed)="x()"></hlm-sheet>\n<button hlmBtn size="xs"></button>\n' +
+          '<input hlmInput [type]="kind">\n<a hlmBadge href="/x"></a>',
+      });
+      assert.equal(found.length, 4);
+      assert.deepEqual(
+        found.map((line) => /src\/app\/a\.html:(\d)/.exec(line)?.[1]),
+        ['1', '2', '3', '4'],
       );
     });
   });
