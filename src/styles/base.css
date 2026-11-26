@@ -1,6 +1,7 @@
 /* Base layer shared by src/styles.css and design/mockup-kit/mockup-kit.css, as approved in
-   design/mockups/61-token-sheet.html ("Base styles"). Import it after tokens.css and brain's
-   hlm-tailwind-preset.css, which define the utilities used here.
+   design/mockups/61-token-sheet.html ("Base styles"). Import it after tokens.css and the preset
+   (spartan-preset.css in the app, brain's hlm-tailwind-preset.css in the mockup kit), which define
+   the utilities used here.
 
    Focus: a solid 2px --ring outline replaces helm's translucent halo (2.25:1, under the 3:1 of
    WCAG 1.4.11). A component must not remove it with `outline-none`.
