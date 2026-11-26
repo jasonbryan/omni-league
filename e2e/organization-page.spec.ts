@@ -2186,6 +2186,11 @@ function monthDay(daysFromToday: number): string {
   return `${month} ${date.getUTCDate()}`;
 }
 
+/** Matches the whole day, so `Dec 1` does not match inside `Dec 16`. */
+function monthDayPattern(daysFromToday: number): RegExp {
+  return new RegExp(`${monthDay(daysFromToday)}(?!\\d)`);
+}
+
 function campTenant(camps: CampPageSeed[], name = 'E2E Camps'): Promise<Tenant> {
   return seedTenantWithCamps(
     {
@@ -2301,9 +2306,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
       const rows = sectionWithId(html, 'camps').split('<li').slice(1);
       const later = plainText(rows.find((row) => row.includes('Later Week Camp')) ?? '');
       expect(later).toContain('Registration open');
-      const start = new Date(`${dateFromToday(20)}T00:00:00Z`);
-      const startText = `${new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(start)} ${start.getUTCDate()}`;
-      expect(later).toContain(startText);
+      expect(later).toMatch(monthDayPattern(20));
       expect(later).toContain('Register for Later Week Camp');
       const closed = plainText(rows.find((row) => row.includes('Closed Camp')) ?? '');
       expect(closed).toContain('Registration closed');
@@ -2325,8 +2328,8 @@ test.describe('organization page: Camps, raw server HTML', () => {
       const { html } = await fetchRawHtml(request, tenant.path);
       const row = plainText(sectionWithId(html, 'camps'));
       expect(row).toContain('Registration open');
-      expect(row).toContain(monthDay(20));
-      expect(row).not.toContain(monthDay(5));
+      expect(row).toMatch(monthDayPattern(20));
+      expect(row).not.toMatch(monthDayPattern(5));
       expect(row).not.toContain('Full');
       expect(row).toContain('Register for Crowded Week Camp');
     },
@@ -2355,7 +2358,7 @@ test.describe('organization page: Camps, raw server HTML', () => {
       const laterRow = plainText(
         rows.find((row) => row.includes('Later After Waiting Camp')) ?? '',
       );
-      expect(laterRow).toContain(monthDay(20));
+      expect(laterRow).toMatch(monthDayPattern(20));
       expect(laterRow).not.toContain('Full');
       expect(laterRow).toContain('Register for Later After Waiting Camp');
       expect(titlesIn(sectionOf(html))).toEqual(['Later After Waiting Camp']);
@@ -2495,12 +2498,12 @@ test.describe('organization page: Camps in the browser', () => {
     await gotoHydrated(page, consoleGuard, tenant.path);
     const row = page.locator('#camps li', { hasText: 'Clock Camp' });
     await expect(row).toContainText('Registration closed');
-    await expect(row).toContainText(`${monthDay(2)} – ${monthDay(6)}`);
+    await expect(row).toContainText(new RegExp(`${monthDay(2)} – ${monthDay(6)}(?!\\d)`));
     await expect(row.getByRole('link', { name: /^Register/ })).toHaveCount(0);
 
     await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);
-    await expect(row).toContainText(`${monthDay(20)} – ${monthDay(24)}`);
-    await expect(row).not.toContainText(monthDay(2));
+    await expect(row).toContainText(new RegExp(`${monthDay(20)} – ${monthDay(24)}(?!\\d)`));
+    await expect(row).not.toContainText(monthDayPattern(2));
     await expect(row).toContainText('Registration closed');
   });
 
