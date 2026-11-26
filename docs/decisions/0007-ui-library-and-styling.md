@@ -5,6 +5,7 @@
 - **Issue:** #6
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 - **Amended:** 2026-10-30 (#202): the overlay default moves from `app.config.ts` to each component that hosts an overlay. See "Amendment: overlay default per host (2026-10-30)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-11-26 (#875): the app's stylesheet imports a copy of brain's preset without CDK's overlay rules. See "Amendment: CDK overlay rules from the CDK runtime (2026-11-26)" at the end.
 
 ## Context
 
@@ -308,7 +309,7 @@ The scaffold (#10) adds none of these; they arrive with the UI foundation work (
 
 - **One token file, `src/styles/tokens.css`.** It holds CSS custom properties in spartan's naming (`--background`, `--foreground`, `--primary`, …, `--radius`) in `:root`, with a `.dark` block only if the owner approves a dark theme. A Tailwind `@theme` block maps them to utilities and sets `--font-sans` to Inter.
 - **The values are a visual decision.** They are set in the first feature screen's mockup and approved through its `gate:ui-design`, not in this ADR.
-- **`src/styles.css` imports Tailwind with an explicit source.** It contains `@import 'tailwindcss' source('.');` (scanning `src/` only), then `tokens.css`, brain's `hlm-tailwind-preset.css`, and the Inter font CSS. The explicit source keeps mockup-only classes out of production CSS.
+- **`src/styles.css` imports Tailwind with an explicit source.** It contains `@import 'tailwindcss' source('.');` (scanning `src/` only), then `tokens.css`, the preset (the app's copy of brain's `hlm-tailwind-preset.css`, see "Amendment: CDK overlay rules from the CDK runtime (2026-11-26)"), and the Inter font CSS. The explicit source keeps mockup-only classes out of production CSS.
 - **Helm code lives in one app folder,** for example `src/app/ui/`, copied from each component page's "Manual" tab with its import paths adjusted.
 
 ### How a self-contained mockup gets the same tokens and styles
@@ -518,3 +519,15 @@ Issue #202. Caveat 4 under "Server rendering and hydration" put `provideSpartanH
   - a brain tooltip, hover card, or navigation menu, a CDK menu or connected overlay, or a direct `Overlay`: nothing more.
 - The CDK reads the config from the injector of the `Overlay` or `Dialog` that opens the overlay. Those and the brain services that use them are root-provided, so a route-level provider alone would not reach them. Passing the openers keeps each host from bundling another kind's code.
 - `scripts/overlay-hosts.test.mjs` fails for a file under `src/app` that hosts any of these kinds without the matching call. Each host's e2e spec checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.
+
+## Amendment: CDK overlay rules from the CDK runtime (2026-11-26)
+
+Issue #875. Brain's `hlm-tailwind-preset.css` starts with `@import '@angular/cdk/overlay-prebuilt.css';`, which put every `.cdk-overlay-*` rule (about 1.7 kB) in the initial stylesheet. `@angular/cdk` 22 adds the same rules when the first overlay opens: `createOverlayRef` and `OverlayContainer.getContainerElement` load `_CdkOverlayStyleLoader`, a component whose styles are those rules, with `z-index`, the backdrop `transition`, and `.cdk-overlay-dark-backdrop` inside `@layer cdk-overlay`.
+
+- **The copy.** `src/styles/spartan-preset.css` is brain 1.9.0's preset without that one import. It is the only vendored stylesheet; the vendored helm components stay under `src/app/ui`. Its header names the brain version and the local changes. `src/styles.css` imports it in place of the brain file.
+- **Two edits that keep the repo's checks passing.** The two issue numbers in the upstream comment become links, which `scripts/comment-refs.mjs` allows, and the file is saved as Prettier formats it. The upkeep check ignores both.
+- **The mockup kit keeps brain's preset.** A static mockup has no CDK runtime to add the rules.
+- **Layer order.** The runtime `<style>` comes after the global stylesheet. `cdk-overlay` is declared after Tailwind's layers, so it still beats every utility, and the preset's unlayered backdrop rule still beats `cdk-overlay`.
+- **Two checks in `npm run test:scripts`** (`scripts/overlay-css.test.mjs`):
+  - the copy equals the installed brain preset minus its CDK import, with comments removed and both formatted by Prettier. A brain update that changes a rule fails until the copy is refreshed, and the message names both files and the re-copy step;
+  - the installed `@angular/cdk` still loads the overlay styles from `createOverlayRef` and `getContainerElement`, and its loader's styles hold every selector and declaration of `overlay-prebuilt.css`. A CDK update that drops the loader or adds a prebuilt rule fails, naming the CDK version and the step to re-check (restore the prebuilt import if the loader is gone).
