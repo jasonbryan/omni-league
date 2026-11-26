@@ -192,6 +192,9 @@ describe('the helm variant exclusion in src/styles.css', () => {
       "<input hlmInput [type]=\"x ? 'file' : 'text'\">",
       '<input hlmInput [type]="inputType">',
       '<input hlmInput [attr.type]="kind()">',
+      '<input hlmInput type="FILE">',
+      '<input hlmInput type="{{ t }}">',
+      '<input hlmInput [type]="`${t}`">',
     ]) {
       it(`fails on ${template}`, () => {
         const found = problems({ 'src/app/a.ts': component(template) });
@@ -219,6 +222,7 @@ describe('the helm variant exclusion in src/styles.css', () => {
           component('<input [type]="kind" [class]="inputClass">'),
       });
       assert.equal(found.length, 1);
+      assert.match(found[0], /src\/app\/a\.ts/);
     });
 
     it('passes a file input in a file that does not use INPUT_CLASSES or hlmInput', () => {
@@ -261,10 +265,15 @@ describe('the helm variant exclusion in src/styles.css', () => {
       `<button hlmBtn [size]="compact ? 'sm' : 'md'"></button>`,
       '<button hlmBtn [size]="compact">x</button>',
       `<button hlmBtn [size]="'xs'">x</button>`,
+      '<button hlmBtn size="{{ s }}">x</button>',
+      '<button hlmBtn size="icon-{{ s }}">x</button>',
+      '<button hlmBtn [size]="`icon-${s}`">x</button>',
+      '<button hlmBtn [size]="big ? \'lg\' : `${s}`">x</button>',
     ]) {
       it(`fails on ${template}`, () => {
         const found = problems({ 'src/app/a.ts': component(template) });
         assert.equal(found.length, 1);
+        assert.match(found[0], /src\/app\/a\.ts/);
         assert.match(found[0], /small helm buttons/);
       });
     }
@@ -278,9 +287,29 @@ describe('the helm variant exclusion in src/styles.css', () => {
       'buttonVariants({ size: this.size() })',
       'buttonVariants({ ...options })',
       'buttonVariants(options)',
+      'buttonVariants({ size: `${s}` })',
+      'provideBrnButtonConfig({ size: `${s}` })',
     ]) {
       it(`fails on ${call}`, () => {
         const found = problems({ 'src/app/a.ts': `const x = ${call};` });
+        assert.equal(found.length, 1);
+        assert.match(found[0], /src\/app\/a\.ts/);
+        assert.match(found[0], /small helm buttons/);
+      });
+    }
+
+    for (const [title, source] of [
+      [
+        'an aliased buttonVariants',
+        "import { buttonVariants as bv } from '../ui/button';\nbv({ size: 'xs' });",
+      ],
+      [
+        'an aliased provideBrnButtonConfig',
+        "import { provideBrnButtonConfig as provide, x } from '../ui/button';\nprovide({ size: 'sm' });",
+      ],
+    ]) {
+      it(`fails on ${title}`, () => {
+        const found = problems({ 'src/app/a.ts': source });
         assert.equal(found.length, 1);
         assert.match(found[0], /src\/app\/a\.ts/);
         assert.match(found[0], /small helm buttons/);
@@ -342,7 +371,7 @@ describe('the helm variant exclusion in src/styles.css', () => {
   });
 
   describe('host directives', () => {
-    for (const directive of ['HlmButton', 'HlmBadge', 'HlmInput']) {
+    for (const directive of ['HlmButton', 'HlmBadge', 'HlmInput', 'HlmSheet', 'BrnSheet']) {
       it(`fails on hostDirectives: [${directive}] outside src/app/ui`, () => {
         const found = problems({
           'src/app/a.ts': `@Component({ hostDirectives: [{ directive: ${directive} }, Other] }) class A {}`,
@@ -358,6 +387,29 @@ describe('the helm variant exclusion in src/styles.css', () => {
         problems({
           'src/app/a.ts': '@Component({ hostDirectives: [HlmFieldGroup, BrnX] }) class A {}',
           'src/app/ui/b.ts': '@Component({ hostDirectives: [HlmButton] }) class B {}',
+        }),
+        [],
+      );
+    });
+  });
+
+  describe('classes that extend a helm control', () => {
+    for (const parent of ['HlmButton', 'HlmBadge', 'HlmInput', 'HlmSheet', 'BrnSheet']) {
+      it(`fails on a class that extends ${parent} outside src/app/ui`, () => {
+        const found = problems({
+          'src/app/a.ts': `@Directive({ selector: '[x]' }) export class X extends ${parent} {}`,
+        });
+        assert.equal(found.length, 1);
+        assert.match(found[0], /src\/app\/a\.ts/);
+        assert.match(found[0], new RegExp(parent));
+      });
+    }
+
+    it('passes a class that extends another class, and any class inside src/app/ui', () => {
+      assert.deepEqual(
+        problems({
+          'src/app/a.ts': 'export class A extends HlmButtonLike {}',
+          'src/app/ui/sheet/hlm-sheet.ts': 'export class HlmSheet extends BrnSheet {}',
         }),
         [],
       );

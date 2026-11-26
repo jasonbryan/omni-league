@@ -11,19 +11,23 @@ import { HELM_VARIANT_CLASSES, HELM_VARIANT_GROUPS } from './helm-variant-classe
 const PREFIX = 'helm-variant-exclusion:';
 const CHECK = 'scripts/helm-variant-exclusion.mjs';
 const STYLES = 'src/styles.css';
-const GROUP_NAMES = {
-  sheet: 'sheet sides',
-  badge: 'badge as a control',
-  file: 'file input',
-  button: 'small helm buttons',
-  other: 'helm variant exclusion',
-};
 
 const SHEET_DIRECTORY = 'src/app/ui/sheet/';
 const INPUT_DIRECTORY = 'src/app/ui/input/';
 const UI_DIRECTORY = 'src/app/ui/';
 const SHEET_CONTENT_FILE = 'src/app/ui/sheet/hlm-sheet-content.ts';
+const BADGE_FILE = 'src/app/ui/badge/hlm-badge.ts';
+const INPUT_FILE = 'src/app/ui/input/hlm-input.ts';
 const BUTTON_FILE = 'src/app/ui/button/hlm-button.ts';
+const groupNameOf = (helmFile) =>
+  HELM_VARIANT_GROUPS.find((group) => group.helmFile === helmFile).name;
+const GROUP_NAMES = {
+  sheet: groupNameOf(SHEET_CONTENT_FILE),
+  badge: groupNameOf(BADGE_FILE),
+  file: groupNameOf(INPUT_FILE),
+  button: groupNameOf(BUTTON_FILE),
+  other: 'helm variant exclusion',
+};
 // The one call whose values come from the `hlmBtn` inputs and `provideBrnButtonConfig`, which the
 // rules below already cover.
 const BUTTON_OWN_CALL_ARGUMENTS = '{ variant: this.variant(), size: this.size() }';
@@ -39,7 +43,13 @@ const FOCUS_OR_VALIDITY_ATTRIBUTES = new Set([
   'contenteditable',
   'aria-invalid',
 ]);
-const HOST_DIRECTIVES_NEEDING_VARIANTS = ['HlmButton', 'HlmBadge', 'HlmInput'];
+const CONTROL_CLASS_GROUPS = {
+  HlmButton: GROUP_NAMES.button,
+  HlmBadge: GROUP_NAMES.badge,
+  HlmInput: GROUP_NAMES.file,
+  HlmSheet: GROUP_NAMES.sheet,
+  BrnSheet: GROUP_NAMES.sheet,
+};
 
 const fix = `remove that group's classes from the exclusion in ${STYLES}`;
 const message = (file, group, what, remedy = fix) =>
@@ -138,11 +148,7 @@ function elementsIn(text) {
   return elements;
 }
 
-/**
- * `[attr.type]`, `[type]`, and `type` all name `type`.
- * @param {string} name
- */
-const baseName = (name) =>
+const nameWithoutBinding = (name) =>
   name
     .replace(/^\[(.*)\]$/, '$1')
     .replace(/^attr\./i, '')
@@ -154,12 +160,20 @@ const baseName = (name) =>
  * @returns {Attribute[]}
  */
 const attributesNamed = (element, name) =>
-  element.attributes.filter((attribute) => baseName(attribute.name) === name);
+  element.attributes.filter((attribute) => nameWithoutBinding(attribute.name) === name);
+
+/** `[attr.name]` sets an attribute, not the input, so only `name` and `[name]` count. */
+const inputsNamed = (element, name) =>
+  element.attributes.filter((attribute) => {
+    const written = attribute.name.toLowerCase();
+    return written === name || written === `[${name}]`;
+  });
 
 const hasAttribute = (element, name) => attributesNamed(element, name).length > 0;
 const isBound = (attribute) => /^\[.*\]$/.test(attribute.name);
 
 const STRING_LITERAL = /'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|`((?:\\.|[^`\\])*)`/g;
+const TEMPLATE_WITH_SUBSTITUTION = /`(?:\\.|[^`\\])*\$\{/;
 const literalsIn = (expression) =>
   [...expression.matchAll(STRING_LITERAL)].map(
     ([, single, double, template]) => single ?? double ?? template,
@@ -172,7 +186,7 @@ const literalsIn = (expression) =>
  */
 function expressionProblem(expression, isAllowed) {
   const trimmed = expression.trim();
-  const literals = literalsIn(trimmed);
+  const literals = TEMPLATE_WITH_SUBSTITUTION.test(trimmed) ? [] : literalsIn(trimmed);
   if (literals.length === 0)
     return `the value \`${trimmed}\` is not a string literal, so the check cannot read it`;
   const refused = literals.find((literal) => !isAllowed(literal));
@@ -188,6 +202,8 @@ function expressionProblem(expression, isAllowed) {
 function attributeProblem(attribute, isAllowed) {
   const value = attribute.value ?? '';
   if (isBound(attribute)) return expressionProblem(value, isAllowed);
+  if (value.includes('{{'))
+    return `the value \`${value}\` holds an interpolation, so the check cannot read it`;
   return isAllowed(value.trim()) ? null : `the value is "${value.trim()}"`;
 }
 
@@ -213,8 +229,7 @@ function closingIndex(text, open) {
   return -1;
 }
 
-/** Splits at commas that are not inside brackets or strings. */
-function topLevelParts(text) {
+function splitAtTopLevelCommas(text) {
   const parts = [];
   let start = 0;
   for (let i = 0; i < text.length; i += 1) {
@@ -235,7 +250,7 @@ function topLevelParts(text) {
 
 const isSmallButtonSizeAllowed = (literal) => !SMALL_BUTTON_SIZES.has(literal);
 const isSideAllowed = (literal) => ALLOWED_SIDES.has(literal);
-const isNotFile = (literal) => literal !== 'file';
+const isNotFile = (literal) => literal.toLowerCase() !== 'file';
 
 /**
  * @param {string} file
@@ -251,8 +266,8 @@ function elementProblems(file, text) {
   for (const element of elementsIn(text)) {
     const tag = element.tag.toLowerCase();
 
-    if (tag === 'hlm-sheet' || hasAttribute(element, 'brnsheet')) {
-      const sides = attributesNamed(element, 'side');
+    if (tag === 'hlm-sheet' || tag === 'brn-sheet' || hasAttribute(element, 'brnsheet')) {
+      const sides = inputsNamed(element, 'side');
       if (sides.length === 0) {
         report(element, GROUP_NAMES.sheet, `<${element.tag}> has no side, so it opens at the top`);
       }
@@ -268,7 +283,7 @@ function elementProblems(file, text) {
     }
 
     if (hasAttribute(element, 'hlmsheettrigger') || hasAttribute(element, 'brnsheettrigger')) {
-      for (const side of attributesNamed(element, 'side')) {
+      for (const side of inputsNamed(element, 'side')) {
         const problem = attributeProblem(side, isSideAllowed);
         if (problem)
           report(
@@ -283,7 +298,7 @@ function elementProblems(file, text) {
       const reasons = [];
       if (FOCUSABLE_TAGS.has(tag)) reasons.push(`it is a <${tag}>`);
       for (const attribute of element.attributes) {
-        if (FOCUS_OR_VALIDITY_ATTRIBUTES.has(baseName(attribute.name))) {
+        if (FOCUS_OR_VALIDITY_ATTRIBUTES.has(nameWithoutBinding(attribute.name))) {
           reasons.push(`it has ${attribute.name}`);
         }
       }
@@ -334,7 +349,18 @@ function elementProblems(file, text) {
  */
 function callProblems(file, text) {
   const found = [];
-  for (const match of text.matchAll(/\b(provideBrnButtonConfig|buttonVariants)\s*\(/g)) {
+  const names = {
+    provideBrnButtonConfig: 'provideBrnButtonConfig',
+    buttonVariants: 'buttonVariants',
+  };
+  for (const [, original, alias] of text.matchAll(
+    /\b(provideBrnButtonConfig|buttonVariants)\s+as\s+(\w+)/g,
+  )) {
+    names[alias] = original;
+  }
+  const callPattern = new RegExp(`\\b(${Object.keys(names).join('|')})\\s*\\(`, 'g');
+  for (const match of text.matchAll(callPattern)) {
+    const callee = names[match[1]];
     const open = match.index + match[0].length - 1;
     if (/\bfunction\s+$/.test(text.slice(Math.max(0, match.index - 20), match.index))) continue;
     const close = closingIndex(text, open);
@@ -342,16 +368,12 @@ function callProblems(file, text) {
     const args = text.slice(open + 1, close).trim();
     const report = (what) =>
       found.push(
-        message(
-          `${file}:${lineOf(text, match.index)}`,
-          GROUP_NAMES.button,
-          `${match[1]}(): ${what}`,
-        ),
+        message(`${file}:${lineOf(text, match.index)}`, GROUP_NAMES.button, `${callee}(): ${what}`),
       );
     if (args === '') continue;
     if (
       file === BUTTON_FILE &&
-      match[1] === 'buttonVariants' &&
+      callee === 'buttonVariants' &&
       squash(args) === squash(BUTTON_OWN_CALL_ARGUMENTS)
     ) {
       continue;
@@ -362,7 +384,7 @@ function callProblems(file, text) {
       );
       continue;
     }
-    for (const property of topLevelParts(args.slice(1, args.lastIndexOf('}')))) {
+    for (const property of splitAtTopLevelCommas(args.slice(1, args.lastIndexOf('}')))) {
       if (property.startsWith('...')) {
         report(`\`${property}\` spreads values the check cannot read`);
         continue;
@@ -385,29 +407,34 @@ function callProblems(file, text) {
  * @param {string} text
  * @returns {string[]}
  */
-function hostDirectiveProblems(file, text) {
+function controlClassProblems(file, text) {
   if (file.startsWith(UI_DIRECTORY)) return [];
   const found = [];
+  const names = Object.keys(CONTROL_CLASS_GROUPS).join('|');
   for (const match of text.matchAll(/\bhostDirectives\s*:\s*\[/g)) {
     const open = match.index + match[0].length - 1;
     const close = closingIndex(text, open);
     if (close === -1) continue;
-    const list = text.slice(open, close + 1);
-    for (const directive of HOST_DIRECTIVES_NEEDING_VARIANTS) {
-      if (new RegExp(`\\b${directive}\\b`).test(list)) {
+    for (const [directive, group] of Object.entries(CONTROL_CLASS_GROUPS)) {
+      if (new RegExp(`\\b${directive}\\b`).test(text.slice(open, close + 1))) {
         found.push(
           message(
             `${file}:${lineOf(text, match.index)}`,
-            directive === 'HlmBadge'
-              ? GROUP_NAMES.badge
-              : directive === 'HlmInput'
-                ? GROUP_NAMES.file
-                : GROUP_NAMES.button,
+            group,
             `${directive} in hostDirectives makes the host element a helm control the check cannot read`,
           ),
         );
       }
     }
+  }
+  for (const match of text.matchAll(new RegExp(`\\bextends\\s+(${names})\\b`, 'g'))) {
+    found.push(
+      message(
+        `${file}:${lineOf(text, match.index)}`,
+        CONTROL_CLASS_GROUPS[match[1]],
+        `a class that extends ${match[1]} makes its host element a helm control the check cannot read`,
+      ),
+    );
   }
   return found;
 }
@@ -464,7 +491,7 @@ export function helmVariantProblems({ sources, stylesCss }) {
     found.push(
       ...elementProblems(file, text),
       ...callProblems(file, text),
-      ...hostDirectiveProblems(file, text),
+      ...controlClassProblems(file, text),
       ...sideStateProblems(file, text),
     );
   }

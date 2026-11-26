@@ -9,8 +9,7 @@ const TOKENS = 'src/styles/tokens.css';
 const EXCLUSION = `the exclusion, @source not inline() in ${STYLES}`;
 const DARK_SELECTOR = ':is(.dark *)';
 
-// Entries that drop classes unrelated to the dark variant, so they need no dark variant. The helm
-// variant classes are owned by scripts/helm-variant-exclusion.mjs.
+// Entries that drop classes unrelated to the dark variant, so they need no dark variant.
 export const OTHER_EXCLUDED = new Set(['outline-destructive', 'outline-muted']);
 
 const SPEC_FILE = /\.spec\.ts$/;
@@ -154,7 +153,7 @@ export function darkExclusionProblems({ sources, stylesCss, tokensCss }) {
   return problems;
 }
 
-export async function filesTailwindScans(root) {
+async function filesTailwindScans(root) {
   const sourceDir = join(root, 'src');
   const files = [];
   for (const entry of await readdir(sourceDir, { withFileTypes: true, recursive: true })) {

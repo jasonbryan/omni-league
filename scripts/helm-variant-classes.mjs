@@ -1,6 +1,5 @@
 // The classes that `src/styles.css` leaves out of the production stylesheet because no page can use
-// them. Both scripts/helm-variant-exclusion.mjs and scripts/dark-exclusion.mjs read this list.
-
+// them.
 /**
  * @typedef {{ name: string, helmFile: string, classes: string[] }} HelmVariantGroup
  */
