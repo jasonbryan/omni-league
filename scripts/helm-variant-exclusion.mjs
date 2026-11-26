@@ -84,6 +84,10 @@ const lineOf = (text, index) => text.slice(0, index).split('\n').length;
  * @typedef {{ tag: string, attributes: Attribute[], index: number }} Element
  */
 
+// Angular reads `bind-x` as `[x]` and `bindon-x` as `[(x)]`.
+const bracketedName = (name) =>
+  name.replace(/^bindon-(.+)$/, '[($1)]').replace(/^bind-(.+)$/, '[$1]');
+
 /**
  * Reads the open tag at `start` (a `<` followed by a letter). Returns null where the text is not a
  * tag, such as a comparison or a generic in TypeScript, so the scan skips it.
@@ -130,7 +134,7 @@ function readOpenTag(text, start) {
         i += bare[0].length;
       }
     }
-    attributes.push({ name: name[0], value });
+    attributes.push({ name: bracketedName(name[0]), value });
   }
 }
 
@@ -150,7 +154,7 @@ function elementsIn(text) {
 
 const nameWithoutBinding = (name) =>
   name
-    .replace(/^\[(.*)\]$/, '$1')
+    .replace(/^\[\(?(.*?)\)?\]$/, '$1')
     .replace(/^attr\./i, '')
     .toLowerCase();
 
@@ -283,6 +287,13 @@ function elementProblems(file, text) {
     }
 
     if (hasAttribute(element, 'hlmsheettrigger') || hasAttribute(element, 'brnsheettrigger')) {
+      if (attributesNamed(element, 'side').length > inputsNamed(element, 'side').length) {
+        report(
+          element,
+          GROUP_NAMES.sheet,
+          `a sheet trigger's side is set with [attr.side], which sets no input; use side or [side]`,
+        );
+      }
       for (const side of inputsNamed(element, 'side')) {
         const problem = attributeProblem(side, isSideAllowed);
         if (problem)
@@ -342,6 +353,55 @@ function elementProblems(file, text) {
   return found;
 }
 
+const BUTTON_FUNCTIONS = ['buttonVariants', 'provideBrnButtonConfig'];
+const CONTROL_NAME_GROUPS = {
+  ...CONTROL_CLASS_GROUPS,
+  buttonVariants: GROUP_NAMES.button,
+  provideBrnButtonConfig: GROUP_NAMES.button,
+};
+const IMPORT_SPECIFIERS =
+  /\bimport\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{[^}]*\}\s*from\s*['"][^'"]*['"]/g;
+
+const withoutComments = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .replace(/(^|\s)\/\/.*$/gm, '$1');
+
+/**
+ * @param {string} file
+ * @param {string} text
+ * @returns {string[]}
+ */
+function renamedOrIndirectProblems(file, text) {
+  if (file.startsWith(UI_DIRECTORY)) return [];
+  const found = [];
+  const code = withoutComments(text);
+  const names = Object.keys(CONTROL_NAME_GROUPS).join('|');
+  for (const match of code.matchAll(new RegExp(`\\b(${names})\\s+as\\s+[\\w$]+`, 'g'))) {
+    found.push(
+      message(
+        `${file}:${lineOf(code, match.index)}`,
+        CONTROL_NAME_GROUPS[match[1]],
+        `${match[1]} is renamed, so the check cannot follow its uses; import and use it under its own name`,
+      ),
+    );
+  }
+  const rest = code.replace(IMPORT_SPECIFIERS, (statement) => statement.replace(/[^\n]/g, ' '));
+  for (const match of rest.matchAll(new RegExp(`\\b(${BUTTON_FUNCTIONS.join('|')})\\b`, 'g'))) {
+    const before = rest.slice(0, match.index);
+    const after = rest.slice(match.index + match[0].length);
+    if (/^\s*\(/.test(after) || /\btypeof\s+$/.test(before)) continue;
+    found.push(
+      message(
+        `${file}:${lineOf(rest, match.index)}`,
+        GROUP_NAMES.button,
+        `${match[1]} is used other than as a call, so the check cannot read the size it sets`,
+      ),
+    );
+  }
+  return found;
+}
+
 /**
  * @param {string} file
  * @param {string} text
@@ -349,18 +409,9 @@ function elementProblems(file, text) {
  */
 function callProblems(file, text) {
   const found = [];
-  const names = {
-    provideBrnButtonConfig: 'provideBrnButtonConfig',
-    buttonVariants: 'buttonVariants',
-  };
-  for (const [, original, alias] of text.matchAll(
-    /\b(provideBrnButtonConfig|buttonVariants)\s+as\s+(\w+)/g,
-  )) {
-    names[alias] = original;
-  }
-  const callPattern = new RegExp(`\\b(${Object.keys(names).join('|')})\\s*\\(`, 'g');
+  const callPattern = /\b(provideBrnButtonConfig|buttonVariants)\s*\(/g;
   for (const match of text.matchAll(callPattern)) {
-    const callee = names[match[1]];
+    const callee = match[1];
     const open = match.index + match[0].length - 1;
     if (/\bfunction\s+$/.test(text.slice(Math.max(0, match.index - 20), match.index))) continue;
     const close = closingIndex(text, open);
@@ -492,6 +543,7 @@ export function helmVariantProblems({ sources, stylesCss }) {
       ...elementProblems(file, text),
       ...callProblems(file, text),
       ...controlClassProblems(file, text),
+      ...renamedOrIndirectProblems(file, text),
       ...sideStateProblems(file, text),
     );
   }

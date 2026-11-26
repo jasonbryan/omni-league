@@ -102,6 +102,21 @@ describe('the helm variant exclusion in src/styles.css', () => {
     for (const [title, template] of [
       ['an hlm-sheet with no side', '<hlm-sheet (closed)="x()"></hlm-sheet>'],
       ['a brnSheet with no side', '<div brnSheet></div>'],
+      ['a brn-sheet with no side', '<brn-sheet></brn-sheet>'],
+      ['a brn-sheet with side right', '<brn-sheet side="right"></brn-sheet>'],
+      [
+        'an hlm-sheet whose only side is [attr.side]',
+        `<hlm-sheet [attr.side]="'left'"></hlm-sheet>`,
+      ],
+      [
+        'a hlmSheetTrigger whose only side is [attr.side]',
+        `<button hlmSheetTrigger [attr.side]="'top'"></button>`,
+      ],
+      ['an hlm-sheet with bind-side bound to a name', '<hlm-sheet bind-side="s"></hlm-sheet>'],
+      [
+        'a hlmSheetTrigger with bind-side bound to a name',
+        '<button hlmSheetTrigger bind-side="s"></button>',
+      ],
       ['a side of right', `<hlm-sheet [side]="'right'"></hlm-sheet>`],
       ['a static side of top', '<hlm-sheet side="top"></hlm-sheet>'],
       ['a hlmSheetTrigger with side top', '<button hlmSheetTrigger side="top"></button>'],
@@ -163,6 +178,8 @@ describe('the helm variant exclusion in src/styles.css', () => {
       '<span hlmBadge routerLink="/a">x</span>',
       '<span hlmBadge [routerLink]="link">x</span>',
       '<hlm-badge tabindex="-1">x</hlm-badge>',
+      '<span hlmBadge bind-tabindex="0">x</span>',
+      '<span hlmBadge bind-attr.aria-invalid="x">x</span>',
     ]) {
       it(`fails on ${template}`, () => {
         const found = problems({ 'src/app/a.ts': component(template) });
@@ -193,6 +210,7 @@ describe('the helm variant exclusion in src/styles.css', () => {
       '<input hlmInput [type]="inputType">',
       '<input hlmInput [attr.type]="kind()">',
       '<input hlmInput type="FILE">',
+      '<input hlmInput bind-type="t">',
       '<input hlmInput type="{{ t }}">',
       '<input hlmInput [type]="`${t}`">',
     ]) {
@@ -266,6 +284,7 @@ describe('the helm variant exclusion in src/styles.css', () => {
       '<button hlmBtn [size]="compact">x</button>',
       `<button hlmBtn [size]="'xs'">x</button>`,
       '<button hlmBtn size="{{ s }}">x</button>',
+      '<button hlmBtn bind-size="s">x</button>',
       '<button hlmBtn size="icon-{{ s }}">x</button>',
       '<button hlmBtn [size]="`icon-${s}`">x</button>',
       '<button hlmBtn [size]="big ? \'lg\' : `${s}`">x</button>',
@@ -298,24 +317,6 @@ describe('the helm variant exclusion in src/styles.css', () => {
       });
     }
 
-    for (const [title, source] of [
-      [
-        'an aliased buttonVariants',
-        "import { buttonVariants as bv } from '../ui/button';\nbv({ size: 'xs' });",
-      ],
-      [
-        'an aliased provideBrnButtonConfig',
-        "import { provideBrnButtonConfig as provide, x } from '../ui/button';\nprovide({ size: 'sm' });",
-      ],
-    ]) {
-      it(`fails on ${title}`, () => {
-        const found = problems({ 'src/app/a.ts': source });
-        assert.equal(found.length, 1);
-        assert.match(found[0], /src\/app\/a\.ts/);
-        assert.match(found[0], /small helm buttons/);
-      });
-    }
-
     it('passes calls that set no small size', () => {
       assert.deepEqual(
         problems({
@@ -336,6 +337,7 @@ describe('the helm variant exclusion in src/styles.css', () => {
       ]) {
         const found = problems({ 'src/app/a.ts': component(content) });
         assert.equal(found.length, 1, content);
+        assert.match(found[0], /src\/app\/a\.ts/);
         assert.match(found[0], /showCloseButton/);
         assert.match(found[0], /small helm buttons/);
       }
@@ -391,6 +393,72 @@ describe('the helm variant exclusion in src/styles.css', () => {
         [],
       );
     });
+  });
+
+  describe('renamed and indirect uses of the helm controls and button functions', () => {
+    const NAMES = [
+      'HlmButton',
+      'HlmBadge',
+      'HlmInput',
+      'HlmSheet',
+      'BrnSheet',
+      'buttonVariants',
+      'provideBrnButtonConfig',
+    ];
+
+    for (const name of NAMES) {
+      it(`fails on ${name} renamed in an import or an export`, () => {
+        for (const source of [
+          `import { ${name} as Renamed } from '../ui/x';`,
+          `import { a, ${name} as Renamed, b } from '../ui/x';`,
+          `export { ${name} as Renamed } from '../ui/x';`,
+          `export {\n  ${name}\n    as Renamed,\n};`,
+        ]) {
+          const found = problems({ 'src/app/a.ts': source });
+          assert.ok(found.length >= 1, source);
+          assert.match(found[0], /src\/app\/a\.ts/);
+          assert.match(found[0], /renamed/);
+        }
+      });
+
+      it(`passes ${name} renamed inside src/app/ui`, () => {
+        assert.deepEqual(
+          problems({ 'src/app/ui/x/y.ts': `import { ${name} as Renamed } from '../z';` }),
+          [],
+        );
+      });
+    }
+
+    it('passes a plain import, a call, a type query, a declaration, and a comment', () => {
+      assert.deepEqual(
+        problems({
+          'src/app/a.ts':
+            "import { buttonVariants, provideBrnButtonConfig, type X } from '../ui/button';\n" +
+            "import type { HlmButton } from '../ui/button';\n" +
+            "const a = buttonVariants({ variant: 'ghost' });\n" +
+            'type V = VariantProps<typeof buttonVariants>;\n' +
+            '// the unmerged `buttonVariants` output, see provideBrnButtonConfig\n' +
+            '/* buttonVariants\n   as a block */\n' +
+            'export function provideBrnButtonConfig(config) {}',
+        }),
+        [],
+      );
+    });
+
+    for (const [title, source] of [
+      ['a local alias', "const bv = buttonVariants;\nbv({ size: 'xs' });"],
+      ['a function passed on', 'run(buttonVariants);'],
+      ['a property that holds it', 'const x = { fn: provideBrnButtonConfig };'],
+      ['a re-export without a rename', "export { buttonVariants } from '../ui/button';"],
+      ['a destructured name', 'const { buttonVariants: bv } = ui;'],
+    ]) {
+      it(`fails on ${title}`, () => {
+        const found = problems({ 'src/app/a.ts': source });
+        assert.ok(found.length >= 1, source);
+        assert.match(found[0], /src\/app\/a\.ts/);
+        assert.match(found[0], /small helm buttons/);
+      });
+    }
   });
 
   describe('classes that extend a helm control', () => {
