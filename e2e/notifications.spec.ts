@@ -55,4 +55,33 @@ test.describe('notifications on this device', () => {
     await screenshot(page, testInfo, '83-notifications-not-available');
     expect(permissionRequests).toBe(0);
   });
+
+  test('opened offline with no answer from the server, the card shows what this device holds and passes axe', async ({
+    page,
+    context,
+  }, testInfo) => {
+    await signUp(page, newUser('NotificationsOffline'));
+    await page.getByRole('link', { name: 'Manage notifications' }).click();
+    const device = page.getByRole('region', { name: 'This device' });
+    await expect(device).toContainText('Not available');
+
+    await page
+      .getByRole('navigation', { name: 'Breadcrumb' })
+      .getByRole('link', { name: 'Home' })
+      .click();
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    await context.setOffline(true);
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${NOTIFICATIONS_PATH}`);
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Notifications');
+    await expect(device).toContainText('Not available');
+    await expect(device).toContainText("This browser can't show notifications from Omni League.");
+    await expect(device).not.toContainText('Checking');
+    await expect(device.locator('.animate-pulse')).toHaveCount(0);
+    await expect(page.locator('app-offline-note')).toContainText("You're offline");
+
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '83-notifications-offline-opened');
+  });
 });

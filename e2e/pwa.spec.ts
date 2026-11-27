@@ -1369,6 +1369,36 @@ test.describe('offline navigation inside the app (production build against the l
     await expect(offlineNote(page)).toBeHidden();
   });
 
+  test('signed in, Notifications opened offline on a page the worker controls shows Off with a button that waits for the connection', async ({
+    page,
+    context,
+  }, testInfo) => {
+    // The headless shell reports Notification.permission as denied even after grantPermissions, and denied reads as Blocked, not Off.
+    await context.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', { get: () => 'default' });
+    });
+    const { user } = await signUpOnLocalBuild(page);
+    await expect(accountRowName(page, user)).toBeVisible();
+
+    await setOffline(context, true);
+    await page.goto('/app/notifications');
+    await expect(page.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible();
+    await expect(offlineNote(page)).toHaveText(OFFLINE_NOTE);
+
+    const device = page.getByRole('region', { name: 'This device' });
+    await expect(device).toContainText('Off');
+    await expect(device).not.toContainText('Checking');
+    const turnOn = device.getByRole('button', { name: 'Turn on notifications' });
+    await expect(turnOn).toHaveAttribute('aria-disabled', 'true');
+    await expect(turnOn).not.toHaveAttribute('disabled', /.*/);
+    await expect(turnOn).toHaveAccessibleDescription('Connect to the internet to change this.');
+    await screenshotsAndAxe(page, testInfo, 'notifications-offline-off');
+
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the press regardless.
+    await turnOn.click({ force: true });
+    await expect(device.getByRole('alert')).toContainText("You're offline. Nothing was sent.");
+  });
+
   test.describe('with the session check answering 503', () => {
     test.use({ expectedFailedRequests: [{ status: 503, path: GET_SESSION_PATH }] });
 

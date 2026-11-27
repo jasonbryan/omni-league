@@ -430,8 +430,13 @@ export class NotificationsPage {
 
   protected readonly state = computed<DeviceState>(() => {
     const config = this.config.value();
-    if (config === undefined) return this.config.error() ? 'not-available' : 'checking';
-    if (config.vapidPublicKey === null) return 'not-available';
+    if (config === undefined) {
+      if (this.config.error()) return 'not-available';
+      // Offline, no answer is coming: show what this browser holds, and let the answers correct it on reconnect.
+      if (this.online()) return 'checking';
+    } else if (config.vapidPublicKey === null) {
+      return 'not-available';
+    }
     if (this.device.needsHomeScreenInstall) return 'install-first';
     if (!this.device.hasPushApis || !this.swPush.isEnabled || this.unlistedPushService()) {
       return 'not-available';
@@ -446,7 +451,9 @@ export class NotificationsPage {
     if (subscription === undefined) return 'checking';
     if (subscription === null) return 'off';
     if (this.savedEndpoint() === subscription.endpoint || this.status.value() === true) return 'on';
-    if (this.status.value() === undefined && this.status.error() === undefined) return 'checking';
+    if (this.status.value() === undefined && this.status.error() === undefined) {
+      return this.online() ? 'checking' : 'on';
+    }
     return 'off';
   });
 

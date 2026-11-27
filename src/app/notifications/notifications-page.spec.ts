@@ -1309,6 +1309,196 @@ describe('NotificationsPage', () => {
     );
   });
 
+  describe('opened offline, before push.getConfig answers', () => {
+    const CONNECT_TEXT = 'Connect to the internet to change this.';
+    const READY_TEXT = 'Getting this device ready. This takes a few seconds the first time.';
+
+    async function openOffline() {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      await open();
+    }
+    const describedBy = (el: Element | null) =>
+      text(panel().querySelector(`#${el?.getAttribute('aria-describedby') ?? ''}`));
+    const expectNoChecking = () => {
+      expect(panel().textContent).not.toContain('Checking');
+      expect(panel().querySelectorAll('.motion-safe\\:animate-pulse')).toHaveLength(0);
+    };
+    function expectRefusedChange() {
+      expect(button()!.getAttribute('aria-disabled')).toBe('true');
+      expect(button()!.classList.contains('opacity-50')).toBe(true);
+      expect(button()!.hasAttribute('disabled')).toBe(false);
+      expect(describedBy(button())).toBe(CONNECT_TEXT);
+    }
+
+    it('keeps checking while online and unanswered', async () => {
+      await open();
+      expect(badge()).toBe('');
+      expect(text(panel().querySelector('[role="status"]'))).toBe(
+        'Checking notifications on this device.',
+      );
+    });
+
+    it('install first: shows the Home Screen steps with no button', async () => {
+      device.needsHomeScreenInstall = true;
+      await openOffline();
+      expect(badge()).toBe('Install first');
+      expect(text(panel())).toContain('Open Omni League from your Home Screen');
+      expect(button()).toBeNull();
+      expectNoChecking();
+    });
+
+    it.each([
+      ['there is no service worker', () => (swPush.isEnabled = false)],
+      ['the browser has no Push API', () => (device.hasPushApis = false)],
+    ])('not available when %s, with no button', async (_case, arrange) => {
+      arrange();
+      await openOffline();
+      expect(badge()).toBe('Not available');
+      expect(text(panel())).toContain("This browser can't show notifications from Omni League.");
+      expect(button()).toBeNull();
+      expectNoChecking();
+    });
+
+    it('blocked when the permission is denied, with no button', async () => {
+      device.permission.set('denied');
+      await openOffline();
+      expect(badge()).toBe('Blocked');
+      expect(button()).toBeNull();
+      expectNoChecking();
+    });
+
+    it('off with no subscription on a controlled page: the button looks disabled, says why, and a press sends nothing', async () => {
+      await openOffline();
+      expect(badge()).toBe('Off');
+      expect(text(button())).toBe('Turn on notifications');
+      expectRefusedChange();
+      expectNoChecking();
+
+      button()!.focus();
+      expect(document.activeElement).toBe(button());
+      button()!.click();
+      await settle();
+      expect(log).toEqual([]);
+      expect(convex.calls).toEqual([]);
+      expect(text(alertBox()?.querySelector('[data-slot="alert-title"]'))).toBe(
+        "You're offline. Nothing was sent.",
+      );
+      expect(text(alertBox()?.querySelector('[data-slot="alert-description"]'))).toBe(
+        "Notifications are still off. Try again when you're connected.",
+      );
+    });
+
+    it('on with a subscription whose status has not answered: the last state known on this device', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      device.permission.set('granted');
+      await openOffline();
+      expect(badge()).toBe('On');
+      expect(text(panel())).toContain(
+        'This device gets game reminders, schedule changes, and score updates.',
+      );
+      expect(text(button())).toBe('Turn off');
+      expectRefusedChange();
+      expectNoChecking();
+
+      button()!.click();
+      await settle();
+      expect(convex.calls).toEqual([]);
+      expect(swPush.unsubscribes).toBe(0);
+      expect(badge()).toBe('On');
+      expect(text(alertBox()?.querySelector('[data-slot="alert-title"]'))).toBe(
+        "You're offline. Nothing was sent.",
+      );
+    });
+
+    it('checking only while the device’s own subscription read is pending', async () => {
+      device.controlled.set(false);
+      device.activated = true;
+      device.registrationSubscription = fakeSubscription(ENDPOINT);
+      swPush.subscription = new Subject<PushSubscription | null>();
+      const answer = device.holdRead('subscription');
+      await openOffline();
+      expect(badge()).toBe('');
+      expect(text(panel().querySelector('[role="status"]'))).toBe(
+        'Checking notifications on this device.',
+      );
+
+      answer();
+      await settle();
+      expect(badge()).toBe('On');
+      expectNoChecking();
+    });
+
+    describe('on a page no service worker controls', () => {
+      beforeEach(() => {
+        device.controlled.set(false);
+        device.registrationSubscription = null;
+        swPush.subscription = new Subject<PushSubscription | null>();
+      });
+
+      it('a worker not yet active keeps the native disabled button and the getting-ready line', async () => {
+        device.activated = false;
+        await openOffline();
+        expect(badge()).toBe('Off');
+        expect(button()!.disabled).toBe(true);
+        expect(describedBy(button())).toBe(READY_TEXT);
+        expect(text(panel())).not.toContain(CONNECT_TEXT);
+        expectNoChecking();
+      });
+
+      it('a worker active but not in control: Turn on and Reload page are aria-disabled with the connect line', async () => {
+        device.activated = true;
+        await openOffline();
+        const reload = [...panel().querySelectorAll('button')].find(
+          (b) => text(b) === 'Reload page',
+        )!;
+        expect(badge()).toBe('Off');
+        expect(button()!.getAttribute('aria-disabled')).toBe('true');
+        expect(button()!.hasAttribute('disabled')).toBe(false);
+        expect(describedBy(button())).toBe(CONNECT_TEXT);
+        expect(reload.getAttribute('aria-disabled')).toBe('true');
+        expect(reload.hasAttribute('disabled')).toBe(false);
+        expect(describedBy(reload)).toBe(CONNECT_TEXT);
+        expectNoChecking();
+      });
+    });
+
+    describe('when the connection returns', () => {
+      beforeEach(() => {
+        swPush.subscription.next(fakeSubscription(ENDPOINT));
+        device.permission.set('granted');
+      });
+
+      it('a server with no VAPID key shows Not available', async () => {
+        await openOffline();
+        expect(badge()).toBe('On');
+        await goOnline();
+        await emitConfig(null);
+        expect(badge()).toBe('Not available');
+        expect(button()).toBeNull();
+      });
+
+      it('an endpoint the server does not hold shows Off', async () => {
+        await openOffline();
+        await goOnline();
+        await emitConfig(VAPID_KEY);
+        await emitStatus(false);
+        expect(badge()).toBe('Off');
+        expect(text(button())).toBe('Turn on notifications');
+        expect(button()!.getAttribute('aria-disabled')).toBeNull();
+      });
+
+      it('an endpoint the server holds stays On, and Turn off works', async () => {
+        await openOffline();
+        await goOnline();
+        await emitConfig(VAPID_KEY);
+        await emitStatus(true);
+        expect(badge()).toBe('On');
+        expect(button()!.getAttribute('aria-disabled')).toBeNull();
+        expect(button()!.hasAttribute('aria-describedby')).toBe(false);
+      });
+    });
+  });
+
   it('names the page in the slim bar from its route title, as the tab title does', async () => {
     await open();
     expectBar(page, 'Notifications');
