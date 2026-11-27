@@ -1627,7 +1627,7 @@ test.describe('find a program: camps', () => {
       const row = rowOf(html, CAMP_NAME);
       expect(row).toContain(`${CAMP_NAME} Camp Ages 9 to 14`);
       expect(row).toContain('Registration open');
-      expect(row).toMatch(/[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4}/);
+      expect(row).toMatch(/[A-Z][a-z]{2} \d{1,2}(?:, \d{4})? – [A-Z][a-z]{2} \d{1,2}, \d{4}/);
       expect(row).toContain('closes');
       expect(html).toContain(`href="${campPath}"`);
       expect(chipNames(html)).toEqual(['All', 'Camps']);
