@@ -696,6 +696,32 @@ function upcomingByEndDate(
         );
 }
 
+function openByDeadline(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport | undefined,
+) {
+  const from = today();
+  return sport === undefined
+    ? ctx.db
+        .query('tournaments')
+        .withIndex('by_organizationId_and_status_and_registrationDeadline', (q) =>
+          q
+            .eq('organizationId', organizationId)
+            .eq('status', 'published')
+            .gte('registrationDeadline', from),
+        )
+    : ctx.db
+        .query('tournaments')
+        .withIndex('by_organizationId_and_sport_and_status_and_registrationDeadline', (q) =>
+          q
+            .eq('organizationId', organizationId)
+            .eq('sport', sport)
+            .eq('status', 'published')
+            .gte('registrationDeadline', from),
+        );
+}
+
 async function ownProgramMatchingDivision(
   ctx: QueryCtx,
   tournament: Doc<'tournaments'>,
@@ -774,19 +800,11 @@ export const listOpenForOrganization = query({
     const organization = await findOrganizationBySlug(ctx, organizationSlug);
     if (!organization) return [];
     const filters = scopedFilters(organization.sportLeagueCounts, sport, requestedFilters);
-    const from = today();
-    const read = await ctx.db
-      .query('tournaments')
-      .withIndex('by_organizationId_and_status_and_registrationDeadline', (q) =>
-        q
-          .eq('organizationId', organization._id)
-          .eq('status', 'published')
-          .gte('registrationDeadline', from),
-      )
-      .take(OPEN_TOURNAMENTS_READ_LIMIT);
+    const read = await openByDeadline(ctx, organization._id, sport).take(
+      OPEN_TOURNAMENTS_READ_LIMIT,
+    );
     const cards: PublicOpenTournaments = [];
     for (const tournament of read) {
-      if (sport !== undefined && tournament.sport !== sport) continue;
       const program = await ownProgramMatchingDivision(ctx, tournament, filters);
       if (!program) continue;
       cards.push({

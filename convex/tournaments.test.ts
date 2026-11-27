@@ -24,7 +24,7 @@ import {
 import schema from './schema';
 import { modules, tournamentProgramFields } from './test.setup';
 import { isForbidden } from './lib/forbidden';
-import { ADMIN_TOURNAMENTS_LIMIT, getForCopy } from './tournaments';
+import { ADMIN_TOURNAMENTS_LIMIT, getForCopy, OPEN_TOURNAMENTS_READ_LIMIT } from './tournaments';
 
 const identity = (authUserId: string) => ({
   subject: authUserId,
@@ -1694,6 +1694,77 @@ describe('tournaments.listOpenForOrganization', () => {
     expect(await slugs({})).toEqual(['sand', 'soccer', 'sand-womens']);
     expect(await slugs({ sport: 'soccer' })).toEqual(['soccer']);
     expect(await slugs({ sport: 'beachVolleyball', gender: ['womens'] })).toEqual(['sand-womens']);
+  });
+
+  test('lists a sport’s open tournament although the other sports fill the read limit before it', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      ...Array.from({ length: OPEN_TOURNAMENTS_READ_LIMIT + 1 }, (_, i) => ({
+        slug: `sand-${String(i).padStart(3, '0')}`,
+        startInDays: 10,
+        deadlineInDays: 2,
+      })),
+      { slug: 'late-soccer', startInDays: 40, deadlineInDays: 30, sport: 'soccer' as const },
+    ]);
+    expect((await listOpen(s, { sport: 'soccer' })).map((row) => row.slug)).toEqual([
+      'late-soccer',
+    ]);
+  });
+
+  test('reads no further than the row limit within a sport, soonest deadline first', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: OPEN_TOURNAMENTS_READ_LIMIT + 1 }, (_, i) => ({
+        slug: `soccer-${String(i).padStart(3, '0')}`,
+        startInDays: 60,
+        deadlineInDays: 51 - i,
+        sport: 'soccer' as const,
+      })),
+    );
+    const slugs = (await listOpen(s, { sport: 'soccer' })).map((row) => row.slug);
+    expect(slugs).toEqual(
+      Array.from(
+        { length: OPEN_TOURNAMENTS_READ_LIMIT },
+        (_, i) => `soccer-${String(OPEN_TOURNAMENTS_READ_LIMIT - i).padStart(3, '0')}`,
+      ),
+    );
+  });
+
+  test('reads no further than the row limit across sports without a sport', async () => {
+    const s = await setup();
+    await insertDated(
+      s,
+      Array.from({ length: OPEN_TOURNAMENTS_READ_LIMIT + 1 }, (_, i) => ({
+        slug: `open-${String(i).padStart(3, '0')}`,
+        startInDays: 60,
+        deadlineInDays: i + 1,
+        sport: i % 2 === 0 ? ('beachVolleyball' as const) : ('soccer' as const),
+      })),
+    );
+    expect((await listOpen(s)).map((row) => row.slug)).toEqual(
+      Array.from(
+        { length: OPEN_TOURNAMENTS_READ_LIMIT },
+        (_, i) => `open-${String(i).padStart(3, '0')}`,
+      ),
+    );
+  });
+
+  test('keeps another organization’s earlier tournament out of a sport’s list', async () => {
+    const s = await setup();
+    await insertDated(s, [
+      {
+        slug: 'b-soccer',
+        startInDays: 10,
+        deadlineInDays: 2,
+        sport: 'soccer',
+        organizationId: s.organizationB,
+      },
+      { slug: 'a-soccer', startInDays: 40, deadlineInDays: 30, sport: 'soccer' },
+    ]);
+    const slugs = async (sport: string) => (await listOpen(s, { sport })).map((row) => row.slug);
+    expect(await slugs('soccer')).toEqual(['a-soccer']);
+    expect(await slugs('softball')).toEqual([]);
   });
 
   test('is empty for an unknown organization', async () => {
