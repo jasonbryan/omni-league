@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { builtStylesheetProblems } from './dark-exclusion.mjs';
 import { checkServerBundle } from './edge-bundle.mjs';
+import { builtHelmVariantProblems } from './helm-variant-exclusion.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
 import { writeStagingSlotFile } from './staging-slot-file.mjs';
 import { serviceWorkerDefine, swConfigCheck } from './sw-config-check.mjs';
@@ -153,6 +154,16 @@ async function afterBuild() {
     );
   }
   console.log('dark-exclusion: PASS (no :is(.dark *) in the built stylesheet)');
+  const helmVariantProblems = await builtHelmVariantProblems(browserDir);
+  for (const problem of helmVariantProblems) console.error(problem);
+  if (helmVariantProblems.length > 0) {
+    throw new Error(
+      'the built stylesheet holds helm variant rules that no page can use (scripts/helm-variant-exclusion.mjs)',
+    );
+  }
+  console.log(
+    'helm-variant-exclusion: PASS (no excluded helm variant rule in the built stylesheet)',
+  );
   if (await writeStagingSlotFile(browserDir, process.env)) {
     console.log(`staging slot: ${process.env.STAGING_SLOT}`);
   }

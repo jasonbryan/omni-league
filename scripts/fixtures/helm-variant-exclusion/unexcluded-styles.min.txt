@@ -1,0 +1,41 @@
+@layer utilities{.rounded-\[min\(var\(--radius-md\)\,10px\)\]{border-radius:min(var(--radius-md),10px)}}
+@layer utilities{.rounded-\[min\(var\(--radius-md\)\,12px\)\]{border-radius:min(var(--radius-md),12px)}}
+@layer utilities{.text-\[0\.8rem\]{font-size:.8rem}}
+@layer utilities{.file\:inline-flex::file-selector-button{display:inline-flex}}
+@layer utilities{.file\:h-6::file-selector-button{height:calc(var(--spacing) * 6)}}
+@layer utilities{.file\:border-0::file-selector-button{border-style:var(--tw-border-style);border-width:0px}}
+@layer utilities{.file\:bg-transparent::file-selector-button{background-color:transparent}}
+@layer utilities{.file\:text-sm::file-selector-button{font-size:var(--text-sm);line-height:var(--tw-leading, var(--text-sm--line-height))}}
+@layer utilities{.file\:font-medium::file-selector-button{--tw-font-weight: var(--font-weight-medium);font-weight:var(--font-weight-medium)}}
+@layer utilities{.file\:text-foreground::file-selector-button{color:var(--foreground)}}
+@layer utilities{.focus-visible\:border-ring:focus-visible{border-color:var(--ring)}}
+@layer utilities{.focus-visible\:ring-\[3px\]:focus-visible{--tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);box-shadow:var(--tw-inset-shadow),var(--tw-inset-ring-shadow),var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow)}}
+@layer utilities{.focus-visible\:ring-ring\/50:focus-visible{--tw-ring-color: var(--ring)}}
+@layer utilities{@supports (color: color-mix(in lab,red,red)){.focus-visible\:ring-ring\/50:focus-visible{--tw-ring-color: color-mix(in oklab, var(--ring) 50%, transparent)}}}
+@layer utilities{:where([data-slot=button-group]) .in-data-\[slot\=button-group\]\:rounded-lg{border-radius:var(--radius)}}
+@layer utilities{.aria-invalid\:border-destructive[aria-invalid=true]{border-color:var(--destructive)}}
+@layer utilities{.aria-invalid\:ring-destructive\/20[aria-invalid=true]{--tw-ring-color: var(--destructive)}}
+@layer utilities{@supports (color: color-mix(in lab,red,red)){.aria-invalid\:ring-destructive\/20[aria-invalid=true]{--tw-ring-color: color-mix(in oklab, var(--destructive) 20%, transparent)}}}
+@layer utilities{.data-\[side\=right\]\:inset-y-0[data-side=right]{inset-block:0px}}
+@layer utilities{.data-\[side\=right\]\:right-0[data-side=right]{right:0}}
+@layer utilities{.data-\[side\=right\]\:h-full[data-side=right]{height:100%}}
+@layer utilities{.data-\[side\=right\]\:w-3\/4[data-side=right]{width:75%}}
+@layer utilities{.data-\[side\=right\]\:border-l[data-side=right]{border-left-style:var(--tw-border-style);border-left-width:1px}}
+@layer utilities{.data-\[side\=top\]\:inset-x-0[data-side=top]{inset-inline:0px}}
+@layer utilities{.data-\[side\=top\]\:top-0[data-side=top]{top:0}}
+@layer utilities{.data-\[side\=top\]\:h-auto[data-side=top]{height:auto}}
+@layer utilities{.data-\[side\=top\]\:border-b[data-side=top]{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}}
+@layer utilities{.data-\[side\=right\]\:data-open\:slide-in-from-right[data-side=right]:where([data-state=open]),.data-\[side\=right\]\:data-open\:slide-in-from-right[data-side=right]:where([data-open]:not([data-open=false])){--tw-enter-translate-x: 100%}}
+@layer utilities{.data-\[side\=top\]\:data-open\:slide-in-from-top[data-side=top]:where([data-state=open]),.data-\[side\=top\]\:data-open\:slide-in-from-top[data-side=top]:where([data-open]:not([data-open=false])){--tw-enter-translate-y: -100%}}
+@layer utilities{.data-\[side\=right\]\:data-closed\:slide-out-to-right[data-side=right]:where([data-state=closed]),.data-\[side\=right\]\:data-closed\:slide-out-to-right[data-side=right]:where([data-closed]:not([data-closed=false])){--tw-exit-translate-x: 100%}}
+@layer utilities{.data-\[side\=top\]\:data-closed\:slide-out-to-top[data-side=top]:where([data-state=closed]),.data-\[side\=top\]\:data-closed\:slide-out-to-top[data-side=top]:where([data-closed]:not([data-closed=false])){--tw-exit-translate-y: -100%}}
+@layer utilities{.\[\&_ng-icon\:not\(\[class\*\=\'text-\'\]\)\]\:text-\[length\:--spacing\(3\)\] ng-icon:not([class*=text-]){font-size:calc(var(--spacing) * 3)}}
+@layer utilities{.\[\&_ng-icon\:not\(\[class\*\=\'text-\'\]\)\]\:text-\[length\:--spacing\(3\.5\)\] ng-icon:not([class*=text-]){font-size:calc(var(--spacing) * 3.5)}}
+@layer utilities{@media(hover:hover){.\[a\]\:hover\:bg-destructive\/20:is(a):hover{background-color:var(--destructive)}}}
+@layer utilities{@media(hover:hover){@supports (color: color-mix(in lab,red,red)){.\[a\]\:hover\:bg-destructive\/20:is(a):hover{background-color:color-mix(in oklab,var(--destructive) 20%,transparent)}}}}
+@layer utilities{@media(hover:hover){.\[a\]\:hover\:bg-muted:is(a):hover{background-color:var(--muted)}}}
+@layer utilities{@media(hover:hover){.\[a\]\:hover\:bg-primary\/80:is(a):hover{background-color:var(--primary)}}}
+@layer utilities{@media(hover:hover){@supports (color: color-mix(in lab,red,red)){.\[a\]\:hover\:bg-primary\/80:is(a):hover{background-color:color-mix(in oklab,var(--primary) 80%,transparent)}}}}
+@layer utilities{@media(hover:hover){.\[a\]\:hover\:bg-secondary\/80:is(a):hover{background-color:var(--secondary)}}}
+@layer utilities{@media(hover:hover){@supports (color: color-mix(in lab,red,red)){.\[a\]\:hover\:bg-secondary\/80:is(a):hover{background-color:color-mix(in oklab,var(--secondary) 80%,transparent)}}}}
+@layer utilities{@media(hover:hover){.\[a\]\:hover\:text-muted-foreground:is(a):hover{color:var(--muted-foreground)}}}

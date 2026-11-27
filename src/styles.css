@@ -28,6 +28,12 @@
    helm update diffs cleanly. One entry per class: a brace expansion could drop a rule a page uses. */
 @source not inline('dark:aria-invalid:ring-destructive/40 dark:bg-destructive/20 dark:bg-input/30 dark:border-input dark:data-[matches-spartan-invalid=true]:border-destructive/50 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 dark:data-checked:bg-primary dark:disabled:bg-input/80 dark:focus-visible:ring-destructive/40 dark:has-data-checked:bg-primary/10 dark:has-data-checked:border-primary/20 dark:hover:bg-destructive/30 dark:hover:bg-input/50 dark:hover:bg-muted/50');
 
+/* Helm variants that no page can use: the sheet sides top and right, the badge as a link or control,
+   the file input, and the small button sizes. The helm files keep the classes so a re-copy diffs
+   cleanly. scripts/helm-variant-exclusion.mjs fails when a page starts to use one. One entry per
+   class, in a double-quoted string because two of them hold `'`. */
+@source not inline("data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=right]:data-open:slide-in-from-right data-[side=top]:data-open:slide-in-from-top data-[side=right]:data-closed:slide-out-to-right data-[side=top]:data-closed:slide-out-to-top [a]:hover:bg-destructive/20 [a]:hover:bg-muted [a]:hover:bg-primary/80 [a]:hover:bg-secondary/80 [a]:hover:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground rounded-[min(var(--radius-md),10px)] rounded-[min(var(--radius-md),12px)] text-[0.8rem] in-data-[slot=button-group]:rounded-lg [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(3)] [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(3.5)]");
+
 /* Angular's critical-CSS inliner (beasties) cannot resolve `var(--font-sans)`, so with base.css
    alone it inlines no Inter @font-face and adds no font preload. The literal family name lets it
    inline the Latin @font-face and preload that file in production builds. It resolves to the same

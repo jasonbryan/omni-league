@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import { HELM_VARIANT_CLASSES } from './helm-variant-classes.mjs';
 
 const PREFIX = 'dark-exclusion:';
 const CHECK = 'scripts/dark-exclusion.mjs';
@@ -9,14 +10,14 @@ const EXCLUSION = `the exclusion, @source not inline() in ${STYLES}`;
 const DARK_SELECTOR = ':is(.dark *)';
 
 // Entries that drop classes unrelated to the dark variant, so they need no dark variant.
-const OTHER_EXCLUDED = new Set(['outline-destructive', 'outline-muted']);
+export const OTHER_EXCLUDED = new Set(['outline-destructive', 'outline-muted']);
 
 const SPEC_FILE = /\.spec\.ts$/;
 const TESTING_DIRECTORY = /(?:^|\/)testing\//;
 const NOT_PART_OF_CLASS = /[\s"'`]/;
 const DEPTH_ZERO_DELIMITERS = new Set(['<', '>', ';', ',', '{', '}', '(', ')']);
 
-const withoutCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+export const withoutCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /**
  * A `>` or `,` inside an arbitrary value such as `has-[>[data-slot=a]]` does not end the class.
@@ -73,7 +74,7 @@ function splitVariants(candidate) {
   return { variants: parts, utility: part };
 }
 
-const hasDarkVariant = (candidate) => {
+export const hasDarkVariant = (candidate) => {
   const { variants, utility } = splitVariants(candidate);
   return utility !== '' && variants.includes('dark');
 };
@@ -96,7 +97,7 @@ function darkClassesIn(sources) {
  * @param {string} stylesCss
  * @returns {string[]} every entry of every `@source not inline()`
  */
-function excludedEntries(stylesCss) {
+export function excludedEntries(stylesCss) {
   const directive = /@source\s+not\s+inline\(\s*(['"])([\s\S]*?)\1\s*\)/g;
   return [...withoutCssComments(stylesCss).matchAll(directive)].flatMap(([, , list]) =>
     list.split(/\s+/).filter(Boolean),
@@ -113,7 +114,9 @@ const fail = (file, message) => `${PREFIX} ${file}: ${message} (${EXCLUSION}; ch
  */
 export function darkExclusionProblems({ sources, stylesCss, tokensCss }) {
   const problems = [];
-  const entries = excludedEntries(stylesCss).filter((entry) => !OTHER_EXCLUDED.has(entry));
+  const entries = excludedEntries(stylesCss).filter(
+    (entry) => !OTHER_EXCLUDED.has(entry) && !HELM_VARIANT_CLASSES.has(entry),
+  );
   const listed = new Set(entries);
 
   for (const entry of entries) {

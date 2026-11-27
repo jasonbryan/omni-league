@@ -141,6 +141,20 @@ describe('the dark-variant exclusion in src/styles.css', () => {
     );
   });
 
+  it('leaves the entries that the helm variant check owns alone, and still fails any other', () => {
+    assert.deepEqual(
+      problems({
+        stylesCss: exclusion('file:h-6', 'data-[side=top]:h-auto', 'dark:bg-x'),
+        sources: { 'src/a.ts': "'dark:bg-x'" },
+      }),
+      [],
+    );
+    const found = problems({ stylesCss: exclusion('file:h-6', 'bg-input/30') });
+    assert.equal(found.length, 1);
+    assert.match(found[0], /"bg-input\/30"/);
+    assert.match(found[0], /no dark variant/);
+  });
+
   it('fails when tokens.css has a .dark block while the exclusion still lists classes', () => {
     const found = problems({
       stylesCss: exclusion('dark:bg-x'),
