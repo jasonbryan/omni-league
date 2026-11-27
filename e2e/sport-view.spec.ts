@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
+import { OPEN_TOURNAMENTS_READ_LIMIT } from '../convex/tournaments';
 import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -373,6 +374,46 @@ test.describe('the sport view: tournaments', () => {
       const softball = await fetchRawHtml(request, `${tenant.path}/sports/softball`);
       expect(softball.status).toBe(200);
       expect(softball.html).not.toContain('id="tournaments"');
+    },
+  );
+
+  test(
+    'lists a sport’s open tournament under Registration open although another sport has more than the read limit',
+    RAW_HTTP,
+    async ({ request }) => {
+      const sandTournaments = Array.from({ length: OPEN_TOURNAMENTS_READ_LIMIT + 1 }, (_, i) => ({
+        name: `Sand Open ${i}`,
+        slug: `sand-open-${i}`,
+        sport: 'beachVolleyball' as const,
+        locations: [NORTH_BEACH.name],
+        startDate: dateFromToday(20),
+        endDate: dateFromToday(21),
+        registrationDeadline: dateFromToday(2),
+      }));
+      const tenant = await seedTenant({
+        name: 'E2E Sport Open Tournaments',
+        locations: [BAYSIDE, NORTH_BEACH],
+        leagues: [
+          { name: 'Coed 7v7 Rec', sport: 'soccer', locations: [BAYSIDE.name] },
+          { name: 'Thursday Coed 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
+        ],
+        tournaments: [
+          ...sandTournaments,
+          {
+            name: 'Late Soccer Cup',
+            slug: 'late-soccer-cup',
+            sport: 'soccer',
+            locations: [BAYSIDE.name],
+            startDate: dateFromToday(40),
+            endDate: dateFromToday(41),
+            registrationDeadline: dateFromToday(30),
+          },
+        ],
+      });
+
+      const soccer = await fetchRawHtml(request, `${tenant.path}/sports/soccer`);
+      expect(soccer.status).toBe(200);
+      expect(namesIn(sectionOf(soccer.html, 'registration-open'))).toEqual(['Late Soccer Cup']);
     },
   );
 });
