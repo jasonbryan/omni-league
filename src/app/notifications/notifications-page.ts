@@ -6,6 +6,7 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  linkedSignal,
   resource,
   inject,
   signal,
@@ -296,7 +297,7 @@ const STEP_NUMBER =
                   [class]="turnOnClasses()"
                   [disabled]="!controlled() && !needsReload()"
                   [attr.aria-disabled]="turnOnAriaDisabled()"
-                  [attr.aria-describedby]="controlled() && online() ? null : 'device-help'"
+                  [attr.aria-describedby]="controlled() && turnOnReady() ? null : 'device-help'"
                   (click)="turnOn()"
                 >
                   @if (busy() === 'turning-on') {
@@ -339,7 +340,7 @@ const STEP_NUMBER =
                   <p role="status" class="text-sm text-muted-foreground">
                     Choose Allow in your browser's prompt.
                   </p>
-                } @else if (!online()) {
+                } @else if (!turnOnReady()) {
                   <p id="device-help" class="text-sm text-muted-foreground">
                     Connect to the internet to change this.
                   </p>
@@ -414,6 +415,11 @@ export class NotificationsPage {
   protected readonly needsReload = computed(
     () => !this.controlled() && this.registrationRead.value()?.activated === true,
   );
+  /** Once true it stays true, so the card does not fall back to the skeleton in the gap before the answers. */
+  private readonly openedOffline = linkedSignal<boolean, boolean>({
+    source: () => !this.online() && this.config.value() === undefined,
+    computation: (offlineUnanswered, previous) => offlineUnanswered || (previous?.value ?? false),
+  });
   protected readonly busy = signal<Busy>('idle');
   protected readonly alert = signal<Alert>(null);
   protected readonly changed = signal<Change | null>(null);
@@ -429,11 +435,13 @@ export class NotificationsPage {
   }
 
   protected readonly state = computed<DeviceState>(() => {
+    // Read first, so a linkedSignal that is only read after the connection returns has already seen the offline spell.
+    const openedOffline = this.openedOffline();
     const config = this.config.value();
     if (config === undefined) {
       if (this.config.error()) return 'not-available';
-      // Offline, no answer is coming: show what this browser holds, and let the answers correct it on reconnect.
-      if (this.online()) return 'checking';
+      // No answer comes offline, and none has yet when the connection returns: show what this browser holds until the answers correct it.
+      if (this.online() && !openedOffline) return 'checking';
     } else if (config.vapidPublicKey === null) {
       return 'not-available';
     }
@@ -452,19 +460,24 @@ export class NotificationsPage {
     if (subscription === null) return 'off';
     if (this.savedEndpoint() === subscription.endpoint || this.status.value() === true) return 'on';
     if (this.status.value() === undefined && this.status.error() === undefined) {
-      return this.online() ? 'checking' : 'on';
+      return this.online() && !openedOffline ? 'checking' : 'on';
     }
     return 'off';
   });
 
+  /** The server's key answers some time after the connection returns, and turning on needs it. */
+  protected readonly turnOnReady = computed(
+    () => this.online() && this.config.value() !== undefined,
+  );
   protected readonly turnOnClasses = computed(() => {
     if (this.needsReload()) return `${this.primaryButton} opacity-50`;
     return (
-      this.offlineAware(this.primaryButton) + (this.controlled() ? '' : ' disabled:opacity-50')
+      (this.turnOnReady() ? this.primaryButton : `${this.primaryButton} opacity-50`) +
+      (this.controlled() ? '' : ' disabled:opacity-50')
     );
   });
   protected readonly turnOnAriaDisabled = computed(() =>
-    this.busy() !== 'idle' || !this.online() || this.needsReload() ? 'true' : null,
+    this.busy() !== 'idle' || !this.turnOnReady() || this.needsReload() ? 'true' : null,
   );
 
   protected readonly crumbLink = CRUMB_LINK;

@@ -1468,33 +1468,67 @@ describe('NotificationsPage', () => {
         device.permission.set('granted');
       });
 
-      it('a server with no VAPID key shows Not available', async () => {
+      const expectHeld = (shown: string) => {
+        expect(badge()).toBe(shown);
+        expectNoChecking();
+      };
+
+      it('a server with no VAPID key shows Not available, with the state held until it answers', async () => {
         await openOffline();
         expect(badge()).toBe('On');
         await goOnline();
+        expectHeld('On');
         await emitConfig(null);
         expect(badge()).toBe('Not available');
         expect(button()).toBeNull();
       });
 
-      it('an endpoint the server does not hold shows Off', async () => {
+      it('an endpoint the server does not hold shows Off, with On held until each answer', async () => {
         await openOffline();
         await goOnline();
+        expectHeld('On');
         await emitConfig(VAPID_KEY);
+        expectHeld('On');
         await emitStatus(false);
         expect(badge()).toBe('Off');
         expect(text(button())).toBe('Turn on notifications');
         expect(button()!.getAttribute('aria-disabled')).toBeNull();
       });
 
-      it('an endpoint the server holds stays On, and Turn off works', async () => {
+      it('an endpoint the server holds stays On, with Turn off enabled', async () => {
         await openOffline();
         await goOnline();
+        expectHeld('On');
         await emitConfig(VAPID_KEY);
+        expectHeld('On');
         await emitStatus(true);
-        expect(badge()).toBe('On');
+        expectHeld('On');
         expect(button()!.getAttribute('aria-disabled')).toBeNull();
         expect(button()!.hasAttribute('aria-describedby')).toBe(false);
+      });
+
+      it('Off with no subscription is held until push.getConfig answers, and Turn on waits for it', async () => {
+        swPush.subscription.next(null);
+        await openOffline();
+        expectHeld('Off');
+        await goOnline();
+        expectHeld('Off');
+        expect(text(button())).toBe('Turn on notifications');
+        expect(button()!.getAttribute('aria-disabled')).toBe('true');
+        expect(button()!.hasAttribute('disabled')).toBe(false);
+        expect(button()!.classList.contains('opacity-50')).toBe(true);
+        expect(describedBy(button())).toBe(CONNECT_TEXT);
+
+        button()!.click();
+        await settle();
+        expect(log).toEqual([]);
+        expect(swPush.requests).toEqual([]);
+
+        await emitConfig(VAPID_KEY);
+        expectHeld('Off');
+        expect(button()!.getAttribute('aria-disabled')).toBeNull();
+        expect(button()!.hasAttribute('aria-describedby')).toBe(false);
+        expect(button()!.classList.contains('opacity-50')).toBe(false);
       });
     });
   });

@@ -78,7 +78,7 @@ test.describe('notifications on this device', () => {
     await expect(device).toContainText('Not available');
     await expect(device).toContainText("This browser can't show notifications from Omni League.");
     await expect(device).not.toContainText('Checking');
-    await expect(device.locator('.animate-pulse')).toHaveCount(0);
+    await expect(device.locator('[data-slot="skeleton"]')).toHaveCount(0);
     await expect(page.locator('app-offline-note')).toContainText("You're offline");
 
     await expectAccessible(page);
