@@ -228,6 +228,12 @@ export default defineSchema({
       'organizationId',
       'status',
       'registrationDeadline',
+    ])
+    .index('by_organizationId_and_sport_and_status_and_registrationDeadline', [
+      'organizationId',
+      'sport',
+      'status',
+      'registrationDeadline',
     ]),
 
   // Written only through `convex/lib/tournamentBracket.ts`. A bye is a round 1 game with one team, already its winner.
