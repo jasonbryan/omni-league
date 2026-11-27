@@ -9,7 +9,7 @@
    (design/mockup-kit/mockup-kit.css), so the app and the mockups get one copy of the base layer. */
 @import 'tailwindcss' source('.');
 @import './styles/tokens.css';
-@import '@spartan-ng/brain/hlm-tailwind-preset.css';
+@import './styles/spartan-preset.css';
 @import '@fontsource-variable/inter/wght.css';
 @import './styles/base.css';
 

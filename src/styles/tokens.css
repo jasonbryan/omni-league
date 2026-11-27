@@ -1,5 +1,6 @@
 /* Design tokens in spartan's naming. The utilities that read them (`bg-primary`,
-   `text-muted-foreground`, `rounded-lg`, `font-sans`) come from brain's hlm-tailwind-preset.css.
+   `text-muted-foreground`, `rounded-lg`, `font-sans`) come from the preset (spartan-preset.css in
+   the app, brain's hlm-tailwind-preset.css in the mockup kit).
 
    Indigo palette, light theme only. The values are the
    `:root` block in design/mockups/61-token-sheet.html ("For src/styles/tokens.css").
