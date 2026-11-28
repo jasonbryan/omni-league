@@ -1530,6 +1530,93 @@ describe('NotificationsPage', () => {
         expect(button()!.hasAttribute('aria-describedby')).toBe(false);
         expect(button()!.classList.contains('opacity-50')).toBe(false);
       });
+
+      it('Turn off waits for push.getMyDeviceStatus: aria-disabled with the connect line, and a press sends nothing', async () => {
+        await openOffline();
+        await goOnline();
+        await emitConfig(VAPID_KEY);
+        expect(text(button())).toBe('Turn off');
+        expect(button()!.getAttribute('aria-disabled')).toBe('true');
+        expect(button()!.hasAttribute('disabled')).toBe(false);
+        expect(button()!.classList.contains('opacity-50')).toBe(true);
+        expect(describedBy(button())).toBe(CONNECT_TEXT);
+
+        button()!.click();
+        await settle();
+        expect(convex.calls).toEqual([]);
+        expect(swPush.unsubscribes).toBe(0);
+        expect(alertBox()).toBeNull();
+
+        await emitStatus(true);
+        expect(button()!.getAttribute('aria-disabled')).toBeNull();
+        expect(button()!.hasAttribute('aria-describedby')).toBe(false);
+        expect(button()!.classList.contains('opacity-50')).toBe(false);
+        button()!.click();
+        await settle();
+        expect(convex.calls.map((c) => c.name)).toEqual(['push:unsubscribe']);
+      });
+
+      describe('Turn on after the answers arrived', () => {
+        beforeEach(() => {
+          swPush.subscription.next(null);
+        });
+
+        async function pressTurnOn(openedOffline: boolean) {
+          if (openedOffline) {
+            await openOffline();
+            await goOnline();
+          } else {
+            await open();
+          }
+          await emitConfig(VAPID_KEY);
+          expect(badge()).toBe('Off');
+          button()!.click();
+          await settle();
+          expect(text(button())).toBe('Turning on…');
+          expect(button()!.getAttribute('aria-disabled')).toBe('true');
+          device.respond('granted');
+          await settle();
+          expect(convex.calls.map((c) => c.name)).toEqual(['push:subscribe']);
+        }
+
+        it.each([
+          ['a page opened online', false],
+          ['a page opened offline', true],
+        ])(
+          '%s shows Checking, not On, while the save is pending, and On once it is saved',
+          async (_case, openedOffline) => {
+            await pressTurnOn(openedOffline);
+            expect(badge()).toBe('');
+            expect(text(panel().querySelector('[role="status"]'))).toBe(
+              'Checking notifications on this device.',
+            );
+            expect(button()).toBeNull();
+
+            convex.calls[0].resolve(null);
+            await settle();
+            expect(badge()).toBe('On');
+            expect(text(button())).toBe('Turn off');
+            expect(changeStatus()).toBe('Notifications are on for this device.');
+          },
+        );
+
+        it.each([
+          ['a page opened online', false],
+          ['a page opened offline', true],
+        ])(
+          '%s shows Off with the failed alert when the save is refused',
+          async (_case, openedOffline) => {
+            await pressTurnOn(openedOffline);
+            convex.calls[0].reject(new Error('Server Error'));
+            await settle();
+            expect(badge()).toBe('Off');
+            expect(text(alertBox()?.querySelector('[data-slot="alert-title"]'))).toBe(
+              'Notifications could not be turned on.',
+            );
+            expect(swPush.unsubscribes).toBe(1);
+          },
+        );
+      });
     });
   });
 

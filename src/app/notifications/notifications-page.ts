@@ -264,9 +264,9 @@ const STEP_NUMBER =
                   #deviceButton
                   type="button"
                   data-slot="button"
-                  [class]="offlineAware(outlineButton)"
-                  [attr.aria-disabled]="busy() !== 'idle' || !online() ? 'true' : null"
-                  [attr.aria-describedby]="online() ? null : 'device-help'"
+                  [class]="turnOffClasses()"
+                  [attr.aria-disabled]="busy() !== 'idle' || !turnOffReady() ? 'true' : null"
+                  [attr.aria-describedby]="turnOffReady() ? null : 'device-help'"
                   (click)="turnOff()"
                 >
                   @if (busy() === 'turning-off') {
@@ -278,7 +278,7 @@ const STEP_NUMBER =
                 </button>
                 @if (busy() === 'turning-off') {
                   <p role="status" class="sr-only">Turning off notifications.</p>
-                } @else if (!online()) {
+                } @else if (!turnOffReady()) {
                   <p id="device-help" class="text-sm text-muted-foreground">
                     Connect to the internet to change this.
                   </p>
@@ -415,10 +415,18 @@ export class NotificationsPage {
   protected readonly needsReload = computed(
     () => !this.controlled() && this.registrationRead.value()?.activated === true,
   );
-  /** Once true it stays true, so the card does not fall back to the skeleton in the gap before the answers. */
-  private readonly openedOffline = linkedSignal<boolean, boolean>({
-    source: () => !this.online() && this.config.value() === undefined,
-    computation: (offlineUnanswered, previous) => offlineUnanswered || (previous?.value ?? false),
+  /** True from an offline open until the answers it waited for arrive, so the card does not fall back to the skeleton in between. */
+  private readonly openedOffline = linkedSignal<'unanswered' | 'answered' | 'waiting', boolean>({
+    source: () => {
+      if (!this.online() && this.config.value() === undefined) return 'unanswered';
+      const statusAsked = this.endpoint() !== null;
+      const statusAnswered = this.status.value() !== undefined || this.status.error() !== undefined;
+      return this.config.value() !== undefined && (!statusAsked || statusAnswered)
+        ? 'answered'
+        : 'waiting';
+    },
+    computation: (phase, previous) =>
+      phase === 'waiting' ? (previous?.value ?? false) : phase === 'unanswered',
   });
   protected readonly busy = signal<Busy>('idle');
   protected readonly alert = signal<Alert>(null);
@@ -468,6 +476,15 @@ export class NotificationsPage {
   /** The server's key answers some time after the connection returns, and turning on needs it. */
   protected readonly turnOnReady = computed(
     () => this.online() && this.config.value() !== undefined,
+  );
+  /** On a kept session the status waits for the sign-in, so Turn off waits for its answer, or for a save this page made. */
+  protected readonly turnOffReady = computed(() => {
+    if (!this.online()) return false;
+    const saved = this.savedEndpoint();
+    return this.status.value() === true || (saved !== null && saved === this.endpoint());
+  });
+  protected readonly turnOffClasses = computed(() =>
+    this.turnOffReady() ? this.outlineButton : `${this.outlineButton} opacity-50`,
   );
   protected readonly turnOnClasses = computed(() => {
     if (this.needsReload()) return `${this.primaryButton} opacity-50`;
@@ -525,6 +542,7 @@ export class NotificationsPage {
       this.showAlert({ kind: 'offline', change: 'off' });
       return;
     }
+    if (!this.turnOffReady()) return;
     this.busy.set('turning-off');
     this.alert.set(null);
     this.changed.set(null);
