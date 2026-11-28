@@ -58,7 +58,7 @@ describe('the expected production runs', () => {
     assert.deepEqual(
       PRODUCTION_RUNS.map(({ name, spec, project, tests }) => [name, spec, project, tests]),
       [
-        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 26],
+        ['production-mobile', 'e2e/pwa.spec.ts', 'chromium-mobile', 27],
         ['production-desktop', 'e2e/harness/no-service-worker.spec.ts', 'chromium-desktop', 2],
         ['pwa-update', 'e2e/pwa-update.spec.ts', 'chromium-mobile', 1],
         ['kill-switch', 'e2e/pwa-kill-switch.spec.ts', 'chromium-mobile', 1],
@@ -115,7 +115,7 @@ describe('checkRun', () => {
     assert.deepEqual(checkRun(mobile, reportFor(mobile, { statuses })).problems, []);
     assert.match(
       checkRun(mobile, reportFor(mobile, { statuses })).summary,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 26 of 26 run \(24 passed, 1 failed, 1 flaky\)$/,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 27 of 27 run \(25 passed, 1 failed, 1 flaky\)$/,
     );
   });
 
@@ -212,7 +212,7 @@ describe('checkReports and the command line', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(
       result.stdout,
-      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 26 of 26/m,
+      /^production-mobile: e2e\/pwa\.spec\.ts on chromium-mobile: 27 of 27/m,
     );
     assert.match(result.stdout, /^kill-switch: e2e\/pwa-kill-switch\.spec\.ts on chromium-mobile/m);
   });
